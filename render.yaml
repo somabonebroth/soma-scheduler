@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: soma-scheduler
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: DATA_DIR
+        value: /opt/render/project/data
+    disk:
+      name: soma-data
+      mountPath: /opt/render/project/data
+      sizeGB: 1
