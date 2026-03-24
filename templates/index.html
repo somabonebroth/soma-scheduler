@@ -15,216 +15,95 @@
     --text: #2a2a2a;
     --text-light: #777;
     --warning: #fff3cd;
-    --warning-border: #ffc107;
     --success: #d4edda;
     --error: #f8d7da;
+    --danger: #dc3545;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-  }
-  .header {
-    background: var(--dark);
-    padding: 16px 24px;
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    border-bottom: 3px solid var(--accent);
-  }
-  .header h1 { color: #fff; font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
-  .header p { color: #aaa; font-size: 13px; margin-top: 2px; }
-  .nav {
-    display: flex;
-    gap: 0;
-    background: var(--dark);
-    padding: 0 24px;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-  }
-  .nav button {
-    background: none;
-    border: none;
-    color: #aaa;
-    padding: 12px 20px;
-    font-size: 14px;
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: all 0.2s;
-  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  .header { background: var(--dark); padding: 12px 24px; position: sticky; top: 0; z-index: 100; border-bottom: 3px solid var(--accent); display: flex; align-items: center; gap: 12px; }
+  .header img { width: 40px; height: 40px; border-radius: 50%; }
+  .header-text h1 { color: #fff; font-size: 18px; font-weight: 700; }
+  .header-text p { color: #aaa; font-size: 12px; }
+  .header-right { margin-left: auto; }
+  .header-right button { background: none; border: 1px solid rgba(255,255,255,0.2); color: #aaa; padding: 6px 14px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+  .header-right button:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
+  .nav { display: flex; gap: 0; background: var(--dark); padding: 0 24px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+  .nav button { background: none; border: none; color: #aaa; padding: 12px 20px; font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
   .nav button:hover { color: #fff; }
   .nav button.active { color: #fff; border-bottom-color: var(--accent); }
   .main { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
   .tab-content { display: none; }
   .tab-content.active { display: block; }
-  .card {
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 20px;
-    margin-bottom: 16px;
-  }
+  .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
   .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: var(--dark); }
   .card h3 { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
   .week-picker { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .week-picker label { font-size: 14px; font-weight: 600; }
-  .week-picker input[type="date"] {
-    padding: 8px 12px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-size: 14px;
-  }
-  .day-block {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    margin-bottom: 12px;
-    overflow: hidden;
-  }
-  .day-header {
-    background: var(--accent);
-    color: #fff;
-    padding: 10px 16px;
-    font-weight: 600;
-    font-size: 14px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .day-header .date { font-weight: 400; font-size: 13px; opacity: 0.9; }
+  .week-picker input[type="date"] { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
+  .day-block { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+  .day-header { background: var(--accent); color: #fff; padding: 10px 16px; font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
   .day-header .lot { font-size: 12px; opacity: 0.8; }
-  .vessel-row {
-    display: grid;
-    grid-template-columns: 50px 1fr 100px;
-    align-items: center;
-    padding: 8px 16px;
-    border-bottom: 1px solid var(--border);
-    gap: 12px;
-  }
+  .vessel-row { display: grid; grid-template-columns: 70px 1fr 90px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--border); gap: 12px; }
   .vessel-row:last-child { border-bottom: none; }
   .vessel-row:nth-child(even) { background: #fafaf7; }
-  .vessel-label { font-weight: 700; font-size: 14px; color: var(--dark); }
-  .vessel-row select {
-    width: 100%;
-    padding: 8px 10px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-size: 13px;
-    background: #fff;
-    cursor: pointer;
-  }
+  .vessel-label { font-weight: 700; font-size: 13px; color: var(--dark); }
+  .vessel-row select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: #fff; cursor: pointer; }
   .yield-display { font-size: 13px; color: var(--text-light); text-align: center; }
   .yield-display.has-value { color: var(--accent); font-weight: 600; }
-  .notes-area {
-    width: 100%;
-    min-height: 80px;
-    padding: 10px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-size: 13px;
-    font-family: inherit;
-    resize: vertical;
-  }
-  .btn {
-    padding: 10px 20px;
-    border: none;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
+  .notes-area { width: 100%; min-height: 80px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; resize: vertical; }
+  .btn { padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
   .btn-primary { background: var(--accent); color: #fff; }
   .btn-primary:hover { background: var(--accent-light); }
   .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
-  .btn-secondary { background: var(--dark); color: #fff; }
-  .btn-secondary:hover { background: #2a2a4e; }
   .btn-outline { background: none; border: 1px solid var(--border); color: var(--text); }
   .btn-outline:hover { background: #f0f0ea; }
+  .btn-danger { background: none; border: 1px solid var(--danger); color: var(--danger); padding: 4px 10px; font-size: 12px; border-radius: 4px; cursor: pointer; }
+  .btn-danger:hover { background: var(--danger); color: #fff; }
   .btn-block { width: 100%; padding: 14px; font-size: 16px; }
-  .generate-bar {
-    position: sticky;
-    bottom: 0;
-    background: var(--card-bg);
-    border-top: 1px solid var(--border);
-    padding: 16px;
-    text-align: center;
-    box-shadow: 0 -2px 8px rgba(0,0,0,0.05);
-  }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+  .generate-bar { position: sticky; bottom: 0; background: var(--card-bg); border-top: 1px solid var(--border); padding: 16px; text-align: center; box-shadow: 0 -2px 8px rgba(0,0,0,0.05); }
   .pdf-list { list-style: none; padding: 0; }
-  .pdf-list li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
-  }
+  .pdf-list li { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 8px; }
   .pdf-list li:last-child { border-bottom: none; }
-  .pdf-list a { color: var(--accent); text-decoration: none; font-weight: 500; }
-  .pdf-list a:hover { text-decoration: underline; }
+  .pdf-list a, .pdf-list button.link-btn { color: var(--accent); text-decoration: none; font-weight: 500; background: none; border: none; cursor: pointer; font-size: 14px; }
+  .pdf-list a:hover, .pdf-list button.link-btn:hover { text-decoration: underline; }
+  .pdf-actions { display: flex; gap: 10px; align-items: center; }
+  .download-all { margin-top: 14px; text-align: center; }
   .history-list { list-style: none; padding: 0; }
-  .history-list li {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border);
-    cursor: pointer;
-    transition: background 0.15s;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
+  .history-list li { padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.15s; display: flex; justify-content: space-between; align-items: center; }
   .history-list li:hover { background: #f0f0ea; }
   .history-week { font-weight: 600; }
   .history-meta { font-size: 12px; color: var(--text-light); }
-  .upload-zone {
-    border: 2px dashed var(--border);
-    border-radius: 8px;
-    padding: 32px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .upload-zone:hover, .upload-zone.dragover {
-    border-color: var(--accent);
-    background: rgba(74,103,65,0.05);
-  }
+  .upload-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 32px; text-align: center; cursor: pointer; transition: all 0.2s; }
+  .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: rgba(74,103,65,0.05); }
   .upload-zone p { color: var(--text-light); font-size: 14px; }
   .upload-zone input { display: none; }
-  .recipe-list-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
-  }
+  .recipe-list-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
   .recipe-name { font-weight: 500; }
   .recipe-meta { font-size: 12px; color: var(--text-light); }
-  .status {
-    padding: 10px 16px;
-    border-radius: 6px;
-    margin-bottom: 12px;
-    font-size: 13px;
-    display: none;
-  }
+  .status { padding: 10px 16px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; display: none; }
   .status.success { display: block; background: var(--success); color: #155724; }
   .status.error { display: block; background: var(--error); color: #721c24; }
   .status.loading { display: block; background: var(--warning); color: #856404; }
   @media (max-width: 768px) {
-    .header h1 { font-size: 17px; }
+    .header h1 { font-size: 16px; }
     .main { padding: 16px 12px; }
-    .vessel-row {
-      grid-template-columns: 45px 1fr 80px;
-      padding: 8px 12px;
-      gap: 8px;
-    }
-    .day-header { padding: 8px 12px; }
+    .vessel-row { grid-template-columns: 60px 1fr 70px; padding: 8px 12px; gap: 8px; }
     .nav button { padding: 10px 14px; font-size: 13px; }
   }
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>SOMA BONE BROTH</h1>
-  <p>Production Scheduler</p>
+  <img src="/static/logo.jpg" alt="Soma">
+  <div class="header-text">
+    <h1>SOMA BONE BROTH</h1>
+    <p>Production Scheduler</p>
+  </div>
+  <div class="header-right">
+    <button onclick="doLogout()">Log Out</button>
+  </div>
 </div>
 <div class="nav">
   <button class="active" onclick="showTab('schedule')">Schedule</button>
@@ -248,17 +127,13 @@
       <textarea id="schedule-notes" class="notes-area" placeholder="Weekly notes..."></textarea>
     </div>
     <div class="generate-bar">
-      <button class="btn btn-primary btn-block" id="generate-btn" onclick="generatePDFs()">
-        Generate Schedule + Checklists
-      </button>
+      <button class="btn btn-primary btn-block" id="generate-btn" onclick="generatePDFs()">Generate Schedule + Checklists</button>
     </div>
   </div>
   <div id="tab-pdfs" class="tab-content">
     <div class="card">
       <h2>Generated PDFs</h2>
-      <p style="color:var(--text-light);font-size:13px;margin-bottom:12px;">
-        Select a week to view its PDFs.
-      </p>
+      <p style="color:var(--text-light);font-size:13px;margin-bottom:12px;">Select a week to view its PDFs. Use "Fill Digitally" to open the interactive checklist.</p>
       <div class="week-picker" style="margin-bottom:16px;">
         <label>Week:</label>
         <input type="date" id="pdf-week-date">
@@ -267,14 +142,15 @@
       <ul id="pdf-list" class="pdf-list">
         <li style="color:var(--text-light)">No PDFs generated yet</li>
       </ul>
+      <div class="download-all" id="download-all-container" style="display:none;">
+        <a id="download-all-link" class="btn btn-primary">Download All (ZIP)</a>
+      </div>
     </div>
   </div>
   <div id="tab-recipes" class="tab-content">
     <div class="card">
       <h2>Add Recipe</h2>
-      <p style="color:var(--text-light);font-size:13px;margin-bottom:16px;">
-        Upload a recipe card PDF (same format as your existing cards).
-      </p>
+      <p style="color:var(--text-light);font-size:13px;margin-bottom:16px;">Upload a recipe card PDF (same format as your existing cards).</p>
       <div class="upload-zone" id="upload-zone">
         <p>Drop PDF here or tap to browse</p>
         <input type="file" id="recipe-upload" accept=".pdf">
@@ -298,6 +174,8 @@
 <script>
 let recipes = {};
 let currentWeekId = '';
+const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const VESSELS = ['K1','K2','K3','K4(115L)'];
 
 document.addEventListener('DOMContentLoaded', async () => {
   const today = new Date();
@@ -312,9 +190,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadHistory();
 });
 
-function formatDate(d) {
-  return d.toISOString().split('T')[0];
-}
+function formatDate(d) { return d.toISOString().split('T')[0]; }
 
 function getMonday(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
@@ -333,6 +209,11 @@ function showTab(name) {
   if (name === 'history') loadHistory();
 }
 
+async function doLogout() {
+  await fetch('/api/logout', {method:'POST'});
+  window.location.href = '/login';
+}
+
 async function loadRecipes() {
   const res = await fetch('/api/recipes');
   recipes = await res.json();
@@ -348,8 +229,18 @@ function loadRecipeList() {
   }
   container.innerHTML = names.map(name => {
     const r = recipes[name];
-    return '<div class="recipe-list-item"><div><div class="recipe-name">' + name + '</div><div class="recipe-meta">' + (r.format || '') + ' · Target: ' + (r.yield || '—') + ' units</div></div></div>';
+    return '<div class="recipe-list-item"><div><div class="recipe-name">' + name + '</div><div class="recipe-meta">' + (r.format || '') + ' · Target: ' + (r.yield || '—') + ' units</div></div><button class="btn-danger" onclick="deleteRecipe(\'' + name.replace(/'/g, "\\'") + '\')">Delete</button></div>';
   }).join('');
+}
+
+async function deleteRecipe(name) {
+  if (!confirm('Delete "' + name + '"? This cannot be undone.')) return;
+  const res = await fetch('/api/recipes/' + encodeURIComponent(name), {method:'DELETE'});
+  if (res.ok) {
+    await loadRecipes();
+    loadRecipeList();
+    rebuildDropdowns();
+  }
 }
 
 const uploadZone = document.getElementById('upload-zone');
@@ -357,14 +248,8 @@ const uploadInput = document.getElementById('recipe-upload');
 uploadZone.addEventListener('click', () => uploadInput.click());
 uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
 uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
-uploadZone.addEventListener('drop', e => {
-  e.preventDefault();
-  uploadZone.classList.remove('dragover');
-  if (e.dataTransfer.files.length) uploadRecipe(e.dataTransfer.files[0]);
-});
-uploadInput.addEventListener('change', () => {
-  if (uploadInput.files.length) uploadRecipe(uploadInput.files[0]);
-});
+uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('dragover'); if (e.dataTransfer.files.length) uploadRecipe(e.dataTransfer.files[0]); });
+uploadInput.addEventListener('change', () => { if (uploadInput.files.length) uploadRecipe(uploadInput.files[0]); });
 
 async function uploadRecipe(file) {
   const status = document.getElementById('upload-status');
@@ -374,7 +259,7 @@ async function uploadRecipe(file) {
   const formData = new FormData();
   formData.append('file', file);
   try {
-    const res = await fetch('/api/recipes/upload', { method: 'POST', body: formData });
+    const res = await fetch('/api/recipes/upload', {method:'POST', body:formData});
     const data = await res.json();
     if (data.success) {
       status.className = 'status success';
@@ -392,9 +277,6 @@ async function uploadRecipe(file) {
   }
 }
 
-const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-const VESSELS = ['K1','K2','K3'];
-
 function buildScheduleGrid() {
   const container = document.getElementById('schedule-grid');
   const weekDate = document.getElementById('week-date').value;
@@ -409,12 +291,12 @@ function buildScheduleGrid() {
   for (let idx = 0; idx < DAYS.length; idx++) {
     const d = new Date(monday);
     d.setDate(d.getDate() + idx);
-    const dateStr = d.toLocaleDateString('en-GB', {day:'2-digit',month:'2-digit',year:'numeric'});
+    const dateStr = d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
     const lot = d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'2-digit'}).replace(/\//g,'');
     html += '<div class="day-block"><div class="day-header"><span>' + DAYS[idx] + ' — ' + dateStr + '</span><span class="lot">LOT# ' + lot + '</span></div>';
     for (let v = 0; v < VESSELS.length; v++) {
-      const selId = 'sel-' + idx + '-' + VESSELS[v];
-      const yieldId = 'yield-' + idx + '-' + VESSELS[v];
+      const selId = 'sel-' + idx + '-' + VESSELS[v].replace(/[()]/g,'');
+      const yieldId = 'yield-' + idx + '-' + VESSELS[v].replace(/[()]/g,'');
       html += '<div class="vessel-row"><span class="vessel-label">' + VESSELS[v] + '</span><select id="' + selId + '" onchange="updateYield(' + idx + ',\'' + VESSELS[v] + '\')">' + options + '</select><span class="yield-display" id="' + yieldId + '">—</span></div>';
     }
     html += '</div>';
@@ -426,24 +308,30 @@ function rebuildDropdowns() {
   const saved = {};
   for (let idx = 0; idx < DAYS.length; idx++) {
     for (let v = 0; v < VESSELS.length; v++) {
-      const sel = document.getElementById('sel-' + idx + '-' + VESSELS[v]);
-      if (sel) saved[idx + '-' + VESSELS[v]] = sel.value;
+      const selId = 'sel-' + idx + '-' + VESSELS[v].replace(/[()]/g,'');
+      const sel = document.getElementById(selId);
+      if (sel) saved[selId] = sel.value;
     }
   }
   buildScheduleGrid();
-  Object.entries(saved).forEach(([key, val]) => {
-    const parts = key.split('-');
-    const sel = document.getElementById('sel-' + parts[0] + '-' + parts[1]);
+  Object.entries(saved).forEach(([id, val]) => {
+    const sel = document.getElementById(id);
     if (sel && val) {
       sel.value = val;
-      updateYield(parseInt(parts[0]), parts[1]);
+      const parts = id.replace('sel-','').split('-');
+      const idx = parseInt(parts[0]);
+      const vKey = parts.slice(1).join('-');
+      const vessel = VESSELS.find(v => v.replace(/[()]/g,'') === vKey);
+      if (vessel) updateYield(idx, vessel);
     }
   });
 }
 
 function updateYield(dayIdx, vessel) {
-  const sel = document.getElementById('sel-' + dayIdx + '-' + vessel);
-  const yieldEl = document.getElementById('yield-' + dayIdx + '-' + vessel);
+  const selId = 'sel-' + dayIdx + '-' + vessel.replace(/[()]/g,'');
+  const yieldId = 'yield-' + dayIdx + '-' + vessel.replace(/[()]/g,'');
+  const sel = document.getElementById(selId);
+  const yieldEl = document.getElementById(yieldId);
   const recipeName = sel.value;
   if (recipeName && recipes[recipeName]) {
     yieldEl.textContent = recipes[recipeName].yield + ' units';
@@ -466,22 +354,20 @@ async function loadSchedule() {
     if (data.schedule) {
       Object.entries(data.schedule).forEach(([dayIdx, vessels]) => {
         Object.entries(vessels).forEach(([vessel, recipe]) => {
-          const sel = document.getElementById('sel-' + dayIdx + '-' + vessel);
+          const selId = 'sel-' + dayIdx + '-' + vessel.replace(/[()]/g,'');
+          const sel = document.getElementById(selId);
           if (sel && recipe) {
             sel.value = recipe;
             updateYield(parseInt(dayIdx), vessel);
           }
         });
       });
-      if (data.notes) {
-        document.getElementById('schedule-notes').value = data.notes;
-      }
+      if (data.notes) document.getElementById('schedule-notes').value = data.notes;
       showStatus('Schedule loaded', 'success');
     }
   } catch (e) {}
 }
-
-async function generatePDFs() {
+  async function generatePDFs() {
   const btn = document.getElementById('generate-btn');
   btn.disabled = true;
   btn.textContent = 'Generating...';
@@ -490,7 +376,8 @@ async function generatePDFs() {
   for (let idx = 0; idx < DAYS.length; idx++) {
     schedule[idx] = {};
     for (let v = 0; v < VESSELS.length; v++) {
-      const sel = document.getElementById('sel-' + idx + '-' + VESSELS[v]);
+      const selId = 'sel-' + idx + '-' + VESSELS[v].replace(/[()]/g,'');
+      const sel = document.getElementById(selId);
       schedule[idx][VESSELS[v]] = sel ? sel.value : '';
     }
   }
@@ -498,8 +385,8 @@ async function generatePDFs() {
   try {
     const res = await fetch('/api/generate', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ week_id: currentWeekId, schedule: schedule, notes: notes }),
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({week_id: currentWeekId, schedule: schedule, notes: notes}),
     });
     const data = await res.json();
     if (data.success) {
@@ -526,16 +413,33 @@ async function loadPDFs() {
 
 async function loadPDFsForWeek(weekId) {
   const container = document.getElementById('pdf-list');
+  const dlContainer = document.getElementById('download-all-container');
   try {
     const res = await fetch('/api/pdfs/' + weekId);
     const files = await res.json();
     if (files.length === 0) {
       container.innerHTML = '<li style="color:var(--text-light)">No PDFs for this week</li>';
+      dlContainer.style.display = 'none';
       return;
     }
-    container.innerHTML = files.map(f => '<li><span>' + f.replace('.pdf','').replace(/_/g,' ') + '</span><a href="/api/pdf/' + weekId + '/' + f + '" target="_blank">Download</a></li>').join('');
+    container.innerHTML = files.map(f => {
+      const label = f.replace('.pdf','').replace(/_/g,' ');
+      let actions = '<div class="pdf-actions"><a href="/api/pdf/' + weekId + '/' + f + '" target="_blank">Download</a>';
+      if (f.includes('_Production')) {
+        const dayName = f.split('_')[0];
+        const dayIdx = DAYS.indexOf(dayName);
+        if (dayIdx >= 0) {
+          actions += '<a href="/checklist/' + weekId + '/' + dayIdx + '" style="color:var(--accent);">Fill Digitally</a>';
+        }
+      }
+      actions += '</div>';
+      return '<li><span>' + label + '</span>' + actions + '</li>';
+    }).join('');
+    dlContainer.style.display = 'block';
+    document.getElementById('download-all-link').href = '/api/pdfs/' + weekId + '/download-all';
   } catch (e) {
     container.innerHTML = '<li style="color:var(--text-light)">Error loading PDFs</li>';
+    dlContainer.style.display = 'none';
   }
 }
 
@@ -550,7 +454,7 @@ async function loadHistory() {
     }
     container.innerHTML = weeks.map(w => {
       const d = new Date(w + 'T00:00:00');
-      const label = d.toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'});
+      const label = d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
       return '<li onclick="loadHistoryWeek(\'' + w + '\')"><span class="history-week">Week of ' + label + '</span><span class="history-meta">View →</span></li>';
     }).join('');
   } catch (e) {
@@ -568,9 +472,7 @@ function showStatus(msg, type) {
   const el = document.getElementById('status-msg');
   el.className = 'status ' + type;
   el.textContent = msg;
-  if (type === 'success') {
-    setTimeout(() => { el.style.display = 'none'; }, 3000);
-  }
+  if (type === 'success') setTimeout(() => { el.style.display = 'none'; }, 3000);
 }
 </script>
 </body>
