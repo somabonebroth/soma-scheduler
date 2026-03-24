@@ -1,11 +1,12 @@
 """
-Soma Bone Broth — PDF Generation Engine
-Generates weekly schedules and daily production packages.
+Soma Bone Broth — PDF Generation Engine v2
+Logo support, K4(115L), updated function signatures.
 """
 
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.colors import HexColor, black, white
 from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
 from datetime import datetime, timedelta
 
 DARK = HexColor("#1a1a2e")
@@ -18,20 +19,32 @@ WARNING_BG = HexColor("#fff3cd")
 HEADER_TEXT = white
 FONT = "Helvetica"
 FONT_BOLD = "Helvetica-Bold"
-VESSELS = ["K1", "K2", "K3"]
+VESSELS = ["K1", "K2", "K3", "K4(115L)"]
 
 
-def draw_header(c, width, height, title, subtitle=""):
+def draw_header(c, width, height, title, subtitle="", logo_path=None):
     header_h = 55
     c.setFillColor(DARK)
     c.rect(0, height - header_h, width, header_h, fill=1, stroke=0)
     c.setFillColor(ACCENT)
     c.rect(0, height - header_h - 3, width, 3, fill=1, stroke=0)
+
+    if logo_path:
+        try:
+            logo = ImageReader(logo_path)
+            logo_size = 40
+            c.drawImage(logo, 20, height - header_h + 7, width=logo_size, height=logo_size, mask='auto')
+            text_x = 20 + logo_size + 10
+        except:
+            text_x = 30
+    else:
+        text_x = 30
+
     c.setFillColor(HEADER_TEXT)
     c.setFont(FONT_BOLD, 16)
-    c.drawString(30, height - 24, "SOMA BONE BROTH")
+    c.drawString(text_x, height - 24, "SOMA BONE BROTH")
     c.setFont(FONT, 10)
-    c.drawString(30, height - 42, title)
+    c.drawString(text_x, height - 42, title)
     if subtitle:
         c.setFillColor(HexColor("#aaaaaa"))
         c.setFont(FONT, 9)
@@ -68,8 +81,6 @@ def estimate_card_height(recipe_data, card_w):
 def draw_recipe_card(c, x, y, card_w, recipe_name, recipe_data, vessel):
     start_y = y
     margin = 6
-
-    # Header
     header_h = 22
     c.setFillColor(ACCENT)
     c.rect(x, y - header_h, card_w, header_h, fill=1, stroke=0)
@@ -82,7 +93,6 @@ def draw_recipe_card(c, x, y, card_w, recipe_name, recipe_data, vessel):
     c.drawRightString(x + card_w - margin, y - 15, f"{fmt}  |  Target: {target} units")
     y -= header_h
 
-    # Special instructions
     special = recipe_data.get("special_instructions", [])
     if special:
         inner_w = card_w - margin * 2
@@ -100,14 +110,12 @@ def draw_recipe_card(c, x, y, card_w, recipe_name, recipe_data, vessel):
             ty -= 10
         y -= si_h
 
-    # Ingredient sections
     sections = [
         ("Add to kettle overnight", recipe_data.get("kettle_overnight", [])),
         ("Add directly to kettle after skim", recipe_data.get("after_skim", [])),
         ("Finishing", recipe_data.get("finishing", [])),
         ("Add to jar / container", recipe_data.get("add_to_jar", [])),
     ]
-
     line_h = 11
     for sec_title, items in sections:
         if not items:
@@ -118,7 +126,6 @@ def draw_recipe_card(c, x, y, card_w, recipe_name, recipe_data, vessel):
         c.setFont(FONT_BOLD, 7)
         c.drawString(x + margin, y - 10, sec_title)
         y -= 14
-
         for i, item in enumerate(items):
             bg = ROW_ALT if i % 2 == 0 else white
             c.setFillColor(bg)
@@ -141,14 +148,13 @@ def draw_recipe_card(c, x, y, card_w, recipe_name, recipe_data, vessel):
 
 
 # ── Weekly Schedule PDF ───────────────────────────────────────────────
-def generate_weekly_schedule_pdf(output_path, week_start, days_map, recipes, notes=""):
+def generate_weekly_schedule_pdf(output_path, week_start, days_map, recipes, notes="", logo_path=None):
     w, h = letter
     c = canvas.Canvas(output_path, pagesize=letter)
     draw_header(c, w, h, "WEEKLY PRODUCTION SCHEDULE",
-                f"Week of {week_start.strftime('%B %d, %Y')}")
+                f"Week of {week_start.strftime('%B %d, %Y')}", logo_path)
     y = h - 85
 
-    # Info bar
     c.setFillColor(LIGHT_BG)
     c.rect(30, y - 28, w - 60, 28, fill=1, stroke=0)
     c.setFillColor(black)
@@ -160,7 +166,7 @@ def generate_weekly_schedule_pdf(output_path, week_start, days_map, recipes, not
 
     days = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
     cols = ["Vessel", "Recipe", "Target Yield", "Production", "LOT#"]
-    col_widths = [50, 200, 80, 80, 120]
+    col_widths = [65, 185, 80, 80, 120]
     col_x = [30]
     for cw in col_widths[:-1]:
         col_x.append(col_x[-1] + cw)
@@ -171,14 +177,13 @@ def generate_weekly_schedule_pdf(output_path, week_start, days_map, recipes, not
     for d_idx, day in enumerate(days):
         date = week_start + timedelta(days=d_idx)
         lot = date.strftime("%d%m%y")
-        block_h = hdr_h + row_h * 3 + 8
+        block_h = hdr_h + row_h * len(VESSELS) + 8
         if y - block_h < 55:
             c.showPage()
             draw_header(c, w, h, "WEEKLY PRODUCTION SCHEDULE (cont.)",
-                        f"Week of {week_start.strftime('%B %d, %Y')}")
+                        f"Week of {week_start.strftime('%B %d, %Y')}", logo_path)
             y = h - 85
 
-        # Day header
         c.setFillColor(ACCENT)
         c.rect(30, y - hdr_h, table_w, hdr_h, fill=1, stroke=0)
         c.setFillColor(HEADER_TEXT)
@@ -186,7 +191,6 @@ def generate_weekly_schedule_pdf(output_path, week_start, days_map, recipes, not
         c.drawString(40, y - 14, f"{day}  —  {date.strftime('%d/%m/%Y')}")
         y -= hdr_h
 
-        # Column headers
         c.setFillColor(DARK)
         c.rect(30, y - row_h, table_w, row_h, fill=1, stroke=0)
         c.setFillColor(HEADER_TEXT)
@@ -195,7 +199,6 @@ def generate_weekly_schedule_pdf(output_path, week_start, days_map, recipes, not
             c.drawString(col_x[i] + 4, y - 13, cn)
         y -= row_h
 
-        # Vessel rows
         day_data = days_map.get(d_idx, [])
         for v_idx, vessel in enumerate(VESSELS):
             bg = ROW_ALT if v_idx % 2 == 0 else white
@@ -230,7 +233,7 @@ def generate_weekly_schedule_pdf(output_path, week_start, days_map, recipes, not
     if y < 120:
         c.showPage()
         draw_header(c, w, h, "WEEKLY PRODUCTION SCHEDULE (cont.)",
-                    f"Week of {week_start.strftime('%B %d, %Y')}")
+                    f"Week of {week_start.strftime('%B %d, %Y')}", logo_path)
         y = h - 85
 
     notes_h = 80
@@ -240,22 +243,18 @@ def generate_weekly_schedule_pdf(output_path, week_start, days_map, recipes, not
     c.setFont(FONT_BOLD, 9)
     c.drawString(40, y - 13, "NOTES")
     y -= 18
-
     c.setFillColor(white)
     c.rect(30, y - notes_h, w - 60, notes_h, fill=1, stroke=0)
     c.setStrokeColor(LIGHT_GRAY)
     c.rect(30, y - notes_h, w - 60, notes_h, fill=0, stroke=1)
-
     if notes:
         c.setFillColor(black)
         c.setFont(FONT, 8)
-        note_lines = notes.split("\n")
         ny = y - 12
-        for nl in note_lines[:8]:
+        for nl in notes.split("\n")[:8]:
             c.drawString(38, ny, nl[:100])
             ny -= 10
 
-    # Footer
     c.setFillColor(MEDIUM_GRAY)
     c.setFont(FONT, 7)
     c.drawString(40, 28, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
@@ -264,15 +263,14 @@ def generate_weekly_schedule_pdf(output_path, week_start, days_map, recipes, not
 
 
 # ── CCP Checklist Pages ──────────────────────────────────────────────
-def draw_checklist_pages(c, w, h, date, active_vessels):
+def draw_checklist_pages(c, w, h, date, active_vessels, logo_path=None):
     day_name = date.strftime("%A").upper()
     lot = date.strftime("%d%m%y")
 
     c.showPage()
-    draw_header(c, w, h, f"CCP CHECKLIST — {day_name}", date.strftime("%d/%m/%Y"))
+    draw_header(c, w, h, f"CCP CHECKLIST — {day_name}", date.strftime("%d/%m/%Y"), logo_path)
     y = h - 72
 
-    # Info bar
     c.setFillColor(LIGHT_BG)
     c.rect(30, y - 22, w - 60, 22, fill=1, stroke=0)
     c.setFillColor(black)
@@ -283,7 +281,6 @@ def draw_checklist_pages(c, w, h, date, active_vessels):
     c.drawString(220, y - 15, info)
     y -= 30
 
-    # Warnings
     c.setFillColor(WARNING_BG)
     c.rect(30, y - 36, w - 60, 36, fill=1, stroke=0)
     c.setStrokeColor(HexColor("#ffc107"))
@@ -350,8 +347,8 @@ def draw_checklist_pages(c, w, h, date, active_vessels):
     left_margin = 30
     table_w = w - 60
     vessel_names = [v["vessel"] for v in active_vessels]
-    temp_col_w = 48
-    check_w = 30
+    temp_col_w = 45
+    check_w = 28
     temp_area = len(vessel_names) * temp_col_w + check_w
     task_w = table_w - temp_area
     temp_start_x = left_margin + task_w
@@ -363,7 +360,7 @@ def draw_checklist_pages(c, w, h, date, active_vessels):
         needed = sec_h + len(items) * row_h + 6
         if y - needed < 70:
             c.showPage()
-            draw_header(c, w, h, f"CCP CHECKLIST — {day_name} (cont.)", date.strftime("%d/%m/%Y"))
+            draw_header(c, w, h, f"CCP CHECKLIST — {day_name} (cont.)", date.strftime("%d/%m/%Y"), logo_path)
             y = h - 72
 
         c.setFillColor(ACCENT)
@@ -410,10 +407,9 @@ def draw_checklist_pages(c, w, h, date, active_vessels):
             y -= row_h
         y -= 5
 
-    # Sign-off
     if y < 90:
         c.showPage()
-        draw_header(c, w, h, f"CCP CHECKLIST — {day_name} (cont.)", date.strftime("%d/%m/%Y"))
+        draw_header(c, w, h, f"CCP CHECKLIST — {day_name} (cont.)", date.strftime("%d/%m/%Y"), logo_path)
         y = h - 72
 
     c.setFillColor(DARK)
@@ -439,7 +435,7 @@ def draw_checklist_pages(c, w, h, date, active_vessels):
 
 
 # ── Daily Production Package ─────────────────────────────────────────
-def generate_daily_package_pdf(output_path, date, vessel_assignments, recipes):
+def generate_daily_package_pdf(output_path, date, vessel_assignments, recipes, logo_path=None):
     w, h = letter
     c = canvas.Canvas(output_path, pagesize=letter)
     day_name = date.strftime("%A").upper()
@@ -447,9 +443,8 @@ def generate_daily_package_pdf(output_path, date, vessel_assignments, recipes):
 
     active = [v for v in vessel_assignments if v.get("recipe") and v["recipe"] in recipes]
 
-    # Recipe pages
     draw_header(c, w, h, f"RECIPE CARDS — {day_name}",
-                f"{date.strftime('%d/%m/%Y')}  |  LOT#: {lot}")
+                f"{date.strftime('%d/%m/%Y')}  |  LOT#: {lot}", logo_path)
 
     if not active:
         c.setFillColor(MEDIUM_GRAY)
@@ -460,18 +455,16 @@ def generate_daily_package_pdf(output_path, date, vessel_assignments, recipes):
         card_w = w - 2 * margin
         y = h - 68
         gap = 12
-
         for v in active:
             rd = recipes[v["recipe"]]
             est_h = estimate_card_height(rd, card_w)
             if y - est_h < 60:
                 c.showPage()
                 draw_header(c, w, h, f"RECIPE CARDS — {day_name} (cont.)",
-                            f"{date.strftime('%d/%m/%Y')}  |  LOT#: {lot}")
+                            f"{date.strftime('%d/%m/%Y')}  |  LOT#: {lot}", logo_path)
                 y = h - 68
             card_bottom = draw_recipe_card(c, margin, y, card_w, v["recipe"], rd, v["vessel"])
             y = card_bottom - gap
 
-    # CCP Checklist
-    draw_checklist_pages(c, w, h, date, active)
+    draw_checklist_pages(c, w, h, date, active, logo_path)
     c.save()
