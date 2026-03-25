@@ -365,6 +365,10 @@ def save_checklist_route(week_id, day_idx):
     save_checklist_data(week_id, day_idx, data)
     return jsonify({"success": True})
 
+# Initialize recipes on import (for gunicorn)
+if not os.path.exists(RECIPES_PATH):
+    from default_recipes import DEFAULT_RECIPES
+    save_recipes(DEFAULT_RECIPES)
 
 if __name__ == "__main__":
     if not os.path.exists(RECIPES_PATH):
