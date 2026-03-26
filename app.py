@@ -1,11 +1,10 @@
 """
-Soma Bone Broth — Production Scheduler v2
-Flask backend: auth, schedule management, PDF generation, digital checklists, recipe CRUD
+Soma Bone Broth — Production Scheduler v3
 """
 
 from flask import Flask, render_template, request, jsonify, send_file, send_from_directory, session, redirect, url_for
 from datetime import datetime, timedelta
-from pdf_engine import generate_weekly_schedule_pdf, generate_daily_package_pdf
+from pdf_engine import generate_weekly_schedule_pdf, generate_daily_package_pdf, generate_filled_checklist_pdf
 from functools import wraps
 import json
 import os
@@ -16,11 +15,9 @@ import io
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ.get("SECRET_KEY", "soma-bone-broth-2026-change-me")
 
-# ── Config ─────────────────────────────────────────────────────────────
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "soma2026")
 VESSELS = ["K1", "K2", "K3", "K4(115L)"]
 
-# ── Paths ──────────────────────────────────────────────────────────────
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "data"))
 RECIPES_PATH = os.path.join(DATA_DIR, "recipes.json")
 SCHEDULES_DIR = os.path.join(DATA_DIR, "schedules")
@@ -127,7 +124,6 @@ def list_schedules():
     files = sorted(os.listdir(SCHEDULES_DIR), reverse=True)
     return [f.replace(".json", "") for f in files if f.endswith(".json")]
 
-
 def get_checklist_path(week_id, day_idx):
     return os.path.join(CHECKLISTS_DIR, f"{week_id}_day{day_idx}.json")
 
@@ -142,9 +138,7 @@ def save_checklist_data(week_id, day_idx, data):
     path = get_checklist_path(week_id, day_idx)
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
-
-
-# ── Routes: Auth ───────────────────────────────────────────────────────
+        # ── Auth ───────────────────────────────────────────────────────────────
 @app.route("/login", methods=["GET"])
 def login_page():
     if session.get("authenticated"):
@@ -165,7 +159,7 @@ def logout():
     return jsonify({"success": True})
 
 
-# ── Routes: Pages ──────────────────────────────────────────────────────
+# ── Pages ──────────────────────────────────────────────────────────────
 @app.route("/")
 @login_required
 def index():
@@ -177,7 +171,7 @@ def checklist_page(week_id, day_idx):
     return render_template("checklist.html", week_id=week_id, day_idx=day_idx)
 
 
-# ── Routes: Recipes ────────────────────────────────────────────────────
+# ── Recipes ────────────────────────────────────────────────────────────
 @app.route("/api/recipes", methods=["GET"])
 @login_required
 def get_recipes():
@@ -232,7 +226,7 @@ def get_recipe_names():
     return jsonify(sorted(recipes.keys()))
 
 
-# ── Routes: Schedules ─────────────────────────────────────────────────
+# ── Schedules ──────────────────────────────────────────────────────────
 @app.route("/api/schedule", methods=["POST"])
 @login_required
 def save_schedule_route():
@@ -258,8 +252,7 @@ def get_schedule(week_id):
 def get_schedules():
     return jsonify(list_schedules())
 
-
-# ── Routes: PDF Generation ────────────────────────────────────────────
+# ── PDF Generation ────────────────────────────────────────────────────
 @app.route("/api/generate", methods=["POST"])
 @login_required
 def generate_pdfs():
@@ -344,7 +337,7 @@ def download_all_pdfs(week_id):
                      download_name=f"Soma_Production_{week_id}.zip")
 
 
-# ── Routes: Digital Checklists ─────────────────────────────────────────
+# ── Digital Checklists ─────────────────────────────────────────────────
 @app.route("/api/checklist/<week_id>/<int:day_idx>", methods=["GET"])
 @login_required
 def get_checklist(week_id, day_idx):
@@ -365,15 +358,50 @@ def save_checklist_route(week_id, day_idx):
     save_checklist_data(week_id, day_idx, data)
     return jsonify({"success": True})
 
-# Initialize recipes on import (for gunicorn)
+@app.route("/api/checklist/<week_id>/<int:day_idx>/complete", methods=["POST"])
+@login_required
+def complete_checklist(week_id, day_idx):
+    data = request.json
+    data["last_updated"] = datetime.now().isoformat()
+    data["completed"] = True
+    save_checklist_data(week_id, day_idx, data)
+
+    schedule_data = load_schedule(week_id)
+    day_info = {}
+    if schedule_data and schedule_data.get("schedule"):
+        day_key = str(day_idx)
+        if day_key in schedule_data["schedule"]:
+            day_info = schedule_data["schedule"][day_key]
+
+    active_vessels = []
+    for vessel in VESSELS:
+        recipe = day_info.get(vessel, "")
+        if recipe:
+            active_vessels.append({"vessel": vessel, "recipe": recipe})
+
+    week_start = datetime.strptime(week_id, "%Y-%m-%d")
+    date = week_start + timedelta(days=day_idx)
+
+    logo_path = os.path.join(app.static_folder, "logo.jpg")
+    if not os.path.exists(logo_path):
+        logo_path = None
+
+    week_pdf_dir = os.path.join(PDF_DIR, week_id)
+    os.makedirs(week_pdf_dir, exist_ok=True)
+    day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    filename = f"{day_names[day_idx]}_Completed_Checklist.pdf"
+    pdf_path = os.path.join(week_pdf_dir, filename)
+
+    generate_filled_checklist_pdf(pdf_path, date, active_vessels, data, logo_path)
+
+    return jsonify({"success": True, "filename": filename})
+
+
+# ── Init recipes ───────────────────────────────────────────────────────
 if not os.path.exists(RECIPES_PATH):
     from default_recipes import DEFAULT_RECIPES
     save_recipes(DEFAULT_RECIPES)
 
 if __name__ == "__main__":
-    if not os.path.exists(RECIPES_PATH):
-        from default_recipes import DEFAULT_RECIPES
-        save_recipes(DEFAULT_RECIPES)
-        print(f"Initialized {len(DEFAULT_RECIPES)} recipes")
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
