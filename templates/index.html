@@ -5,20 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Soma Bone Broth — Production Scheduler</title>
 <style>
-  :root {
-    --dark: #1a1a2e;
-    --accent: #4a6741;
-    --accent-light: #5a7d4f;
-    --bg: #f5f5f0;
-    --card-bg: #ffffff;
-    --border: #e0e0d8;
-    --text: #2a2a2a;
-    --text-light: #777;
-    --warning: #fff3cd;
-    --success: #d4edda;
-    --error: #f8d7da;
-    --danger: #dc3545;
-  }
+  :root { --dark: #1a1a2e; --accent: #4a6741; --accent-light: #5a7d4f; --bg: #f5f5f0; --card-bg: #ffffff; --border: #e0e0d8; --text: #2a2a2a; --text-light: #777; --warning: #fff3cd; --success: #d4edda; --error: #f8d7da; --danger: #dc3545; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
   .header { background: var(--dark); padding: 12px 24px; position: sticky; top: 0; z-index: 100; border-bottom: 3px solid var(--accent); display: flex; align-items: center; gap: 12px; }
@@ -52,7 +39,7 @@
   .yield-display { font-size: 13px; color: var(--text-light); text-align: center; }
   .yield-display.has-value { color: var(--accent); font-weight: 600; }
   .notes-area { width: 100%; min-height: 80px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; resize: vertical; }
-  .btn { padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .btn { padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: inline-block; text-decoration: none; }
   .btn-primary { background: var(--accent); color: #fff; }
   .btn-primary:hover { background: var(--accent-light); }
   .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
@@ -60,14 +47,15 @@
   .btn-outline:hover { background: #f0f0ea; }
   .btn-danger { background: none; border: 1px solid var(--danger); color: var(--danger); padding: 4px 10px; font-size: 12px; border-radius: 4px; cursor: pointer; }
   .btn-danger:hover { background: var(--danger); color: #fff; }
+  .btn-reset { background: none; border: 1px solid var(--border); color: var(--text-light); padding: 8px 16px; font-size: 13px; border-radius: 6px; cursor: pointer; }
+  .btn-reset:hover { background: #f0f0ea; color: var(--text); }
   .btn-block { width: 100%; padding: 14px; font-size: 16px; }
-  .btn-sm { padding: 6px 12px; font-size: 12px; }
-  .generate-bar { position: sticky; bottom: 0; background: var(--card-bg); border-top: 1px solid var(--border); padding: 16px; text-align: center; box-shadow: 0 -2px 8px rgba(0,0,0,0.05); }
+  .generate-bar { position: sticky; bottom: 0; background: var(--card-bg); border-top: 1px solid var(--border); padding: 16px; text-align: center; box-shadow: 0 -2px 8px rgba(0,0,0,0.05); display: flex; gap: 12px; justify-content: center; align-items: center; }
   .pdf-list { list-style: none; padding: 0; }
   .pdf-list li { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 8px; }
   .pdf-list li:last-child { border-bottom: none; }
-  .pdf-list a, .pdf-list button.link-btn { color: var(--accent); text-decoration: none; font-weight: 500; background: none; border: none; cursor: pointer; font-size: 14px; }
-  .pdf-list a:hover, .pdf-list button.link-btn:hover { text-decoration: underline; }
+  .pdf-list a { color: var(--accent); text-decoration: none; font-weight: 500; }
+  .pdf-list a:hover { text-decoration: underline; }
   .pdf-actions { display: flex; gap: 10px; align-items: center; }
   .download-all { margin-top: 14px; text-align: center; }
   .history-list { list-style: none; padding: 0; }
@@ -86,24 +74,21 @@
   .status.success { display: block; background: var(--success); color: #155724; }
   .status.error { display: block; background: var(--error); color: #721c24; }
   .status.loading { display: block; background: var(--warning); color: #856404; }
+  .pdf-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
   @media (max-width: 768px) {
     .header h1 { font-size: 16px; }
     .main { padding: 16px 12px; }
     .vessel-row { grid-template-columns: 60px 1fr 70px; padding: 8px 12px; gap: 8px; }
     .nav button { padding: 10px 14px; font-size: 13px; }
+    .generate-bar { flex-direction: column; }
   }
 </style>
 </head>
 <body>
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma">
-  <div class="header-text">
-    <h1>SOMA BONE BROTH</h1>
-    <p>Production Scheduler</p>
-  </div>
-  <div class="header-right">
-    <button onclick="doLogout()">Log Out</button>
-  </div>
+  <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Production Scheduler</p></div>
+  <div class="header-right"><button onclick="doLogout()">Log Out</button></div>
 </div>
 <div class="nav">
   <button class="active" onclick="showTab('schedule')">Schedule</button>
@@ -118,30 +103,29 @@
         <label>Week starting (Monday):</label>
         <input type="date" id="week-date">
         <button class="btn btn-outline" onclick="loadSchedule()">Load</button>
+        <button class="btn-reset" onclick="resetSchedule()">Re-Set Schedule</button>
       </div>
     </div>
     <div id="status-msg" class="status"></div>
     <div id="schedule-grid"></div>
-    <div class="card">
-      <h3>Notes</h3>
-      <textarea id="schedule-notes" class="notes-area" placeholder="Weekly notes..."></textarea>
-    </div>
+    <div class="card"><h3>Notes</h3><textarea id="schedule-notes" class="notes-area" placeholder="Weekly notes..."></textarea></div>
     <div class="generate-bar">
       <button class="btn btn-primary btn-block" id="generate-btn" onclick="generatePDFs()">Generate Schedule + Checklists</button>
     </div>
   </div>
   <div id="tab-pdfs" class="tab-content">
     <div class="card">
-      <h2>Generated PDFs</h2>
-      <p style="color:var(--text-light);font-size:13px;margin-bottom:12px;">Select a week to view its PDFs. Use "Fill Digitally" to open the interactive checklist.</p>
+      <div class="pdf-nav">
+        <h2 style="margin-bottom:0;">Generated PDFs</h2>
+        <button class="btn btn-outline" onclick="showTab('schedule')" style="font-size:13px;">← Back to Schedule</button>
+      </div>
+      <p style="color:var(--text-light);font-size:13px;margin-bottom:12px;">Download PDFs or use "Fill Digitally" for interactive checklists.</p>
       <div class="week-picker" style="margin-bottom:16px;">
         <label>Week:</label>
         <input type="date" id="pdf-week-date">
         <button class="btn btn-outline" onclick="loadPDFs()">Load PDFs</button>
       </div>
-      <ul id="pdf-list" class="pdf-list">
-        <li style="color:var(--text-light)">No PDFs generated yet</li>
-      </ul>
+      <ul id="pdf-list" class="pdf-list"><li style="color:var(--text-light)">No PDFs generated yet</li></ul>
       <div class="download-all" id="download-all-container" style="display:none;">
         <a id="download-all-link" class="btn btn-primary">Download All (ZIP)</a>
       </div>
@@ -150,44 +134,50 @@
   <div id="tab-recipes" class="tab-content">
     <div class="card">
       <h2>Add Recipe</h2>
-      <p style="color:var(--text-light);font-size:13px;margin-bottom:16px;">Upload a recipe card PDF (same format as your existing cards).</p>
-      <div class="upload-zone" id="upload-zone">
-        <p>Drop PDF here or tap to browse</p>
-        <input type="file" id="recipe-upload" accept=".pdf">
-      </div>
+      <p style="color:var(--text-light);font-size:13px;margin-bottom:16px;">Upload a recipe card PDF.</p>
+      <div class="upload-zone" id="upload-zone"><p>Drop PDF here or tap to browse</p><input type="file" id="recipe-upload" accept=".pdf"></div>
       <div id="upload-status" class="status" style="margin-top:12px;"></div>
     </div>
-    <div class="card">
-      <h2>All Recipes (<span id="recipe-count">0</span>)</h2>
-      <div id="recipe-list"></div>
-    </div>
+    <div class="card"><h2>All Recipes (<span id="recipe-count">0</span>)</h2><div id="recipe-list"></div></div>
   </div>
   <div id="tab-history" class="tab-content">
-    <div class="card">
-      <h2>Past Schedules</h2>
-      <ul id="history-list" class="history-list">
-        <li style="color:var(--text-light)">No past schedules</li>
-      </ul>
-    </div>
+    <div class="card"><h2>Past Schedules</h2><ul id="history-list" class="history-list"><li style="color:var(--text-light)">No past schedules</li></ul></div>
   </div>
 </div>
-<script>
+
+  <script>
 let recipes = {};
 let currentWeekId = '';
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 const VESSELS = ['K1','K2','K3','K4(115L)'];
 
-document.addEventListener('DOMContentLoaded', async () => {
+function getCurrentMonday() {
   const today = new Date();
   const day = today.getDay();
-  const diff = day === 0 ? 1 : (day === 1 ? 0 : 8 - day);
-  const nextMon = new Date(today);
-  nextMon.setDate(today.getDate() + diff);
-  document.getElementById('week-date').value = formatDate(nextMon);
-  document.getElementById('pdf-week-date').value = formatDate(nextMon);
+  const diff = day === 0 ? -6 : 1 - day;
+  const mon = new Date(today);
+  mon.setDate(today.getDate() + diff);
+  return mon;
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const params = new URLSearchParams(window.location.search);
+  const urlTab = params.get('tab');
+  const urlWeek = params.get('week');
+  const mon = getCurrentMonday();
+  const defaultDate = urlWeek || formatDate(mon);
+  document.getElementById('week-date').value = defaultDate;
+  document.getElementById('pdf-week-date').value = defaultDate;
   await loadRecipes();
   buildScheduleGrid();
   loadHistory();
+  if (urlTab === 'pdfs' && urlWeek) {
+    showTabDirect('pdfs');
+    loadPDFsForWeek(urlWeek);
+    currentWeekId = urlWeek;
+    document.getElementById('week-date').value = urlWeek;
+    loadScheduleSilent(urlWeek);
+  }
 });
 
 function formatDate(d) { return d.toISOString().split('T')[0]; }
@@ -204,43 +194,44 @@ function showTab(name) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  event.target.classList.add('active');
+  const navBtns = document.querySelectorAll('.nav button');
+  const tabNames = ['schedule','pdfs','recipes','history'];
+  const idx = tabNames.indexOf(name);
+  if (idx >= 0 && navBtns[idx]) navBtns[idx].classList.add('active');
   if (name === 'recipes') loadRecipeList();
   if (name === 'history') loadHistory();
 }
 
-async function doLogout() {
-  await fetch('/api/logout', {method:'POST'});
-  window.location.href = '/login';
+function showTabDirect(name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  const navBtns = document.querySelectorAll('.nav button');
+  const tabNames = ['schedule','pdfs','recipes','history'];
+  const idx = tabNames.indexOf(name);
+  if (idx >= 0 && navBtns[idx]) navBtns[idx].classList.add('active');
 }
 
-async function loadRecipes() {
-  const res = await fetch('/api/recipes');
-  recipes = await res.json();
-}
+async function doLogout() { await fetch('/api/logout',{method:'POST'}); window.location.href='/login'; }
+
+async function loadRecipes() { const res = await fetch('/api/recipes'); recipes = await res.json(); }
 
 function loadRecipeList() {
   const container = document.getElementById('recipe-list');
   const names = Object.keys(recipes).sort();
   document.getElementById('recipe-count').textContent = names.length;
-  if (names.length === 0) {
-    container.innerHTML = '<p style="color:var(--text-light)">No recipes loaded</p>';
-    return;
-  }
+  if (names.length === 0) { container.innerHTML = '<p style="color:var(--text-light)">No recipes loaded</p>'; return; }
   container.innerHTML = names.map(name => {
     const r = recipes[name];
-    return '<div class="recipe-list-item"><div><div class="recipe-name">' + name + '</div><div class="recipe-meta">' + (r.format || '') + ' · Target: ' + (r.yield || '—') + ' units</div></div><button class="btn-danger" onclick="deleteRecipe(\'' + name.replace(/'/g, "\\'") + '\')">Delete</button></div>';
+    const safeName = name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    return '<div class="recipe-list-item"><div><div class="recipe-name">' + name + '</div><div class="recipe-meta">' + (r.format||'') + ' · Target: ' + (r.yield||'—') + ' units</div></div><button class="btn-danger" onclick="deleteRecipe(\'' + safeName + '\')">Delete</button></div>';
   }).join('');
 }
 
 async function deleteRecipe(name) {
-  if (!confirm('Delete "' + name + '"? This cannot be undone.')) return;
-  const res = await fetch('/api/recipes/' + encodeURIComponent(name), {method:'DELETE'});
-  if (res.ok) {
-    await loadRecipes();
-    loadRecipeList();
-    rebuildDropdowns();
-  }
+  if (!confirm('Delete "' + name + '"?')) return;
+  await fetch('/api/recipes/' + encodeURIComponent(name), {method:'DELETE'});
+  await loadRecipes(); loadRecipeList(); rebuildDropdowns();
 }
 
 const uploadZone = document.getElementById('upload-zone');
@@ -253,51 +244,34 @@ uploadInput.addEventListener('change', () => { if (uploadInput.files.length) upl
 
 async function uploadRecipe(file) {
   const status = document.getElementById('upload-status');
-  status.className = 'status loading';
-  status.textContent = 'Parsing recipe...';
-  status.style.display = 'block';
-  const formData = new FormData();
-  formData.append('file', file);
+  status.className='status loading'; status.textContent='Parsing recipe...'; status.style.display='block';
+  const fd = new FormData(); fd.append('file',file);
   try {
-    const res = await fetch('/api/recipes/upload', {method:'POST', body:formData});
+    const res = await fetch('/api/recipes/upload',{method:'POST',body:fd});
     const data = await res.json();
-    if (data.success) {
-      status.className = 'status success';
-      status.textContent = 'Added: ' + data.name;
-      await loadRecipes();
-      loadRecipeList();
-      rebuildDropdowns();
-    } else {
-      status.className = 'status error';
-      status.textContent = data.error || 'Failed to parse recipe';
-    }
-  } catch (e) {
-    status.className = 'status error';
-    status.textContent = 'Upload failed: ' + e.message;
-  }
+    if (data.success) { status.className='status success'; status.textContent='Added: '+data.name; await loadRecipes(); loadRecipeList(); rebuildDropdowns(); }
+    else { status.className='status error'; status.textContent=data.error||'Failed'; }
+  } catch(e) { status.className='status error'; status.textContent='Upload failed: '+e.message; }
 }
 
-function buildScheduleGrid() {
+    function buildScheduleGrid() {
   const container = document.getElementById('schedule-grid');
   const weekDate = document.getElementById('week-date').value;
   const monday = getMonday(weekDate);
   currentWeekId = formatDate(monday);
   const recipeNames = Object.keys(recipes).sort();
   let options = '<option value="">— No production —</option>';
-  for (let i = 0; i < recipeNames.length; i++) {
-    options += '<option value="' + recipeNames[i] + '">' + recipeNames[i] + '</option>';
-  }
+  for (let i=0;i<recipeNames.length;i++) options += '<option value="'+recipeNames[i]+'">'+recipeNames[i]+'</option>';
   let html = '';
-  for (let idx = 0; idx < DAYS.length; idx++) {
-    const d = new Date(monday);
-    d.setDate(d.getDate() + idx);
+  for (let idx=0;idx<DAYS.length;idx++) {
+    const d = new Date(monday); d.setDate(d.getDate()+idx);
     const dateStr = d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
     const lot = d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'2-digit'}).replace(/\//g,'');
-    html += '<div class="day-block"><div class="day-header"><span>' + DAYS[idx] + ' — ' + dateStr + '</span><span class="lot">LOT# ' + lot + '</span></div>';
-    for (let v = 0; v < VESSELS.length; v++) {
-      const selId = 'sel-' + idx + '-' + VESSELS[v].replace(/[()]/g,'');
-      const yieldId = 'yield-' + idx + '-' + VESSELS[v].replace(/[()]/g,'');
-      html += '<div class="vessel-row"><span class="vessel-label">' + VESSELS[v] + '</span><select id="' + selId + '" onchange="updateYield(' + idx + ',\'' + VESSELS[v] + '\')">' + options + '</select><span class="yield-display" id="' + yieldId + '">—</span></div>';
+    html += '<div class="day-block"><div class="day-header"><span>'+DAYS[idx]+' — '+dateStr+'</span><span class="lot">LOT# '+lot+'</span></div>';
+    for (let v=0;v<VESSELS.length;v++) {
+      const selId='sel-'+idx+'-'+VESSELS[v].replace(/[()]/g,'');
+      const yieldId='yield-'+idx+'-'+VESSELS[v].replace(/[()]/g,'');
+      html += '<div class="vessel-row"><span class="vessel-label">'+VESSELS[v]+'</span><select id="'+selId+'" onchange="updateYield('+idx+',\''+VESSELS[v]+'\')">'+options+'</select><span class="yield-display" id="'+yieldId+'">—</span></div>';
     }
     html += '</div>';
   }
@@ -306,40 +280,33 @@ function buildScheduleGrid() {
 
 function rebuildDropdowns() {
   const saved = {};
-  for (let idx = 0; idx < DAYS.length; idx++) {
-    for (let v = 0; v < VESSELS.length; v++) {
-      const selId = 'sel-' + idx + '-' + VESSELS[v].replace(/[()]/g,'');
-      const sel = document.getElementById(selId);
-      if (sel) saved[selId] = sel.value;
-    }
+  for (let idx=0;idx<DAYS.length;idx++) for (let v=0;v<VESSELS.length;v++) {
+    const id='sel-'+idx+'-'+VESSELS[v].replace(/[()]/g,'');
+    const el=document.getElementById(id); if(el) saved[id]=el.value;
   }
   buildScheduleGrid();
-  Object.entries(saved).forEach(([id, val]) => {
-    const sel = document.getElementById(id);
-    if (sel && val) {
-      sel.value = val;
-      const parts = id.replace('sel-','').split('-');
-      const idx = parseInt(parts[0]);
-      const vKey = parts.slice(1).join('-');
-      const vessel = VESSELS.find(v => v.replace(/[()]/g,'') === vKey);
-      if (vessel) updateYield(idx, vessel);
-    }
+  Object.entries(saved).forEach(([id,val]) => {
+    const sel=document.getElementById(id);
+    if(sel&&val){sel.value=val; const p=id.replace('sel-','').split('-'); const vessel=VESSELS.find(v=>v.replace(/[()]/g,'')===p.slice(1).join('-')); if(vessel)updateYield(parseInt(p[0]),vessel);}
   });
 }
 
-function updateYield(dayIdx, vessel) {
-  const selId = 'sel-' + dayIdx + '-' + vessel.replace(/[()]/g,'');
-  const yieldId = 'yield-' + dayIdx + '-' + vessel.replace(/[()]/g,'');
-  const sel = document.getElementById(selId);
-  const yieldEl = document.getElementById(yieldId);
-  const recipeName = sel.value;
-  if (recipeName && recipes[recipeName]) {
-    yieldEl.textContent = recipes[recipeName].yield + ' units';
-    yieldEl.classList.add('has-value');
-  } else {
-    yieldEl.textContent = '—';
-    yieldEl.classList.remove('has-value');
-  }
+function updateYield(dayIdx,vessel) {
+  const selId='sel-'+dayIdx+'-'+vessel.replace(/[()]/g,'');
+  const yieldId='yield-'+dayIdx+'-'+vessel.replace(/[()]/g,'');
+  const sel=document.getElementById(selId); const yieldEl=document.getElementById(yieldId);
+  const rn=sel.value;
+  if(rn&&recipes[rn]){yieldEl.textContent=recipes[rn].yield+' units';yieldEl.classList.add('has-value');}
+  else{yieldEl.textContent='—';yieldEl.classList.remove('has-value');}
+}
+
+function resetSchedule() {
+  if (!confirm('Reset the schedule? All selections will be cleared.')) return;
+  const mon = getCurrentMonday();
+  document.getElementById('week-date').value = formatDate(mon);
+  document.getElementById('schedule-notes').value = '';
+  buildScheduleGrid();
+  showStatus('Schedule reset', 'success');
 }
 
 async function loadSchedule() {
@@ -349,131 +316,86 @@ async function loadSchedule() {
   document.getElementById('week-date').value = currentWeekId;
   buildScheduleGrid();
   try {
-    const res = await fetch('/api/schedule/' + currentWeekId);
+    const res = await fetch('/api/schedule/'+currentWeekId);
     const data = await res.json();
-    if (data.schedule) {
-      Object.entries(data.schedule).forEach(([dayIdx, vessels]) => {
-        Object.entries(vessels).forEach(([vessel, recipe]) => {
-          const selId = 'sel-' + dayIdx + '-' + vessel.replace(/[()]/g,'');
-          const sel = document.getElementById(selId);
-          if (sel && recipe) {
-            sel.value = recipe;
-            updateYield(parseInt(dayIdx), vessel);
-          }
-        });
-      });
-      if (data.notes) document.getElementById('schedule-notes').value = data.notes;
-      showStatus('Schedule loaded', 'success');
-    }
-  } catch (e) {}
-}
-  async function generatePDFs() {
-  const btn = document.getElementById('generate-btn');
-  btn.disabled = true;
-  btn.textContent = 'Generating...';
-  showStatus('Generating PDFs...', 'loading');
-  const schedule = {};
-  for (let idx = 0; idx < DAYS.length; idx++) {
-    schedule[idx] = {};
-    for (let v = 0; v < VESSELS.length; v++) {
-      const selId = 'sel-' + idx + '-' + VESSELS[v].replace(/[()]/g,'');
-      const sel = document.getElementById(selId);
-      schedule[idx][VESSELS[v]] = sel ? sel.value : '';
-    }
-  }
-  const notes = document.getElementById('schedule-notes').value;
-  try {
-    const res = await fetch('/api/generate', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({week_id: currentWeekId, schedule: schedule, notes: notes}),
-    });
-    const data = await res.json();
-    if (data.success) {
-      showStatus('Generated ' + data.files.length + ' PDFs', 'success');
-      document.getElementById('pdf-week-date').value = currentWeekId;
-      loadPDFsForWeek(currentWeekId);
-      document.querySelectorAll('.nav button')[1].click();
-    } else {
-      showStatus(data.error || 'Generation failed', 'error');
-    }
-  } catch (e) {
-    showStatus('Error: ' + e.message, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Generate Schedule + Checklists';
-  }
+    if(data.schedule) { populateSchedule(data); showStatus('Schedule loaded','success'); }
+  } catch(e) {}
 }
 
-async function loadPDFs() {
-  const weekDate = document.getElementById('pdf-week-date').value;
-  const monday = getMonday(weekDate);
-  loadPDFsForWeek(formatDate(monday));
+async function loadScheduleSilent(weekId) {
+  try {
+    buildScheduleGrid();
+    const res = await fetch('/api/schedule/'+weekId);
+    const data = await res.json();
+    if(data.schedule) populateSchedule(data);
+  } catch(e) {}
 }
+
+function populateSchedule(data) {
+  Object.entries(data.schedule).forEach(([dayIdx,vessels]) => {
+    Object.entries(vessels).forEach(([vessel,recipe]) => {
+      const selId='sel-'+dayIdx+'-'+vessel.replace(/[()]/g,'');
+      const sel=document.getElementById(selId);
+      if(sel&&recipe){sel.value=recipe;updateYield(parseInt(dayIdx),vessel);}
+    });
+  });
+  if(data.notes) document.getElementById('schedule-notes').value=data.notes;
+}
+
+    async function generatePDFs() {
+  const btn=document.getElementById('generate-btn');
+  btn.disabled=true; btn.textContent='Generating...';
+  showStatus('Generating PDFs...','loading');
+  const schedule={};
+  for(let idx=0;idx<DAYS.length;idx++){schedule[idx]={};for(let v=0;v<VESSELS.length;v++){const id='sel-'+idx+'-'+VESSELS[v].replace(/[()]/g,'');const sel=document.getElementById(id);schedule[idx][VESSELS[v]]=sel?sel.value:'';}}
+  const notes=document.getElementById('schedule-notes').value;
+  try {
+    const res=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({week_id:currentWeekId,schedule:schedule,notes:notes})});
+    const data=await res.json();
+    if(data.success){showStatus('Generated '+data.files.length+' PDFs','success');document.getElementById('pdf-week-date').value=currentWeekId;loadPDFsForWeek(currentWeekId);showTabDirect('pdfs');}
+    else showStatus(data.error||'Generation failed','error');
+  }catch(e){showStatus('Error: '+e.message,'error');}
+  finally{btn.disabled=false;btn.textContent='Generate Schedule + Checklists';}
+}
+
+async function loadPDFs(){const d=document.getElementById('pdf-week-date').value;loadPDFsForWeek(formatDate(getMonday(d)));}
 
 async function loadPDFsForWeek(weekId) {
-  const container = document.getElementById('pdf-list');
-  const dlContainer = document.getElementById('download-all-container');
+  const container=document.getElementById('pdf-list');
+  const dlc=document.getElementById('download-all-container');
   try {
-    const res = await fetch('/api/pdfs/' + weekId);
-    const files = await res.json();
-    if (files.length === 0) {
-      container.innerHTML = '<li style="color:var(--text-light)">No PDFs for this week</li>';
-      dlContainer.style.display = 'none';
-      return;
-    }
-    container.innerHTML = files.map(f => {
-      const label = f.replace('.pdf','').replace(/_/g,' ');
-      let actions = '<div class="pdf-actions"><a href="/api/pdf/' + weekId + '/' + f + '" target="_blank">Download</a>';
-      if (f.includes('_Production')) {
-        const dayName = f.split('_')[0];
-        const dayIdx = DAYS.indexOf(dayName);
-        if (dayIdx >= 0) {
-          actions += '<a href="/checklist/' + weekId + '/' + dayIdx + '" style="color:var(--accent);">Fill Digitally</a>';
-        }
-      }
-      actions += '</div>';
-      return '<li><span>' + label + '</span>' + actions + '</li>';
+    const res=await fetch('/api/pdfs/'+weekId);
+    const files=await res.json();
+    if(files.length===0){container.innerHTML='<li style="color:var(--text-light)">No PDFs for this week</li>';dlc.style.display='none';return;}
+    container.innerHTML=files.map(f=>{
+      const label=f.replace('.pdf','').replace(/_/g,' ');
+      let actions='<div class="pdf-actions"><a href="/api/pdf/'+weekId+'/'+f+'" target="_blank">Download</a>';
+      if(f.includes('_Production')){const dn=f.split('_')[0];const di=DAYS.indexOf(dn);if(di>=0)actions+='<a href="/checklist/'+weekId+'/'+di+'">Fill Digitally</a>';}
+      actions+='</div>';
+      return '<li><span>'+label+'</span>'+actions+'</li>';
     }).join('');
-    dlContainer.style.display = 'block';
-    document.getElementById('download-all-link').href = '/api/pdfs/' + weekId + '/download-all';
-  } catch (e) {
-    container.innerHTML = '<li style="color:var(--text-light)">Error loading PDFs</li>';
-    dlContainer.style.display = 'none';
-  }
+    dlc.style.display='block';
+    document.getElementById('download-all-link').href='/api/pdfs/'+weekId+'/download-all';
+  }catch(e){container.innerHTML='<li style="color:var(--text-light)">Error loading PDFs</li>';dlc.style.display='none';}
 }
 
 async function loadHistory() {
-  const container = document.getElementById('history-list');
+  const container=document.getElementById('history-list');
   try {
-    const res = await fetch('/api/schedules');
-    const weeks = await res.json();
-    if (weeks.length === 0) {
-      container.innerHTML = '<li style="color:var(--text-light)">No past schedules</li>';
-      return;
-    }
-    container.innerHTML = weeks.map(w => {
-      const d = new Date(w + 'T00:00:00');
-      const label = d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
-      return '<li onclick="loadHistoryWeek(\'' + w + '\')"><span class="history-week">Week of ' + label + '</span><span class="history-meta">View →</span></li>';
+    const res=await fetch('/api/schedules');
+    const weeks=await res.json();
+    if(weeks.length===0){container.innerHTML='<li style="color:var(--text-light)">No past schedules</li>';return;}
+    container.innerHTML=weeks.map(w=>{
+      const d=new Date(w+'T00:00:00');
+      const label=d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+      return '<li onclick="loadHistoryWeek(\''+w+'\')"><span class="history-week">Week of '+label+'</span><span class="history-meta">View →</span></li>';
     }).join('');
-  } catch (e) {
-    container.innerHTML = '<li style="color:var(--text-light)">Error loading history</li>';
-  }
+  }catch(e){container.innerHTML='<li style="color:var(--text-light)">Error loading history</li>';}
 }
 
-function loadHistoryWeek(weekId) {
-  document.getElementById('week-date').value = weekId;
-  document.querySelectorAll('.nav button')[0].click();
-  setTimeout(() => loadSchedule(), 100);
-}
+function loadHistoryWeek(weekId){document.getElementById('week-date').value=weekId;showTabDirect('schedule');setTimeout(()=>loadSchedule(),100);}
 
-function showStatus(msg, type) {
-  const el = document.getElementById('status-msg');
-  el.className = 'status ' + type;
-  el.textContent = msg;
-  if (type === 'success') setTimeout(() => { el.style.display = 'none'; }, 3000);
-}
+function showStatus(msg,type){const el=document.getElementById('status-msg');el.className='status '+type;el.textContent=msg;if(type==='success')setTimeout(()=>{el.style.display='none';},3000);}
 </script>
 </body>
 </html>
