@@ -5,33 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Soma — Digital Checklist</title>
 <style>
-  :root {
-    --dark: #1a1a2e;
-    --accent: #4a6741;
-    --bg: #f5f5f0;
-    --card-bg: #ffffff;
-    --border: #e0e0d8;
-    --text: #2a2a2a;
-    --text-light: #777;
-    --warning: #fff3cd;
-    --success: #d4edda;
-    --row-alt: #fafaf7;
-  }
+  :root { --dark: #1a1a2e; --accent: #4a6741; --bg: #f5f5f0; --card-bg: #ffffff; --border: #e0e0d8; --text: #2a2a2a; --text-light: #777; --warning: #fff3cd; --success: #d4edda; --row-alt: #fafaf7; --danger: #dc3545; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
   .header { background: var(--dark); padding: 12px 20px; position: sticky; top: 0; z-index: 100; border-bottom: 3px solid var(--accent); display: flex; align-items: center; gap: 12px; }
   .header img { width: 36px; height: 36px; border-radius: 50%; }
   .header-text h1 { color: #fff; font-size: 16px; }
   .header-text p { color: #aaa; font-size: 12px; }
-  .back-btn { color: #aaa; text-decoration: none; font-size: 13px; margin-left: auto; }
-  .back-btn:hover { color: #fff; }
+  .back-btn { color: #aaa; text-decoration: none; font-size: 13px; margin-left: auto; padding: 6px 14px; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; }
+  .back-btn:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
   .main { max-width: 800px; margin: 0 auto; padding: 16px; }
   .info-bar { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 20px; align-items: center; }
   .info-item { font-size: 13px; }
   .info-item strong { color: var(--dark); }
   .info-item .lot { color: var(--accent); font-weight: 700; }
-  .save-status { margin-left: auto; font-size: 12px; color: var(--text-light); }
-  .save-status.saved { color: var(--accent); }
   .warning-box { background: var(--warning); border: 1px solid #ffc107; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 12px; font-weight: 600; }
   .section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
   .section-header { background: var(--accent); color: #fff; padding: 10px 14px; font-size: 13px; font-weight: 600; }
@@ -57,6 +44,15 @@
   .progress-bar { background: var(--border); border-radius: 4px; height: 6px; margin-bottom: 12px; overflow: hidden; }
   .progress-fill { background: var(--accent); height: 100%; transition: width 0.3s; border-radius: 4px; }
   .progress-label { font-size: 12px; color: var(--text-light); margin-bottom: 4px; }
+  .save-status { font-size: 12px; color: var(--text-light); text-align: center; margin-bottom: 12px; }
+  .save-status.saved { color: var(--accent); }
+  .complete-bar { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 20px; text-align: center; }
+  .btn-complete { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 14px 32px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+  .btn-complete:hover { background: #5a7d4f; }
+  .btn-complete:disabled { background: #ccc; cursor: not-allowed; }
+  .complete-status { margin-top: 10px; font-size: 13px; display: none; }
+  .complete-status.success { display: block; color: var(--accent); }
+  .complete-status.error { display: block; color: var(--danger); }
   @media (max-width: 768px) {
     .checklist-item { padding: 8px 10px; }
     .temp-group input { width: 48px; }
@@ -72,12 +68,10 @@
     <h1>CCP CHECKLIST</h1>
     <p id="header-subtitle">Loading...</p>
   </div>
-  <a href="/" class="back-btn">← Back to Schedule</a>
+  <a href="#" class="back-btn" onclick="saveAndGoBack(event)">← Save & Back to PDFs</a>
 </div>
 <div class="main">
-  <div class="info-bar" id="info-bar">
-    <div class="info-item"><strong>Loading...</strong></div>
-  </div>
+  <div class="info-bar" id="info-bar"><div class="info-item"><strong>Loading...</strong></div></div>
   <div class="progress-label"><span id="progress-text">0 / 0 completed</span></div>
   <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
   <div class="warning-box">
@@ -92,84 +86,40 @@
   </div>
   <div class="signoff-section">
     <h3>Final Sign-Off</h3>
-    <div class="signoff-row">
-      <label>Kitchen Lead:</label>
-      <input type="text" id="signoff-kitchen" placeholder="Name" oninput="autoSave()">
-    </div>
-    <div class="signoff-row">
-      <label>Production Manager:</label>
-      <input type="text" id="signoff-manager" placeholder="Name" oninput="autoSave()">
-    </div>
+    <div class="signoff-row"><label>Kitchen Lead:</label><input type="text" id="signoff-kitchen" placeholder="Name" oninput="autoSave()"></div>
+    <div class="signoff-row"><label>Production Manager:</label><input type="text" id="signoff-manager" placeholder="Name" oninput="autoSave()"></div>
   </div>
   <div id="save-indicator" class="save-status">Not yet saved</div>
+  <div class="complete-bar">
+    <button class="btn-complete" id="complete-btn" onclick="completeChecklist()">✓ Complete Checklist & Save as PDF</button>
+    <div class="complete-status" id="complete-status"></div>
+  </div>
 </div>
-<script>
+
+  <script>
 const WEEK_ID = '{{ week_id }}';
 const DAY_IDX = {{ day_idx }};
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 const VESSELS_ALL = ['K1','K2','K3','K4(115L)'];
-
 const SECTIONS = [
-  {num:'1', title:'RAW MATERIAL SELECTION', items:[
-    {num:'1.1', text:'Use fresh (walk-in fridge) or frozen bones only', temp:false},
-    {num:'1.2', text:'Transfer bones to oven racks — roast immediately', temp:false},
-  ]},
-  {num:'2', title:'EQUIPMENT CHECK', items:[
-    {num:'2.1', text:'Jars: sterilized, undamaged, cleaned same shift/day', temp:false},
-    {num:'2.2', text:'Pressure canner: clean, operational, water to 1.5" depth, rack in place', temp:false},
-    {num:'2.3', text:'New (undamaged) lids for every jar', temp:false},
-  ]},
-  {num:'3', title:'FIRING / COOKING', items:[
-    {num:'3.1', text:'Wash vegetables under running potable water; inspect', temp:false},
-    {num:'3.2', text:'Heat kettle to rolling boil; reduce to 96-98°C', temp:true},
-    {num:'3.3', text:'Log temp 1hr after start — must be above 96°C', temp:true},
-  ]},
-  {num:'4', title:'CANNING', items:[
-    {num:'4.1', text:'Log kettle temp prior to canning — above 96°C', temp:true},
-    {num:'4.2', text:'Double-filter; transfer to pouring pot; hot-fill within 30 min', temp:false},
-    {num:'4.3', text:'Fill jars to 1" headspace; verify fill level', temp:false},
-    {num:'—', text:'CANNER — Kitchen Lead must supervise; do not leave kitchen', temp:false, callout:true},
-    {num:'4.4', text:'Vent canner 10 min to expel air', temp:false},
-    {num:'4.5', text:'Bring to 10 psi; time only once pressure reached', temp:false},
-    {num:'4.6', text:'Maintain pressure full time; restart if drops', temp:false},
-    {num:'4.7', text:'Canner guidelines completed all active kettles', temp:false},
-  ]},
-  {num:'5', title:'DEPRESSURIZING & JAR REMOVAL', items:[
-    {num:'5.1', text:'Turn off heat; leave on burner until depressurized', temp:false},
-    {num:'5.2', text:'Open counterweight once depressurized; wait 10 min', temp:false},
-    {num:'5.3', text:'Open lid away from body (steam burn risk)', temp:false},
-    {num:'5.4', text:'Remove jars gripping body or lid rim', temp:false},
-    {num:'5.5', text:'Do not retighten lids or tilt during cooling', temp:false},
-  ]},
-  {num:'6', title:'COOLING & SEAL VERIFICATION (NEXT DAY)', items:[
-    {num:'6.1', text:'Cool undisturbed at room temp 12-24 hours', temp:false},
-    {num:'6.2', text:'Test each seal: press lid center — no flex', temp:false},
-    {num:'6.3', text:'Dispose unsealed jars immediately — no refrigeration', temp:false},
-  ]},
-  {num:'7', title:'FINISHING & LABELLING', items:[
-    {num:'7.1', text:'Wash and dry jars if necessary', temp:false},
-    {num:'7.2', text:'Label machine: date and LOT# match schedule', temp:false},
-    {num:'7.3', text:'Label cases of 12: product, expiry, LOT', temp:false},
-  ]},
-  {num:'8', title:'INVENTORY & STORAGE', items:[
-    {num:'8.1', text:'Add to Finished Goods Inventory with LOT', temp:false},
-    {num:'8.2', text:'Store labelled, away from heat/sunlight', temp:false},
-    {num:'8.3', text:'Best before within 1 year — confirm label', temp:false},
-  ]},
+  {num:'1', title:'RAW MATERIAL SELECTION', items:[{num:'1.1', text:'Use fresh (walk-in fridge) or frozen bones only', temp:false},{num:'1.2', text:'Transfer bones to oven racks — roast immediately', temp:false}]},
+  {num:'2', title:'EQUIPMENT CHECK', items:[{num:'2.1', text:'Jars: sterilized, undamaged, cleaned same shift/day', temp:false},{num:'2.2', text:'Pressure canner: clean, operational, water to 1.5" depth, rack in place', temp:false},{num:'2.3', text:'New (undamaged) lids for every jar', temp:false}]},
+  {num:'3', title:'FIRING / COOKING', items:[{num:'3.1', text:'Wash vegetables under running potable water; inspect', temp:false},{num:'3.2', text:'Heat kettle to rolling boil; reduce to 96-98°C', temp:true},{num:'3.3', text:'Log temp 1hr after start — must be above 96°C', temp:true}]},
+  {num:'4', title:'CANNING', items:[{num:'4.1', text:'Log kettle temp prior to canning — above 96°C', temp:true},{num:'4.2', text:'Double-filter; transfer to pouring pot; hot-fill within 30 min', temp:false},{num:'4.3', text:'Fill jars to 1" headspace; verify fill level', temp:false},{num:'—', text:'CANNER — Kitchen Lead must supervise; do not leave kitchen', temp:false, callout:true},{num:'4.4', text:'Vent canner 10 min to expel air', temp:false},{num:'4.5', text:'Bring to 10 psi; time only once pressure reached', temp:false},{num:'4.6', text:'Maintain pressure full time; restart if drops', temp:false},{num:'4.7', text:'Canner guidelines completed all active kettles', temp:false}]},
+  {num:'5', title:'DEPRESSURIZING & JAR REMOVAL', items:[{num:'5.1', text:'Turn off heat; leave on burner until depressurized', temp:false},{num:'5.2', text:'Open counterweight once depressurized; wait 10 min', temp:false},{num:'5.3', text:'Open lid away from body (steam burn risk)', temp:false},{num:'5.4', text:'Remove jars gripping body or lid rim', temp:false},{num:'5.5', text:'Do not retighten lids or tilt during cooling', temp:false}]},
+  {num:'6', title:'COOLING & SEAL VERIFICATION (NEXT DAY)', items:[{num:'6.1', text:'Cool undisturbed at room temp 12-24 hours', temp:false},{num:'6.2', text:'Test each seal: press lid center — no flex', temp:false},{num:'6.3', text:'Dispose unsealed jars immediately — no refrigeration', temp:false}]},
+  {num:'7', title:'FINISHING & LABELLING', items:[{num:'7.1', text:'Wash and dry jars if necessary', temp:false},{num:'7.2', text:'Label machine: date and LOT# match schedule', temp:false},{num:'7.3', text:'Label cases of 12: product, expiry, LOT', temp:false}]},
+  {num:'8', title:'INVENTORY & STORAGE', items:[{num:'8.1', text:'Add to Finished Goods Inventory with LOT', temp:false},{num:'8.2', text:'Store labelled, away from heat/sunlight', temp:false},{num:'8.3', text:'Best before within 1 year — confirm label', temp:false}]},
 ];
-
 let activeVessels = [];
 let saveTimeout = null;
-let checklistData = {};
 
 async function init() {
   const res = await fetch('/api/checklist/' + WEEK_ID + '/' + DAY_IDX);
   const data = await res.json();
   const dayInfo = data.day_info || {};
   activeVessels = [];
-  for (const v of VESSELS_ALL) {
-    if (dayInfo[v]) activeVessels.push(v);
-  }
+  for (const v of VESSELS_ALL) { if (dayInfo[v]) activeVessels.push(v); }
   if (activeVessels.length === 0) activeVessels = ['K1','K2','K3'];
   const weekStart = new Date(WEEK_ID + 'T00:00:00');
   const dayDate = new Date(weekStart);
@@ -177,15 +127,11 @@ async function init() {
   const dateStr = dayDate.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
   const lot = dayDate.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'2-digit'}).replace(/\//g,'');
   document.getElementById('header-subtitle').textContent = DAYS[DAY_IDX] + ' — ' + dateStr;
-  let infoHtml = '<div class="info-item"><strong>DATE:</strong> ' + dateStr + '</div>';
-  infoHtml += '<div class="info-item"><strong>LOT#:</strong> <span class="lot">' + lot + '</span></div>';
-  for (const v of activeVessels) {
-    const recipe = dayInfo[v] || '—';
-    infoHtml += '<div class="info-item"><strong>' + v + ':</strong> ' + recipe + '</div>';
-  }
+  let infoHtml = '<div class="info-item"><strong>DATE:</strong> ' + dateStr + '</div><div class="info-item"><strong>LOT#:</strong> <span class="lot">' + lot + '</span></div>';
+  for (const v of activeVessels) { infoHtml += '<div class="info-item"><strong>' + v + ':</strong> ' + (dayInfo[v]||'—') + '</div>'; }
   document.getElementById('info-bar').innerHTML = infoHtml;
   buildChecklist();
-  if (data.checklist) { checklistData = data.checklist; restoreData(); }
+  if (data.checklist) restoreData(data.checklist);
   updateProgress();
 }
 
@@ -195,21 +141,12 @@ function buildChecklist() {
   for (const section of SECTIONS) {
     html += '<div class="section"><div class="section-header">' + section.num + '  ' + section.title + '</div>';
     for (const item of section.items) {
-      if (item.callout) {
-        html += '<div class="checklist-item callout"><span class="item-text">' + item.text + '</span></div>';
-        continue;
-      }
+      if (item.callout) { html += '<div class="checklist-item callout"><span class="item-text">' + item.text + '</span></div>'; continue; }
       const id = 'check-' + item.num.replace('.','_');
-      html += '<div class="checklist-item">';
-      html += '<input type="checkbox" id="' + id + '" onchange="autoSave();updateProgress()">';
-      html += '<span class="item-num">' + item.num + '</span>';
-      html += '<span class="item-text">' + item.text + '</span>';
+      html += '<div class="checklist-item"><input type="checkbox" id="' + id + '" onchange="autoSave();updateProgress()"><span class="item-num">' + item.num + '</span><span class="item-text">' + item.text + '</span>';
       if (item.temp) {
         html += '<div class="temp-inputs">';
-        for (const v of activeVessels) {
-          const tid = 'temp-' + item.num.replace('.','_') + '-' + v.replace(/[()]/g,'');
-          html += '<div class="temp-group"><label>' + v + '</label><input type="text" id="' + tid + '" placeholder="°C" oninput="autoSave()"></div>';
-        }
+        for (const v of activeVessels) { const tid = 'temp-' + item.num.replace('.','_') + '-' + v.replace(/[()]/g,''); html += '<div class="temp-group"><label>' + v + '</label><input type="text" id="' + tid + '" placeholder="°C" oninput="autoSave()"></div>'; }
         html += '</div>';
       }
       html += '</div>';
@@ -228,55 +165,69 @@ function updateProgress() {
 }
 
 function collectData() {
-  const data = {checks: {}, temps: {}, notes: '', signoff_kitchen: '', signoff_manager: ''};
-  const boxes = document.querySelectorAll('#checklist-container input[type="checkbox"]');
-  boxes.forEach(b => { data.checks[b.id] = b.checked; });
-  const tempInputs = document.querySelectorAll('#checklist-container input[type="text"]');
-  tempInputs.forEach(t => { data.temps[t.id] = t.value; });
+  const data = {checks:{}, temps:{}, notes:'', signoff_kitchen:'', signoff_manager:''};
+  document.querySelectorAll('#checklist-container input[type="checkbox"]').forEach(b => { data.checks[b.id] = b.checked; });
+  document.querySelectorAll('#checklist-container input[type="text"]').forEach(t => { data.temps[t.id] = t.value; });
   data.notes = document.getElementById('day-notes').value;
   data.signoff_kitchen = document.getElementById('signoff-kitchen').value;
   data.signoff_manager = document.getElementById('signoff-manager').value;
   return data;
 }
 
-function restoreData() {
-  if (checklistData.checks) {
-    Object.entries(checklistData.checks).forEach(([id, val]) => {
-      const el = document.getElementById(id);
-      if (el) el.checked = val;
-    });
-  }
-  if (checklistData.temps) {
-    Object.entries(checklistData.temps).forEach(([id, val]) => {
-      const el = document.getElementById(id);
-      if (el) el.value = val;
-    });
-  }
-  if (checklistData.notes) document.getElementById('day-notes').value = checklistData.notes;
-  if (checklistData.signoff_kitchen) document.getElementById('signoff-kitchen').value = checklistData.signoff_kitchen;
-  if (checklistData.signoff_manager) document.getElementById('signoff-manager').value = checklistData.signoff_manager;
+function restoreData(d) {
+  if (d.checks) Object.entries(d.checks).forEach(([id,val]) => { const el = document.getElementById(id); if (el) el.checked = val; });
+  if (d.temps) Object.entries(d.temps).forEach(([id,val]) => { const el = document.getElementById(id); if (el) el.value = val; });
+  if (d.notes) document.getElementById('day-notes').value = d.notes;
+  if (d.signoff_kitchen) document.getElementById('signoff-kitchen').value = d.signoff_kitchen;
+  if (d.signoff_manager) document.getElementById('signoff-manager').value = d.signoff_manager;
 }
 
-function autoSave() {
+    function autoSave() {
   const indicator = document.getElementById('save-indicator');
   indicator.textContent = 'Saving...';
   indicator.className = 'save-status';
   if (saveTimeout) clearTimeout(saveTimeout);
   saveTimeout = setTimeout(async () => {
-    const data = collectData();
     try {
-      await fetch('/api/checklist/' + WEEK_ID + '/' + DAY_IDX, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(data),
-      });
+      await fetch('/api/checklist/' + WEEK_ID + '/' + DAY_IDX, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(collectData()) });
       indicator.textContent = 'Saved ✓';
       indicator.className = 'save-status saved';
-    } catch (e) {
-      indicator.textContent = 'Save failed';
-      indicator.className = 'save-status';
-    }
+    } catch (e) { indicator.textContent = 'Save failed'; }
   }, 800);
+}
+
+async function saveAndGoBack(e) {
+  e.preventDefault();
+  const data = collectData();
+  await fetch('/api/checklist/' + WEEK_ID + '/' + DAY_IDX, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+  window.location.href = '/?tab=pdfs&week=' + WEEK_ID;
+}
+
+async function completeChecklist() {
+  const btn = document.getElementById('complete-btn');
+  const status = document.getElementById('complete-status');
+  btn.disabled = true;
+  btn.textContent = 'Completing...';
+  const data = collectData();
+  try {
+    const res = await fetch('/api/checklist/' + WEEK_ID + '/' + DAY_IDX + '/complete', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
+    const result = await res.json();
+    if (result.success) {
+      status.className = 'complete-status success';
+      status.textContent = 'Checklist completed and PDF saved! Redirecting...';
+      setTimeout(() => { window.location.href = '/?tab=pdfs&week=' + WEEK_ID; }, 1500);
+    } else {
+      status.className = 'complete-status error';
+      status.textContent = result.error || 'Failed to complete';
+      btn.disabled = false;
+      btn.textContent = '✓ Complete Checklist & Save as PDF';
+    }
+  } catch (e) {
+    status.className = 'complete-status error';
+    status.textContent = 'Error: ' + e.message;
+    btn.disabled = false;
+    btn.textContent = '✓ Complete Checklist & Save as PDF';
+  }
 }
 
 document.addEventListener('DOMContentLoaded', init);
