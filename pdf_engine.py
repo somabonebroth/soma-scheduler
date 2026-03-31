@@ -313,7 +313,7 @@ if y < 90:
         draw_header(c, w, h, f"{title_prefix} — {day_name} (cont.)", date.strftime("%d/%m/%Y"), logo_path)
         y = h - 72
 
-    if is_filled and filled_data.get("notes"):
+if is_filled and filled_data.get("notes"):
         c.setFillColor(DARK)
         c.rect(30, y - 18, w - 60, 18, fill=1, stroke=0)
         c.setFillColor(HEADER_TEXT)
