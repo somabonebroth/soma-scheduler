@@ -1,5 +1,5 @@
 """
-Soma Bone Broth — Production Scheduler v3
+Soma Bone Broth — Production Scheduler v4
 """
 
 from flask import Flask, render_template, request, jsonify, send_file, send_from_directory, session, redirect, url_for
@@ -138,7 +138,8 @@ def save_checklist_data(week_id, day_idx, data):
     path = get_checklist_path(week_id, day_idx)
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
-        # ── Auth ───────────────────────────────────────────────────────────────
+
+# ── Auth ───────────────────────────────────────────────────────────────
 @app.route("/login", methods=["GET"])
 def login_page():
     if session.get("authenticated"):
@@ -208,6 +209,29 @@ def upload_recipe():
     recipes[result["name"]] = result["data"]
     save_recipes(recipes)
     return jsonify({"success": True, "name": result["name"], "recipe": result["data"]})
+
+@app.route("/api/recipes/<path:name>", methods=["GET"])
+@login_required
+def get_recipe(name):
+    recipes = load_recipes()
+    if name in recipes:
+        return jsonify({"name": name, "data": recipes[name]})
+    return jsonify({"error": "Recipe not found"}), 404
+
+@app.route("/api/recipes/<path:name>", methods=["PUT"])
+@login_required
+def update_recipe(name):
+    recipes = load_recipes()
+    if name not in recipes:
+        return jsonify({"error": "Recipe not found"}), 404
+    data = request.json
+    new_name = data.get("name", name)
+    recipe_data = data.get("data", {})
+    if new_name != name:
+        del recipes[name]
+    recipes[new_name] = recipe_data
+    save_recipes(recipes)
+    return jsonify({"success": True, "name": new_name})
 
 @app.route("/api/recipes/<path:name>", methods=["DELETE"])
 @login_required
@@ -391,10 +415,23 @@ def complete_checklist(week_id, day_idx):
     day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     filename = f"{day_names[day_idx]}_Completed_Checklist.pdf"
     pdf_path = os.path.join(week_pdf_dir, filename)
-
     generate_filled_checklist_pdf(pdf_path, date, active_vessels, data, logo_path)
 
     return jsonify({"success": True, "filename": filename})
+
+@app.route("/api/checklist-status/<week_id>", methods=["GET"])
+@login_required
+def checklist_status(week_id):
+    statuses = {}
+    for d_idx in range(7):
+        data = load_checklist(week_id, d_idx)
+        if data and data.get("completed"):
+            statuses[str(d_idx)] = "completed"
+        elif data:
+            statuses[str(d_idx)] = "in_progress"
+        else:
+            statuses[str(d_idx)] = "not_started"
+    return jsonify(statuses)
 
 
 # ── Init recipes ───────────────────────────────────────────────────────
