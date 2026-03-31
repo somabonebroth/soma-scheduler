@@ -47,7 +47,7 @@
   .save-status { font-size: 12px; color: var(--text-light); text-align: center; margin-bottom: 12px; }
   .save-status.saved { color: var(--accent); }
   .complete-bar { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 20px; text-align: center; }
-  .btn-complete { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 14px 32px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+  .btn-complete { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 14px 32px; font-size: 16px; font-weight: 600; cursor: pointer; }
   .btn-complete:hover { background: #5a7d4f; }
   .btn-complete:disabled { background: #ccc; cursor: not-allowed; }
   .complete-status { margin-top: 10px; font-size: 13px; display: none; }
@@ -64,173 +64,140 @@
 <body>
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma">
-  <div class="header-text">
-    <h1>CCP CHECKLIST</h1>
-    <p id="header-subtitle">Loading...</p>
-  </div>
-  <a href="#" class="back-btn" onclick="saveAndGoBack(event)">← Save & Back to PDFs</a>
+  <div class="header-text"><h1>CCP CHECKLIST</h1><p id="header-subtitle">Loading...</p></div>
+  <a href="#" class="back-btn" onclick="saveAndGoBack(event)">← Save & Back</a>
 </div>
 <div class="main">
   <div class="info-bar" id="info-bar"><div class="info-item"><strong>Loading...</strong></div></div>
   <div class="progress-label"><span id="progress-text">0 / 0 completed</span></div>
   <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
-  <div class="warning-box">
-    ⚠ Pressure canning MANDATORY — never use boiling-water canner<br>
-    ⚠ Never add thickeners (including fat) before canning<br>
-    ⚠ Never skip any canning procedures
-  </div>
+  <div class="warning-box">⚠ Pressure canning MANDATORY — never use boiling-water canner<br>⚠ Never add thickeners (including fat) before canning<br>⚠ Never skip any canning procedures</div>
   <div id="checklist-container"></div>
-  <div class="notes-section">
-    <h3>Daily Notes</h3>
-    <textarea id="day-notes" placeholder="Notes for this production day..." oninput="autoSave()"></textarea>
-  </div>
-  <div class="signoff-section">
-    <h3>Final Sign-Off</h3>
-    <div class="signoff-row"><label>Kitchen Lead:</label><input type="text" id="signoff-kitchen" placeholder="Name" oninput="autoSave()"></div>
-    <div class="signoff-row"><label>Production Manager:</label><input type="text" id="signoff-manager" placeholder="Name" oninput="autoSave()"></div>
-  </div>
+  <div class="notes-section"><h3>Daily Notes</h3><textarea id="day-notes" placeholder="Notes for this production day..." oninput="autoSave()"></textarea></div>
+  <div class="signoff-section"><h3>Final Sign-Off</h3><div class="signoff-row"><label>Kitchen Lead:</label><input type="text" id="signoff-kitchen" placeholder="Name" oninput="autoSave()"></div><div class="signoff-row"><label>Production Manager:</label><input type="text" id="signoff-manager" placeholder="Name" oninput="autoSave()"></div></div>
   <div id="save-indicator" class="save-status">Not yet saved</div>
   <div class="complete-bar">
-    <button class="btn-complete" id="complete-btn" onclick="completeChecklist()">✓ Complete Checklist & Save as PDF</button>
+    <button class="btn-complete" id="complete-btn" onclick="completeChecklist()">✓ Complete & File</button>
     <div class="complete-status" id="complete-status"></div>
   </div>
 </div>
 
   <script>
-const WEEK_ID = '{{ week_id }}';
-const DAY_IDX = {{ day_idx }};
-const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-const VESSELS_ALL = ['K1','K2','K3','K4(115L)'];
-const SECTIONS = [
-  {num:'1', title:'RAW MATERIAL SELECTION', items:[{num:'1.1', text:'Use fresh (walk-in fridge) or frozen bones only', temp:false},{num:'1.2', text:'Transfer bones to oven racks — roast immediately', temp:false}]},
-  {num:'2', title:'EQUIPMENT CHECK', items:[{num:'2.1', text:'Jars: sterilized, undamaged, cleaned same shift/day', temp:false},{num:'2.2', text:'Pressure canner: clean, operational, water to 1.5" depth, rack in place', temp:false},{num:'2.3', text:'New (undamaged) lids for every jar', temp:false}]},
-  {num:'3', title:'FIRING / COOKING', items:[{num:'3.1', text:'Wash vegetables under running potable water; inspect', temp:false},{num:'3.2', text:'Heat kettle to rolling boil; reduce to 96-98°C', temp:true},{num:'3.3', text:'Log temp 1hr after start — must be above 96°C', temp:true}]},
-  {num:'4', title:'CANNING', items:[{num:'4.1', text:'Log kettle temp prior to canning — above 96°C', temp:true},{num:'4.2', text:'Double-filter; transfer to pouring pot; hot-fill within 30 min', temp:false},{num:'4.3', text:'Fill jars to 1" headspace; verify fill level', temp:false},{num:'—', text:'CANNER — Kitchen Lead must supervise; do not leave kitchen', temp:false, callout:true},{num:'4.4', text:'Vent canner 10 min to expel air', temp:false},{num:'4.5', text:'Bring to 10 psi; time only once pressure reached', temp:false},{num:'4.6', text:'Maintain pressure full time; restart if drops', temp:false},{num:'4.7', text:'Canner guidelines completed all active kettles', temp:false}]},
-  {num:'5', title:'DEPRESSURIZING & JAR REMOVAL', items:[{num:'5.1', text:'Turn off heat; leave on burner until depressurized', temp:false},{num:'5.2', text:'Open counterweight once depressurized; wait 10 min', temp:false},{num:'5.3', text:'Open lid away from body (steam burn risk)', temp:false},{num:'5.4', text:'Remove jars gripping body or lid rim', temp:false},{num:'5.5', text:'Do not retighten lids or tilt during cooling', temp:false}]},
-  {num:'6', title:'COOLING & SEAL VERIFICATION (NEXT DAY)', items:[{num:'6.1', text:'Cool undisturbed at room temp 12-24 hours', temp:false},{num:'6.2', text:'Test each seal: press lid center — no flex', temp:false},{num:'6.3', text:'Dispose unsealed jars immediately — no refrigeration', temp:false}]},
-  {num:'7', title:'FINISHING & LABELLING', items:[{num:'7.1', text:'Wash and dry jars if necessary', temp:false},{num:'7.2', text:'Label machine: date and LOT# match schedule', temp:false},{num:'7.3', text:'Label cases of 12: product, expiry, LOT', temp:false}]},
-  {num:'8', title:'INVENTORY & STORAGE', items:[{num:'8.1', text:'Add to Finished Goods Inventory with LOT', temp:false},{num:'8.2', text:'Store labelled, away from heat/sunlight', temp:false},{num:'8.3', text:'Best before within 1 year — confirm label', temp:false}]},
+const WEEK_ID='{{ week_id }}';
+const DAY_IDX={{ day_idx }};
+const DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const VESSELS_ALL=['K1','K2','K3','K4(115L)'];
+const SECTIONS=[
+  {num:'1',title:'RAW MATERIAL SELECTION',items:[{num:'1.1',text:'Use fresh (walk-in fridge) or frozen bones only',temp:false},{num:'1.2',text:'Transfer bones to oven racks — roast immediately',temp:false}]},
+  {num:'2',title:'EQUIPMENT CHECK',items:[{num:'2.1',text:'Jars: sterilized, undamaged, cleaned same shift/day',temp:false},{num:'2.2',text:'Pressure canner: clean, operational, water to 1.5" depth, rack in place',temp:false},{num:'2.3',text:'New (undamaged) lids for every jar',temp:false}]},
+  {num:'3',title:'FIRING / COOKING',items:[{num:'3.1',text:'Wash vegetables under running potable water; inspect',temp:false},{num:'3.2',text:'Heat kettle to rolling boil; reduce to 96-98°C',temp:true},{num:'3.3',text:'Log temp 1hr after start — must be above 96°C',temp:true}]},
+  {num:'4',title:'CANNING',items:[{num:'4.1',text:'Log kettle temp prior to canning — above 96°C',temp:true},{num:'4.2',text:'Double-filter; transfer to pouring pot; hot-fill within 30 min',temp:false},{num:'4.3',text:'Fill jars to 1" headspace; verify fill level',temp:false},{num:'—',text:'CANNER — Kitchen Lead must supervise; do not leave kitchen',temp:false,callout:true},{num:'4.4',text:'Vent canner 10 min to expel air',temp:false},{num:'4.5',text:'Bring to 10 psi; time only once pressure reached',temp:false},{num:'4.6',text:'Maintain pressure full time; restart if drops',temp:false},{num:'4.7',text:'Canner guidelines completed all active kettles',temp:false}]},
+  {num:'5',title:'DEPRESSURIZING & JAR REMOVAL',items:[{num:'5.1',text:'Turn off heat; leave on burner until depressurized',temp:false},{num:'5.2',text:'Open counterweight once depressurized; wait 10 min',temp:false},{num:'5.3',text:'Open lid away from body (steam burn risk)',temp:false},{num:'5.4',text:'Remove jars gripping body or lid rim',temp:false},{num:'5.5',text:'Do not retighten lids or tilt during cooling',temp:false}]},
+  {num:'6',title:'COOLING & SEAL VERIFICATION (NEXT DAY)',items:[{num:'6.1',text:'Cool undisturbed at room temp 12-24 hours',temp:false},{num:'6.2',text:'Test each seal: press lid center — no flex',temp:false},{num:'6.3',text:'Dispose unsealed jars immediately — no refrigeration',temp:false}]},
+  {num:'7',title:'FINISHING & LABELLING',items:[{num:'7.1',text:'Wash and dry jars if necessary',temp:false},{num:'7.2',text:'Label machine: date and LOT# match schedule',temp:false},{num:'7.3',text:'Label cases of 12: product, expiry, LOT',temp:false}]},
+  {num:'8',title:'INVENTORY & STORAGE',items:[{num:'8.1',text:'Add to Finished Goods Inventory with LOT',temp:false},{num:'8.2',text:'Store labelled, away from heat/sunlight',temp:false},{num:'8.3',text:'Best before within 1 year — confirm label',temp:false}]},
 ];
-let activeVessels = [];
-let saveTimeout = null;
+let activeVessels=[];
+let saveTimeout=null;
 
-async function init() {
-  const res = await fetch('/api/checklist/' + WEEK_ID + '/' + DAY_IDX);
-  const data = await res.json();
-  const dayInfo = data.day_info || {};
-  activeVessels = [];
-  for (const v of VESSELS_ALL) { if (dayInfo[v]) activeVessels.push(v); }
-  if (activeVessels.length === 0) activeVessels = ['K1','K2','K3'];
-  const weekStart = new Date(WEEK_ID + 'T00:00:00');
-  const dayDate = new Date(weekStart);
-  dayDate.setDate(dayDate.getDate() + DAY_IDX);
-  const dateStr = dayDate.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
-  const lot = dayDate.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'2-digit'}).replace(/\//g,'');
-  document.getElementById('header-subtitle').textContent = DAYS[DAY_IDX] + ' — ' + dateStr;
-  let infoHtml = '<div class="info-item"><strong>DATE:</strong> ' + dateStr + '</div><div class="info-item"><strong>LOT#:</strong> <span class="lot">' + lot + '</span></div>';
-  for (const v of activeVessels) { infoHtml += '<div class="info-item"><strong>' + v + ':</strong> ' + (dayInfo[v]||'—') + '</div>'; }
-  document.getElementById('info-bar').innerHTML = infoHtml;
+async function init(){
+  const res=await fetch('/api/checklist/'+WEEK_ID+'/'+DAY_IDX);
+  const data=await res.json();
+  const dayInfo=data.day_info||{};
+  activeVessels=[];
+  for(const v of VESSELS_ALL){if(dayInfo[v])activeVessels.push(v);}
+  if(activeVessels.length===0)activeVessels=['K1','K2','K3'];
+  const weekStart=new Date(WEEK_ID+'T00:00:00');
+  const dayDate=new Date(weekStart);
+  dayDate.setDate(dayDate.getDate()+DAY_IDX);
+  const dateStr=dayDate.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const lot=dayDate.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'2-digit'}).replace(/\//g,'');
+  document.getElementById('header-subtitle').textContent=DAYS[DAY_IDX]+' — '+dateStr;
+  let infoHtml='<div class="info-item"><strong>DATE:</strong> '+dateStr+'</div><div class="info-item"><strong>LOT#:</strong> <span class="lot">'+lot+'</span></div>';
+  for(const v of activeVessels){infoHtml+='<div class="info-item"><strong>'+v+':</strong> '+(dayInfo[v]||'—')+'</div>';}
+  document.getElementById('info-bar').innerHTML=infoHtml;
   buildChecklist();
-  if (data.checklist) restoreData(data.checklist);
+  if(data.checklist)restoreData(data.checklist);
   updateProgress();
 }
 
-function buildChecklist() {
-  const container = document.getElementById('checklist-container');
-  let html = '';
-  for (const section of SECTIONS) {
-    html += '<div class="section"><div class="section-header">' + section.num + '  ' + section.title + '</div>';
-    for (const item of section.items) {
-      if (item.callout) { html += '<div class="checklist-item callout"><span class="item-text">' + item.text + '</span></div>'; continue; }
-      const id = 'check-' + item.num.replace('.','_');
-      html += '<div class="checklist-item"><input type="checkbox" id="' + id + '" onchange="autoSave();updateProgress()"><span class="item-num">' + item.num + '</span><span class="item-text">' + item.text + '</span>';
-      if (item.temp) {
-        html += '<div class="temp-inputs">';
-        for (const v of activeVessels) { const tid = 'temp-' + item.num.replace('.','_') + '-' + v.replace(/[()]/g,''); html += '<div class="temp-group"><label>' + v + '</label><input type="text" id="' + tid + '" placeholder="°C" oninput="autoSave()"></div>'; }
-        html += '</div>';
+function buildChecklist(){
+  const container=document.getElementById('checklist-container');
+  let html='';
+  for(const section of SECTIONS){
+    html+='<div class="section"><div class="section-header">'+section.num+'  '+section.title+'</div>';
+    for(const item of section.items){
+      if(item.callout){html+='<div class="checklist-item callout"><span class="item-text">'+item.text+'</span></div>';continue;}
+      const id='check-'+item.num.replace('.','_');
+      html+='<div class="checklist-item"><input type="checkbox" id="'+id+'" onchange="autoSave();updateProgress()"><span class="item-num">'+item.num+'</span><span class="item-text">'+item.text+'</span>';
+      if(item.temp){
+        html+='<div class="temp-inputs">';
+        for(const v of activeVessels){const tid='temp-'+item.num.replace('.','_')+'-'+v.replace(/[()]/g,'');html+='<div class="temp-group"><label>'+v+'</label><input type="text" id="'+tid+'" placeholder="°C" oninput="autoSave()"></div>';}
+        html+='</div>';
       }
-      html += '</div>';
+      html+='</div>';
     }
-    html += '</div>';
+    html+='</div>';
   }
-  container.innerHTML = html;
+  container.innerHTML=html;
 }
 
-function updateProgress() {
-  const boxes = document.querySelectorAll('#checklist-container input[type="checkbox"]');
-  const total = boxes.length;
-  const checked = Array.from(boxes).filter(b => b.checked).length;
-  document.getElementById('progress-text').textContent = checked + ' / ' + total + ' completed';
-  document.getElementById('progress-fill').style.width = (total > 0 ? (checked/total*100) : 0) + '%';
+function updateProgress(){
+  const boxes=document.querySelectorAll('#checklist-container input[type="checkbox"]');
+  const total=boxes.length;
+  const checked=Array.from(boxes).filter(b=>b.checked).length;
+  document.getElementById('progress-text').textContent=checked+' / '+total+' completed';
+  document.getElementById('progress-fill').style.width=(total>0?(checked/total*100):0)+'%';
 }
 
-function collectData() {
-  const data = {checks:{}, temps:{}, notes:'', signoff_kitchen:'', signoff_manager:''};
-  document.querySelectorAll('#checklist-container input[type="checkbox"]').forEach(b => { data.checks[b.id] = b.checked; });
-  document.querySelectorAll('#checklist-container input[type="text"]').forEach(t => { data.temps[t.id] = t.value; });
-  data.notes = document.getElementById('day-notes').value;
-  data.signoff_kitchen = document.getElementById('signoff-kitchen').value;
-  data.signoff_manager = document.getElementById('signoff-manager').value;
+function collectData(){
+  const data={checks:{},temps:{},notes:'',signoff_kitchen:'',signoff_manager:''};
+  document.querySelectorAll('#checklist-container input[type="checkbox"]').forEach(b=>{data.checks[b.id]=b.checked;});
+  document.querySelectorAll('#checklist-container input[type="text"]').forEach(t=>{data.temps[t.id]=t.value;});
+  data.notes=document.getElementById('day-notes').value;
+  data.signoff_kitchen=document.getElementById('signoff-kitchen').value;
+  data.signoff_manager=document.getElementById('signoff-manager').value;
   return data;
 }
 
-function restoreData(d) {
-  if (d.checks) Object.entries(d.checks).forEach(([id,val]) => { const el = document.getElementById(id); if (el) el.checked = val; });
-  if (d.temps) Object.entries(d.temps).forEach(([id,val]) => { const el = document.getElementById(id); if (el) el.value = val; });
-  if (d.notes) document.getElementById('day-notes').value = d.notes;
-  if (d.signoff_kitchen) document.getElementById('signoff-kitchen').value = d.signoff_kitchen;
-  if (d.signoff_manager) document.getElementById('signoff-manager').value = d.signoff_manager;
+function restoreData(d){
+  if(d.checks)Object.entries(d.checks).forEach(([id,val])=>{const el=document.getElementById(id);if(el)el.checked=val;});
+  if(d.temps)Object.entries(d.temps).forEach(([id,val])=>{const el=document.getElementById(id);if(el)el.value=val;});
+  if(d.notes)document.getElementById('day-notes').value=d.notes;
+  if(d.signoff_kitchen)document.getElementById('signoff-kitchen').value=d.signoff_kitchen;
+  if(d.signoff_manager)document.getElementById('signoff-manager').value=d.signoff_manager;
 }
 
-    function autoSave() {
-  const indicator = document.getElementById('save-indicator');
-  indicator.textContent = 'Saving...';
-  indicator.className = 'save-status';
-  if (saveTimeout) clearTimeout(saveTimeout);
-  saveTimeout = setTimeout(async () => {
-    try {
-      await fetch('/api/checklist/' + WEEK_ID + '/' + DAY_IDX, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(collectData()) });
-      indicator.textContent = 'Saved ✓';
-      indicator.className = 'save-status saved';
-    } catch (e) { indicator.textContent = 'Save failed'; }
-  }, 800);
+function autoSave(){
+  const indicator=document.getElementById('save-indicator');
+  indicator.textContent='Saving...';indicator.className='save-status';
+  if(saveTimeout)clearTimeout(saveTimeout);
+  saveTimeout=setTimeout(async()=>{
+    try{await fetch('/api/checklist/'+WEEK_ID+'/'+DAY_IDX,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collectData())});indicator.textContent='Saved ✓';indicator.className='save-status saved';}
+    catch(e){indicator.textContent='Save failed';}
+  },800);
 }
 
-async function saveAndGoBack(e) {
+async function saveAndGoBack(e){
   e.preventDefault();
-  const data = collectData();
-  await fetch('/api/checklist/' + WEEK_ID + '/' + DAY_IDX, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
-  window.location.href = '/?tab=pdfs&week=' + WEEK_ID;
+  await fetch('/api/checklist/'+WEEK_ID+'/'+DAY_IDX,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collectData())});
+  window.location.href='/?tab=pdfs&week='+WEEK_ID;
 }
 
-async function completeChecklist() {
-  const btn = document.getElementById('complete-btn');
-  const status = document.getElementById('complete-status');
-  btn.disabled = true;
-  btn.textContent = 'Completing...';
-  const data = collectData();
-  try {
-    const res = await fetch('/api/checklist/' + WEEK_ID + '/' + DAY_IDX + '/complete', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
-    const result = await res.json();
-    if (result.success) {
-      status.className = 'complete-status success';
-      status.textContent = 'Checklist completed and PDF saved! Redirecting...';
-      setTimeout(() => { window.location.href = '/?tab=pdfs&week=' + WEEK_ID; }, 1500);
-    } else {
-      status.className = 'complete-status error';
-      status.textContent = result.error || 'Failed to complete';
-      btn.disabled = false;
-      btn.textContent = '✓ Complete Checklist & Save as PDF';
-    }
-  } catch (e) {
-    status.className = 'complete-status error';
-    status.textContent = 'Error: ' + e.message;
-    btn.disabled = false;
-    btn.textContent = '✓ Complete Checklist & Save as PDF';
-  }
+async function completeChecklist(){
+  const btn=document.getElementById('complete-btn');
+  const status=document.getElementById('complete-status');
+  btn.disabled=true;btn.textContent='Filing...';
+  const data=collectData();
+  try{
+    const res=await fetch('/api/checklist/'+WEEK_ID+'/'+DAY_IDX+'/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    const result=await res.json();
+    if(result.success){status.className='complete-status success';status.textContent='Checklist filed and PDF saved! Redirecting...';setTimeout(()=>{window.location.href='/?tab=pdfs&week='+WEEK_ID;},1500);}
+    else{status.className='complete-status error';status.textContent=result.error||'Failed';btn.disabled=false;btn.textContent='✓ Complete & File';}
+  }catch(e){status.className='complete-status error';status.textContent='Error: '+e.message;btn.disabled=false;btn.textContent='✓ Complete & File';}
 }
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded',init);
 </script>
 </body>
 </html>
