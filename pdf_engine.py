@@ -122,7 +122,7 @@ def estimate_card_height(recipe_data, card_w):
     n_sections = sum(1 for k in ["kettle_overnight", "after_skim", "finishing", "add_to_jar"] if recipe_data.get(k))
     si_lines = sum(len(_wrap_text(inst, 7, card_w - 20)) for inst in recipe_data.get("special_instructions", []))
     return 22 + si_lines * 10 + 8 + n_items * 11 + n_sections * 14 + 10
-    def draw_recipe_card(c, x, y, card_w, recipe_name, recipe_data, vessel):
+def draw_recipe_card(c, x, y, card_w, recipe_name, recipe_data, vessel):
     start_y = y
     margin = 6
     header_h = 22
