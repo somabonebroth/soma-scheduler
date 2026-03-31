@@ -352,7 +352,7 @@ def _draw_checklist_content(c, w, h, date, active_vessels, logo_path=None, fille
     c.setFont(FONT, 6)
     c.drawString(40, 25, "Generated: " + datetime.now().strftime("%Y-%m-%d %H:%M"))
     c.drawRightString(w - 40, 25, "Soma Bone Broth --- Retain for audit records")
-    def generate_weekly_schedule_pdf(output_path, week_start, days_map, recipes, notes="", logo_path=None):
+def generate_weekly_schedule_pdf(output_path, week_start, days_map, recipes, notes="", logo_path=None):
     w, h = letter
     c = canvas.Canvas(output_path, pagesize=letter)
     draw_header(c, w, h, "WEEKLY PRODUCTION SCHEDULE", "Week of " + week_start.strftime("%B %d, %Y"), logo_path)
