@@ -7,8 +7,9 @@
 <link rel="stylesheet" href="/static/style.css">
 <style>
 .recipe-list-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); gap: 8px; }
-.recipe-name { font-weight: 500; }
-.recipe-meta { font-size: 12px; color: var(--text-light); }
+.recipe-info .recipe-name { font-size: 14px; font-weight: 600; color: var(--dark); }
+.recipe-info .recipe-brand { font-size: 12px; font-weight: 600; color: var(--accent); }
+.recipe-info .recipe-meta { font-size: 11px; color: var(--text-light); }
 .recipe-btns { display: flex; gap: 6px; flex-shrink: 0; }
 .upload-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; }
 .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: rgba(74,103,65,0.05); }
@@ -25,7 +26,7 @@
 .edit-field input, .edit-field textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; }
 .edit-field textarea { min-height: 80px; resize: vertical; }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
-.add-btns { display: flex; gap: 10px; margin-bottom: 16px; }
+.add-btns { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; }
 .brand-group { margin-bottom: 16px; }
 .brand-label { font-size: 13px; font-weight: 700; color: var(--accent); padding: 6px 0; border-bottom: 2px solid var(--accent); margin-bottom: 4px; }
 </style>
@@ -41,7 +42,7 @@
         <h2>Add Recipe</h2>
         <div class="add-btns">
             <button class="btn btn-primary" onclick="openAddManual()">Add Recipe Manually</button>
-            <span style="color:var(--text-light);font-size:13px;line-height:40px;">or</span>
+            <span style="color:var(--text-light);font-size:13px;">or upload PDF below</span>
         </div>
         <div class="upload-zone" id="upload-zone"><p>Upload recipe card PDF</p><input type="file" id="recipe-upload" accept=".pdf"></div>
         <div id="upload-status" class="status" style="margin-top:12px;"></div>
@@ -71,7 +72,6 @@
 var recipes = {};
 var editingName = '';
 var isAdding = false;
-
 function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
 document.addEventListener('DOMContentLoaded', async function() {
@@ -84,14 +84,8 @@ function renderList() {
     var names = Object.keys(recipes).sort();
     document.getElementById('recipe-count').textContent = names.length;
     if (!names.length) { container.innerHTML = '<p style="color:var(--text-light)">No recipes added yet</p>'; return; }
-
     var brands = {};
-    names.forEach(function(name) {
-        var brand = recipes[name].brand || 'Other';
-        if (!brands[brand]) brands[brand] = [];
-        brands[brand].push(name);
-    });
-
+    names.forEach(function(name) { var brand = recipes[name].brand || 'Other'; if (!brands[brand]) brands[brand] = []; brands[brand].push(name); });
     var brandNames = Object.keys(brands).sort();
     var html = '';
     brandNames.forEach(function(brand) {
@@ -99,7 +93,7 @@ function renderList() {
         brands[brand].forEach(function(name) {
             var r = recipes[name];
             var safe = name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-            html += '<div class="recipe-list-item"><div><div class="recipe-name">' + name + '</div><div class="recipe-meta">' + (r.format || '') + ' | Target: ' + (r.yield || '--') + ' units</div></div><div class="recipe-btns"><button class="btn-sm" onclick="viewRecipe(\'' + safe + '\')">View</button><button class="btn-sm" onclick="editRecipe(\'' + safe + '\')">Edit</button><button class="btn-danger" onclick="deleteRecipe(\'' + safe + '\')">Delete</button></div></div>';
+            html += '<div class="recipe-list-item"><div class="recipe-info"><div class="recipe-name">' + name + '</div><div class="recipe-meta">' + (r.format || '') + ' | Target: ' + (r.yield || '--') + ' units</div></div><div class="recipe-btns"><button class="btn-sm" onclick="viewRecipe(\'' + safe + '\')">View</button><button class="btn-sm" onclick="editRecipe(\'' + safe + '\')">Edit</button><button class="btn-danger" onclick="deleteRecipe(\'' + safe + '\')">Delete</button></div></div>';
         });
         html += '</div>';
     });
@@ -109,8 +103,8 @@ function renderList() {
 function viewRecipe(name) {
     var r = recipes[name];
     if (!r) return;
-    document.getElementById('view-name').textContent = name;
-    document.getElementById('view-meta').textContent = (r.brand || '') + ' | ' + (r.format || '') + ' | Target: ' + (r.yield || '--') + ' units';
+    document.getElementById('view-name').textContent = (r.brand ? r.brand + ' - ' : '') + name;
+    document.getElementById('view-meta').textContent = (r.format || '') + ' | Target: ' + (r.yield || '--') + ' units';
     var html = '';
     if (r.special_instructions && r.special_instructions.length) {
         html += '<div class="modal-section"><div class="modal-section-title warning">Special Instructions</div>';
@@ -131,10 +125,10 @@ function viewRecipe(name) {
 
 function buildEditForm(name, r) {
     var html = '';
-    html += '<div class="edit-field"><label>Brand Name</label><input id="e-brand" value="' + ((r && r.brand) || '').replace(/"/g, '&quot;') + '" placeholder="e.g. SOMA, Ripe, Wild Meadows"></div>';
-    html += '<div class="edit-field"><label>Recipe Name</label><input id="e-name" value="' + (name || '').replace(/"/g, '&quot;') + '" placeholder="e.g. Chicken with Herbs & Turmeric"></div>';
-    html += '<div class="edit-field"><label>Format</label><input id="e-format" value="' + ((r && r.format) || '') + '" placeholder="e.g. SS-876ML"></div>';
-    html += '<div class="edit-field"><label>Target Yield</label><input type="number" id="e-yield" value="' + ((r && r.yield) || '') + '" placeholder="e.g. 150"></div>';
+    html += '<div class="edit-field"><label>Brand Name</label><input id="e-brand" value="' + ((r && r.brand) || '').replace(/"/g, '&quot;') + '" placeholder="e.g. Ripe, SOMA, Wild Meadows"></div>';
+    html += '<div class="edit-field"><label>Recipe Name</label><input id="e-name" value="' + (name || '').replace(/"/g, '&quot;') + '" placeholder="e.g. Liquid Gold"></div>';
+    html += '<div class="edit-field"><label>Format</label><input id="e-format" value="' + ((r && r.format) || '') + '" placeholder="SS-876ML, FZ-750ML, SS-750ML"></div>';
+    html += '<div class="edit-field"><label>Target Yield</label><input type="number" id="e-yield" value="' + ((r && r.yield) || '') + '" placeholder="150"></div>';
     html += '<div class="edit-field"><label>Special Instructions (one per line)</label><textarea id="e-special">' + ((r && r.special_instructions) || []).join('\n') + '</textarea></div>';
     html += '<div class="edit-field"><label>Kettle Overnight (one per line)</label><textarea id="e-overnight">' + ((r && r.kettle_overnight) || []).join('\n') + '</textarea></div>';
     html += '<div class="edit-field"><label>After Skim (one per line)</label><textarea id="e-skim">' + ((r && r.after_skim) || []).join('\n') + '</textarea></div>';
@@ -144,8 +138,7 @@ function buildEditForm(name, r) {
 }
 
 function openAddManual() {
-    isAdding = true;
-    editingName = '';
+    isAdding = true; editingName = '';
     document.getElementById('edit-title').textContent = 'Add Recipe';
     document.getElementById('edit-save-btn').textContent = 'Add Recipe';
     document.getElementById('edit-form').innerHTML = buildEditForm('', null);
@@ -153,8 +146,7 @@ function openAddManual() {
 }
 
 function editRecipe(name) {
-    isAdding = false;
-    editingName = name;
+    isAdding = false; editingName = name;
     document.getElementById('edit-title').textContent = 'Edit Recipe';
     document.getElementById('edit-save-btn').textContent = 'Save Changes';
     document.getElementById('edit-form').innerHTML = buildEditForm(name, recipes[name]);
@@ -173,15 +165,10 @@ async function saveEdit() {
         special_instructions: toLines('e-special'), kettle_overnight: toLines('e-overnight'),
         after_skim: toLines('e-skim'), finishing: toLines('e-finishing'), add_to_jar: toLines('e-jar'),
     }};
-
     if (isAdding) {
-        var allRecipes = await (await fetch('/api/recipes')).json();
-        allRecipes[newName] = data.data;
         await fetch('/api/recipes/upload-json', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: newName, data: data.data})});
     } else {
-        await fetch('/api/recipes/' + encodeURIComponent(editingName), {
-            method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data),
-        });
+        await fetch('/api/recipes/' + encodeURIComponent(editingName), {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)});
     }
     closeModal('edit-modal');
     recipes = await (await fetch('/api/recipes')).json();

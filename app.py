@@ -168,19 +168,33 @@ def parse_recipe_pdf_text(text):
     lines = [l.strip() for l in text.strip().split("\n") if l.strip()]
     if not lines:
         return None
-    name = lines[0]
+    raw_name = lines[0]
     recipe = {
         "yield": None, "format": "", "brand": "",
         "special_instructions": [], "kettle_overnight": [],
         "after_skim": [], "finishing": [], "add_to_jar": [],
     }
-    upper = name.upper()
+    upper = raw_name.upper()
     if "SS-876ML" in upper or "SS876ML" in upper:
         recipe["format"] = "SS-876ML"
     elif "FZ-750ML" in upper or "FZ750ML" in upper:
         recipe["format"] = "FZ-750ML"
     elif "SS-750ML" in upper or "SS750ML" in upper:
         recipe["format"] = "SS-750ML"
+    # Try to extract brand from name (e.g. "RIPE-LIQUID GOLD-SS-876ML")
+    # Split on first hyphen to get brand
+    parts = raw_name.split("-", 1)
+    if len(parts) > 1:
+        recipe["brand"] = parts[0].strip()
+        # Remove format suffix from recipe name
+        recipe_part = parts[1].strip()
+        for suffix in ["-SS-876ML", "-FZ-750ML", "-SS-750ML", "-SS876ML", "-FZ750ML", "-SS750ML"]:
+            if recipe_part.upper().endswith(suffix.upper()):
+                recipe_part = recipe_part[:len(recipe_part)-len(suffix)].strip()
+                break
+        name = recipe_part
+    else:
+        name = raw_name
     for line in lines:
         m = re.search(r"Target Yield:\s*(\d+)", line, re.IGNORECASE)
         if m:
@@ -687,6 +701,47 @@ def get_traceability():
         if week_record["days"]:
             records.append(week_record)
     return jsonify(records)
+
+@app.route("/api/traceability/<week_id>/<int:day_idx>", methods=["DELETE"])
+@login_required
+def delete_traceability_record(week_id, day_idx):
+    path = os.path.join(CHECKLISTS_DIR, week_id + "_day" + str(day_idx) + ".json")
+    if os.path.exists(path):
+        os.unlink(path)
+        # Also remove completed PDF if it exists
+        pdf_path = os.path.join(PDF_DIR, week_id, DAYS[day_idx] + "_Completed_Checklist.pdf")
+        if os.path.exists(pdf_path):
+            os.unlink(pdf_path)
+        return jsonify({"success": True})
+    return jsonify({"error": "Record not found"}), 404
+
+
+# -- Production Tracker --
+@app.route("/api/production-tracker/<week_id>", methods=["GET"])
+@login_required
+def get_production_tracker(week_id):
+    daily_totals = []
+    for d_idx in range(7):
+        cl = load_checklist(week_id, d_idx)
+        total = 0
+        if cl and cl.get("produced"):
+            for vessel_id, amount in cl["produced"].items():
+                try:
+                    total += int(amount)
+                except (ValueError, TypeError):
+                    pass
+        daily_totals.append({
+            "day_idx": d_idx,
+            "day_name": DAYS[d_idx],
+            "total": total,
+            "has_data": cl is not None,
+        })
+    return jsonify(daily_totals)
+
+@app.route("/production-tracker")
+@login_required
+def production_tracker_page():
+    return render_template("production_tracker.html")
 
 
 # -- Init --

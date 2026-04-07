@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soma - Production Tracker</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.week-picker { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+.week-picker input[type="date"] { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
+.chart-container { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin-bottom: 16px; }
+.chart-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--dark); }
+.bar-chart { display: flex; align-items: flex-end; gap: 12px; height: 280px; padding: 0 8px; border-bottom: 2px solid var(--border); }
+.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.bar { background: var(--accent); border-radius: 4px 4px 0 0; width: 100%; min-height: 2px; transition: height 0.5s; position: relative; }
+.bar.empty { background: var(--border); }
+.bar-value { font-size: 12px; font-weight: 600; color: var(--dark); }
+.bar-label { font-size: 11px; color: var(--text-light); margin-top: 8px; }
+.bar-wrapper { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.total-row { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-top: 1px solid var(--border); margin-top: 16px; }
+.total-label { font-size: 14px; font-weight: 600; color: var(--dark); }
+.total-value { font-size: 20px; font-weight: 700; color: var(--accent); }
+.no-data { text-align: center; padding: 60px 20px; color: var(--text-light); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="header">
+    <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+    <div class="header-text"><h1>Production Tracker</h1><p>Weekly output overview</p></div>
+    <div class="header-right"><a href="/" class="header-btn">Back to Dashboard</a></div>
+</div>
+<div class="main">
+    <div class="week-picker">
+        <label style="font-size:14px;font-weight:600;">Week of:</label>
+        <input type="date" id="week-date" onchange="loadTracker()">
+    </div>
+    <div id="chart-area"></div>
+</div>
+<script>
+function getCurrentMonday() {
+    var today = new Date();
+    var day = today.getDay();
+    var diff = day === 0 ? -6 : 1 - day;
+    var mon = new Date(today);
+    mon.setDate(today.getDate() + diff);
+    return mon;
+}
+function formatDate(d) { return d.toISOString().split('T')[0]; }
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('week-date').value = formatDate(getCurrentMonday());
+    loadTracker();
+});
+
+async function loadTracker() {
+    var weekId = document.getElementById('week-date').value;
+    var res = await fetch('/api/production-tracker/' + weekId);
+    var data = await res.json();
+    var container = document.getElementById('chart-area');
+
+    var maxVal = 0;
+    var weekTotal = 0;
+    var hasAnyData = false;
+    for (var i = 0; i < data.length; i++) {
+        if (data[i].total > maxVal) maxVal = data[i].total;
+        weekTotal += data[i].total;
+        if (data[i].has_data && data[i].total > 0) hasAnyData = true;
+    }
+
+    if (!hasAnyData) {
+        container.innerHTML = '<div class="chart-container"><div class="no-data">No production data for this week yet.<br>Complete daily production to see data here.</div></div>';
+        return;
+    }
+
+    if (maxVal === 0) maxVal = 100;
+    var chartHeight = 240;
+
+    var html = '<div class="chart-container">';
+    html += '<div class="chart-title">Daily Production Output</div>';
+    html += '<div class="bar-chart">';
+
+    for (var i = 0; i < data.length; i++) {
+        var d = data[i];
+        var barH = d.total > 0 ? Math.max(Math.round((d.total / maxVal) * chartHeight), 8) : 4;
+        var barClass = d.total > 0 ? 'bar' : 'bar empty';
+        html += '<div class="bar-col">';
+        html += '<div class="bar-wrapper">';
+        if (d.total > 0) html += '<div class="bar-value">' + d.total + '</div>';
+        html += '<div class="' + barClass + '" style="height:' + barH + 'px;"></div>';
+        html += '</div>';
+        html += '<div class="bar-label">' + d.day_name.substring(0, 3) + '</div>';
+        html += '</div>';
+    }
+
+    html += '</div>';
+    html += '<div class="total-row"><span class="total-label">Weekly Total</span><span class="total-value">' + weekTotal + ' units</span></div>';
+    html += '</div>';
+
+    container.innerHTML = html;
+}
+</script>
+</body>
+</html>

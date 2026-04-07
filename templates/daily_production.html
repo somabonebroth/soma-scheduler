@@ -23,54 +23,28 @@
 .ingredient-item:last-child { border-bottom: none; }
 .finish-inputs { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 .finish-inputs label { font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; }
-.finish-inputs input, .finish-inputs textarea { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 14px; font-family: inherit; margin-bottom: 8px; -webkit-appearance: none; }
+.finish-inputs input, .finish-inputs textarea { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 14px; font-family: inherit; margin-bottom: 8px; }
 .finish-inputs textarea { min-height: 50px; resize: vertical; }
 .label-btn { background: var(--accent); color: #fff; border: none; padding: 8px 14px; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .label-btn:hover { background: var(--accent-light); }
 .no-production { color: var(--text-light); font-size: 12px; padding: 20px; text-align: center; }
-
-/* iPad-friendly checkboxes */
 .ccp-section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
 .ccp-header { background: var(--accent); color: #fff; padding: 12px 16px; font-size: 14px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
-.ccp-check-wrap { position: relative; width: 32px; height: 32px; flex-shrink: 0; }
-.ccp-check-wrap input[type="checkbox"] {
-    position: absolute; top: 0; left: 0;
-    width: 32px; height: 32px;
-    opacity: 0; cursor: pointer; z-index: 2;
-    -webkit-appearance: none;
-    margin: 0; padding: 0;
-}
-.ccp-check-visual {
-    position: absolute; top: 0; left: 0;
-    width: 28px; height: 28px;
-    border: 2px solid rgba(255,255,255,0.5);
-    border-radius: 4px;
-    background: rgba(255,255,255,0.1);
-    display: flex; align-items: center; justify-content: center;
-    pointer-events: none;
-    transition: all 0.15s;
-}
-.ccp-check-wrap input:checked + .ccp-check-visual {
-    background: white;
-    border-color: white;
-}
-.ccp-check-wrap input:checked + .ccp-check-visual::after {
-    content: '\\2713';
-    color: var(--accent);
-    font-size: 18px;
-    font-weight: 700;
-}
+.ccp-checkbox { width: 32px; height: 32px; position: relative; flex-shrink: 0; cursor: pointer; }
+.ccp-checkbox input { position: absolute; width: 32px; height: 32px; opacity: 0; cursor: pointer; z-index: 2; margin: 0; padding: 0; }
+.ccp-checkbox .box { width: 28px; height: 28px; border: 2px solid rgba(255,255,255,0.6); border-radius: 4px; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; }
+.ccp-checkbox input:checked ~ .box { background: #fff; border-color: #fff; }
+.ccp-checkbox input:checked ~ .box::after { content: ''; display: block; width: 8px; height: 14px; border: solid var(--accent); border-width: 0 3px 3px 0; transform: rotate(45deg); margin-top: -3px; }
 .ccp-item { font-size: 13px; padding: 8px 16px; border-bottom: 1px solid var(--border); line-height: 1.4; }
 .ccp-item:last-child { border-bottom: none; }
 .ccp-item:nth-child(even) { background: var(--row-alt); }
 .ccp-item.callout { background: var(--warning); font-weight: 600; }
-
 .signoff-section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 12px; }
 .signoff-row { display: flex; gap: 12px; margin-bottom: 8px; align-items: center; flex-wrap: wrap; }
 .signoff-row label { font-size: 13px; font-weight: 600; width: 140px; }
-.signoff-row input { flex: 1; min-width: 160px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; -webkit-appearance: none; }
+.signoff-row input { flex: 1; min-width: 160px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
 .complete-bar { text-align: center; padding: 20px; }
-.btn-complete { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 16px 36px; font-size: 17px; font-weight: 600; cursor: pointer; -webkit-appearance: none; }
+.btn-complete { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 16px 36px; font-size: 17px; font-weight: 600; cursor: pointer; }
 .btn-complete:hover { background: var(--accent-light); }
 .btn-complete:disabled { background: #ccc; }
 .complete-msg { margin-top: 10px; font-size: 13px; }
@@ -81,7 +55,6 @@
 .pct-bar { background: var(--border); border-radius: 4px; height: 8px; margin-bottom: 16px; overflow: hidden; }
 .pct-fill { background: var(--accent); height: 100%; transition: width 0.3s; border-radius: 4px; }
 .pct-label { font-size: 12px; color: var(--text-light); margin-bottom: 4px; }
-
 @media (max-width: 768px) {
     .t-layout { grid-template-columns: 1fr; }
     .t-side:first-child { border-right: none; border-bottom: 2px solid var(--border); }
@@ -101,29 +74,20 @@
     <div class="pct-label"><span id="pct-text">0% Complete</span></div>
     <div class="pct-bar"><div class="pct-fill" id="pct-fill" style="width:0%"></div></div>
     <div id="kettles-container"></div>
-
-    <div class="card"><h2>CCP Checklist</h2><p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Tap the checkbox on each section header to confirm all items are completed.</p></div>
+    <div class="card"><h2>CCP Checklist</h2><p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Tap the checkbox on each section header to confirm all items are completed. Temperature reference: 92-98 C.</p></div>
     <div id="ccp-container"></div>
-
-    <div class="card">
-        <h3>Daily Notes</h3>
-        <textarea id="day-notes" style="width:100%;min-height:60px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit;-webkit-appearance:none;" oninput="autoSave()"></textarea>
-    </div>
-
+    <div class="card"><h3>Daily Notes</h3><textarea id="day-notes" style="width:100%;min-height:60px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit;" oninput="autoSave()"></textarea></div>
     <div class="signoff-section">
         <h3 style="font-size:14px;margin-bottom:12px;">Final Sign-Off</h3>
-        <div class="signoff-row"><label>Kitchen Lead:</label><input type="text" id="signoff-kitchen" oninput="autoSave()"></div>
-        <div class="signoff-row"><label>Production Manager:</label><input type="text" id="signoff-manager" oninput="autoSave()"></div>
+        <div class="signoff-row"><label>Kitchen Lead:</label><input type="text" id="signoff-kitchen" placeholder="" autocomplete="off" oninput="autoSave();updatePct()"></div>
+        <div class="signoff-row"><label>Production Manager:</label><input type="text" id="signoff-manager" placeholder="" autocomplete="off" oninput="autoSave();updatePct()"></div>
     </div>
-
     <div id="save-indicator" class="save-indicator">Not yet saved</div>
-
     <div class="complete-bar">
         <button class="btn-complete" id="complete-btn" onclick="completeAndFile()">Complete & File</button>
         <div class="complete-msg" id="complete-msg"></div>
     </div>
 </div>
-
 <script>
 var WEEK_ID = '{{ week_id }}';
 var DAY_IDX = {{ day_idx }};
@@ -140,13 +104,9 @@ async function init() {
     productionData = await prodRes.json();
     ccpSections = await ccpRes.json();
     var clData = await clRes.json();
-
     document.getElementById('header-sub').textContent = productionData.day_name + ' - ' + productionData.date;
-    var infoHtml = '<strong>DATE:</strong> ' + productionData.date;
-    infoHtml += '&nbsp;&nbsp;&nbsp;<strong>START LOT#:</strong> ' + productionData.lot;
-    infoHtml += '&nbsp;&nbsp;&nbsp;<strong>FINISH LOT#:</strong> ' + productionData.prev_lot;
+    var infoHtml = '<strong>DATE:</strong> ' + productionData.date + '&nbsp;&nbsp;&nbsp;<strong>START LOT#:</strong> ' + productionData.lot + '&nbsp;&nbsp;&nbsp;<strong>FINISH LOT#:</strong> ' + productionData.prev_lot;
     document.getElementById('info-bar').innerHTML = infoHtml;
-
     buildKettles();
     buildCCP();
     if (clData.checklist) restoreData(clData.checklist);
@@ -163,12 +123,11 @@ function buildKettles() {
         if (!finish && !start) continue;
         html += '<div class="kettle-block"><div class="kettle-header">' + vessel + '</div><div class="t-layout">';
         html += '<div class="t-side"><span class="t-label finish">FINISH</span>';
-        if (finish) { html += buildRecipeCard(finish, vessel, 'finish'); }
-        else { html += '<div class="no-production">No production to finish</div>'; }
-        html += '</div>';
-        html += '<div class="t-side"><span class="t-label start">START</span>';
-        if (start) { html += buildRecipeCard(start, vessel, 'start'); }
-        else { html += '<div class="no-production">No production to start</div>'; }
+        if (finish) html += buildRecipeCard(finish, vessel, 'finish');
+        else html += '<div class="no-production">No production to finish</div>';
+        html += '</div><div class="t-side"><span class="t-label start">START</span>';
+        if (start) html += buildRecipeCard(start, vessel, 'start');
+        else html += '<div class="no-production">No production to start</div>';
         html += '</div></div></div>';
     }
     if (!html) html = '<div class="card" style="text-align:center;color:var(--text-light);padding:40px;">No production scheduled</div>';
@@ -178,7 +137,8 @@ function buildKettles() {
 function buildRecipeCard(data, vessel, side) {
     var r = data.details;
     var name = data.recipe;
-    var html = '<div class="recipe-title">' + name + '</div>';
+    var brandDisplay = r.brand ? (r.brand + ' - ') : '';
+    var html = '<div class="recipe-title">' + brandDisplay + name + '</div>';
     html += '<div class="recipe-format">' + (r.format || '') + ' | Target: ' + (r.yield || '--') + ' units</div>';
     if (r.special_instructions && r.special_instructions.length) {
         html += '<div class="special-box">';
@@ -187,10 +147,9 @@ function buildRecipeCard(data, vessel, side) {
     }
     var secs = [['Add to kettle overnight', r.kettle_overnight],['Add after skim', r.after_skim],['Finishing', r.finishing],['Add to jar/container', r.add_to_jar]];
     for (var s = 0; s < secs.length; s++) {
-        var title = secs[s][0]; var items = secs[s][1];
-        if (items && items.length) {
-            html += '<div class="ingredient-section"><div class="ingredient-header">' + title + '</div>';
-            for (var j = 0; j < items.length; j++) html += '<div class="ingredient-item">' + items[j] + '</div>';
+        if (secs[s][1] && secs[s][1].length) {
+            html += '<div class="ingredient-section"><div class="ingredient-header">' + secs[s][0] + '</div>';
+            for (var j = 0; j < secs[s][1].length; j++) html += '<div class="ingredient-item">' + secs[s][1][j] + '</div>';
             html += '</div>';
         }
     }
@@ -198,7 +157,7 @@ function buildRecipeCard(data, vessel, side) {
         var vid = vessel.replace(/[()]/g, '');
         html += '<div class="finish-inputs">';
         html += '<label>Amount Produced</label><input type="number" id="produced-' + vid + '" placeholder="units" oninput="autoSave();updatePct()">';
-        html += '<button class="label-btn" onclick="generateLabel(\'' + name.replace(/'/g, "\\'") + '\')">Generate Label</button>';
+        html += '<button class="label-btn" onclick="generateLabel(\'' + name.replace(/'/g, "\\'") + '\',\'' + (r.format || '').replace(/'/g, "\\'") + '\')">Generate Label</button>';
         html += '<label style="margin-top:8px;">Notes</label><textarea id="fnotes-' + vid + '" placeholder="Finish notes..." oninput="autoSave()"></textarea>';
         html += '</div>';
     }
@@ -212,7 +171,7 @@ function buildCCP() {
         var sec = ccpSections[i];
         var checkId = 'section-' + sec.num;
         html += '<div class="ccp-section"><div class="ccp-header"><span>' + sec.num + '  ' + sec.title + '</span>';
-        html += '<div class="ccp-check-wrap"><input type="checkbox" id="' + checkId + '" onchange="autoSave();updatePct()"><div class="ccp-check-visual"></div></div>';
+        html += '<div class="ccp-checkbox"><input type="checkbox" id="' + checkId + '" onchange="autoSave();updatePct()"><div class="box"></div></div>';
         html += '</div>';
         for (var j = 0; j < sec.items.length; j++) {
             var item = sec.items[j];
@@ -225,24 +184,20 @@ function buildCCP() {
 }
 
 function updatePct() {
-    var total = 0; var done = 0;
-    // CCP sections
+    var total = 0, done = 0;
     for (var i = 0; i < ccpSections.length; i++) {
         total++;
         var el = document.getElementById('section-' + ccpSections[i].num);
         if (el && el.checked) done++;
     }
-    // Amount produced for each finish kettle
     for (var v = 0; v < VESSELS.length; v++) {
         var vid = VESSELS[v].replace(/[()]/g, '');
         var pel = document.getElementById('produced-' + vid);
         if (pel) { total++; if (pel.value) done++; }
     }
-    // Sign-offs
     total += 2;
-    if (document.getElementById('signoff-kitchen').value) done++;
-    if (document.getElementById('signoff-manager').value) done++;
-
+    if (document.getElementById('signoff-kitchen').value.trim()) done++;
+    if (document.getElementById('signoff-manager').value.trim()) done++;
     var pct = total > 0 ? Math.round(done / total * 100) : 0;
     document.getElementById('pct-text').textContent = pct + '% Complete';
     document.getElementById('pct-fill').style.width = pct + '%';
@@ -283,20 +238,16 @@ function autoSave() {
     if (saveTimeout) clearTimeout(saveTimeout);
     saveTimeout = setTimeout(async function() {
         try {
-            await fetch('/api/daily-production/' + WEEK_ID + '/' + DAY_IDX + '/save', {
-                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(collectData()),
-            });
+            await fetch('/api/daily-production/' + WEEK_ID + '/' + DAY_IDX + '/save', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(collectData()) });
             ind.textContent = 'Saved'; ind.className = 'save-indicator saved';
         } catch (e) { ind.textContent = 'Save failed'; }
     }, 800);
 }
 
-async function generateLabel(recipeName) {
+async function generateLabel(recipeName, format) {
+    var fullName = recipeName + (format ? ' ' + format : '');
     try {
-        var res = await fetch('/api/label', {
-            method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({product_name: recipeName, lot: productionData.prev_lot, production_date: productionData.date}),
-        });
+        var res = await fetch('/api/label', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({product_name: fullName, lot: productionData.prev_lot, production_date: productionData.date}) });
         if (res.ok) {
             var blob = await res.blob();
             var url = URL.createObjectURL(blob);
@@ -312,21 +263,11 @@ async function completeAndFile() {
     var msg = document.getElementById('complete-msg');
     btn.disabled = true; btn.textContent = 'Filing...';
     try {
-        var res = await fetch('/api/checklist/' + WEEK_ID + '/' + DAY_IDX + '/complete', {
-            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(collectData()),
-        });
+        var res = await fetch('/api/checklist/' + WEEK_ID + '/' + DAY_IDX + '/complete', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(collectData()) });
         var result = await res.json();
-        if (result.success) {
-            msg.style.color = 'var(--accent)'; msg.textContent = 'Filed successfully! Redirecting...';
-            setTimeout(function() { window.location.href = '/'; }, 1500);
-        } else {
-            msg.style.color = '#dc3545'; msg.textContent = result.error || 'Failed';
-            btn.disabled = false; btn.textContent = 'Complete & File';
-        }
-    } catch (e) {
-        msg.style.color = '#dc3545'; msg.textContent = 'Error: ' + e.message;
-        btn.disabled = false; btn.textContent = 'Complete & File';
-    }
+        if (result.success) { msg.style.color = 'var(--accent)'; msg.textContent = 'Filed successfully! Redirecting...'; setTimeout(function() { window.location.href = '/'; }, 1500); }
+        else { msg.style.color = '#dc3545'; msg.textContent = result.error || 'Failed'; btn.disabled = false; btn.textContent = 'Complete & File'; }
+    } catch (e) { msg.style.color = '#dc3545'; msg.textContent = 'Error: ' + e.message; btn.disabled = false; btn.textContent = 'Complete & File'; }
 }
 
 document.addEventListener('DOMContentLoaded', init);
