@@ -168,62 +168,95 @@ def parse_recipe_pdf_text(text):
     lines = [l.strip() for l in text.strip().split("\n") if l.strip()]
     if not lines:
         return None
-    raw_name = lines[0]
     recipe = {
         "yield": None, "format": "", "brand": "",
         "special_instructions": [], "kettle_overnight": [],
         "after_skim": [], "finishing": [], "add_to_jar": [],
     }
-    upper = raw_name.upper()
-    if "SS-876ML" in upper or "SS876ML" in upper:
-        recipe["format"] = "SS-876ML"
-    elif "FZ-750ML" in upper or "FZ750ML" in upper:
-        recipe["format"] = "FZ-750ML"
-    elif "SS-750ML" in upper or "SS750ML" in upper:
-        recipe["format"] = "SS-750ML"
-    # Try to extract brand from name (e.g. "RIPE-LIQUID GOLD-SS-876ML")
-    # Split on first hyphen to get brand
-    parts = raw_name.split("-", 1)
-    if len(parts) > 1:
-        recipe["brand"] = parts[0].strip()
-        # Remove format suffix from recipe name
-        recipe_part = parts[1].strip()
-        for suffix in ["-SS-876ML", "-FZ-750ML", "-SS-750ML", "-SS876ML", "-FZ750ML", "-SS750ML"]:
-            if recipe_part.upper().endswith(suffix.upper()):
-                recipe_part = recipe_part[:len(recipe_part)-len(suffix)].strip()
-                break
-        name = recipe_part
-    else:
-        name = raw_name
-    for line in lines:
-        m = re.search(r"Target Yield:\s*(\d+)", line, re.IGNORECASE)
-        if m:
-            recipe["yield"] = int(m.group(1))
-            break
+    name = ""
+    # First pass: extract labelled fields (Brand Name:, Recipe Name:, Format:, Target Yield:)
+    header_lines_used = set()
+    for i, line in enumerate(lines):
+        ll = line.lower().strip()
+        if ll.startswith("brand name:"):
+            recipe["brand"] = line.split(":", 1)[1].strip()
+            header_lines_used.add(i)
+        elif ll.startswith("recipe name:"):
+            name = line.split(":", 1)[1].strip()
+            header_lines_used.add(i)
+        elif ll.startswith("format:"):
+            fmt = line.split(":", 1)[1].strip().upper()
+            if "SS-876ML" in fmt or "SS876ML" in fmt:
+                recipe["format"] = "SS-876ML"
+            elif "FZ-750ML" in fmt or "FZ750ML" in fmt:
+                recipe["format"] = "FZ-750ML"
+            elif "SS-750ML" in fmt or "SS750ML" in fmt:
+                recipe["format"] = "SS-750ML"
+            else:
+                recipe["format"] = fmt
+            header_lines_used.add(i)
+        elif "target yield" in ll:
+            m = re.search(r"(\d+)", line)
+            if m:
+                recipe["yield"] = int(m.group(1))
+            header_lines_used.add(i)
+    # Fallback: if no labelled fields found, try old format (first line as name)
+    if not name:
+        raw_name = lines[0]
+        upper = raw_name.upper()
+        if "SS-876ML" in upper or "SS876ML" in upper:
+            recipe["format"] = "SS-876ML"
+        elif "FZ-750ML" in upper or "FZ750ML" in upper:
+            recipe["format"] = "FZ-750ML"
+        elif "SS-750ML" in upper or "SS750ML" in upper:
+            recipe["format"] = "SS-750ML"
+        parts = raw_name.split("-", 1)
+        if len(parts) > 1:
+            recipe["brand"] = parts[0].strip()
+            recipe_part = parts[1].strip()
+            for suffix in ["-SS-876ML", "-FZ-750ML", "-SS-750ML"]:
+                if recipe_part.upper().endswith(suffix.upper()):
+                    recipe_part = recipe_part[:len(recipe_part)-len(suffix)].strip()
+                    break
+            name = recipe_part
+        else:
+            name = raw_name
+        header_lines_used.add(0)
     if recipe["yield"] is None:
         recipe["yield"] = 190 if "FZ" in recipe["format"] else 150
+    # Second pass: parse ingredient sections
     current_section = None
     in_special = False
-    for line in lines[1:]:
+    for i, line in enumerate(lines):
+        if i in header_lines_used:
+            continue
         ll = line.lower().strip()
-        if "target yield" in ll:
+        if ll == "(none)" or ll == "none":
             continue
         if ll == "special instructions:" or ll.startswith("special instructions"):
             in_special = True
+            current_section = None
             continue
         if "add to kettle overnight" in ll:
             in_special = False
             current_section = "kettle_overnight"
             continue
         if "add directly to kettle after skim" in ll or "add to kettle after skim" in ll:
+            in_special = False
             current_section = "after_skim"
             continue
         if ll.startswith("water") and ("removing solids" in ll or "top kettle" in ll):
+            in_special = False
             current_section = "finishing"
             recipe["finishing"].append(line)
             continue
         if "add to jar" in ll or "add to container" in ll:
+            in_special = False
             current_section = "add_to_jar"
+            continue
+        if "finishing:" in ll and len(ll) < 15:
+            in_special = False
+            current_section = "finishing"
             continue
         if any(ll.startswith(p) for p in ["no salt", "g per liter", "ml per liter"]) or "per liter" in ll or "per litre" in ll:
             if current_section != "finishing":
@@ -231,7 +264,11 @@ def parse_recipe_pdf_text(text):
             recipe["finishing"].append(line)
             continue
         if in_special:
-            recipe["special_instructions"].append(line)
+            # Join continuation lines (lowercase start = continuation of previous)
+            if recipe["special_instructions"] and line[0].islower():
+                recipe["special_instructions"][-1] += " " + line
+            else:
+                recipe["special_instructions"].append(line)
             continue
         if current_section and current_section in recipe:
             recipe[current_section].append(line)
