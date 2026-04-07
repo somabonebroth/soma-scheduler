@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soma - Daily Production</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.kettle-block { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
+.kettle-header { background: var(--dark); color: #fff; padding: 10px 16px; font-weight: 700; font-size: 14px; text-align: center; }
+.t-layout { display: grid; grid-template-columns: 1fr 1fr; min-height: 100px; }
+.t-side { padding: 12px 16px; }
+.t-side:first-child { border-right: 2px solid var(--border); }
+.t-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; padding: 4px 8px; border-radius: 4px; display: inline-block; }
+.t-label.finish { background: #fce4ec; color: #c62828; }
+.t-label.start { background: #e8f5e9; color: #2e7d32; }
+.recipe-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--dark); }
+.recipe-format { font-size: 11px; color: var(--text-light); margin-bottom: 8px; }
+.special-box { background: var(--warning); padding: 6px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-bottom: 8px; }
+.ingredient-section { margin-bottom: 8px; }
+.ingredient-header { background: var(--dark); color: #fff; padding: 4px 8px; font-size: 10px; font-weight: 600; border-radius: 3px; margin-bottom: 4px; }
+.ingredient-item { font-size: 11px; padding: 3px 8px; border-bottom: 1px solid var(--border); }
+.ingredient-item:last-child { border-bottom: none; }
+.finish-inputs { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.finish-inputs label { font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px; }
+.finish-inputs input, .finish-inputs textarea {
+    width: 100%; padding: 6px 8px; border: 1px solid var(--border);
+    border-radius: 4px; font-size: 13px; font-family: inherit; margin-bottom: 8px;
+}
+.finish-inputs textarea { min-height: 50px; resize: vertical; }
+.label-btn { background: var(--accent); color: #fff; border: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.label-btn:hover { background: var(--accent-light); }
+.no-production { color: var(--text-light); font-size: 12px; padding: 20px; text-align: center; }
+.ccp-section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+.ccp-header { background: var(--accent); color: #fff; padding: 10px 14px; font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+.ccp-header input[type="checkbox"] { width: 20px; height: 20px; accent-color: white; }
+.ccp-item { font-size: 12px; padding: 6px 14px; border-bottom: 1px solid var(--border); }
+.ccp-item:last-child { border-bottom: none; }
+.ccp-item:nth-child(even) { background: var(--row-alt); }
+.ccp-item.callout { background: var(--warning); font-weight: 600; }
+.signoff-section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 12px; }
+.signoff-row { display: flex; gap: 12px; margin-bottom: 8px; align-items: center; flex-wrap: wrap; }
+.signoff-row label { font-size: 13px; font-weight: 600; width: 140px; }
+.signoff-row input { flex: 1; min-width: 160px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+.complete-bar { text-align: center; padding: 20px; }
+.btn-complete { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 14px 32px; font-size: 16px; font-weight: 600; cursor: pointer; }
+.btn-complete:hover { background: var(--accent-light); }
+.btn-complete:disabled { background: #ccc; }
+.complete-msg { margin-top: 10px; font-size: 13px; }
+.info-bar { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; }
+.info-bar strong { color: var(--dark); }
+.save-indicator { font-size: 12px; color: var(--text-light); text-align: center; margin-bottom: 8px; }
+.save-indicator.saved { color: var(--accent); }
+@media (max-width: 768px) {
+    .t-layout { grid-template-columns: 1fr; }
+    .t-side:first-child { border-right: none; border-bottom: 2px solid var(--border); }
+}
+</style>
+</head>
+<body>
+<div class="header">
+    <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+    <div class="header-text"><h1>Daily Production</h1><p id="header-sub">Loading...</p></div>
+    <div class="header-right"><a href="/" class="header-btn">Back to Dashboard</a></div>
+</div>
+<div class="main">
+    <div class="info-bar" id="info-bar">Loading...</div>
+    <div id="kettles-container"></div>
+
+    <div class="card"><h2>CCP Checklist</h2><p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">One checkmark per section confirms all items within that section are completed.</p></div>
+    <div id="ccp-container"></div>
+
+    <div class="card">
+        <h3>Daily Notes</h3>
+        <textarea id="day-notes" style="width:100%;min-height:60px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;" oninput="autoSave()"></textarea>
+    </div>
+
+    <div class="signoff-section">
+        <h3 style="font-size:14px;margin-bottom:12px;">Final Sign-Off</h3>
+        <div class="signoff-row"><label>Kitchen Lead:</label><input type="text" id="signoff-kitchen" oninput="autoSave()"></div>
+        <div class="signoff-row"><label>Production Manager:</label><input type="text" id="signoff-manager" oninput="autoSave()"></div>
+    </div>
+
+    <div id="save-indicator" class="save-indicator">Not yet saved</div>
+
+    <div class="complete-bar">
+        <button class="btn-complete" id="complete-btn" onclick="completeAndFile()">Complete & File</button>
+        <div class="complete-msg" id="complete-msg"></div>
+    </div>
+</div>
+
+<script>
+const WEEK_ID = '{{ week_id }}';
+const DAY_IDX = {{ day_idx }};
+const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const VESSELS = ['K1','K2','K3','K4(115L)'];
+let productionData = null;
+let ccpSections = [];
+let saveTimeout = null;
+
+async function init() {
+    const [prodRes, ccpRes, clRes] = await Promise.all([
+        fetch('/api/daily-production/' + WEEK_ID + '/' + DAY_IDX),
+        fetch('/api/ccp-master'),
+        fetch('/api/checklist/' + WEEK_ID + '/' + DAY_IDX),
+    ]);
+    productionData = await prodRes.json();
+    ccpSections = await ccpRes.json();
+    const clData = await clRes.json();
+
+    document.getElementById('header-sub').textContent = productionData.day_name + ' - ' + productionData.date;
+
+    let infoHtml = '<strong>DATE:</strong> ' + productionData.date;
+    infoHtml += '&nbsp;&nbsp;&nbsp;<strong>START LOT#:</strong> ' + productionData.lot;
+    infoHtml += '&nbsp;&nbsp;&nbsp;<strong>FINISH LOT#:</strong> ' + productionData.prev_lot;
+    document.getElementById('info-bar').innerHTML = infoHtml;
+
+    buildKettles();
+    buildCCP();
+
+    if (clData.checklist) restoreData(clData.checklist);
+}
+
+function buildKettles() {
+    const container = document.getElementById('kettles-container');
+    let html = '';
+    for (const vessel of VESSELS) {
+        const finish = productionData.finish[vessel];
+        const start = productionData.start[vessel];
+        if (!finish && !start) continue;
+
+        html += '<div class="kettle-block"><div class="kettle-header">' + vessel + '</div><div class="t-layout">';
+
+        // FINISH side
+        html += '<div class="t-side"><span class="t-label finish">FINISH</span>';
+        if (finish) {
+            html += buildRecipeCard(finish, vessel, 'finish');
+        } else {
+            html += '<div class="no-production">No production to finish</div>';
+        }
+        html += '</div>';
+
+        // START side
+        html += '<div class="t-side"><span class="t-label start">START</span>';
+        if (start) {
+            html += buildRecipeCard(start, vessel, 'start');
+        } else {
+            html += '<div class="no-production">No production to start</div>';
+        }
+        html += '</div>';
+
+        html += '</div></div>';
+    }
+    if (!html) html = '<div class="card" style="text-align:center;color:var(--text-light);padding:40px;">No production scheduled for this day</div>';
+    container.innerHTML = html;
+}
+
+function buildRecipeCard(data, vessel, side) {
+    const r = data.details;
+    const name = data.recipe;
+    let html = '<div class="recipe-title">' + name + '</div>';
+    html += '<div class="recipe-format">' + (r.format || '') + ' | Target: ' + (r.yield || '--') + ' units</div>';
+
+    if (r.special_instructions && r.special_instructions.length) {
+        html += '<div class="special-box">';
+        r.special_instructions.forEach(function(s) { html += s + '<br>'; });
+        html += '</div>';
+    }
+
+    var sections = [
+        ['Add to kettle overnight', r.kettle_overnight],
+        ['Add after skim', r.after_skim],
+        ['Finishing', r.finishing],
+        ['Add to jar/container', r.add_to_jar],
+    ];
+    for (var i = 0; i < sections.length; i++) {
+        var title = sections[i][0];
+        var items = sections[i][1];
+        if (items && items.length) {
+            html += '<div class="ingredient-section"><div class="ingredient-header">' + title + '</div>';
+            for (var j = 0; j < items.length; j++) {
+                html += '<div class="ingredient-item">' + items[j] + '</div>';
+            }
+            html += '</div>';
+        }
+    }
+
+    if (side === 'finish') {
+        var vid = vessel.replace(/[()]/g, '');
+        html += '<div class="finish-inputs">';
+        html += '<label>Amount Produced</label><input type="number" id="produced-' + vid + '" placeholder="units" oninput="autoSave()">';
+        html += '<button class="label-btn" onclick="generateLabel(\'' + name + '\')">Generate Label</button>';
+        html += '<label style="margin-top:8px;">Notes</label><textarea id="fnotes-' + vid + '" placeholder="Finish notes..." oninput="autoSave()"></textarea>';
+        html += '</div>';
+    }
+
+    return html;
+}
+
+function buildCCP() {
+    const container = document.getElementById('ccp-container');
+    let html = '';
+    for (var i = 0; i < ccpSections.length; i++) {
+        var sec = ccpSections[i];
+        var checkId = 'section-' + sec.num;
+        html += '<div class="ccp-section"><div class="ccp-header"><span>' + sec.num + '  ' + sec.title + '</span><input type="checkbox" id="' + checkId + '" onchange="autoSave()"></div>';
+        for (var j = 0; j < sec.items.length; j++) {
+            var item = sec.items[j];
+            var cls = item.toUpperCase().indexOf('CANNER') >= 0 && item.indexOf('Kitchen Lead') >= 0 ? 'ccp-item callout' : 'ccp-item';
+            html += '<div class="' + cls + '">' + item + '</div>';
+        }
+        html += '</div>';
+    }
+    container.innerHTML = html;
+}
+
+function collectData() {
+    var data = {checks: {}, produced: {}, finish_notes: {}, notes: '', signoff_kitchen: '', signoff_manager: ''};
+    for (var i = 0; i < ccpSections.length; i++) {
+        var el = document.getElementById('section-' + ccpSections[i].num);
+        if (el) data.checks['section-' + ccpSections[i].num] = el.checked;
+    }
+    for (var v = 0; v < VESSELS.length; v++) {
+        var vid = VESSELS[v].replace(/[()]/g, '');
+        var pel = document.getElementById('produced-' + vid);
+        if (pel) data.produced[vid] = pel.value;
+        var nel = document.getElementById('fnotes-' + vid);
+        if (nel) data.finish_notes[vid] = nel.value;
+    }
+    data.notes = document.getElementById('day-notes').value;
+    data.signoff_kitchen = document.getElementById('signoff-kitchen').value;
+    data.signoff_manager = document.getElementById('signoff-manager').value;
+    return data;
+}
+
+function restoreData(d) {
+    if (d.checks) {
+        Object.entries(d.checks).forEach(function(entry) {
+            var el = document.getElementById(entry[0]);
+            if (el) el.checked = entry[1];
+        });
+    }
+    if (d.produced) {
+        Object.entries(d.produced).forEach(function(entry) {
+            var el = document.getElementById('produced-' + entry[0]);
+            if (el) el.value = entry[1];
+        });
+    }
+    if (d.finish_notes) {
+        Object.entries(d.finish_notes).forEach(function(entry) {
+            var el = document.getElementById('fnotes-' + entry[0]);
+            if (el) el.value = entry[1];
+        });
+    }
+    if (d.notes) document.getElementById('day-notes').value = d.notes;
+    if (d.signoff_kitchen) document.getElementById('signoff-kitchen').value = d.signoff_kitchen;
+    if (d.signoff_manager) document.getElementById('signoff-manager').value = d.signoff_manager;
+}
+
+function autoSave() {
+    var ind = document.getElementById('save-indicator');
+    ind.textContent = 'Saving...';
+    ind.className = 'save-indicator';
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(async function() {
+        try {
+            await fetch('/api/daily-production/' + WEEK_ID + '/' + DAY_IDX + '/save', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(collectData()),
+            });
+            ind.textContent = 'Saved';
+            ind.className = 'save-indicator saved';
+        } catch (e) {
+            ind.textContent = 'Save failed';
+        }
+    }, 800);
+}
+
+async function generateLabel(recipeName) {
+    try {
+        const res = await fetch('/api/label', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                product_name: recipeName,
+                lot: productionData.prev_lot,
+                production_date: productionData.date,
+            }),
+        });
+        if (res.ok) {
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'Label_' + recipeName.replace(/[^a-zA-Z0-9]/g, '_') + '.pdf';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    } catch (e) {
+        alert('Label generation failed: ' + e.message);
+    }
+}
+
+async function completeAndFile() {
+    var btn = document.getElementById('complete-btn');
+    var msg = document.getElementById('complete-msg');
+    btn.disabled = true;
+    btn.textContent = 'Filing...';
+    var data = collectData();
+    try {
+        var res = await fetch('/api/checklist/' + WEEK_ID + '/' + DAY_IDX + '/complete', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data),
+        });
+        var result = await res.json();
+        if (result.success) {
+            msg.style.color = 'var(--accent)';
+            msg.textContent = 'Filed successfully! Redirecting...';
+            setTimeout(function() { window.location.href = '/'; }, 1500);
+        } else {
+            msg.style.color = 'var(--danger)';
+            msg.textContent = result.error || 'Failed';
+            btn.disabled = false;
+            btn.textContent = 'Complete & File';
+        }
+    } catch (e) {
+        msg.style.color = 'var(--danger)';
+        msg.textContent = 'Error: ' + e.message;
+        btn.disabled = false;
+        btn.textContent = 'Complete & File';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soma - Traceability Records</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.week-record { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+.week-header { background: var(--dark); color: #fff; padding: 12px 18px; font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+.week-header:hover { background: #2a2a4e; }
+.week-days { padding: 0; display: none; }
+.week-days.open { display: block; }
+.day-record { display: flex; justify-content: space-between; align-items: center; padding: 10px 18px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.day-record:last-child { border-bottom: none; }
+.day-record:nth-child(even) { background: var(--row-alt); }
+.day-name { font-weight: 600; }
+.day-time { font-size: 11px; color: var(--text-light); }
+.day-actions a { color: var(--accent); text-decoration: none; font-weight: 500; font-size: 13px; }
+.day-actions a:hover { text-decoration: underline; }
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-light); }
+.download-week { font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="header">
+    <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+    <div class="header-text"><h1>Traceability Records</h1><p>Non-Organic Certified</p></div>
+    <div class="header-right"><a href="/" class="header-btn">Back to Dashboard</a></div>
+</div>
+<div class="main">
+    <div id="records-container"><div class="empty-state">Loading...</div></div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+    const res = await fetch('/api/traceability');
+    const records = await res.json();
+    const container = document.getElementById('records-container');
+
+    if (!records.length) {
+        container.innerHTML = '<div class="empty-state"><h2>No Records Yet</h2><p>Completed daily production checklists will appear here.</p></div>';
+        return;
+    }
+
+    let html = '';
+    for (var i = 0; i < records.length; i++) {
+        var rec = records[i];
+        var weekStart = new Date(rec.week_id + 'T00:00:00');
+        var label = weekStart.toLocaleDateString('en-US', {month: 'long', day: 'numeric', year: 'numeric'});
+
+        html += '<div class="week-record">';
+        html += '<div class="week-header" onclick="toggleWeek(this)"><span>Week of ' + label + '</span><span class="download-week"><a href="/api/pdfs/' + rec.week_id + '/download-all" style="color:#aaa;text-decoration:none;" onclick="event.stopPropagation();">Download All</a></span></div>';
+        html += '<div class="week-days">';
+
+        for (var j = 0; j < rec.days.length; j++) {
+            var day = rec.days[j];
+            var timeStr = day.last_updated ? day.last_updated.substring(0, 16).replace('T', ' ') : '';
+            html += '<div class="day-record"><div><span class="day-name">' + day.day_name + '</span><br><span class="day-time">Completed: ' + timeStr + '</span></div><div class="day-actions"><a href="/api/pdf/' + rec.week_id + '/' + day.day_name + '_Completed_Checklist.pdf" target="_blank">Download PDF</a></div></div>';
+        }
+
+        html += '</div></div>';
+    }
+
+    container.innerHTML = html;
+});
+
+function toggleWeek(el) {
+    var days = el.nextElementSibling;
+    days.classList.toggle('open');
+}
+</script>
+</body>
+</html>

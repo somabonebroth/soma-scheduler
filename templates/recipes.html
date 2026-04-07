@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soma - Recipe Cards</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.recipe-list-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); gap: 8px; }
+.recipe-name { font-weight: 500; }
+.recipe-meta { font-size: 12px; color: var(--text-light); }
+.recipe-btns { display: flex; gap: 6px; flex-shrink: 0; }
+.upload-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 32px; text-align: center; cursor: pointer; transition: all 0.2s; }
+.upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: rgba(74,103,65,0.05); }
+.upload-zone p { color: var(--text-light); font-size: 14px; }
+.upload-zone input { display: none; }
+.modal-meta { font-size: 12px; color: var(--text-light); margin-bottom: 16px; }
+.modal-section { margin-bottom: 12px; }
+.modal-section-title { background: var(--dark); color: #fff; padding: 6px 10px; font-size: 12px; font-weight: 600; border-radius: 4px; margin-bottom: 6px; }
+.modal-section-title.warning { background: var(--warning); color: #856404; }
+.modal-item { font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.modal-item:last-child { border-bottom: none; }
+.edit-field { margin-bottom: 12px; }
+.edit-field label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: var(--text-light); }
+.edit-field input, .edit-field textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; }
+.edit-field textarea { min-height: 80px; resize: vertical; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="header">
+    <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+    <div class="header-text"><h1>Recipe Cards</h1><p>Manage production recipes</p></div>
+    <div class="header-right"><a href="/" class="header-btn">Back to Dashboard</a></div>
+</div>
+<div class="main">
+    <div class="card">
+        <h2>Add Recipe</h2>
+        <p style="color:var(--text-light);font-size:13px;margin-bottom:16px;">Upload a recipe card PDF.</p>
+        <div class="upload-zone" id="upload-zone"><p>Drop PDF here or tap to browse</p><input type="file" id="recipe-upload" accept=".pdf"></div>
+        <div id="upload-status" class="status" style="margin-top:12px;"></div>
+    </div>
+    <div class="card"><h2>All Recipes (<span id="recipe-count">0</span>)</h2><div id="recipe-list"></div></div>
+</div>
+<div class="modal-overlay" id="view-modal">
+    <div class="modal">
+        <button class="modal-close" onclick="closeModal('view-modal')">&times;</button>
+        <h2 id="view-name"></h2>
+        <div class="modal-meta" id="view-meta"></div>
+        <div id="view-body"></div>
+    </div>
+</div>
+<div class="modal-overlay" id="edit-modal">
+    <div class="modal">
+        <button class="modal-close" onclick="closeModal('edit-modal')">&times;</button>
+        <h2>Edit Recipe</h2>
+        <div id="edit-form"></div>
+        <div class="modal-actions">
+            <button class="btn btn-outline" onclick="closeModal('edit-modal')">Cancel</button>
+            <button class="btn btn-primary" onclick="saveEdit()">Save Changes</button>
+        </div>
+    </div>
+</div>
+<script>
+let recipes = {};
+let editingName = '';
+
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const res = await fetch('/api/recipes');
+    recipes = await res.json();
+    renderList();
+});
+
+function renderList() {
+    const container = document.getElementById('recipe-list');
+    const names = Object.keys(recipes).sort();
+    document.getElementById('recipe-count').textContent = names.length;
+    if (!names.length) { container.innerHTML = '<p style="color:var(--text-light)">No recipes</p>'; return; }
+    container.innerHTML = names.map(function(name) {
+        var r = recipes[name];
+        var safe = name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        return '<div class="recipe-list-item"><div><div class="recipe-name">' + name + '</div><div class="recipe-meta">' + (r.format || '') + ' | Target: ' + (r.yield || '--') + ' units</div></div><div class="recipe-btns"><button class="btn-sm" onclick="viewRecipe(\'' + safe + '\')">View</button><button class="btn-sm" onclick="editRecipe(\'' + safe + '\')">Edit</button><button class="btn-danger" onclick="deleteRecipe(\'' + safe + '\')">Delete</button></div></div>';
+    }).join('');
+}
+
+function viewRecipe(name) {
+    var r = recipes[name];
+    if (!r) return;
+    document.getElementById('view-name').textContent = name;
+    document.getElementById('view-meta').textContent = (r.format || '') + ' | Target: ' + (r.yield || '--') + ' units';
+    var html = '';
+    if (r.special_instructions && r.special_instructions.length) {
+        html += '<div class="modal-section"><div class="modal-section-title warning">Special Instructions</div>';
+        r.special_instructions.forEach(function(s) { html += '<div class="modal-item">' + s + '</div>'; });
+        html += '</div>';
+    }
+    var secs = [['Add to kettle overnight','kettle_overnight'],['Add after skim','after_skim'],['Finishing','finishing'],['Add to jar/container','add_to_jar']];
+    secs.forEach(function(pair) {
+        var items = r[pair[1]];
+        if (items && items.length) {
+            html += '<div class="modal-section"><div class="modal-section-title">' + pair[0] + '</div>';
+            items.forEach(function(item) { html += '<div class="modal-item">' + item + '</div>'; });
+            html += '</div>';
+        }
+    });
+    document.getElementById('view-body').innerHTML = html;
+    document.getElementById('view-modal').classList.add('active');
+}
+
+function editRecipe(name) {
+    var r = recipes[name];
+    if (!r) return;
+    editingName = name;
+    var html = '';
+    html += '<div class="edit-field"><label>Recipe Name</label><input id="e-name" value="' + name.replace(/"/g, '&quot;') + '"></div>';
+    html += '<div class="edit-field"><label>Format</label><input id="e-format" value="' + (r.format || '') + '"></div>';
+    html += '<div class="edit-field"><label>Target Yield</label><input type="number" id="e-yield" value="' + (r.yield || '') + '"></div>';
+    html += '<div class="edit-field"><label>Special Instructions (one per line)</label><textarea id="e-special">' + (r.special_instructions || []).join('\n') + '</textarea></div>';
+    html += '<div class="edit-field"><label>Kettle Overnight (one per line)</label><textarea id="e-overnight">' + (r.kettle_overnight || []).join('\n') + '</textarea></div>';
+    html += '<div class="edit-field"><label>After Skim (one per line)</label><textarea id="e-skim">' + (r.after_skim || []).join('\n') + '</textarea></div>';
+    html += '<div class="edit-field"><label>Finishing (one per line)</label><textarea id="e-finishing">' + (r.finishing || []).join('\n') + '</textarea></div>';
+    html += '<div class="edit-field"><label>Add to Jar (one per line)</label><textarea id="e-jar">' + (r.add_to_jar || []).join('\n') + '</textarea></div>';
+    document.getElementById('edit-form').innerHTML = html;
+    document.getElementById('edit-modal').classList.add('active');
+}
+
+async function saveEdit() {
+    var newName = document.getElementById('e-name').value.trim();
+    if (!newName) { alert('Name required'); return; }
+    function toLines(id) { return document.getElementById(id).value.split('\n').map(function(l){return l.trim();}).filter(function(l){return l;}); }
+    var data = { name: newName, data: {
+        format: document.getElementById('e-format').value.trim(),
+        yield: parseInt(document.getElementById('e-yield').value) || 150,
+        special_instructions: toLines('e-special'), kettle_overnight: toLines('e-overnight'),
+        after_skim: toLines('e-skim'), finishing: toLines('e-finishing'), add_to_jar: toLines('e-jar'),
+    }};
+    var res = await fetch('/api/recipes/' + encodeURIComponent(editingName), {
+        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data),
+    });
+    if (res.ok) { closeModal('edit-modal'); recipes = await (await fetch('/api/recipes')).json(); renderList(); }
+}
+
+async function deleteRecipe(name) {
+    if (!confirm('Delete "' + name + '"?')) return;
+    await fetch('/api/recipes/' + encodeURIComponent(name), {method: 'DELETE'});
+    recipes = await (await fetch('/api/recipes')).json();
+    renderList();
+}
+
+var uz = document.getElementById('upload-zone');
+var ui = document.getElementById('recipe-upload');
+uz.addEventListener('click', function() { ui.click(); });
+uz.addEventListener('dragover', function(e) { e.preventDefault(); uz.classList.add('dragover'); });
+uz.addEventListener('dragleave', function() { uz.classList.remove('dragover'); });
+uz.addEventListener('drop', function(e) { e.preventDefault(); uz.classList.remove('dragover'); if (e.dataTransfer.files.length) doUpload(e.dataTransfer.files[0]); });
+ui.addEventListener('change', function() { if (ui.files.length) doUpload(ui.files[0]); });
+
+async function doUpload(file) {
+    var st = document.getElementById('upload-status');
+    st.className = 'status loading'; st.textContent = 'Parsing...'; st.style.display = 'block';
+    var fd = new FormData(); fd.append('file', file);
+    try {
+        var res = await fetch('/api/recipes/upload', {method: 'POST', body: fd});
+        var data = await res.json();
+        if (data.success) { st.className = 'status success'; st.textContent = 'Added: ' + data.name; recipes = await (await fetch('/api/recipes')).json(); renderList(); }
+        else { st.className = 'status error'; st.textContent = data.error || 'Failed'; }
+    } catch (e) { st.className = 'status error'; st.textContent = 'Error: ' + e.message; }
+}
+</script>
+</body>
+</html>

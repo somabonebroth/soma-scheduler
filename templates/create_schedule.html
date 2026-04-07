@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soma - Create Schedule</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.day-block { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+.day-header { background: var(--accent); color: #fff; padding: 10px 16px; font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; }
+.day-header .lot { font-size: 12px; opacity: 0.8; }
+.vessel-row { display: grid; grid-template-columns: 70px 1fr 90px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--border); gap: 12px; }
+.vessel-row:last-child { border-bottom: none; }
+.vessel-row:nth-child(even) { background: var(--row-alt); }
+.vessel-label { font-weight: 700; font-size: 13px; }
+.vessel-row select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: #fff; }
+.yield-display { font-size: 13px; color: var(--text-light); text-align: center; }
+.yield-display.has-value { color: var(--accent); font-weight: 600; }
+.notes-area { width: 100%; min-height: 80px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; resize: vertical; }
+.top-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.week-picker { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.week-picker input[type="date"] { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
+.btn-reset { background: none; border: 1px solid var(--border); color: var(--text-light); padding: 8px 16px; font-size: 13px; border-radius: 6px; cursor: pointer; }
+.btn-reset:hover { background: #f0f0ea; }
+.generate-bar { position: sticky; bottom: 0; background: var(--card-bg); border-top: 1px solid var(--border); padding: 16px; text-align: center; box-shadow: 0 -2px 8px rgba(0,0,0,0.05); }
+</style>
+</head>
+<body>
+<div class="header">
+    <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+    <div class="header-text"><h1>Create Schedule</h1><p>Assign recipes to kettles for the week</p></div>
+    <div class="header-right">
+        <a href="/" class="header-btn">Back to Dashboard</a>
+    </div>
+</div>
+<div class="main">
+    <div class="top-bar">
+        <div class="week-picker">
+            <label style="font-size:14px;font-weight:600;">Week starting:</label>
+            <input type="date" id="week-date">
+            <button class="btn-reset" onclick="resetSchedule()">Re-Set Schedule</button>
+        </div>
+        <button class="btn btn-primary" id="generate-btn" onclick="generateSchedule()">Generate Schedule + Checklists</button>
+    </div>
+    <div id="status-msg" class="status"></div>
+    <div id="schedule-grid"></div>
+    <div class="card"><h3>Notes</h3><textarea id="schedule-notes" class="notes-area" placeholder="Weekly notes..."></textarea></div>
+    <div class="generate-bar">
+        <button class="btn btn-primary btn-block" onclick="generateSchedule()">Generate Schedule + Checklists</button>
+    </div>
+</div>
+<script>
+let recipes = {};
+let currentWeekId = '';
+const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const VESSELS = ['K1','K2','K3','K4(115L)'];
+
+function getCurrentMonday() {
+    const today = new Date();
+    const day = today.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    const mon = new Date(today);
+    mon.setDate(today.getDate() + diff);
+    return mon;
+}
+function formatDate(d) { return d.toISOString().split('T')[0]; }
+function getMonday(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    d.setDate(diff);
+    return d;
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const params = new URLSearchParams(window.location.search);
+    const weekParam = params.get('week');
+    const mon = weekParam ? new Date(weekParam + 'T00:00:00') : getCurrentMonday();
+    document.getElementById('week-date').value = formatDate(mon);
+    currentWeekId = formatDate(mon);
+    const res = await fetch('/api/recipes');
+    recipes = await res.json();
+    buildGrid();
+    if (weekParam) loadExisting(weekParam);
+});
+
+function buildGrid() {
+    const container = document.getElementById('schedule-grid');
+    const weekDate = document.getElementById('week-date').value;
+    const monday = getMonday(weekDate);
+    currentWeekId = formatDate(monday);
+    const names = Object.keys(recipes).sort();
+    let opts = '<option value="">-- No production --</option>';
+    for (const n of names) opts += '<option value="' + n + '">' + n + '</option>';
+    let html = '';
+    for (let idx = 0; idx < 7; idx++) {
+        const d = new Date(monday); d.setDate(d.getDate() + idx);
+        const ds = d.toLocaleDateString('en-GB', {day:'2-digit',month:'2-digit',year:'numeric'});
+        const lot = d.toLocaleDateString('en-GB', {day:'2-digit',month:'2-digit',year:'2-digit'}).replace(/\//g, '');
+        html += '<div class="day-block"><div class="day-header"><span>' + DAYS[idx] + ' -- ' + ds + '</span><span class="lot">LOT# ' + lot + '</span></div>';
+        for (const v of VESSELS) {
+            const sid = 'sel-' + idx + '-' + v.replace(/[()]/g, '');
+            const yid = 'yield-' + idx + '-' + v.replace(/[()]/g, '');
+            html += '<div class="vessel-row"><span class="vessel-label">' + v + '</span><select id="' + sid + '" onchange="updateYield(' + idx + ',\'' + v + '\')">' + opts + '</select><span class="yield-display" id="' + yid + '">--</span></div>';
+        }
+        html += '</div>';
+    }
+    container.innerHTML = html;
+}
+
+function updateYield(dayIdx, vessel) {
+    const sid = 'sel-' + dayIdx + '-' + vessel.replace(/[()]/g, '');
+    const yid = 'yield-' + dayIdx + '-' + vessel.replace(/[()]/g, '');
+    const sel = document.getElementById(sid);
+    const yel = document.getElementById(yid);
+    const rn = sel.value;
+    if (rn && recipes[rn]) { yel.textContent = recipes[rn].yield + ' units'; yel.classList.add('has-value'); }
+    else { yel.textContent = '--'; yel.classList.remove('has-value'); }
+}
+
+function resetSchedule() {
+    if (!confirm('Reset? All selections will be cleared.')) return;
+    document.getElementById('week-date').value = formatDate(getCurrentMonday());
+    document.getElementById('schedule-notes').value = '';
+    buildGrid();
+}
+
+async function loadExisting(weekId) {
+    try {
+        const res = await fetch('/api/schedule/' + weekId);
+        const data = await res.json();
+        if (data.schedule) {
+            Object.entries(data.schedule).forEach(([di, vessels]) => {
+                Object.entries(vessels).forEach(([v, r]) => {
+                    const sid = 'sel-' + di + '-' + v.replace(/[()]/g, '');
+                    const sel = document.getElementById(sid);
+                    if (sel && r) { sel.value = r; updateYield(parseInt(di), v); }
+                });
+            });
+            if (data.notes) document.getElementById('schedule-notes').value = data.notes;
+        }
+    } catch (e) {}
+}
+
+async function generateSchedule() {
+    const btn = document.getElementById('generate-btn');
+    btn.disabled = true; btn.textContent = 'Generating...';
+    const schedule = {};
+    for (let idx = 0; idx < 7; idx++) {
+        schedule[idx] = {};
+        for (const v of VESSELS) {
+            const sid = 'sel-' + idx + '-' + v.replace(/[()]/g, '');
+            const sel = document.getElementById(sid);
+            schedule[idx][v] = sel ? sel.value : '';
+        }
+    }
+    const notes = document.getElementById('schedule-notes').value;
+    try {
+        const res = await fetch('/api/generate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({week_id: currentWeekId, schedule: schedule, notes: notes}),
+        });
+        const data = await res.json();
+        if (data.success) {
+            window.location.href = '/weekly-schedule?week=' + currentWeekId;
+        } else {
+            const el = document.getElementById('status-msg');
+            el.className = 'status error'; el.textContent = data.error || 'Failed';
+        }
+    } catch (e) {
+        const el = document.getElementById('status-msg');
+        el.className = 'status error'; el.textContent = 'Error: ' + e.message;
+    } finally {
+        btn.disabled = false; btn.textContent = 'Generate Schedule + Checklists';
+    }
+}
+</script>
+</body>
+</html>
