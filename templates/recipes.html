@@ -10,7 +10,7 @@
 .recipe-name { font-weight: 500; }
 .recipe-meta { font-size: 12px; color: var(--text-light); }
 .recipe-btns { display: flex; gap: 6px; flex-shrink: 0; }
-.upload-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 32px; text-align: center; cursor: pointer; transition: all 0.2s; }
+.upload-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; }
 .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: rgba(74,103,65,0.05); }
 .upload-zone p { color: var(--text-light); font-size: 14px; }
 .upload-zone input { display: none; }
@@ -25,6 +25,9 @@
 .edit-field input, .edit-field textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; }
 .edit-field textarea { min-height: 80px; resize: vertical; }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+.add-btns { display: flex; gap: 10px; margin-bottom: 16px; }
+.brand-group { margin-bottom: 16px; }
+.brand-label { font-size: 13px; font-weight: 700; color: var(--accent); padding: 6px 0; border-bottom: 2px solid var(--accent); margin-bottom: 4px; }
 </style>
 </head>
 <body>
@@ -36,8 +39,11 @@
 <div class="main">
     <div class="card">
         <h2>Add Recipe</h2>
-        <p style="color:var(--text-light);font-size:13px;margin-bottom:16px;">Upload a recipe card PDF.</p>
-        <div class="upload-zone" id="upload-zone"><p>Drop PDF here or tap to browse</p><input type="file" id="recipe-upload" accept=".pdf"></div>
+        <div class="add-btns">
+            <button class="btn btn-primary" onclick="openAddManual()">Add Recipe Manually</button>
+            <span style="color:var(--text-light);font-size:13px;line-height:40px;">or</span>
+        </div>
+        <div class="upload-zone" id="upload-zone"><p>Upload recipe card PDF</p><input type="file" id="recipe-upload" accept=".pdf"></div>
         <div id="upload-status" class="status" style="margin-top:12px;"></div>
     </div>
     <div class="card"><h2>All Recipes (<span id="recipe-count">0</span>)</h2><div id="recipe-list"></div></div>
@@ -53,51 +59,65 @@
 <div class="modal-overlay" id="edit-modal">
     <div class="modal">
         <button class="modal-close" onclick="closeModal('edit-modal')">&times;</button>
-        <h2>Edit Recipe</h2>
+        <h2 id="edit-title">Edit Recipe</h2>
         <div id="edit-form"></div>
         <div class="modal-actions">
             <button class="btn btn-outline" onclick="closeModal('edit-modal')">Cancel</button>
-            <button class="btn btn-primary" onclick="saveEdit()">Save Changes</button>
+            <button class="btn btn-primary" id="edit-save-btn" onclick="saveEdit()">Save Changes</button>
         </div>
     </div>
 </div>
 <script>
-let recipes = {};
-let editingName = '';
+var recipes = {};
+var editingName = '';
+var isAdding = false;
 
 function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
-document.addEventListener('DOMContentLoaded', async () => {
-    const res = await fetch('/api/recipes');
-    recipes = await res.json();
+document.addEventListener('DOMContentLoaded', async function() {
+    recipes = await (await fetch('/api/recipes')).json();
     renderList();
 });
 
 function renderList() {
-    const container = document.getElementById('recipe-list');
-    const names = Object.keys(recipes).sort();
+    var container = document.getElementById('recipe-list');
+    var names = Object.keys(recipes).sort();
     document.getElementById('recipe-count').textContent = names.length;
-    if (!names.length) { container.innerHTML = '<p style="color:var(--text-light)">No recipes</p>'; return; }
-    container.innerHTML = names.map(function(name) {
-        var r = recipes[name];
-        var safe = name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        return '<div class="recipe-list-item"><div><div class="recipe-name">' + name + '</div><div class="recipe-meta">' + (r.format || '') + ' | Target: ' + (r.yield || '--') + ' units</div></div><div class="recipe-btns"><button class="btn-sm" onclick="viewRecipe(\'' + safe + '\')">View</button><button class="btn-sm" onclick="editRecipe(\'' + safe + '\')">Edit</button><button class="btn-danger" onclick="deleteRecipe(\'' + safe + '\')">Delete</button></div></div>';
-    }).join('');
+    if (!names.length) { container.innerHTML = '<p style="color:var(--text-light)">No recipes added yet</p>'; return; }
+
+    var brands = {};
+    names.forEach(function(name) {
+        var brand = recipes[name].brand || 'Other';
+        if (!brands[brand]) brands[brand] = [];
+        brands[brand].push(name);
+    });
+
+    var brandNames = Object.keys(brands).sort();
+    var html = '';
+    brandNames.forEach(function(brand) {
+        html += '<div class="brand-group"><div class="brand-label">' + brand + '</div>';
+        brands[brand].forEach(function(name) {
+            var r = recipes[name];
+            var safe = name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            html += '<div class="recipe-list-item"><div><div class="recipe-name">' + name + '</div><div class="recipe-meta">' + (r.format || '') + ' | Target: ' + (r.yield || '--') + ' units</div></div><div class="recipe-btns"><button class="btn-sm" onclick="viewRecipe(\'' + safe + '\')">View</button><button class="btn-sm" onclick="editRecipe(\'' + safe + '\')">Edit</button><button class="btn-danger" onclick="deleteRecipe(\'' + safe + '\')">Delete</button></div></div>';
+        });
+        html += '</div>';
+    });
+    container.innerHTML = html;
 }
 
 function viewRecipe(name) {
     var r = recipes[name];
     if (!r) return;
     document.getElementById('view-name').textContent = name;
-    document.getElementById('view-meta').textContent = (r.format || '') + ' | Target: ' + (r.yield || '--') + ' units';
+    document.getElementById('view-meta').textContent = (r.brand || '') + ' | ' + (r.format || '') + ' | Target: ' + (r.yield || '--') + ' units';
     var html = '';
     if (r.special_instructions && r.special_instructions.length) {
         html += '<div class="modal-section"><div class="modal-section-title warning">Special Instructions</div>';
         r.special_instructions.forEach(function(s) { html += '<div class="modal-item">' + s + '</div>'; });
         html += '</div>';
     }
-    var secs = [['Add to kettle overnight','kettle_overnight'],['Add after skim','after_skim'],['Finishing','finishing'],['Add to jar/container','add_to_jar']];
-    secs.forEach(function(pair) {
+    [['Add to kettle overnight','kettle_overnight'],['Add after skim','after_skim'],['Finishing','finishing'],['Add to jar/container','add_to_jar']].forEach(function(pair) {
         var items = r[pair[1]];
         if (items && items.length) {
             html += '<div class="modal-section"><div class="modal-section-title">' + pair[0] + '</div>';
@@ -109,37 +129,63 @@ function viewRecipe(name) {
     document.getElementById('view-modal').classList.add('active');
 }
 
-function editRecipe(name) {
-    var r = recipes[name];
-    if (!r) return;
-    editingName = name;
+function buildEditForm(name, r) {
     var html = '';
-    html += '<div class="edit-field"><label>Recipe Name</label><input id="e-name" value="' + name.replace(/"/g, '&quot;') + '"></div>';
-    html += '<div class="edit-field"><label>Format</label><input id="e-format" value="' + (r.format || '') + '"></div>';
-    html += '<div class="edit-field"><label>Target Yield</label><input type="number" id="e-yield" value="' + (r.yield || '') + '"></div>';
-    html += '<div class="edit-field"><label>Special Instructions (one per line)</label><textarea id="e-special">' + (r.special_instructions || []).join('\n') + '</textarea></div>';
-    html += '<div class="edit-field"><label>Kettle Overnight (one per line)</label><textarea id="e-overnight">' + (r.kettle_overnight || []).join('\n') + '</textarea></div>';
-    html += '<div class="edit-field"><label>After Skim (one per line)</label><textarea id="e-skim">' + (r.after_skim || []).join('\n') + '</textarea></div>';
-    html += '<div class="edit-field"><label>Finishing (one per line)</label><textarea id="e-finishing">' + (r.finishing || []).join('\n') + '</textarea></div>';
-    html += '<div class="edit-field"><label>Add to Jar (one per line)</label><textarea id="e-jar">' + (r.add_to_jar || []).join('\n') + '</textarea></div>';
-    document.getElementById('edit-form').innerHTML = html;
+    html += '<div class="edit-field"><label>Brand Name</label><input id="e-brand" value="' + ((r && r.brand) || '').replace(/"/g, '&quot;') + '" placeholder="e.g. SOMA, Ripe, Wild Meadows"></div>';
+    html += '<div class="edit-field"><label>Recipe Name</label><input id="e-name" value="' + (name || '').replace(/"/g, '&quot;') + '" placeholder="e.g. Chicken with Herbs & Turmeric"></div>';
+    html += '<div class="edit-field"><label>Format</label><input id="e-format" value="' + ((r && r.format) || '') + '" placeholder="e.g. SS-876ML"></div>';
+    html += '<div class="edit-field"><label>Target Yield</label><input type="number" id="e-yield" value="' + ((r && r.yield) || '') + '" placeholder="e.g. 150"></div>';
+    html += '<div class="edit-field"><label>Special Instructions (one per line)</label><textarea id="e-special">' + ((r && r.special_instructions) || []).join('\n') + '</textarea></div>';
+    html += '<div class="edit-field"><label>Kettle Overnight (one per line)</label><textarea id="e-overnight">' + ((r && r.kettle_overnight) || []).join('\n') + '</textarea></div>';
+    html += '<div class="edit-field"><label>After Skim (one per line)</label><textarea id="e-skim">' + ((r && r.after_skim) || []).join('\n') + '</textarea></div>';
+    html += '<div class="edit-field"><label>Finishing (one per line)</label><textarea id="e-finishing">' + ((r && r.finishing) || []).join('\n') + '</textarea></div>';
+    html += '<div class="edit-field"><label>Add to Jar (one per line)</label><textarea id="e-jar">' + ((r && r.add_to_jar) || []).join('\n') + '</textarea></div>';
+    return html;
+}
+
+function openAddManual() {
+    isAdding = true;
+    editingName = '';
+    document.getElementById('edit-title').textContent = 'Add Recipe';
+    document.getElementById('edit-save-btn').textContent = 'Add Recipe';
+    document.getElementById('edit-form').innerHTML = buildEditForm('', null);
     document.getElementById('edit-modal').classList.add('active');
 }
 
+function editRecipe(name) {
+    isAdding = false;
+    editingName = name;
+    document.getElementById('edit-title').textContent = 'Edit Recipe';
+    document.getElementById('edit-save-btn').textContent = 'Save Changes';
+    document.getElementById('edit-form').innerHTML = buildEditForm(name, recipes[name]);
+    document.getElementById('edit-modal').classList.add('active');
+}
+
+function toLines(id) { return document.getElementById(id).value.split('\n').map(function(l){return l.trim();}).filter(function(l){return l;}); }
+
 async function saveEdit() {
     var newName = document.getElementById('e-name').value.trim();
-    if (!newName) { alert('Name required'); return; }
-    function toLines(id) { return document.getElementById(id).value.split('\n').map(function(l){return l.trim();}).filter(function(l){return l;}); }
+    if (!newName) { alert('Recipe name required'); return; }
     var data = { name: newName, data: {
+        brand: document.getElementById('e-brand').value.trim(),
         format: document.getElementById('e-format').value.trim(),
         yield: parseInt(document.getElementById('e-yield').value) || 150,
         special_instructions: toLines('e-special'), kettle_overnight: toLines('e-overnight'),
         after_skim: toLines('e-skim'), finishing: toLines('e-finishing'), add_to_jar: toLines('e-jar'),
     }};
-    var res = await fetch('/api/recipes/' + encodeURIComponent(editingName), {
-        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data),
-    });
-    if (res.ok) { closeModal('edit-modal'); recipes = await (await fetch('/api/recipes')).json(); renderList(); }
+
+    if (isAdding) {
+        var allRecipes = await (await fetch('/api/recipes')).json();
+        allRecipes[newName] = data.data;
+        await fetch('/api/recipes/upload-json', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: newName, data: data.data})});
+    } else {
+        await fetch('/api/recipes/' + encodeURIComponent(editingName), {
+            method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data),
+        });
+    }
+    closeModal('edit-modal');
+    recipes = await (await fetch('/api/recipes')).json();
+    renderList();
 }
 
 async function deleteRecipe(name) {

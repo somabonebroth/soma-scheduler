@@ -29,9 +29,7 @@
 <div class="header">
     <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
     <div class="header-text"><h1>Create Schedule</h1><p>Assign recipes to kettles for the week</p></div>
-    <div class="header-right">
-        <a href="/" class="header-btn">Back to Dashboard</a>
-    </div>
+    <div class="header-right"><a href="/" class="header-btn">Back to Dashboard</a></div>
 </div>
 <div class="main">
     <div class="top-bar">
@@ -43,65 +41,80 @@
         <button class="btn btn-primary" id="generate-btn" onclick="generateSchedule()">Generate Schedule + Checklists</button>
     </div>
     <div id="status-msg" class="status"></div>
+    <div class="card"><h3>Notes</h3><textarea id="schedule-notes" class="notes-area" placeholder="Weekly production notes..."></textarea></div>
     <div id="schedule-grid"></div>
-    <div class="card"><h3>Notes</h3><textarea id="schedule-notes" class="notes-area" placeholder="Weekly notes..."></textarea></div>
     <div class="generate-bar">
         <button class="btn btn-primary btn-block" onclick="generateSchedule()">Generate Schedule + Checklists</button>
     </div>
 </div>
 <script>
-let recipes = {};
-let currentWeekId = '';
-const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-const VESSELS = ['K1','K2','K3','K4(115L)'];
+var recipes = {};
+var groupedRecipes = {};
+var currentWeekId = '';
+var DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+var VESSELS = ['K1','K2','K3','K4(115L)'];
 
 function getCurrentMonday() {
-    const today = new Date();
-    const day = today.getDay();
-    const diff = day === 0 ? -6 : 1 - day;
-    const mon = new Date(today);
+    var today = new Date();
+    var day = today.getDay();
+    var diff = day === 0 ? -6 : 1 - day;
+    var mon = new Date(today);
     mon.setDate(today.getDate() + diff);
     return mon;
 }
 function formatDate(d) { return d.toISOString().split('T')[0]; }
 function getMonday(dateStr) {
-    const d = new Date(dateStr + 'T00:00:00');
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    var d = new Date(dateStr + 'T00:00:00');
+    var day = d.getDay();
+    var diff = d.getDate() - day + (day === 0 ? -6 : 1);
     d.setDate(diff);
     return d;
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-    const params = new URLSearchParams(window.location.search);
-    const weekParam = params.get('week');
-    const mon = weekParam ? new Date(weekParam + 'T00:00:00') : getCurrentMonday();
+document.addEventListener('DOMContentLoaded', async function() {
+    var params = new URLSearchParams(window.location.search);
+    var weekParam = params.get('week');
+    var mon = weekParam ? new Date(weekParam + 'T00:00:00') : getCurrentMonday();
     document.getElementById('week-date').value = formatDate(mon);
     currentWeekId = formatDate(mon);
-    const res = await fetch('/api/recipes');
-    recipes = await res.json();
+
+    recipes = await (await fetch('/api/recipes')).json();
+    groupedRecipes = await (await fetch('/api/recipes/grouped')).json();
     buildGrid();
     if (weekParam) loadExisting(weekParam);
 });
 
+function buildGroupedOptions() {
+    var html = '<option value="">-- No production --</option>';
+    var brands = Object.keys(groupedRecipes).sort();
+    for (var b = 0; b < brands.length; b++) {
+        var brand = brands[b];
+        html += '<optgroup label="' + brand + '">';
+        var items = groupedRecipes[brand];
+        for (var i = 0; i < items.length; i++) {
+            html += '<option value="' + items[i].name + '">' + items[i].name + ' (' + items[i].format + ')</option>';
+        }
+        html += '</optgroup>';
+    }
+    return html;
+}
+
 function buildGrid() {
-    const container = document.getElementById('schedule-grid');
-    const weekDate = document.getElementById('week-date').value;
-    const monday = getMonday(weekDate);
+    var container = document.getElementById('schedule-grid');
+    var weekDate = document.getElementById('week-date').value;
+    var monday = getMonday(weekDate);
     currentWeekId = formatDate(monday);
-    const names = Object.keys(recipes).sort();
-    let opts = '<option value="">-- No production --</option>';
-    for (const n of names) opts += '<option value="' + n + '">' + n + '</option>';
-    let html = '';
-    for (let idx = 0; idx < 7; idx++) {
-        const d = new Date(monday); d.setDate(d.getDate() + idx);
-        const ds = d.toLocaleDateString('en-GB', {day:'2-digit',month:'2-digit',year:'numeric'});
-        const lot = d.toLocaleDateString('en-GB', {day:'2-digit',month:'2-digit',year:'2-digit'}).replace(/\//g, '');
+    var opts = buildGroupedOptions();
+    var html = '';
+    for (var idx = 0; idx < 7; idx++) {
+        var d = new Date(monday); d.setDate(d.getDate() + idx);
+        var ds = d.toLocaleDateString('en-GB', {day:'2-digit',month:'2-digit',year:'numeric'});
+        var lot = d.toLocaleDateString('en-GB', {day:'2-digit',month:'2-digit',year:'2-digit'}).replace(/\//g, '');
         html += '<div class="day-block"><div class="day-header"><span>' + DAYS[idx] + ' -- ' + ds + '</span><span class="lot">LOT# ' + lot + '</span></div>';
-        for (const v of VESSELS) {
-            const sid = 'sel-' + idx + '-' + v.replace(/[()]/g, '');
-            const yid = 'yield-' + idx + '-' + v.replace(/[()]/g, '');
-            html += '<div class="vessel-row"><span class="vessel-label">' + v + '</span><select id="' + sid + '" onchange="updateYield(' + idx + ',\'' + v + '\')">' + opts + '</select><span class="yield-display" id="' + yid + '">--</span></div>';
+        for (var v = 0; v < VESSELS.length; v++) {
+            var sid = 'sel-' + idx + '-' + VESSELS[v].replace(/[()]/g, '');
+            var yid = 'yield-' + idx + '-' + VESSELS[v].replace(/[()]/g, '');
+            html += '<div class="vessel-row"><span class="vessel-label">' + VESSELS[v] + '</span><select id="' + sid + '" onchange="updateYield(' + idx + ',\'' + VESSELS[v] + '\')">' + opts + '</select><span class="yield-display" id="' + yid + '">--</span></div>';
         }
         html += '</div>';
     }
@@ -109,11 +122,11 @@ function buildGrid() {
 }
 
 function updateYield(dayIdx, vessel) {
-    const sid = 'sel-' + dayIdx + '-' + vessel.replace(/[()]/g, '');
-    const yid = 'yield-' + dayIdx + '-' + vessel.replace(/[()]/g, '');
-    const sel = document.getElementById(sid);
-    const yel = document.getElementById(yid);
-    const rn = sel.value;
+    var sid = 'sel-' + dayIdx + '-' + vessel.replace(/[()]/g, '');
+    var yid = 'yield-' + dayIdx + '-' + vessel.replace(/[()]/g, '');
+    var sel = document.getElementById(sid);
+    var yel = document.getElementById(yid);
+    var rn = sel.value;
     if (rn && recipes[rn]) { yel.textContent = recipes[rn].yield + ' units'; yel.classList.add('has-value'); }
     else { yel.textContent = '--'; yel.classList.remove('has-value'); }
 }
@@ -122,18 +135,21 @@ function resetSchedule() {
     if (!confirm('Reset? All selections will be cleared.')) return;
     document.getElementById('week-date').value = formatDate(getCurrentMonday());
     document.getElementById('schedule-notes').value = '';
+    currentWeekId = formatDate(getCurrentMonday());
     buildGrid();
 }
 
 async function loadExisting(weekId) {
     try {
-        const res = await fetch('/api/schedule/' + weekId);
-        const data = await res.json();
+        var res = await fetch('/api/schedule/' + weekId);
+        var data = await res.json();
         if (data.schedule) {
-            Object.entries(data.schedule).forEach(([di, vessels]) => {
-                Object.entries(vessels).forEach(([v, r]) => {
-                    const sid = 'sel-' + di + '-' + v.replace(/[()]/g, '');
-                    const sel = document.getElementById(sid);
+            Object.entries(data.schedule).forEach(function(entry) {
+                var di = entry[0]; var vessels = entry[1];
+                Object.entries(vessels).forEach(function(ve) {
+                    var v = ve[0]; var r = ve[1];
+                    var sid = 'sel-' + di + '-' + v.replace(/[()]/g, '');
+                    var sel = document.getElementById(sid);
                     if (sel && r) { sel.value = r; updateYield(parseInt(di), v); }
                 });
             });
@@ -143,33 +159,33 @@ async function loadExisting(weekId) {
 }
 
 async function generateSchedule() {
-    const btn = document.getElementById('generate-btn');
+    var btn = document.getElementById('generate-btn');
     btn.disabled = true; btn.textContent = 'Generating...';
-    const schedule = {};
-    for (let idx = 0; idx < 7; idx++) {
+    var schedule = {};
+    for (var idx = 0; idx < 7; idx++) {
         schedule[idx] = {};
-        for (const v of VESSELS) {
-            const sid = 'sel-' + idx + '-' + v.replace(/[()]/g, '');
-            const sel = document.getElementById(sid);
-            schedule[idx][v] = sel ? sel.value : '';
+        for (var v = 0; v < VESSELS.length; v++) {
+            var sid = 'sel-' + idx + '-' + VESSELS[v].replace(/[()]/g, '');
+            var sel = document.getElementById(sid);
+            schedule[idx][VESSELS[v]] = sel ? sel.value : '';
         }
     }
-    const notes = document.getElementById('schedule-notes').value;
+    var notes = document.getElementById('schedule-notes').value;
     try {
-        const res = await fetch('/api/generate', {
+        var res = await fetch('/api/generate', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({week_id: currentWeekId, schedule: schedule, notes: notes}),
         });
-        const data = await res.json();
+        var data = await res.json();
         if (data.success) {
             window.location.href = '/weekly-schedule?week=' + currentWeekId;
         } else {
-            const el = document.getElementById('status-msg');
+            var el = document.getElementById('status-msg');
             el.className = 'status error'; el.textContent = data.error || 'Failed';
         }
     } catch (e) {
-        const el = document.getElementById('status-msg');
+        var el = document.getElementById('status-msg');
         el.className = 'status error'; el.textContent = 'Error: ' + e.message;
     } finally {
         btn.disabled = false; btn.textContent = 'Generate Schedule + Checklists';

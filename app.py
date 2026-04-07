@@ -170,7 +170,7 @@ def parse_recipe_pdf_text(text):
         return None
     name = lines[0]
     recipe = {
-        "yield": None, "format": "",
+        "yield": None, "format": "", "brand": "",
         "special_instructions": [], "kettle_overnight": [],
         "after_skim": [], "finishing": [], "add_to_jar": [],
     }
@@ -352,6 +352,35 @@ def delete_recipe(name):
         save_recipes(recipes)
         return jsonify({"success": True})
     return jsonify({"error": "Recipe not found"}), 404
+
+@app.route("/api/recipes/grouped", methods=["GET"])
+@login_required
+def get_recipes_grouped():
+    recipes = load_recipes()
+    groups = {}
+    for name, data in recipes.items():
+        brand = data.get("brand", "Other")
+        if not brand:
+            brand = "Other"
+        if brand not in groups:
+            groups[brand] = []
+        groups[brand].append({"name": name, "format": data.get("format", ""), "yield": data.get("yield", "")})
+    for brand in groups:
+        groups[brand].sort(key=lambda x: (0 if "SS" in x.get("format", "") else 1, x["name"]))
+    return jsonify(groups)
+
+@app.route("/api/recipes/upload-json", methods=["POST"])
+@login_required
+def add_recipe_manual():
+    data = request.json
+    name = data.get("name", "")
+    recipe_data = data.get("data", {})
+    if not name:
+        return jsonify({"error": "Name required"}), 400
+    recipes = load_recipes()
+    recipes[name] = recipe_data
+    save_recipes(recipes)
+    return jsonify({"success": True, "name": name})
 
 
 # -- Schedule API --
