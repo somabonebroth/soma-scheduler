@@ -142,6 +142,18 @@ def save_ccp_master(sections):
     with open(CCP_MASTER_PATH, "w") as f:
         json.dump(sections, f, indent=2)
 
+RECIPE_ORDER_PATH = os.path.join(DATA_DIR, "recipe_order.json")
+
+def load_recipe_order():
+    if os.path.exists(RECIPE_ORDER_PATH):
+        with open(RECIPE_ORDER_PATH, "r") as f:
+            return json.load(f)
+    return None
+
+def save_recipe_order_data(data):
+    with open(RECIPE_ORDER_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
 def get_current_week_id():
     today = datetime.today()
     day = today.weekday()
@@ -169,12 +181,12 @@ def parse_recipe_pdf_text(text):
     if not lines:
         return None
     recipe = {
-        "yield": None, "format": "", "brand": "",
+        "yield": None, "format": "", "brand": "", "certification": "",
         "special_instructions": [], "kettle_overnight": [],
         "after_skim": [], "finishing": [], "add_to_jar": [],
     }
     name = ""
-    # First pass: extract labelled fields (Brand Name:, Recipe Name:, Format:, Target Yield:)
+    # First pass: extract labelled fields (Brand Name:, Recipe Name:, Format:, Target Yield:, Certification:)
     header_lines_used = set()
     for i, line in enumerate(lines):
         ll = line.lower().strip()
@@ -183,6 +195,9 @@ def parse_recipe_pdf_text(text):
             header_lines_used.add(i)
         elif ll.startswith("recipe name:"):
             name = line.split(":", 1)[1].strip()
+            header_lines_used.add(i)
+        elif ll.startswith("certification:"):
+            recipe["certification"] = line.split(":", 1)[1].strip()
             header_lines_used.add(i)
         elif ll.startswith("format:"):
             fmt = line.split(":", 1)[1].strip().upper()
@@ -408,6 +423,7 @@ def delete_recipe(name):
 @login_required
 def get_recipes_grouped():
     recipes = load_recipes()
+    order = load_recipe_order()
     groups = {}
     for name, data in recipes.items():
         brand = data.get("brand", "Other")
@@ -415,10 +431,41 @@ def get_recipes_grouped():
             brand = "Other"
         if brand not in groups:
             groups[brand] = []
-        groups[brand].append({"name": name, "format": data.get("format", ""), "yield": data.get("yield", "")})
-    for brand in groups:
-        groups[brand].sort(key=lambda x: (0 if "SS" in x.get("format", "") else 1, x["name"]))
+        display = brand + "-" + name + "-" + data.get("format", "")
+        groups[brand].append({"name": name, "format": data.get("format", ""), "yield": data.get("yield", ""), "display": display, "certification": data.get("certification", "")})
+    # Apply stored order if available, otherwise sort SS first
+    if order:
+        ordered_groups = {}
+        for brand in order.get("brand_order", []):
+            if brand in groups:
+                recipe_order = order.get("recipe_order", {}).get(brand, [])
+                if recipe_order:
+                    ordered = []
+                    for rname in recipe_order:
+                        match = [r for r in groups[brand] if r["name"] == rname]
+                        if match:
+                            ordered.append(match[0])
+                    for r in groups[brand]:
+                        if r not in ordered:
+                            ordered.append(r)
+                    ordered_groups[brand] = ordered
+                else:
+                    ordered_groups[brand] = groups[brand]
+        for brand in groups:
+            if brand not in ordered_groups:
+                ordered_groups[brand] = groups[brand]
+        groups = ordered_groups
+    else:
+        for brand in groups:
+            groups[brand].sort(key=lambda x: (0 if "SS" in x.get("format", "") else 1, x["name"]))
     return jsonify(groups)
+
+@app.route("/api/recipes/order", methods=["POST"])
+@login_required
+def save_recipe_order():
+    data = request.json
+    save_recipe_order_data(data)
+    return jsonify({"success": True})
 
 @app.route("/api/recipes/upload-json", methods=["POST"])
 @login_required
@@ -722,18 +769,37 @@ def update_ccp_master():
 @app.route("/api/traceability", methods=["GET"])
 @login_required
 def get_traceability():
+    filter_type = request.args.get("filter", "all")
+    recipes = load_recipes()
     weeks = list_schedules()
     records = []
     for week_id in weeks:
         week_record = {"week_id": week_id, "days": []}
+        schedule = load_schedule(week_id)
         for d_idx in range(7):
             cl = load_checklist(week_id, d_idx)
             if cl and cl.get("completed"):
+                # Check if any recipe that day has organic certification
+                has_organic = False
+                if schedule and schedule.get("schedule"):
+                    day_data = schedule["schedule"].get(str(d_idx), {})
+                    for vessel in VESSELS:
+                        rname = day_data.get(vessel, "")
+                        if rname and rname in recipes:
+                            cert = recipes[rname].get("certification", "")
+                            if cert and cert.lower() == "organic":
+                                has_organic = True
+                                break
+                if filter_type == "organic" and not has_organic:
+                    continue
+                if filter_type == "non-organic" and has_organic:
+                    continue
                 week_record["days"].append({
                     "day_idx": d_idx,
                     "day_name": DAYS[d_idx],
                     "completed": True,
                     "last_updated": cl.get("last_updated", ""),
+                    "has_organic": has_organic,
                 })
         if week_record["days"]:
             records.append(week_record)
