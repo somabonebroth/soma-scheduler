@@ -287,6 +287,9 @@ def parse_recipe_pdf_text(text):
             continue
         if current_section and current_section in recipe:
             recipe[current_section].append(line)
+    # Include format in name to make FZ/SS variants unique
+    if recipe["format"] and recipe["format"] not in name:
+        name = name + " " + recipe["format"]
     return {"name": name, "data": recipe}
 
 
@@ -431,8 +434,11 @@ def get_recipes_grouped():
             brand = "Other"
         if brand not in groups:
             groups[brand] = []
-        display = brand + "-" + name + "-" + data.get("format", "")
-        groups[brand].append({"name": name, "format": data.get("format", ""), "yield": data.get("yield", ""), "display": display, "certification": data.get("certification", "")})
+        display = brand + "-" + name
+        fmt = data.get("format", "")
+        if fmt and fmt not in name:
+            display = display + "-" + fmt
+        groups[brand].append({"name": name, "format": fmt, "yield": data.get("yield", ""), "display": display, "certification": data.get("certification", "")})
     # Apply stored order if available, otherwise sort SS first
     if order:
         ordered_groups = {}
