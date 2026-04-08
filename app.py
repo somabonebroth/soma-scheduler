@@ -422,6 +422,33 @@ def delete_recipe(name):
         return jsonify({"success": True})
     return jsonify({"error": "Recipe not found"}), 404
 
+PHOTOS_DIR = os.path.join(DATA_DIR, "photos")
+os.makedirs(PHOTOS_DIR, exist_ok=True)
+
+@app.route("/api/recipes/<path:name>/photo", methods=["POST"])
+@login_required
+def upload_recipe_photo(name):
+    if "photo" not in request.files:
+        return jsonify({"error": "No photo provided"}), 400
+    file = request.files["photo"]
+    safe = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in [".jpg", ".jpeg", ".png"]:
+        ext = ".jpg"
+    filename = safe + ext
+    filepath = os.path.join(PHOTOS_DIR, filename)
+    file.save(filepath)
+    recipes = load_recipes()
+    if name in recipes:
+        recipes[name]["photo"] = filename
+        save_recipes(recipes)
+    return jsonify({"success": True, "photo": filename})
+
+@app.route("/api/photos/<filename>")
+@login_required
+def serve_photo(filename):
+    return send_from_directory(PHOTOS_DIR, filename)
+
 @app.route("/api/recipes/grouped", methods=["GET"])
 @login_required
 def get_recipes_grouped():
@@ -660,12 +687,14 @@ def save_daily_production(week_id, day_idx):
 @login_required
 def generate_label():
     data = request.json
-    product_name = data.get("product_name", "")
+    brand_name = data.get("brand_name", "")
+    recipe_name = data.get("recipe_name", "")
+    recipe_format = data.get("recipe_format", "")
     lot = data.get("lot", "")
     production_date = data.get("production_date", "")
 
-    if not product_name:
-        return jsonify({"error": "Missing product name"}), 400
+    if not recipe_name:
+        return jsonify({"error": "Missing recipe name"}), 400
 
     try:
         prod_date = datetime.strptime(production_date, "%d/%m/%Y")
@@ -673,16 +702,13 @@ def generate_label():
         prod_date = datetime.today()
 
     best_before = prod_date + timedelta(days=365)
-
-    logo_path = os.path.join(app.static_folder, "logo.jpg")
-    if not os.path.exists(logo_path):
-        logo_path = None
+    recipe_format_display = recipe_name + "-" + recipe_format if recipe_format else recipe_name
 
     label_buffer = io.BytesIO()
-    generate_label_pdf(label_buffer, product_name, lot, best_before.strftime("%d/%m/%Y"))
+    generate_label_pdf(label_buffer, brand_name, recipe_format_display, lot, best_before.strftime("%d/%m/%Y"))
     label_buffer.seek(0)
 
-    safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', product_name)
+    safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', recipe_name)
     return send_file(label_buffer, mimetype="application/pdf", as_attachment=True,
                      download_name="Label_" + safe_name + "_" + lot + ".pdf")
 
@@ -832,17 +858,33 @@ def get_production_tracker(week_id):
     daily_totals = []
     for d_idx in range(7):
         cl = load_checklist(week_id, d_idx)
-        total = 0
-        if cl and cl.get("produced"):
-            for vessel_id, amount in cl["produced"].items():
-                try:
-                    total += int(amount)
-                except (ValueError, TypeError):
-                    pass
+        total_produced = 0
+        total_bb = 0
+        total_kettles_end = 0
+        if cl:
+            if cl.get("produced"):
+                for vessel_id, amount in cl["produced"].items():
+                    try:
+                        total_produced += int(amount)
+                    except (ValueError, TypeError):
+                        pass
+            if cl.get("bb_produced"):
+                for vessel_id, amount in cl["bb_produced"].items():
+                    try:
+                        total_bb += int(amount)
+                    except (ValueError, TypeError):
+                        pass
+            try:
+                total_kettles_end = int(cl.get("kettles_end", 0))
+            except (ValueError, TypeError):
+                total_kettles_end = 0
         daily_totals.append({
             "day_idx": d_idx,
             "day_name": DAYS[d_idx],
-            "total": total,
+            "produced": total_produced,
+            "bb": total_bb,
+            "kettles_end": total_kettles_end,
+            "total": total_produced + total_bb + total_kettles_end,
             "has_data": cl is not None,
         })
     return jsonify(daily_totals)

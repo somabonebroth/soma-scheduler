@@ -9,17 +9,29 @@
 .week-picker { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
 .week-picker input[type="date"] { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
 .chart-container { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin-bottom: 16px; }
-.chart-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--dark); }
+.chart-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; color: var(--dark); }
+.legend { display: flex; gap: 16px; margin-bottom: 16px; font-size: 12px; }
+.legend-item { display: flex; align-items: center; gap: 4px; }
+.legend-dot { width: 12px; height: 12px; border-radius: 2px; }
 .bar-chart { display: flex; align-items: flex-end; gap: 12px; height: 280px; padding: 0 8px; border-bottom: 2px solid var(--border); }
 .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.bar { background: var(--accent); border-radius: 4px 4px 0 0; width: 100%; min-height: 2px; transition: height 0.5s; position: relative; }
-.bar.empty { background: var(--border); }
-.bar-value { font-size: 12px; font-weight: 600; color: var(--dark); }
+.bar-wrapper { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; width: 100%; }
+.bar-stack { width: 70%; display: flex; flex-direction: column-reverse; }
+.bar-segment { width: 100%; min-height: 0; transition: height 0.5s; }
+.bar-produced { background: var(--accent); border-radius: 0 0 3px 3px; }
+.bar-bb { background: #5b9bd5; }
+.bar-kettles { background: #f4a261; border-radius: 3px 3px 0 0; }
+.bar-empty { background: var(--border); border-radius: 3px; min-height: 4px; }
+.bar-value { font-size: 11px; font-weight: 600; color: var(--dark); }
 .bar-label { font-size: 11px; color: var(--text-light); margin-top: 8px; }
-.bar-wrapper { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
-.total-row { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-top: 1px solid var(--border); margin-top: 16px; }
-.total-label { font-size: 14px; font-weight: 600; color: var(--dark); }
-.total-value { font-size: 20px; font-weight: 700; color: var(--accent); }
+.total-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.total-row:last-child { border-bottom: none; }
+.total-label { font-size: 13px; color: var(--text); }
+.total-value { font-size: 16px; font-weight: 700; }
+.total-produced { color: var(--accent); }
+.total-bb { color: #5b9bd5; }
+.total-kettles { color: #f4a261; }
+.total-all { color: var(--dark); font-size: 18px; }
 .no-data { text-align: center; padding: 60px 20px; color: var(--text-light); font-size: 14px; }
 </style>
 </head>
@@ -37,66 +49,61 @@
     <div id="chart-area"></div>
 </div>
 <script>
-function getCurrentMonday() {
-    var today = new Date();
-    var day = today.getDay();
-    var diff = day === 0 ? -6 : 1 - day;
-    var mon = new Date(today);
-    mon.setDate(today.getDate() + diff);
-    return mon;
-}
-function formatDate(d) { return d.toISOString().split('T')[0]; }
+function getCurrentMonday(){var t=new Date();var d=t.getDay();var diff=d===0?-6:1-d;var m=new Date(t);m.setDate(t.getDate()+diff);return m;}
+function formatDate(d){return d.toISOString().split('T')[0];}
 
-document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('week-date').value = formatDate(getCurrentMonday());
-    loadTracker();
-});
+document.addEventListener('DOMContentLoaded',function(){document.getElementById('week-date').value=formatDate(getCurrentMonday());loadTracker();});
 
-async function loadTracker() {
-    var weekId = document.getElementById('week-date').value;
-    var res = await fetch('/api/production-tracker/' + weekId);
-    var data = await res.json();
-    var container = document.getElementById('chart-area');
+async function loadTracker(){
+    var weekId=document.getElementById('week-date').value;
+    var res=await fetch('/api/production-tracker/'+weekId);
+    var data=await res.json();
+    var container=document.getElementById('chart-area');
 
-    var maxVal = 0;
-    var weekTotal = 0;
-    var hasAnyData = false;
-    for (var i = 0; i < data.length; i++) {
-        if (data[i].total > maxVal) maxVal = data[i].total;
-        weekTotal += data[i].total;
-        if (data[i].has_data && data[i].total > 0) hasAnyData = true;
+    var maxVal=0;var weekProduced=0;var weekBB=0;var weekKettles=0;var hasAny=false;
+    for(var i=0;i<data.length;i++){
+        var dayTotal=data[i].produced+data[i].bb+data[i].kettles_end;
+        if(dayTotal>maxVal)maxVal=dayTotal;
+        weekProduced+=data[i].produced;
+        weekBB+=data[i].bb;
+        weekKettles+=data[i].kettles_end;
+        if(data[i].has_data&&dayTotal>0)hasAny=true;
     }
 
-    if (!hasAnyData) {
-        container.innerHTML = '<div class="chart-container"><div class="no-data">No production data for this week yet.<br>Complete daily production to see data here.</div></div>';
-        return;
+    if(!hasAny){container.innerHTML='<div class="chart-container"><div class="no-data">No production data for this week yet.<br>Complete daily production to see data here.</div></div>';return;}
+    if(maxVal===0)maxVal=100;
+    var chartH=240;
+
+    var html='<div class="chart-container">';
+    html+='<div class="chart-title">Daily Production Output</div>';
+    html+='<div class="legend"><div class="legend-item"><div class="legend-dot" style="background:var(--accent);"></div>Produced</div><div class="legend-item"><div class="legend-dot" style="background:#5b9bd5;"></div>BB (Back Bar)</div><div class="legend-item"><div class="legend-dot" style="background:#f4a261;"></div>Kettle\'s End</div></div>';
+    html+='<div class="bar-chart">';
+
+    for(var i=0;i<data.length;i++){
+        var d=data[i];
+        var dayTotal=d.produced+d.bb+d.kettles_end;
+        html+='<div class="bar-col"><div class="bar-wrapper">';
+        if(dayTotal>0){
+            html+='<div class="bar-value">'+dayTotal+'</div>';
+            html+='<div class="bar-stack">';
+            if(d.produced>0){var h1=Math.max(Math.round((d.produced/maxVal)*chartH),4);html+='<div class="bar-segment bar-produced" style="height:'+h1+'px;" title="Produced: '+d.produced+'"></div>';}
+            if(d.bb>0){var h2=Math.max(Math.round((d.bb/maxVal)*chartH),4);html+='<div class="bar-segment bar-bb" style="height:'+h2+'px;" title="BB: '+d.bb+'"></div>';}
+            if(d.kettles_end>0){var h3=Math.max(Math.round((d.kettles_end/maxVal)*chartH),4);html+='<div class="bar-segment bar-kettles" style="height:'+h3+'px;" title="Kettles End: '+d.kettles_end+'"></div>';}
+            html+='</div>';
+        }else{html+='<div class="bar-empty" style="height:4px;width:70%;"></div>';}
+        html+='</div><div class="bar-label">'+d.day_name.substring(0,3)+'</div></div>';
     }
+    html+='</div>';
 
-    if (maxVal === 0) maxVal = 100;
-    var chartHeight = 240;
+    var weekTotal=weekProduced+weekBB+weekKettles;
+    html+='<div style="margin-top:16px;">';
+    html+='<div class="total-row"><span class="total-label">Standard Produced</span><span class="total-value total-produced">'+weekProduced+' units</span></div>';
+    html+='<div class="total-row"><span class="total-label">BB (Back Bar)</span><span class="total-value total-bb">'+weekBB+' units</span></div>';
+    html+='<div class="total-row"><span class="total-label">Kettle\'s End</span><span class="total-value total-kettles">'+weekKettles+' units</span></div>';
+    html+='<div class="total-row"><span class="total-label"><strong>Weekly Total</strong></span><span class="total-value total-all">'+weekTotal+' units</span></div>';
+    html+='</div></div>';
 
-    var html = '<div class="chart-container">';
-    html += '<div class="chart-title">Daily Production Output</div>';
-    html += '<div class="bar-chart">';
-
-    for (var i = 0; i < data.length; i++) {
-        var d = data[i];
-        var barH = d.total > 0 ? Math.max(Math.round((d.total / maxVal) * chartHeight), 8) : 4;
-        var barClass = d.total > 0 ? 'bar' : 'bar empty';
-        html += '<div class="bar-col">';
-        html += '<div class="bar-wrapper">';
-        if (d.total > 0) html += '<div class="bar-value">' + d.total + '</div>';
-        html += '<div class="' + barClass + '" style="height:' + barH + 'px;"></div>';
-        html += '</div>';
-        html += '<div class="bar-label">' + d.day_name.substring(0, 3) + '</div>';
-        html += '</div>';
-    }
-
-    html += '</div>';
-    html += '<div class="total-row"><span class="total-label">Weekly Total</span><span class="total-value">' + weekTotal + ' units</span></div>';
-    html += '</div>';
-
-    container.innerHTML = html;
+    container.innerHTML=html;
 }
 </script>
 </body>

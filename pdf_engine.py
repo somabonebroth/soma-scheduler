@@ -144,27 +144,40 @@ def draw_recipe_card(c, x, y, card_w, recipe_name, recipe_data, vessel):
 
 
 # -- Label PDF --
-def generate_label_pdf(output, product_name, lot, best_before):
+def generate_label_pdf(output, brand_name, recipe_format, lot, best_before):
     label_w = 2 * inch
     label_h = 2 * inch
     c = canvas.Canvas(output, pagesize=(label_w, label_h))
 
-    c.setFont(FONT_BOLD, 8)
-    c.setFillColor(black)
+    y = label_h - 22
 
-    # Product name - wrap if needed
-    lines = _wrap_text(product_name, 8, label_w - 16)
-    y = label_h - 20
-    for line in lines:
+    # Brand name bold
+    c.setFont(FONT_BOLD, 9)
+    c.setFillColor(black)
+    brand_lines = _wrap_text(brand_name, 9, label_w - 16)
+    for line in brand_lines:
         c.drawCentredString(label_w / 2, y, line)
         y = y - 12
 
-    y = y - 8
-    c.setFont(FONT, 7)
+    # Recipe name + format
+    y = y - 2
+    c.setFont(FONT, 8)
+    rf_lines = _wrap_text(recipe_format, 8, label_w - 16)
+    for line in rf_lines:
+        c.drawCentredString(label_w / 2, y, line)
+        y = y - 11
+
+    # LOT#
+    y = y - 6
+    c.setFont(FONT_BOLD, 7)
     c.drawCentredString(label_w / 2, y, "LOT#: " + lot)
-    y = y - 14
+
+    # Best before
+    y = y - 12
+    c.setFont(FONT, 7)
     c.drawCentredString(label_w / 2, y, "Best Before: " + best_before)
 
+    # Border
     c.setStrokeColor(LIGHT_GRAY)
     c.rect(2, 2, label_w - 4, label_h - 4, fill=0, stroke=1)
 

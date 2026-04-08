@@ -15,6 +15,7 @@
 .dash-btn .sublabel { font-size: 11px; color: var(--text-light); }
 .dash-btn.highlight { border-color: var(--accent); background: linear-gradient(135deg, #f5f5f0, #e8efe5); }
 .dash-btn.disabled { opacity: 0.4; cursor: default; }
+.dash-btn.disabled:hover { transform: none; box-shadow: none; border-color: var(--border); }
 .section-label { font-size: 11px; font-weight: 600; color: var(--text-light); text-transform: uppercase; letter-spacing: 1px; margin-top: 12px; margin-bottom: 4px; }
 </style>
 </head>
@@ -42,8 +43,8 @@
             <a href="/recipes" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Recipe Cards</span><span class="sublabel">View and manage recipes</span></a>
             <a href="/ccp-master" class="dash-btn"><span class="icon">&#9989;</span><span class="label">CCP Checklist</span><span class="sublabel">Master reference</span></a>
             <a href="/production-tracker" class="dash-btn"><span class="icon">&#128200;</span><span class="label">Production Tracker</span><span class="sublabel">Weekly output charts</span></a>
-            <a href="/traceability" class="dash-btn"><span class="icon">&#128451;</span><span class="label">Traceability Records</span><span class="sublabel">Non-Organic Certified</span></a>
-            <a href="/traceability?filter=organic" class="dash-btn"><span class="icon">&#127807;</span><span class="label">Traceability Records</span><span class="sublabel">Organic Certified</span></a>
+            <a href="/traceability" class="dash-btn"><span class="icon">&#128451;</span><span class="label">Traceability Records</span><span class="sublabel">All production records</span></a>
+            <div class="dash-btn disabled"><span class="icon">&#128295;</span><span class="label">Equipment & Maintenance</span><span class="sublabel">Coming Soon</span></div>
         </div>
     </div>
 </div>
@@ -52,28 +53,8 @@ var DAYNAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Satur
 async function doLogout(){await fetch('/api/logout',{method:'POST'});window.location.href='/login';}
 function getWeekId(date){var d=new Date(date);var day=d.getDay();var diff=day===0?-6:1-day;d.setDate(d.getDate()+diff);return d.toISOString().split('T')[0];}
 function getDayIdx(date){var day=date.getDay();return day===0?6:day-1;}
-async function goToDay(offset){
-    var target=new Date();target.setDate(target.getDate()+offset);
-    var weekId=getWeekId(target);var dayIdx=getDayIdx(target);
-    var res=await fetch('/api/schedule/'+weekId);var data=await res.json();
-    if(!data.schedule){alert('No schedule created for this week.');return;}
-    var dayData=data.schedule[String(dayIdx)]||{};
-    var hasP=Object.values(dayData).some(function(v){return v;});
-    if(!hasP){alert('No production scheduled for '+DAYNAMES[target.getDay()]+'.');return;}
-    window.location.href='/daily-production/'+weekId+'/'+dayIdx;
-}
-async function loadDayLabels(){
-    for(var offset=-1;offset<=1;offset++){
-        var target=new Date();target.setDate(target.getDate()+offset);
-        var weekId=getWeekId(target);var dayIdx=getDayIdx(target);
-        var labelId=offset===-1?'yesterday-label':offset===0?'today-label':'tomorrow-label';
-        var dayName=DAYNAMES[target.getDay()];
-        try{var res=await fetch('/api/schedule/'+weekId);var data=await res.json();
-            if(data.schedule){var dd=data.schedule[String(dayIdx)]||{};var r=Object.values(dd).filter(function(v){return v;});document.getElementById(labelId).textContent=dayName+' - '+(r.length>0?r.length+' kettle(s)':'No production');}
-            else{document.getElementById(labelId).textContent=dayName+' - No schedule';}
-        }catch(e){document.getElementById(labelId).textContent=dayName;}
-    }
-}
+async function goToDay(offset){var target=new Date();target.setDate(target.getDate()+offset);var weekId=getWeekId(target);var dayIdx=getDayIdx(target);var res=await fetch('/api/schedule/'+weekId);var data=await res.json();if(!data.schedule){alert('No schedule created for this week.');return;}var dayData=data.schedule[String(dayIdx)]||{};var hasP=Object.values(dayData).some(function(v){return v;});if(!hasP){alert('No production scheduled for '+DAYNAMES[target.getDay()]+'.');return;}window.location.href='/daily-production/'+weekId+'/'+dayIdx;}
+async function loadDayLabels(){for(var offset=-1;offset<=1;offset++){var target=new Date();target.setDate(target.getDate()+offset);var weekId=getWeekId(target);var dayIdx=getDayIdx(target);var labelId=offset===-1?'yesterday-label':offset===0?'today-label':'tomorrow-label';var dayName=DAYNAMES[target.getDay()];try{var res=await fetch('/api/schedule/'+weekId);var data=await res.json();if(data.schedule){var dd=data.schedule[String(dayIdx)]||{};var r=Object.values(dd).filter(function(v){return v;});document.getElementById(labelId).textContent=dayName+' - '+(r.length>0?r.length+' kettle(s)':'No production');}else{document.getElementById(labelId).textContent=dayName+' - No schedule';}}catch(e){document.getElementById(labelId).textContent=dayName;}}}
 document.addEventListener('DOMContentLoaded',loadDayLabels);
 </script>
 </body>
