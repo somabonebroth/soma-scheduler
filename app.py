@@ -617,27 +617,27 @@ def get_daily_production(week_id, day_idx):
             prev_schedule = schedule_data["schedule"].get(prev_key, {})
 
     # Build finish (previous day) and start (today) data
-    finish_kettles = []
-    start_kettles = []
+    finish_kettles = {}
+    start_kettles = {}
 
     for vessel in VESSELS:
         # FINISH: previous day's recipe
         prev_recipe_name = prev_schedule.get(vessel, "")
         prev_recipe_data = recipes.get(prev_recipe_name, {}) if prev_recipe_name else {}
-        finish_kettles.append({
-            "vessel": vessel,
-            "recipe_name": prev_recipe_name,
-            "recipe_data": prev_recipe_data,
-        })
+        if prev_recipe_name:
+            finish_kettles[vessel] = {
+                "recipe": prev_recipe_name,
+                "details": prev_recipe_data,
+            }
 
         # START: today's recipe
         today_recipe_name = today_schedule.get(vessel, "")
         today_recipe_data = recipes.get(today_recipe_name, {}) if today_recipe_name else {}
-        start_kettles.append({
-            "vessel": vessel,
-            "recipe_name": today_recipe_name,
-            "recipe_data": today_recipe_data,
-        })
+        if today_recipe_name:
+            start_kettles[vessel] = {
+                "recipe": today_recipe_name,
+                "details": today_recipe_data,
+            }
 
     week_start = datetime.strptime(week_id, "%Y-%m-%d")
     date = week_start + timedelta(days=day_idx)
@@ -645,8 +645,10 @@ def get_daily_production(week_id, day_idx):
 
     return jsonify({
         "date": date.strftime("%A, %d/%m/%Y"),
+        "day_name": DAYS[day_idx],
         "prev_date": prev_date.strftime("%d/%m/%Y"),
         "prev_lot": prev_date.strftime("%d%m%y"),
+        "lot": date.strftime("%d%m%y"),
         "today_lot": date.strftime("%d%m%y"),
         "finish": finish_kettles,
         "start": start_kettles,
