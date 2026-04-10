@@ -27,6 +27,7 @@ SCHEDULES_DIR = os.path.join(DATA_DIR, "schedules")
 PDF_DIR = os.path.join(DATA_DIR, "pdfs")
 CHECKLISTS_DIR = os.path.join(DATA_DIR, "checklists")
 CCP_MASTER_PATH = os.path.join(DATA_DIR, "ccp_master.json")
+RECIPE_ORDER_PATH = os.path.join(DATA_DIR, "recipe_order.json")
 
 for d in [DATA_DIR, SCHEDULES_DIR, PDF_DIR, CHECKLISTS_DIR]:
     os.makedirs(d, exist_ok=True)
@@ -56,32 +57,17 @@ DEFAULT_CCP_SECTIONS = [
         "Maintain steady pressure for full processing time; restart timer from zero if pressure drops",
         "Canner guidelines completed for all active kettles",
     ]},
-    {"num": "5", "title": "DEPRESSURIZING & JAR REMOVAL", "items": [
-        "Turn off heat; leave canner on burner until fully depressurized - no force-cooling",
-        "Open counterweight/petcock once fully depressurized; wait additional 10 min",
-        "Open lid away from body (steam burn risk)",
-        "Remove jars gripping glass body or lid rim; minimize lid contact",
-        "Do not retighten lids or tilt/move jars during cooling",
-    ]},
-    {"num": "6", "title": "COOLING & SEAL VERIFICATION (NEXT DAY)", "items": [
-        "Cool undisturbed at room temp 12-24 hours",
-        "Test each seal: press lid center - no flex or spring",
-        "Dispose immediately of any unsealed jars - do NOT refrigerate",
-    ]},
-    {"num": "7", "title": "FINISHING & LABELLING", "items": [
-        "Wash and dry jars if necessary",
-        "Set label machine: date and LOT# match production schedule",
-        "Label each case of 12: product name, expiry date, LOT number",
-    ]},
-    {"num": "8", "title": "INVENTORY & STORAGE", "items": [
-        "Add finished inventory to Finished Goods Inventory with LOT for tracking",
-        "Store in designated area, labelled - away from heat and direct sunlight",
-        "Best before: within 1 year - confirm label matches",
+    {"num": "5", "title": "POST-CANNING", "items": [
+        "Let canner depressurize fully before opening",
+        "Remove jars; cool upright on clean towel 12-24 hrs",
+        "Check all lids for seal (no flex); separate any unsealed jars for re-processing or discard",
+        "Label jars: product name, lot number, best before date",
+        "Store in designated area at ambient temperature",
     ]},
 ]
 
 
-# -- Auth --
+# ── Auth ───────────────────────────────────────────────────────────────
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -93,7 +79,7 @@ def login_required(f):
     return decorated
 
 
-# -- Data helpers --
+# ── Data helpers ───────────────────────────────────────────────────────
 def load_recipes():
     if os.path.exists(RECIPES_PATH):
         with open(RECIPES_PATH, "r") as f:
@@ -117,8 +103,10 @@ def save_schedule(week_id, data):
         json.dump(data, f, indent=2)
 
 def list_schedules():
-    files = sorted(os.listdir(SCHEDULES_DIR), reverse=True)
-    return [f.replace(".json", "") for f in files if f.endswith(".json")]
+    if not os.path.exists(SCHEDULES_DIR):
+        return []
+    files = sorted([f.replace(".json", "") for f in os.listdir(SCHEDULES_DIR) if f.endswith(".json")], reverse=True)
+    return files
 
 def load_checklist(week_id, day_idx):
     path = os.path.join(CHECKLISTS_DIR, week_id + "_day" + str(day_idx) + ".json")
@@ -142,51 +130,36 @@ def save_ccp_master(sections):
     with open(CCP_MASTER_PATH, "w") as f:
         json.dump(sections, f, indent=2)
 
-RECIPE_ORDER_PATH = os.path.join(DATA_DIR, "recipe_order.json")
-
 def load_recipe_order():
     if os.path.exists(RECIPE_ORDER_PATH):
         with open(RECIPE_ORDER_PATH, "r") as f:
             return json.load(f)
     return None
 
-def save_recipe_order_data(data):
+def save_recipe_order(order):
     with open(RECIPE_ORDER_PATH, "w") as f:
-        json.dump(data, f, indent=2)
+        json.dump(order, f, indent=2)
 
 def get_current_week_id():
     today = datetime.today()
-    day = today.weekday()
-    monday = today - timedelta(days=day)
+    monday = today - timedelta(days=today.weekday())
     return monday.strftime("%Y-%m-%d")
 
-def get_day_assignments(week_id, day_idx):
-    schedule = load_schedule(week_id)
-    if schedule and schedule.get("schedule"):
-        day_key = str(day_idx)
-        if day_key in schedule["schedule"]:
-            return schedule["schedule"][day_key]
-    return {}
 
-def get_prev_day_info(week_id, day_idx):
-    if day_idx == 0:
-        prev_week = datetime.strptime(week_id, "%Y-%m-%d") - timedelta(days=7)
-        prev_week_id = prev_week.strftime("%Y-%m-%d")
-        return get_day_assignments(prev_week_id, 6)
-    else:
-        return get_day_assignments(week_id, day_idx - 1)
-
+# ── Recipe parser ──────────────────────────────────────────────────────
 def parse_recipe_pdf_text(text):
     lines = [l.strip() for l in text.strip().split("\n") if l.strip()]
     if not lines:
         return None
+
     recipe = {
         "yield": None, "format": "", "brand": "", "certification": "",
         "special_instructions": [], "kettle_overnight": [],
         "after_skim": [], "finishing": [], "add_to_jar": [],
     }
     name = ""
-    # First pass: extract labelled fields (Brand Name:, Recipe Name:, Format:, Target Yield:, Certification:)
+
+    # First pass: extract labelled fields
     header_lines_used = set()
     for i, line in enumerate(lines):
         ll = line.lower().strip()
@@ -207,6 +180,8 @@ def parse_recipe_pdf_text(text):
                 recipe["format"] = "FZ-750ML"
             elif "SS-750ML" in fmt or "SS750ML" in fmt:
                 recipe["format"] = "SS-750ML"
+            elif "IQ-750ML" in fmt or "IQ750ML" in fmt:
+                recipe["format"] = "iQ-750ML"
             else:
                 recipe["format"] = fmt
             header_lines_used.add(i)
@@ -215,63 +190,51 @@ def parse_recipe_pdf_text(text):
             if m:
                 recipe["yield"] = int(m.group(1))
             header_lines_used.add(i)
-    # Fallback: if no labelled fields found, try old format (first line as name)
+
+    # Fallback: if no labelled fields, use first line as name
     if not name:
-        raw_name = lines[0]
-        upper = raw_name.upper()
+        name = lines[0]
+        header_lines_used.add(0)
+        upper = name.upper()
         if "SS-876ML" in upper or "SS876ML" in upper:
             recipe["format"] = "SS-876ML"
         elif "FZ-750ML" in upper or "FZ750ML" in upper:
             recipe["format"] = "FZ-750ML"
         elif "SS-750ML" in upper or "SS750ML" in upper:
             recipe["format"] = "SS-750ML"
-        parts = raw_name.split("-", 1)
-        if len(parts) > 1:
-            recipe["brand"] = parts[0].strip()
-            recipe_part = parts[1].strip()
-            for suffix in ["-SS-876ML", "-FZ-750ML", "-SS-750ML"]:
-                if recipe_part.upper().endswith(suffix.upper()):
-                    recipe_part = recipe_part[:len(recipe_part)-len(suffix)].strip()
-                    break
-            name = recipe_part
-        else:
-            name = raw_name
-        header_lines_used.add(0)
+
     if recipe["yield"] is None:
         recipe["yield"] = 190 if "FZ" in recipe["format"] else 150
-    # Second pass: parse ingredient sections
+
+    # Append format to name for unique storage key
+    if recipe["format"] and not name.endswith(recipe["format"]):
+        name = name + " " + recipe["format"]
+
+    # Parse recipe body
     current_section = None
     in_special = False
     for i, line in enumerate(lines):
         if i in header_lines_used:
             continue
         ll = line.lower().strip()
-        if ll == "(none)" or ll == "none":
+        if "target yield" in ll:
             continue
         if ll == "special instructions:" or ll.startswith("special instructions"):
             in_special = True
-            current_section = None
             continue
-        if "add to kettle overnight" in ll:
+        if "add to kettle overnight" in ll or ll == "start:":
             in_special = False
             current_section = "kettle_overnight"
             continue
-        if "add directly to kettle after skim" in ll or "add to kettle after skim" in ll:
-            in_special = False
+        if "add directly to kettle after skim" in ll or "add to kettle after skim" in ll or ll == "finish:":
             current_section = "after_skim"
             continue
         if ll.startswith("water") and ("removing solids" in ll or "top kettle" in ll):
-            in_special = False
             current_section = "finishing"
             recipe["finishing"].append(line)
             continue
         if "add to jar" in ll or "add to container" in ll:
-            in_special = False
             current_section = "add_to_jar"
-            continue
-        if "finishing:" in ll and len(ll) < 15:
-            in_special = False
-            current_section = "finishing"
             continue
         if any(ll.startswith(p) for p in ["no salt", "g per liter", "ml per liter"]) or "per liter" in ll or "per litre" in ll:
             if current_section != "finishing":
@@ -279,25 +242,17 @@ def parse_recipe_pdf_text(text):
             recipe["finishing"].append(line)
             continue
         if in_special:
-            # Join continuation lines (lowercase start = continuation of previous)
-            if recipe["special_instructions"] and line[0].islower():
-                recipe["special_instructions"][-1] += " " + line
-            else:
-                recipe["special_instructions"].append(line)
+            recipe["special_instructions"].append(line)
             continue
         if current_section and current_section in recipe:
             recipe[current_section].append(line)
-    # Include format in name to make FZ/SS variants unique
-    if recipe["format"] and recipe["format"] not in name:
-        name = name + " " + recipe["format"]
+
     return {"name": name, "data": recipe}
 
 
-# -- Auth routes --
+# ── Auth routes ────────────────────────────────────────────────────────
 @app.route("/login")
 def login_page():
-    if session.get("authenticated"):
-        return redirect(url_for("dashboard"))
     return render_template("login.html")
 
 @app.route("/api/login", methods=["POST"])
@@ -306,7 +261,7 @@ def login():
     if data.get("password") == APP_PASSWORD:
         session["authenticated"] = True
         return jsonify({"success": True})
-    return jsonify({"error": "Incorrect password"}), 401
+    return jsonify({"error": "Invalid password"}), 401
 
 @app.route("/api/logout", methods=["POST"])
 def logout():
@@ -314,7 +269,7 @@ def logout():
     return jsonify({"success": True})
 
 
-# -- Page routes --
+# ── Page routes ────────────────────────────────────────────────────────
 @app.route("/")
 @login_required
 def dashboard():
@@ -335,6 +290,11 @@ def weekly_schedule_page():
 def daily_production_page(week_id, day_idx):
     return render_template("daily_production.html", week_id=week_id, day_idx=day_idx)
 
+@app.route("/checklist/<week_id>/<int:day_idx>")
+@login_required
+def checklist_page(week_id, day_idx):
+    return render_template("checklist.html", week_id=week_id, day_idx=day_idx)
+
 @app.route("/recipes")
 @login_required
 def recipes_page():
@@ -343,51 +303,36 @@ def recipes_page():
 @app.route("/ccp-master")
 @login_required
 def ccp_master_page():
-    return render_template("master_ccp.html")
+    return render_template("ccp_master.html")
 
 @app.route("/traceability")
 @login_required
 def traceability_page():
     return render_template("traceability.html")
 
+@app.route("/production-tracker")
+@login_required
+def production_tracker_page():
+    return render_template("production_tracker.html")
 
-# -- Recipe API --
+
+# ── Recipe API ─────────────────────────────────────────────────────────
 @app.route("/api/recipes", methods=["GET"])
 @login_required
 def get_recipes():
     return jsonify(load_recipes())
 
-@app.route("/api/recipes/upload", methods=["POST"])
+@app.route("/api/recipes", methods=["POST"])
 @login_required
-def upload_recipe():
-    if "file" not in request.files:
-        return jsonify({"error": "No file provided"}), 400
-    file = request.files["file"]
-    if not file.filename.lower().endswith(".pdf"):
-        return jsonify({"error": "Must be a PDF file"}), 400
-    import tempfile
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        file.save(tmp.name)
-        tmp_path = tmp.name
-    try:
-        import pdfplumber
-        text = ""
-        with pdfplumber.open(tmp_path) as pdf:
-            for page in pdf.pages:
-                t = page.extract_text()
-                if t:
-                    text += t + "\n"
-    finally:
-        os.unlink(tmp_path)
-    if not text.strip():
-        return jsonify({"error": "Could not extract text from PDF"}), 400
-    result = parse_recipe_pdf_text(text)
-    if not result:
-        return jsonify({"error": "Could not parse recipe format"}), 400
+def add_recipe():
+    data = request.json
+    name = data.get("name", "").strip()
+    if not name:
+        return jsonify({"error": "Name required"}), 400
     recipes = load_recipes()
-    recipes[result["name"]] = result["data"]
+    recipes[name] = data.get("data", {})
     save_recipes(recipes)
-    return jsonify({"success": True, "name": result["name"], "recipe": result["data"]})
+    return jsonify({"success": True})
 
 @app.route("/api/recipes/<path:name>", methods=["GET"])
 @login_required
@@ -400,17 +345,15 @@ def get_recipe(name):
 @app.route("/api/recipes/<path:name>", methods=["PUT"])
 @login_required
 def update_recipe(name):
-    recipes = load_recipes()
-    if name not in recipes:
-        return jsonify({"error": "Recipe not found"}), 404
     data = request.json
+    recipes = load_recipes()
     new_name = data.get("name", name)
     recipe_data = data.get("data", {})
-    if new_name != name:
+    if name in recipes and new_name != name:
         del recipes[name]
     recipes[new_name] = recipe_data
     save_recipes(recipes)
-    return jsonify({"success": True, "name": new_name})
+    return jsonify({"success": True})
 
 @app.route("/api/recipes/<path:name>", methods=["DELETE"])
 @login_required
@@ -422,6 +365,7 @@ def delete_recipe(name):
         return jsonify({"success": True})
     return jsonify({"error": "Recipe not found"}), 404
 
+# Photo upload
 PHOTOS_DIR = os.path.join(DATA_DIR, "photos")
 os.makedirs(PHOTOS_DIR, exist_ok=True)
 
@@ -449,6 +393,7 @@ def upload_recipe_photo(name):
 def serve_photo(filename):
     return send_from_directory(PHOTOS_DIR, filename)
 
+# Grouped recipes for dropdowns
 @app.route("/api/recipes/grouped", methods=["GET"])
 @login_required
 def get_recipes_grouped():
@@ -462,10 +407,13 @@ def get_recipes_grouped():
         if brand not in groups:
             groups[brand] = []
         display = brand + "-" + name
-        fmt = data.get("format", "")
-        if fmt and fmt not in name:
-            display = display + "-" + fmt
-        groups[brand].append({"name": name, "format": fmt, "yield": data.get("yield", ""), "display": display, "certification": data.get("certification", "")})
+        groups[brand].append({
+            "name": name,
+            "format": data.get("format", ""),
+            "yield": data.get("yield", ""),
+            "display": display,
+            "certification": data.get("certification", ""),
+        })
     # Apply stored order if available, otherwise sort SS first
     if order:
         ordered_groups = {}
@@ -487,118 +435,112 @@ def get_recipes_grouped():
         for brand in groups:
             if brand not in ordered_groups:
                 ordered_groups[brand] = groups[brand]
-        groups = ordered_groups
+        return jsonify(ordered_groups)
     else:
         for brand in groups:
             groups[brand].sort(key=lambda x: (0 if "SS" in x.get("format", "") else 1, x["name"]))
-    return jsonify(groups)
+        return jsonify(groups)
 
 @app.route("/api/recipes/order", methods=["POST"])
 @login_required
-def save_recipe_order():
+def update_recipe_order():
     data = request.json
-    save_recipe_order_data(data)
+    save_recipe_order(data)
     return jsonify({"success": True})
 
-@app.route("/api/recipes/upload-json", methods=["POST"])
+# Upload recipe PDF text
+@app.route("/api/recipes/upload", methods=["POST"])
 @login_required
-def add_recipe_manual():
+def upload_recipe():
     data = request.json
-    name = data.get("name", "")
-    recipe_data = data.get("data", {})
-    if not name:
-        return jsonify({"error": "Name required"}), 400
+    text = data.get("text", "")
+    if not text:
+        return jsonify({"error": "No text provided"}), 400
+    parsed = parse_recipe_pdf_text(text)
+    if not parsed:
+        return jsonify({"error": "Could not parse recipe"}), 400
     recipes = load_recipes()
-    recipes[name] = recipe_data
+    recipes[parsed["name"]] = parsed["data"]
     save_recipes(recipes)
-    return jsonify({"success": True, "name": name})
+    return jsonify({"success": True, "name": parsed["name"], "data": parsed["data"]})
 
 
-# -- Schedule API --
-@app.route("/api/schedule", methods=["POST"])
-@login_required
-def save_schedule_route():
-    data = request.json
-    week_id = data.get("week_id")
-    schedule = data.get("schedule")
-    notes = data.get("notes", "")
-    if not week_id or schedule is None:
-        return jsonify({"error": "Missing data"}), 400
-    save_schedule(week_id, {"schedule": schedule, "notes": notes})
-    return jsonify({"success": True})
-
+# ── Schedule API ───────────────────────────────────────────────────────
 @app.route("/api/schedule/<week_id>", methods=["GET"])
 @login_required
 def get_schedule(week_id):
     data = load_schedule(week_id)
-    if data is None:
-        return jsonify({"schedule": None})
-    return jsonify(data)
-
-@app.route("/api/schedule/current", methods=["GET"])
-@login_required
-def get_current_schedule():
-    week_id = get_current_week_id()
-    data = load_schedule(week_id)
-    if data is None:
-        return jsonify({"schedule": None, "week_id": week_id})
-    return jsonify({"schedule": data.get("schedule"), "notes": data.get("notes", ""), "week_id": week_id})
+    if data:
+        return jsonify(data)
+    return jsonify({"schedule": None, "notes": ""})
 
 @app.route("/api/schedules", methods=["GET"])
 @login_required
 def get_schedules():
     return jsonify(list_schedules())
 
+@app.route("/api/schedule/<week_id>", methods=["DELETE"])
+@login_required
+def delete_schedule(week_id):
+    path = os.path.join(SCHEDULES_DIR, week_id + ".json")
+    if os.path.exists(path):
+        os.unlink(path)
+    return jsonify({"success": True})
 
-# -- Generate PDFs --
+
+# ── Generate PDFs ──────────────────────────────────────────────────────
 @app.route("/api/generate", methods=["POST"])
 @login_required
 def generate_pdfs():
     data = request.json
-    week_id = data.get("week_id")
-    schedule = data.get("schedule")
+    week_id = data.get("week_id", get_current_week_id())
+    schedule = data.get("schedule", {})
     notes = data.get("notes", "")
-    if not week_id or not schedule:
-        return jsonify({"error": "Missing data"}), 400
 
-    recipes = load_recipes()
-    week_start = datetime.strptime(week_id, "%Y-%m-%d")
     save_schedule(week_id, {"schedule": schedule, "notes": notes})
 
-    week_pdf_dir = os.path.join(PDF_DIR, week_id)
-    os.makedirs(week_pdf_dir, exist_ok=True)
-
-    days_map = {}
-    for d_idx in range(7):
-        day_key = str(d_idx)
-        if day_key in schedule:
-            vessels = []
-            for vessel in VESSELS:
-                recipe_name = schedule[day_key].get(vessel, "")
-                vessels.append({"vessel": vessel, "recipe": recipe_name})
-            days_map[d_idx] = vessels
-        else:
-            days_map[d_idx] = []
+    week_start = datetime.strptime(week_id, "%Y-%m-%d")
+    recipes = load_recipes()
+    ccp = load_ccp_master()
 
     logo_path = os.path.join(app.static_folder, "logo.jpg")
     if not os.path.exists(logo_path):
         logo_path = None
 
-    schedule_path = os.path.join(week_pdf_dir, "Weekly_Schedule.pdf")
-    generate_weekly_schedule_pdf(schedule_path, week_start, days_map, recipes, notes, logo_path)
+    week_pdf_dir = os.path.join(PDF_DIR, week_id)
+    os.makedirs(week_pdf_dir, exist_ok=True)
 
-    generated = ["Weekly_Schedule.pdf"]
-    for d_idx in range(7):
-        date = week_start + timedelta(days=d_idx)
-        assignments = days_map.get(d_idx, [])
-        has_active = any(a.get("recipe") for a in assignments)
-        if has_active:
-            filename = DAYS[d_idx] + "_Production.pdf"
-            path = os.path.join(week_pdf_dir, filename)
-            generate_daily_package_pdf(path, date, assignments, recipes, logo_path)
-            generated.append(filename)
+    generated = []
+
+    # Weekly schedule PDF
+    filename = "Weekly_Schedule.pdf"
+    filepath = os.path.join(week_pdf_dir, filename)
+    generate_weekly_schedule_pdf(filepath, week_start, schedule, recipes, notes, logo_path)
+    generated.append(filename)
+
+    # Daily production packages
+    for day_idx in range(7):
+        day_key = str(day_idx)
+        day_schedule = schedule.get(day_key, {})
+        has_production = any(day_schedule.get(v) for v in VESSELS)
+        if not has_production:
+            continue
+
+        date = week_start + timedelta(days=day_idx)
+        filename = DAYS[day_idx] + "_Production.pdf"
+        filepath = os.path.join(week_pdf_dir, filename)
+        generate_daily_package_pdf(filepath, date, day_schedule, recipes, ccp, logo_path)
+        generated.append(filename)
 
     return jsonify({"success": True, "files": generated, "week_id": week_id})
+
+
+# ── PDF downloads ──────────────────────────────────────────────────────
+@app.route("/api/pdf/<week_id>/<filename>", methods=["GET"])
+@login_required
+def download_pdf(week_id, filename):
+    week_pdf_dir = os.path.join(PDF_DIR, week_id)
+    return send_from_directory(week_pdf_dir, filename, as_attachment=True)
 
 @app.route("/api/pdfs/<week_id>", methods=["GET"])
 @login_required
@@ -608,12 +550,6 @@ def list_pdfs(week_id):
         return jsonify([])
     files = sorted(os.listdir(week_pdf_dir))
     return jsonify([f for f in files if f.endswith(".pdf")])
-
-@app.route("/api/pdf/<week_id>/<filename>", methods=["GET"])
-@login_required
-def download_pdf(week_id, filename):
-    week_pdf_dir = os.path.join(PDF_DIR, week_id)
-    return send_from_directory(week_pdf_dir, filename, as_attachment=True)
 
 @app.route("/api/pdfs/<week_id>/download-all", methods=["GET"])
 @login_required
@@ -630,47 +566,63 @@ def download_all_pdfs(week_id):
             zf.write(os.path.join(week_pdf_dir, f), f)
     zip_buffer.seek(0)
     return send_file(zip_buffer, mimetype="application/zip", as_attachment=True,
-                     download_name="Soma_Production_" + week_id + ".zip")
+                     download_name=f"Soma_Production_{week_id}.zip")
 
 
-# -- Daily Production API --
+# ── Daily Production API ──────────────────────────────────────────────
 @app.route("/api/daily-production/<week_id>/<int:day_idx>", methods=["GET"])
 @login_required
 def get_daily_production(week_id, day_idx):
+    schedule_data = load_schedule(week_id)
     recipes = load_recipes()
-    start_assignments = get_day_assignments(week_id, day_idx)
-    finish_assignments = get_prev_day_info(week_id, day_idx)
+    checklist = load_checklist(week_id, day_idx)
 
-    start_data = {}
-    for vessel in VESSELS:
-        recipe_name = start_assignments.get(vessel, "")
-        if recipe_name and recipe_name in recipes:
-            start_data[vessel] = {"recipe": recipe_name, "details": recipes[recipe_name]}
-        else:
-            start_data[vessel] = None
+    today_schedule = {}
+    prev_schedule = {}
 
-    finish_data = {}
+    if schedule_data and schedule_data.get("schedule"):
+        today_key = str(day_idx)
+        prev_key = str(day_idx - 1)
+        today_schedule = schedule_data["schedule"].get(today_key, {})
+        if day_idx > 0:
+            prev_schedule = schedule_data["schedule"].get(prev_key, {})
+
+    # Build finish (previous day) and start (today) data
+    finish_kettles = []
+    start_kettles = []
+
     for vessel in VESSELS:
-        recipe_name = finish_assignments.get(vessel, "")
-        if recipe_name and recipe_name in recipes:
-            finish_data[vessel] = {"recipe": recipe_name, "details": recipes[recipe_name]}
-        else:
-            finish_data[vessel] = None
+        # FINISH: previous day's recipe
+        prev_recipe_name = prev_schedule.get(vessel, "")
+        prev_recipe_data = recipes.get(prev_recipe_name, {}) if prev_recipe_name else {}
+        finish_kettles.append({
+            "vessel": vessel,
+            "recipe_name": prev_recipe_name,
+            "recipe_data": prev_recipe_data,
+        })
+
+        # START: today's recipe
+        today_recipe_name = today_schedule.get(vessel, "")
+        today_recipe_data = recipes.get(today_recipe_name, {}) if today_recipe_name else {}
+        start_kettles.append({
+            "vessel": vessel,
+            "recipe_name": today_recipe_name,
+            "recipe_data": today_recipe_data,
+        })
 
     week_start = datetime.strptime(week_id, "%Y-%m-%d")
-    prod_date = week_start + timedelta(days=day_idx)
-    lot = prod_date.strftime("%d%m%y")
-
-    prev_date = prod_date - timedelta(days=1)
-    prev_lot = prev_date.strftime("%d%m%y")
+    date = week_start + timedelta(days=day_idx)
+    prev_date = date - timedelta(days=1)
 
     return jsonify({
-        "start": start_data,
-        "finish": finish_data,
-        "date": prod_date.strftime("%d/%m/%Y"),
-        "day_name": DAYS[day_idx],
-        "lot": lot,
-        "prev_lot": prev_lot,
+        "date": date.strftime("%A, %d/%m/%Y"),
+        "prev_date": prev_date.strftime("%d/%m/%Y"),
+        "prev_lot": prev_date.strftime("%d%m%y"),
+        "today_lot": date.strftime("%d%m%y"),
+        "finish": finish_kettles,
+        "start": start_kettles,
+        "checklist": checklist,
+        "notes": schedule_data.get("notes", "") if schedule_data else "",
     })
 
 @app.route("/api/daily-production/<week_id>/<int:day_idx>/save", methods=["POST"])
@@ -682,7 +634,7 @@ def save_daily_production(week_id, day_idx):
     return jsonify({"success": True})
 
 
-# -- Label Generation --
+# ── Label Generation ──────────────────────────────────────────────────
 @app.route("/api/label", methods=["POST"])
 @login_required
 def generate_label():
@@ -702,7 +654,12 @@ def generate_label():
         prod_date = datetime.today()
 
     best_before = prod_date + timedelta(days=365)
-    recipe_format_display = recipe_name + "-" + recipe_format if recipe_format else recipe_name
+
+    # FIX: Strip format from recipe_name if it already contains it to avoid doubling
+    base_name = recipe_name
+    if recipe_format and recipe_name.endswith(recipe_format):
+        base_name = recipe_name[:-(len(recipe_format))].rstrip(" -")
+    recipe_format_display = base_name + "-" + recipe_format if recipe_format else recipe_name
 
     label_buffer = io.BytesIO()
     generate_label_pdf(label_buffer, brand_name, recipe_format_display, lot, best_before.strftime("%d/%m/%Y"))
@@ -713,20 +670,18 @@ def generate_label():
                      download_name="Label_" + safe_name + "_" + lot + ".pdf")
 
 
-# -- CCP Checklist --
+# ── Digital Checklists ─────────────────────────────────────────────────
 @app.route("/api/checklist/<week_id>/<int:day_idx>", methods=["GET"])
 @login_required
-def get_checklist(week_id, day_idx):
+def get_checklist_route(week_id, day_idx):
     data = load_checklist(week_id, day_idx)
-    start_info = get_day_assignments(week_id, day_idx)
-    finish_info = get_prev_day_info(week_id, day_idx)
-    ccp = load_ccp_master()
-    return jsonify({
-        "checklist": data,
-        "start_info": start_info,
-        "finish_info": finish_info,
-        "ccp_sections": ccp,
-    })
+    schedule_data = load_schedule(week_id)
+    day_info = {}
+    if schedule_data and schedule_data.get("schedule"):
+        day_key = str(day_idx)
+        if day_key in schedule_data["schedule"]:
+            day_info = schedule_data["schedule"][day_key]
+    return jsonify({"checklist": data, "day_info": day_info})
 
 @app.route("/api/checklist/<week_id>/<int:day_idx>", methods=["POST"])
 @login_required
@@ -744,12 +699,16 @@ def complete_checklist(week_id, day_idx):
     data["completed"] = True
     save_checklist_data(week_id, day_idx, data)
 
-    start_info = get_day_assignments(week_id, day_idx)
-    finish_info = get_prev_day_info(week_id, day_idx)
+    schedule_data = load_schedule(week_id)
+    day_info = {}
+    if schedule_data and schedule_data.get("schedule"):
+        day_key = str(day_idx)
+        if day_key in schedule_data["schedule"]:
+            day_info = schedule_data["schedule"][day_key]
 
     active_vessels = []
     for vessel in VESSELS:
-        recipe = start_info.get(vessel, "") or finish_info.get(vessel, "")
+        recipe = day_info.get(vessel, "")
         if recipe:
             active_vessels.append({"vessel": vessel, "recipe": recipe})
 
@@ -768,6 +727,41 @@ def complete_checklist(week_id, day_idx):
 
     return jsonify({"success": True, "filename": filename})
 
+
+# ── Checklist Status ──────────────────────────────────────────────────
+def _has_meaningful_data(checklist_data):
+    """Check if a checklist has any real user input, not just empty auto-save."""
+    sections = checklist_data.get("sections", {})
+    for sec_key, sec_data in sections.items():
+        if isinstance(sec_data, dict):
+            for item_key, item_val in sec_data.items():
+                if item_val:
+                    return True
+        elif sec_data:
+            return True
+    temps = checklist_data.get("temps", {})
+    for key, val in temps.items():
+        if val and str(val).strip():
+            return True
+    for field in ["signoff_kitchen", "signoff_manager", "kitchen_lead", "production_manager"]:
+        if checklist_data.get(field, "").strip():
+            return True
+    if checklist_data.get("notes", "").strip():
+        return True
+    production = checklist_data.get("production", {})
+    for key, val in production.items():
+        if val and str(val).strip() and str(val).strip() != "0":
+            return True
+    # Check produced and bb_produced
+    for field in ["produced", "bb_produced"]:
+        prod = checklist_data.get(field, {})
+        for key, val in prod.items():
+            if val and str(val).strip() and str(val).strip() != "0":
+                return True
+    if checklist_data.get("kettles_end", "").strip() and checklist_data.get("kettles_end", "").strip() != "0":
+        return True
+    return False
+
 @app.route("/api/checklist-status/<week_id>", methods=["GET"])
 @login_required
 def checklist_status(week_id):
@@ -776,14 +770,14 @@ def checklist_status(week_id):
         data = load_checklist(week_id, d_idx)
         if data and data.get("completed"):
             statuses[str(d_idx)] = "completed"
-        elif data:
+        elif data and _has_meaningful_data(data):
             statuses[str(d_idx)] = "in_progress"
         else:
             statuses[str(d_idx)] = "not_started"
     return jsonify(statuses)
 
 
-# -- Master CCP --
+# ── Master CCP ─────────────────────────────────────────────────────────
 @app.route("/api/ccp-master", methods=["GET"])
 @login_required
 def get_ccp_master():
@@ -797,41 +791,37 @@ def update_ccp_master():
     return jsonify({"success": True})
 
 
-# -- Traceability --
+# ── Traceability ──────────────────────────────────────────────────────
 @app.route("/api/traceability", methods=["GET"])
 @login_required
 def get_traceability():
-    filter_type = request.args.get("filter", "all")
-    recipes = load_recipes()
     weeks = list_schedules()
     records = []
     for week_id in weeks:
         week_record = {"week_id": week_id, "days": []}
-        schedule = load_schedule(week_id)
+        schedule_data = load_schedule(week_id)
         for d_idx in range(7):
             cl = load_checklist(week_id, d_idx)
             if cl and cl.get("completed"):
-                # Check if any recipe that day has organic certification
-                has_organic = False
-                if schedule and schedule.get("schedule"):
-                    day_data = schedule["schedule"].get(str(d_idx), {})
-                    for vessel in VESSELS:
-                        rname = day_data.get(vessel, "")
+                day_info = {}
+                if schedule_data and schedule_data.get("schedule"):
+                    day_info = schedule_data["schedule"].get(str(d_idx), {})
+                certification = ""
+                if day_info:
+                    recipes = load_recipes()
+                    for v in VESSELS:
+                        rname = day_info.get(v, "")
                         if rname and rname in recipes:
                             cert = recipes[rname].get("certification", "")
-                            if cert and cert.lower() == "organic":
-                                has_organic = True
+                            if cert:
+                                certification = cert
                                 break
-                if filter_type == "organic" and not has_organic:
-                    continue
-                if filter_type == "non-organic" and has_organic:
-                    continue
                 week_record["days"].append({
                     "day_idx": d_idx,
                     "day_name": DAYS[d_idx],
                     "completed": True,
                     "last_updated": cl.get("last_updated", ""),
-                    "has_organic": has_organic,
+                    "certification": certification,
                 })
         if week_record["days"]:
             records.append(week_record)
@@ -843,7 +833,6 @@ def delete_traceability_record(week_id, day_idx):
     path = os.path.join(CHECKLISTS_DIR, week_id + "_day" + str(day_idx) + ".json")
     if os.path.exists(path):
         os.unlink(path)
-        # Also remove completed PDF if it exists
         pdf_path = os.path.join(PDF_DIR, week_id, DAYS[day_idx] + "_Completed_Checklist.pdf")
         if os.path.exists(pdf_path):
             os.unlink(pdf_path)
@@ -851,7 +840,7 @@ def delete_traceability_record(week_id, day_idx):
     return jsonify({"error": "Record not found"}), 404
 
 
-# -- Production Tracker --
+# ── Production Tracker ────────────────────────────────────────────────
 @app.route("/api/production-tracker/<week_id>", methods=["GET"])
 @login_required
 def get_production_tracker(week_id):
@@ -885,17 +874,12 @@ def get_production_tracker(week_id):
             "bb": total_bb,
             "kettles_end": total_kettles_end,
             "total": total_produced + total_bb + total_kettles_end,
-            "has_data": cl is not None,
+            "has_data": cl is not None and _has_meaningful_data(cl) if cl else False,
         })
     return jsonify(daily_totals)
 
-@app.route("/production-tracker")
-@login_required
-def production_tracker_page():
-    return render_template("production_tracker.html")
 
-
-# -- Init --
+# ── Init ──────────────────────────────────────────────────────────────
 if not os.path.exists(RECIPES_PATH):
     from default_recipes import DEFAULT_RECIPES
     save_recipes(DEFAULT_RECIPES)
