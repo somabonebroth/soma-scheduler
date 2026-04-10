@@ -448,11 +448,40 @@ def update_recipe_order():
     save_recipe_order(data)
     return jsonify({"success": True})
 
-# Upload recipe PDF text
+# Upload recipe — accepts PDF file or JSON text
 @app.route("/api/recipes/upload", methods=["POST"])
 @login_required
 def upload_recipe():
+    # Handle PDF file upload
+    if request.files and "file" in request.files:
+        file = request.files["file"]
+        if not file.filename:
+            return jsonify({"error": "No file selected"}), 400
+        try:
+            import pdfplumber
+            pdf = pdfplumber.open(file)
+            text = ""
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+            pdf.close()
+        except Exception as e:
+            return jsonify({"error": f"Could not read PDF: {str(e)}"}), 400
+        if not text.strip():
+            return jsonify({"error": "No text found in PDF"}), 400
+        parsed = parse_recipe_pdf_text(text)
+        if not parsed:
+            return jsonify({"error": "Could not parse recipe from PDF"}), 400
+        recipes = load_recipes()
+        recipes[parsed["name"]] = parsed["data"]
+        save_recipes(recipes)
+        return jsonify({"success": True, "name": parsed["name"], "data": parsed["data"]})
+
+    # Handle JSON text upload (legacy)
     data = request.json
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
     text = data.get("text", "")
     if not text:
         return jsonify({"error": "No text provided"}), 400
