@@ -13,18 +13,19 @@
 .same-btn:hover { background: rgba(255,255,255,0.3); }
 .vessel-row { display: grid; grid-template-columns: 80px 1fr 90px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--border); gap: 12px; }
 .vessel-row:last-child { border-bottom: none; }
-.vessel-row:nth-child(even) { background: var(--row-alt); }
+.vessel-row:nth-child(even) { background: var(--row-alt, #fafaf7); }
 .vessel-label { font-weight: 700; font-size: 14px; }
-.vessel-row select { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; background: #fff; min-height: 44px; }
+.vessel-row select { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; background: #fff; }
 .yield-display { font-size: 13px; color: var(--text-light); text-align: center; }
 .yield-display.has-value { color: var(--accent); font-weight: 600; }
-.notes-area { width: 100%; min-height: 80px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; font-family: inherit; resize: vertical; }
+.notes-area { width: 100%; min-height: 80px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; resize: vertical; }
 .top-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
 .week-picker { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.week-picker input[type="date"] { padding: 10px 14px; border: 1px solid var(--border); border-radius: 6px; font-size: 15px; }
+.week-picker input[type="date"] { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
 .btn-reset { background: none; border: 1px solid var(--border); color: var(--text-light); padding: 8px 16px; font-size: 13px; border-radius: 6px; cursor: pointer; }
 .btn-reset:hover { background: #f0f0ea; }
-.generate-bar { position: sticky; bottom: 0; background: var(--card-bg); border-top: 1px solid var(--border); padding: 16px; text-align: center; box-shadow: 0 -2px 8px rgba(0,0,0,0.05); }
+.generate-bar { position: sticky; bottom: 0; background: var(--card-bg, #fff); border-top: 1px solid var(--border); padding: 16px; text-align: center; box-shadow: 0 -2px 8px rgba(0,0,0,0.05); }
+.week-exists-notice { background: #e8f5e9; border: 1px solid #c8e6c9; color: #2e7d32; padding: 10px 16px; border-radius: 6px; font-size: 13px; margin-bottom: 12px; display: none; }
 </style>
 </head>
 <body>
@@ -37,12 +38,13 @@
     <div class="top-bar">
         <div class="week-picker">
             <label style="font-size:14px;font-weight:600;">Week starting:</label>
-            <input type="date" id="week-date">
+            <input type="date" id="week-date" onchange="weekChanged()">
             <button class="btn-reset" onclick="resetSchedule()">Re-Set Schedule</button>
         </div>
         <button class="btn btn-primary" id="generate-btn" onclick="generateSchedule()">Generate Schedule + Checklists</button>
     </div>
     <div id="status-msg" class="status"></div>
+    <div id="week-exists-notice" class="week-exists-notice"></div>
     <div class="card"><h3>Notes</h3><textarea id="schedule-notes" class="notes-area" placeholder="Weekly production notes..."></textarea></div>
     <div id="schedule-grid"></div>
     <div class="generate-bar">
@@ -56,25 +58,50 @@ var currentWeekId = '';
 var DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 var VESSELS = ['K1','K2','K3','K4(115L)'];
 
-function getCurrentMonday() { var t=new Date();var d=t.getDay();var diff=d===0?-6:1-d;var m=new Date(t);m.setDate(t.getDate()+diff);return m; }
+function getCurrentMonday() {
+    var today = new Date();
+    var day = today.getDay();
+    var diff = day === 0 ? -6 : 1 - day;
+    var mon = new Date(today);
+    mon.setDate(today.getDate() + diff);
+    return mon;
+}
 function formatDate(d) { return d.toISOString().split('T')[0]; }
-function getMonday(ds) { var d=new Date(ds+'T00:00:00');var day=d.getDay();var diff=d.getDate()-day+(day===0?-6:1);d.setDate(diff);return d; }
+function getMonday(dateStr) {
+    var d = new Date(dateStr + 'T00:00:00');
+    var day = d.getDay();
+    var diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    d.setDate(diff);
+    return d;
+}
 
 document.addEventListener('DOMContentLoaded', async function() {
     var params = new URLSearchParams(window.location.search);
-    var wp = params.get('week');
-    var mon = wp ? new Date(wp+'T00:00:00') : getCurrentMonday();
+    var weekParam = params.get('week');
+    var mon = weekParam ? new Date(weekParam + 'T00:00:00') : getCurrentMonday();
     document.getElementById('week-date').value = formatDate(mon);
     currentWeekId = formatDate(mon);
+
     recipes = await (await fetch('/api/recipes')).json();
     groupedRecipes = await (await fetch('/api/recipes/grouped')).json();
     buildGrid();
-    if (wp) loadExisting(wp);
+    loadExisting(currentWeekId);
 });
+
+/* Called when user changes the date picker */
+function weekChanged() {
+    var weekDate = document.getElementById('week-date').value;
+    var monday = getMonday(weekDate);
+    document.getElementById('week-date').value = formatDate(monday);
+    currentWeekId = formatDate(monday);
+    document.getElementById('schedule-notes').value = '';
+    buildGrid();
+    loadExisting(currentWeekId);
+}
 
 function buildGroupedOptions() {
     var html = '<option value="">-- No production --</option>';
-    var brands = Object.keys(groupedRecipes);
+    var brands = Object.keys(groupedRecipes).sort();
     for (var b = 0; b < brands.length; b++) {
         var brand = brands[b];
         html += '<optgroup label="' + brand + '">';
@@ -95,14 +122,14 @@ function buildGrid() {
     var opts = buildGroupedOptions();
     var html = '';
     for (var idx = 0; idx < 7; idx++) {
-        var d = new Date(monday); d.setDate(d.getDate()+idx);
-        var ds = d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric'});
-        var lot = d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit',year:'2-digit'}).replace(/\//g,'');
-        html += '<div class="day-block"><div class="day-header"><span>' + DAYS[idx] + ' -- ' + ds + '</span><span><span class="lot">LOT# ' + lot + '</span><button class="same-btn" onclick="sameAllKettles('+idx+')">Same All Kettles</button></span></div>';
+        var d = new Date(monday); d.setDate(d.getDate() + idx);
+        var ds = d.toLocaleDateString('en-GB', {day:'2-digit', month:'2-digit', year:'numeric'});
+        var lot = d.toLocaleDateString('en-GB', {day:'2-digit', month:'2-digit', year:'2-digit'}).replace(/\//g, '');
+        html += '<div class="day-block"><div class="day-header"><span>' + DAYS[idx] + ' -- ' + ds + '</span><span><span class="lot">LOT# ' + lot + '</span><button class="same-btn" onclick="sameAllKettles(' + idx + ')">Same All Kettles</button></span></div>';
         for (var v = 0; v < VESSELS.length; v++) {
-            var sid = 'sel-'+idx+'-'+VESSELS[v].replace(/[()]/g,'');
-            var yid = 'yield-'+idx+'-'+VESSELS[v].replace(/[()]/g,'');
-            html += '<div class="vessel-row"><span class="vessel-label">'+VESSELS[v]+'</span><select id="'+sid+'" onchange="updateYield('+idx+',\''+VESSELS[v]+'\')">'+opts+'</select><span class="yield-display" id="'+yid+'">--</span></div>';
+            var sid = 'sel-' + idx + '-' + VESSELS[v].replace(/[()]/g, '');
+            var yid = 'yield-' + idx + '-' + VESSELS[v].replace(/[()]/g, '');
+            html += '<div class="vessel-row"><span class="vessel-label">' + VESSELS[v] + '</span><select id="' + sid + '" onchange="updateYield(' + idx + ',\'' + VESSELS[v] + '\')">' + opts + '</select><span class="yield-display" id="' + yid + '">--</span></div>';
         }
         html += '</div>';
     }
@@ -110,24 +137,29 @@ function buildGrid() {
 }
 
 function sameAllKettles(dayIdx) {
-    var k1id = 'sel-'+dayIdx+'-K1';
+    var k1id = 'sel-' + dayIdx + '-K1';
     var k1val = document.getElementById(k1id).value;
     if (!k1val) { alert('Select a recipe for K1 first'); return; }
-    ['K2','K3'].forEach(function(v) {
-        var sid = 'sel-'+dayIdx+'-'+v;
+    ['K2', 'K3'].forEach(function(v) {
+        var sid = 'sel-' + dayIdx + '-' + v;
         var sel = document.getElementById(sid);
         if (sel) { sel.value = k1val; updateYield(dayIdx, v); }
     });
 }
 
 function updateYield(dayIdx, vessel) {
-    var sid = 'sel-'+dayIdx+'-'+vessel.replace(/[()]/g,'');
-    var yid = 'yield-'+dayIdx+'-'+vessel.replace(/[()]/g,'');
+    var sid = 'sel-' + dayIdx + '-' + vessel.replace(/[()]/g, '');
+    var yid = 'yield-' + dayIdx + '-' + vessel.replace(/[()]/g, '');
     var sel = document.getElementById(sid);
     var yel = document.getElementById(yid);
     var rn = sel.value;
-    if (rn && recipes[rn]) { yel.textContent = recipes[rn].yield+' units'; yel.classList.add('has-value'); }
-    else { yel.textContent = '--'; yel.classList.remove('has-value'); }
+    if (rn && recipes[rn]) {
+        yel.textContent = recipes[rn].yield + ' units';
+        yel.classList.add('has-value');
+    } else {
+        yel.textContent = '--';
+        yel.classList.remove('has-value');
+    }
 }
 
 function resetSchedule() {
@@ -135,41 +167,65 @@ function resetSchedule() {
     document.getElementById('week-date').value = formatDate(getCurrentMonday());
     document.getElementById('schedule-notes').value = '';
     currentWeekId = formatDate(getCurrentMonday());
+    document.getElementById('week-exists-notice').style.display = 'none';
     buildGrid();
 }
 
 async function loadExisting(weekId) {
+    var notice = document.getElementById('week-exists-notice');
+    notice.style.display = 'none';
     try {
-        var res = await fetch('/api/schedule/'+weekId);
+        var res = await fetch('/api/schedule/' + weekId);
         var data = await res.json();
         if (data.schedule) {
-            Object.entries(data.schedule).forEach(function(e) {
-                var di=e[0];var vessels=e[1];
+            notice.innerHTML = 'Editing existing schedule for week of ' + weekId + '. Changes will update this week only.';
+            notice.style.display = 'block';
+            Object.entries(data.schedule).forEach(function(entry) {
+                var di = entry[0]; var vessels = entry[1];
                 Object.entries(vessels).forEach(function(ve) {
-                    var v=ve[0];var r=ve[1];
-                    var sid='sel-'+di+'-'+v.replace(/[()]/g,'');
-                    var sel=document.getElementById(sid);
-                    if(sel&&r){sel.value=r;updateYield(parseInt(di),v);}
+                    var v = ve[0]; var r = ve[1];
+                    var sid = 'sel-' + di + '-' + v.replace(/[()]/g, '');
+                    var sel = document.getElementById(sid);
+                    if (sel && r) { sel.value = r; updateYield(parseInt(di), v); }
                 });
             });
             if (data.notes) document.getElementById('schedule-notes').value = data.notes;
         }
-    } catch(e){}
+    } catch (e) {}
 }
 
 async function generateSchedule() {
-    var btn=document.getElementById('generate-btn');
-    btn.disabled=true;btn.textContent='Generating...';
-    var schedule={};
-    for(var idx=0;idx<7;idx++){schedule[idx]={};for(var v=0;v<VESSELS.length;v++){var sid='sel-'+idx+'-'+VESSELS[v].replace(/[()]/g,'');var sel=document.getElementById(sid);schedule[idx][VESSELS[v]]=sel?sel.value:'';}}
-    var notes=document.getElementById('schedule-notes').value;
+    var btn = document.getElementById('generate-btn');
+    btn.disabled = true; btn.textContent = 'Generating...';
+    var schedule = {};
+    for (var idx = 0; idx < 7; idx++) {
+        schedule[idx] = {};
+        for (var v = 0; v < VESSELS.length; v++) {
+            var sid = 'sel-' + idx + '-' + VESSELS[v].replace(/[()]/g, '');
+            var sel = document.getElementById(sid);
+            schedule[idx][VESSELS[v]] = sel ? sel.value : '';
+        }
+    }
+    var notes = document.getElementById('schedule-notes').value;
     try {
-        var res=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({week_id:currentWeekId,schedule:schedule,notes:notes})});
-        var data=await res.json();
-        if(data.success){window.location.href='/weekly-schedule?week='+currentWeekId;}
-        else{var el=document.getElementById('status-msg');el.className='status error';el.textContent=data.error||'Failed';}
-    }catch(e){var el=document.getElementById('status-msg');el.className='status error';el.textContent='Error: '+e.message;}
-    finally{btn.disabled=false;btn.textContent='Generate Schedule + Checklists';}
+        var res = await fetch('/api/generate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({week_id: currentWeekId, schedule: schedule, notes: notes}),
+        });
+        var data = await res.json();
+        if (data.success) {
+            window.location.href = '/weekly-schedule?week=' + currentWeekId;
+        } else {
+            var el = document.getElementById('status-msg');
+            el.className = 'status error'; el.textContent = data.error || 'Failed';
+        }
+    } catch (e) {
+        var el = document.getElementById('status-msg');
+        el.className = 'status error'; el.textContent = 'Error: ' + e.message;
+    } finally {
+        btn.disabled = false; btn.textContent = 'Generate Schedule + Checklists';
+    }
 }
 </script>
 </body>
