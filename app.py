@@ -269,6 +269,12 @@ def logout():
     return jsonify({"success": True})
 
 
+# ── PWA manifest ──────────────────────────────────────────────────────
+@app.route("/manifest.json")
+def manifest():
+    return send_from_directory(app.static_folder, "manifest.json", mimetype="application/manifest+json")
+
+
 # ── Page routes ────────────────────────────────────────────────────────
 @app.route("/")
 @login_required
