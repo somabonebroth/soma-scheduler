@@ -623,21 +623,23 @@ def get_daily_production(week_id, day_idx):
     for vessel in VESSELS:
         # FINISH: previous day's recipe
         prev_recipe_name = prev_schedule.get(vessel, "")
-        prev_recipe_data = recipes.get(prev_recipe_name, {}) if prev_recipe_name else {}
-        if prev_recipe_name:
-            finish_kettles[vessel] = {
-                "recipe": prev_recipe_name,
-                "details": prev_recipe_data,
-            }
+        if prev_recipe_name and prev_recipe_name.strip():
+            prev_recipe_data = recipes.get(prev_recipe_name, {})
+            if prev_recipe_data:
+                finish_kettles[vessel] = {
+                    "recipe": prev_recipe_name,
+                    "details": prev_recipe_data,
+                }
 
         # START: today's recipe
         today_recipe_name = today_schedule.get(vessel, "")
-        today_recipe_data = recipes.get(today_recipe_name, {}) if today_recipe_name else {}
-        if today_recipe_name:
-            start_kettles[vessel] = {
-                "recipe": today_recipe_name,
-                "details": today_recipe_data,
-            }
+        if today_recipe_name and today_recipe_name.strip():
+            today_recipe_data = recipes.get(today_recipe_name, {})
+            if today_recipe_data:
+                start_kettles[vessel] = {
+                    "recipe": today_recipe_name,
+                    "details": today_recipe_data,
+                }
 
     week_start = datetime.strptime(week_id, "%Y-%m-%d")
     date = week_start + timedelta(days=day_idx)
