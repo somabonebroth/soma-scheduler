@@ -614,15 +614,20 @@ def get_daily_production(week_id, day_idx):
 
     today_schedule = {}
     prev_schedule = {}
+    next_schedule = {}
 
     if schedule_data and schedule_data.get("schedule"):
         today_key = str(day_idx)
         prev_key = str(day_idx - 1)
+        next_key = str(day_idx + 1)
         today_schedule = schedule_data["schedule"].get(today_key, {})
         if day_idx > 0:
             prev_schedule = schedule_data["schedule"].get(prev_key, {})
+        if day_idx < 6:
+            next_schedule = schedule_data["schedule"].get(next_key, {})
 
-    # Build finish (previous day) and start (today) data
+    # FINISH = previous day's assigned recipe (it was started yesterday, finishing today)
+    # START = tomorrow's assigned recipe (prepping tonight so it can finish tomorrow)
     finish_kettles = {}
     start_kettles = {}
 
@@ -637,14 +642,14 @@ def get_daily_production(week_id, day_idx):
                     "details": prev_recipe_data,
                 }
 
-        # START: today's recipe
-        today_recipe_name = today_schedule.get(vessel, "")
-        if today_recipe_name and today_recipe_name.strip():
-            today_recipe_data = recipes.get(today_recipe_name, {})
-            if today_recipe_data:
+        # START: tomorrow's recipe (what we're prepping tonight)
+        next_recipe_name = next_schedule.get(vessel, "")
+        if next_recipe_name and next_recipe_name.strip():
+            next_recipe_data = recipes.get(next_recipe_name, {})
+            if next_recipe_data:
                 start_kettles[vessel] = {
-                    "recipe": today_recipe_name,
-                    "details": today_recipe_data,
+                    "recipe": next_recipe_name,
+                    "details": next_recipe_data,
                 }
 
     week_start = datetime.strptime(week_id, "%Y-%m-%d")
