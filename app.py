@@ -725,7 +725,6 @@ def get_daily_production(week_id, day_idx):
 
     today_schedule = {}
     prev_schedule = {}
-    next_schedule = {}
 
     if schedule_data and schedule_data.get("schedule"):
         today_key = str(day_idx)
@@ -733,8 +732,6 @@ def get_daily_production(week_id, day_idx):
 
         if day_idx > 0:
             prev_schedule = schedule_data["schedule"].get(str(day_idx - 1), {})
-        if day_idx < 6:
-            next_schedule = schedule_data["schedule"].get(str(day_idx + 1), {})
 
     # Cross-week: Monday FINISH needs previous week's Sunday (day 6)
     if day_idx == 0:
@@ -744,21 +741,13 @@ def get_daily_production(week_id, day_idx):
         if prev_week_data and prev_week_data.get("schedule"):
             prev_schedule = prev_week_data["schedule"].get("6", {})
 
-    # Cross-week: Sunday START needs next week's Monday (day 0)
-    if day_idx == 6:
-        next_week_start = datetime.strptime(week_id, "%Y-%m-%d") + timedelta(days=7)
-        next_week_id = next_week_start.strftime("%Y-%m-%d")
-        next_week_data = load_schedule(next_week_id)
-        if next_week_data and next_week_data.get("schedule"):
-            next_schedule = next_week_data["schedule"].get("0", {})
-
     # FINISH = previous day's assigned recipe (it was started yesterday, finishing today)
-    # START = tomorrow's assigned recipe (prepping tonight so it can finish tomorrow)
+    # START = today's assigned recipe (what we're starting/prepping today)
     finish_kettles = {}
     start_kettles = {}
 
     for vessel in VESSELS:
-        # FINISH: previous day's recipe
+        # FINISH: previous day's recipe (started yesterday, finishing today)
         prev_recipe_name = prev_schedule.get(vessel, "")
         if prev_recipe_name and prev_recipe_name.strip():
             prev_recipe_data = recipes.get(prev_recipe_name, {})
@@ -770,14 +759,14 @@ def get_daily_production(week_id, day_idx):
                     "halved": vessel == "115L",
                 }
 
-        # START: tomorrow's recipe (what we're prepping tonight)
-        next_recipe_name = next_schedule.get(vessel, "")
-        if next_recipe_name and next_recipe_name.strip():
-            next_recipe_data = recipes.get(next_recipe_name, {})
-            if next_recipe_data:
-                details = _halve_for_115L(next_recipe_data) if vessel == "115L" else next_recipe_data
+        # START: today's assigned recipe (starting today, will be finished tomorrow)
+        today_recipe_name = today_schedule.get(vessel, "")
+        if today_recipe_name and today_recipe_name.strip():
+            today_recipe_data = recipes.get(today_recipe_name, {})
+            if today_recipe_data:
+                details = _halve_for_115L(today_recipe_data) if vessel == "115L" else today_recipe_data
                 start_kettles[vessel] = {
-                    "recipe": next_recipe_name,
+                    "recipe": today_recipe_name,
                     "details": details,
                     "halved": vessel == "115L",
                 }
