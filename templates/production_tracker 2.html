@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soma - Production Tracker</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.view-toggle { display: flex; gap: 0; margin-bottom: 16px; }
+.view-toggle button { padding: 8px 20px; border: 1px solid var(--border); font-size: 13px; font-weight: 600; cursor: pointer; background: var(--card-bg); color: var(--text); }
+.view-toggle button:first-child { border-radius: 6px 0 0 6px; }
+.view-toggle button:last-child { border-radius: 0 6px 6px 0; }
+.view-toggle button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.picker-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+.picker-bar input[type="date"], .picker-bar select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
+.chart-container { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin-bottom: 16px; }
+.chart-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; color: var(--dark); }
+.legend { display: flex; gap: 16px; margin-bottom: 16px; font-size: 12px; }
+.legend-item { display: flex; align-items: center; gap: 4px; }
+.legend-dot { width: 12px; height: 12px; border-radius: 2px; }
+.bar-chart { display: flex; align-items: flex-end; gap: 12px; height: 280px; padding: 0 8px; border-bottom: 2px solid var(--border); }
+.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.bar-wrapper { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; width: 100%; }
+.bar-stack { width: 70%; display: flex; flex-direction: column-reverse; }
+.bar-segment { width: 100%; min-height: 0; transition: height 0.5s; }
+.bar-produced { background: var(--accent); border-radius: 0 0 3px 3px; }
+.bar-bb { background: #5b9bd5; }
+.bar-kettles { background: #f4a261; border-radius: 3px 3px 0 0; }
+.bar-empty { background: var(--border); border-radius: 3px; min-height: 4px; }
+.bar-value { font-size: 11px; font-weight: 600; color: var(--dark); }
+.bar-label { font-size: 11px; color: var(--text-light); margin-top: 8px; text-align: center; }
+.total-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.total-row:last-child { border-bottom: none; }
+.total-label { font-size: 13px; color: var(--text); }
+.total-value { font-size: 16px; font-weight: 700; }
+.total-produced { color: var(--accent); }
+.total-bb { color: #5b9bd5; }
+.total-kettles { color: #f4a261; }
+.total-all { color: var(--dark); font-size: 18px; }
+.no-data { text-align: center; padding: 60px 20px; color: var(--text-light); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="header">
+    <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+    <div class="header-text"><h1>Production Tracker</h1><p>Output overview</p></div>
+    <div class="header-right"><a href="/" class="header-btn">Back to Dashboard</a></div>
+</div>
+<div class="main">
+    <div class="view-toggle">
+        <button id="btn-week" class="active" onclick="setView('week')">Week</button>
+        <button id="btn-month" onclick="setView('month')">Month</button>
+        <button id="btn-year" onclick="setView('year')">Year</button>
+    </div>
+    <div class="picker-bar" id="picker-bar"></div>
+    <div id="chart-area"></div>
+</div>
+<script>
+var currentView='week';
+var MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function getCurrentMonday(){var t=new Date();var d=t.getDay();var diff=d===0?-6:1-d;var m=new Date(t);m.setDate(t.getDate()+diff);return m;}
+function formatDate(d){return d.toISOString().split('T')[0];}
+
+function setView(v){
+    currentView=v;
+    document.querySelectorAll('.view-toggle button').forEach(function(b){b.classList.remove('active');});
+    document.getElementById('btn-'+v).classList.add('active');
+    buildPicker();
+    loadData();
+}
+
+function buildPicker(){
+    var bar=document.getElementById('picker-bar');
+    var now=new Date();
+    if(currentView==='week'){
+        bar.innerHTML='<label style="font-size:14px;font-weight:600;">Week of:</label><input type="date" id="week-date" onchange="loadData()">';
+        document.getElementById('week-date').value=formatDate(getCurrentMonday());
+    }else if(currentView==='month'){
+        var html='<label style="font-size:14px;font-weight:600;">Month:</label>';
+        html+='<select id="month-sel" onchange="loadData()">';
+        for(var i=0;i<12;i++){
+            var sel=i===now.getMonth()?' selected':'';
+            html+='<option value="'+i+'"'+sel+'>'+MONTHS[i]+'</option>';
+        }
+        html+='</select>';
+        html+='<select id="month-year-sel" onchange="loadData()">';
+        for(var y=now.getFullYear()-2;y<=now.getFullYear()+1;y++){
+            var sel=y===now.getFullYear()?' selected':'';
+            html+='<option value="'+y+'"'+sel+'>'+y+'</option>';
+        }
+        html+='</select>';
+        bar.innerHTML=html;
+    }else{
+        var html='<label style="font-size:14px;font-weight:600;">Year:</label>';
+        html+='<select id="year-sel" onchange="loadData()">';
+        for(var y=now.getFullYear()-2;y<=now.getFullYear()+1;y++){
+            var sel=y===now.getFullYear()?' selected':'';
+            html+='<option value="'+y+'"'+sel+'>'+y+'</option>';
+        }
+        html+='</select>';
+        bar.innerHTML=html;
+    }
+}
+
+async function loadData(){
+    if(currentView==='week') await loadWeek();
+    else if(currentView==='month') await loadMonth();
+    else await loadYear();
+}
+
+async function loadWeek(){
+    var weekId=document.getElementById('week-date').value;
+    var res=await fetch('/api/production-tracker/'+weekId);
+    var data=await res.json();
+    renderBarChart(data, function(d){return d.day_name.substring(0,3);}, 'Daily Production Output');
+}
+
+async function loadMonth(){
+    var m=parseInt(document.getElementById('month-sel').value)+1;
+    var y=document.getElementById('month-year-sel').value;
+    var ym=y+'-'+(m<10?'0'+m:m);
+    var res=await fetch('/api/production-tracker/month/'+ym);
+    var data=await res.json();
+    renderBarChart(data, function(d){return d.label;}, MONTHS[m-1]+' '+y+' — Weekly Totals');
+}
+
+async function loadYear(){
+    var y=document.getElementById('year-sel').value;
+    var res=await fetch('/api/production-tracker/year/'+y);
+    var data=await res.json();
+    renderBarChart(data, function(d){return d.label;}, y+' — Monthly Totals');
+}
+
+function renderBarChart(data, labelFn, title){
+    var container=document.getElementById('chart-area');
+    var maxVal=0;var totalP=0;var totalB=0;var totalK=0;var hasAny=false;
+    for(var i=0;i<data.length;i++){
+        var t=data[i].produced+data[i].bb+data[i].kettles_end;
+        if(t>maxVal)maxVal=t;
+        totalP+=data[i].produced;totalB+=data[i].bb;totalK+=data[i].kettles_end;
+        if(t>0)hasAny=true;
+    }
+    if(!hasAny){container.innerHTML='<div class="chart-container"><div class="no-data">No production data for this period yet.</div></div>';return;}
+    if(maxVal===0)maxVal=100;
+    var chartH=240;
+    var html='<div class="chart-container">';
+    html+='<div class="chart-title">'+title+'</div>';
+    html+='<div class="legend"><div class="legend-item"><div class="legend-dot" style="background:var(--accent);"></div>Produced</div><div class="legend-item"><div class="legend-dot" style="background:#5b9bd5;"></div>BB</div><div class="legend-item"><div class="legend-dot" style="background:#f4a261;"></div>Kettle\'s End</div></div>';
+    html+='<div class="bar-chart">';
+    for(var i=0;i<data.length;i++){
+        var d=data[i];var dayTotal=d.produced+d.bb+d.kettles_end;
+        html+='<div class="bar-col"><div class="bar-wrapper">';
+        if(dayTotal>0){
+            html+='<div class="bar-value">'+dayTotal+'</div><div class="bar-stack">';
+            if(d.produced>0){var h1=Math.max(Math.round((d.produced/maxVal)*chartH),4);html+='<div class="bar-segment bar-produced" style="height:'+h1+'px;" title="Produced: '+d.produced+'"></div>';}
+            if(d.bb>0){var h2=Math.max(Math.round((d.bb/maxVal)*chartH),4);html+='<div class="bar-segment bar-bb" style="height:'+h2+'px;" title="BB: '+d.bb+'"></div>';}
+            if(d.kettles_end>0){var h3=Math.max(Math.round((d.kettles_end/maxVal)*chartH),4);html+='<div class="bar-segment bar-kettles" style="height:'+h3+'px;" title="Kettles End: '+d.kettles_end+'"></div>';}
+            html+='</div>';
+        }else{html+='<div class="bar-empty" style="height:4px;width:70%;"></div>';}
+        html+='</div><div class="bar-label">'+labelFn(d)+'</div></div>';
+    }
+    html+='</div>';
+    var weekTotal=totalP+totalB+totalK;
+    html+='<div style="margin-top:16px;">';
+    html+='<div class="total-row"><span class="total-label">Standard Produced</span><span class="total-value total-produced">'+totalP+' units</span></div>';
+    html+='<div class="total-row"><span class="total-label">BB (Back Bar)</span><span class="total-value total-bb">'+totalB+' units</span></div>';
+    html+='<div class="total-row"><span class="total-label">Kettle\'s End</span><span class="total-value total-kettles">'+totalK+' units</span></div>';
+    html+='<div class="total-row"><span class="total-label"><strong>Total</strong></span><span class="total-value total-all">'+weekTotal+' units</span></div>';
+    html+='</div></div>';
+    container.innerHTML=html;
+}
+
+document.addEventListener('DOMContentLoaded',function(){buildPicker();loadData();});
+</script>
+</body>
+</html>
