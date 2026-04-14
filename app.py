@@ -609,7 +609,8 @@ def generate_pdfs():
         date = week_start + timedelta(days=day_idx)
         filename = DAYS[day_idx] + "_Production.pdf"
         filepath = os.path.join(week_pdf_dir, filename)
-        generate_daily_package_pdf(filepath, date, day_schedule, recipes, logo_path)
+        vessel_assignments = [{"vessel": v, "recipe": day_schedule[v]} for v in VESSELS if day_schedule.get(v)]
+        generate_daily_package_pdf(filepath, date, vessel_assignments, recipes, logo_path)
         generated.append(filename)
 
     return jsonify({"success": True, "files": generated, "week_id": week_id})
