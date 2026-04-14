@@ -72,7 +72,7 @@ def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get("authenticated"):
-            if request.is_json or request.path.startswith("/api/"):
+            if request.is_json or request.path.startswith("/api/") or request.headers.get("Accept") == "application/json":
                 return jsonify({"error": "Not authenticated"}), 401
             return redirect(url_for("login_page"))
         return f(*args, **kwargs)
@@ -551,6 +551,14 @@ def get_schedule(week_id):
     if data:
         return jsonify(data)
     return jsonify({"schedule": None, "notes": ""})
+
+@app.route("/api/schedule/<week_id>", methods=["POST"])
+@login_required
+@require_valid_week
+def save_schedule_route(week_id):
+    data = request.json
+    save_schedule(week_id, data)
+    return jsonify({"success": True})
 
 @app.route("/api/schedules", methods=["GET"])
 @login_required
