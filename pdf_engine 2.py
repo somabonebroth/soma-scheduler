@@ -21,7 +21,7 @@ CHECK_GREEN = HexColor("#2d8a4e")
 HEADER_TEXT = white
 FONT = "Helvetica"
 FONT_BOLD = "Helvetica-Bold"
-VESSELS = ["K1", "K2", "K3", "115L"]
+VESSELS = ["K1", "K2", "K3", "K4(115L)"]
 
 
 def draw_header(c, width, height, title, subtitle="", logo_path=None):
