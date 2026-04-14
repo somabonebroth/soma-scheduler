@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Soma">
+<meta name="theme-color" content="#4a6741">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/static/logo.jpg">
 <title>Soma - Create Schedule</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
@@ -12,13 +18,16 @@
 .same-btn { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: #fff; padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; margin-left: 10px; }
 .same-btn:hover { background: rgba(255,255,255,0.3); }
 .vessel-row { display: grid; grid-template-columns: 80px 1fr 90px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--border); gap: 12px; }
-.vessel-row:last-child { border-bottom: none; }
 .vessel-row:nth-child(even) { background: var(--row-alt, #fafaf7); }
 .vessel-label { font-weight: 700; font-size: 14px; }
+.vessel-label.half-vessel { color: #e67e22; }
 .vessel-row select { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; background: #fff; }
 .yield-display { font-size: 13px; color: var(--text-light); text-align: center; }
 .yield-display.has-value { color: var(--accent); font-weight: 600; }
+.yield-display.halved { color: #e67e22; }
 .notes-area { width: 100%; min-height: 80px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; resize: vertical; }
+.day-notes { width: calc(100% - 32px); margin: 0 16px 12px; padding: 8px 10px; border: 1px dashed var(--border); border-radius: 6px; font-size: 12px; font-family: inherit; resize: vertical; min-height: 36px; background: #fffdf5; }
+.day-notes-label { font-size: 11px; color: var(--text-light); padding: 8px 16px 2px; font-weight: 600; }
 .top-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
 .week-picker { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .week-picker input[type="date"] { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
@@ -45,7 +54,7 @@
     </div>
     <div id="status-msg" class="status"></div>
     <div id="week-exists-notice" class="week-exists-notice"></div>
-    <div class="card"><h3>Notes</h3><textarea id="schedule-notes" class="notes-area" placeholder="Weekly production notes..."></textarea></div>
+    <div class="card"><h3>General Notes</h3><textarea id="schedule-notes" class="notes-area" placeholder="General weekly notes..."></textarea></div>
     <div id="schedule-grid"></div>
     <div class="generate-bar">
         <button class="btn btn-primary btn-block" onclick="generateSchedule()">Generate Schedule + Checklists</button>
@@ -55,8 +64,9 @@
 var recipes = {};
 var groupedRecipes = {};
 var currentWeekId = '';
+var existingSchedule = false;
 var DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-var VESSELS = ['K1','K2','K3','K4(115L)'];
+var VESSELS = ['K1','K2','K3','115L'];
 
 function getCurrentMonday() {
     var today = new Date();
@@ -81,20 +91,19 @@ document.addEventListener('DOMContentLoaded', async function() {
     var mon = weekParam ? new Date(weekParam + 'T00:00:00') : getCurrentMonday();
     document.getElementById('week-date').value = formatDate(mon);
     currentWeekId = formatDate(mon);
-
     recipes = await (await fetch('/api/recipes')).json();
     groupedRecipes = await (await fetch('/api/recipes/grouped')).json();
     buildGrid();
     loadExisting(currentWeekId);
 });
 
-/* Called when user changes the date picker */
 function weekChanged() {
     var weekDate = document.getElementById('week-date').value;
     var monday = getMonday(weekDate);
     document.getElementById('week-date').value = formatDate(monday);
     currentWeekId = formatDate(monday);
     document.getElementById('schedule-notes').value = '';
+    existingSchedule = false;
     buildGrid();
     loadExisting(currentWeekId);
 }
@@ -125,12 +134,16 @@ function buildGrid() {
         var d = new Date(monday); d.setDate(d.getDate() + idx);
         var ds = d.toLocaleDateString('en-GB', {day:'2-digit', month:'2-digit', year:'numeric'});
         var lot = d.toLocaleDateString('en-GB', {day:'2-digit', month:'2-digit', year:'2-digit'}).replace(/\//g, '');
-        html += '<div class="day-block"><div class="day-header"><span>' + DAYS[idx] + ' -- ' + ds + '</span><span><span class="lot">LOT# ' + lot + '</span><button class="same-btn" onclick="sameAllKettles(' + idx + ')">Same All Kettles</button></span></div>';
+        html += '<div class="day-block"><div class="day-header"><span>' + DAYS[idx] + ' — ' + ds + '</span><span><span class="lot">LOT# ' + lot + '</span><button class="same-btn" onclick="sameAllKettles(' + idx + ')">Same All Kettles</button></span></div>';
         for (var v = 0; v < VESSELS.length; v++) {
-            var sid = 'sel-' + idx + '-' + VESSELS[v].replace(/[()]/g, '');
-            var yid = 'yield-' + idx + '-' + VESSELS[v].replace(/[()]/g, '');
-            html += '<div class="vessel-row"><span class="vessel-label">' + VESSELS[v] + '</span><select id="' + sid + '" onchange="updateYield(' + idx + ',\'' + VESSELS[v] + '\')">' + opts + '</select><span class="yield-display" id="' + yid + '">--</span></div>';
+            var vessel = VESSELS[v];
+            var sid = 'sel-' + idx + '-' + vessel.replace(/[()]/g, '');
+            var yid = 'yield-' + idx + '-' + vessel.replace(/[()]/g, '');
+            var labelClass = vessel === '115L' ? 'vessel-label half-vessel' : 'vessel-label';
+            html += '<div class="vessel-row"><span class="' + labelClass + '">' + vessel + '</span><select id="' + sid + '" onchange="updateYield(' + idx + ',\'' + vessel + '\')">' + opts + '</select><span class="yield-display" id="' + yid + '">--</span></div>';
         }
+        html += '<div class="day-notes-label">Day Notes</div>';
+        html += '<textarea class="day-notes" id="day-notes-' + idx + '" placeholder="Notes for ' + DAYS[idx] + '..."></textarea>';
         html += '</div>';
     }
     container.innerHTML = html;
@@ -154,11 +167,18 @@ function updateYield(dayIdx, vessel) {
     var yel = document.getElementById(yid);
     var rn = sel.value;
     if (rn && recipes[rn]) {
-        yel.textContent = recipes[rn].yield + ' units';
-        yel.classList.add('has-value');
+        var yieldVal = recipes[rn].yield;
+        if (vessel === '115L') {
+            yieldVal = Math.round(yieldVal / 2);
+            yel.textContent = yieldVal + ' units (½)';
+            yel.className = 'yield-display has-value halved';
+        } else {
+            yel.textContent = yieldVal + ' units';
+            yel.className = 'yield-display has-value';
+        }
     } else {
         yel.textContent = '--';
-        yel.classList.remove('has-value');
+        yel.className = 'yield-display';
     }
 }
 
@@ -167,6 +187,7 @@ function resetSchedule() {
     document.getElementById('week-date').value = formatDate(getCurrentMonday());
     document.getElementById('schedule-notes').value = '';
     currentWeekId = formatDate(getCurrentMonday());
+    existingSchedule = false;
     document.getElementById('week-exists-notice').style.display = 'none';
     buildGrid();
 }
@@ -174,11 +195,13 @@ function resetSchedule() {
 async function loadExisting(weekId) {
     var notice = document.getElementById('week-exists-notice');
     notice.style.display = 'none';
+    existingSchedule = false;
     try {
         var res = await fetch('/api/schedule/' + weekId);
         var data = await res.json();
         if (data.schedule) {
-            notice.innerHTML = 'Editing existing schedule for week of ' + weekId + '. Changes will update this week only.';
+            existingSchedule = true;
+            notice.innerHTML = 'Editing existing schedule for week of ' + weekId + '. Generating will overwrite this week\'s schedule.';
             notice.style.display = 'block';
             Object.entries(data.schedule).forEach(function(entry) {
                 var di = entry[0]; var vessels = entry[1];
@@ -190,14 +213,24 @@ async function loadExisting(weekId) {
                 });
             });
             if (data.notes) document.getElementById('schedule-notes').value = data.notes;
+            if (data.daily_notes) {
+                Object.entries(data.daily_notes).forEach(function(entry) {
+                    var el = document.getElementById('day-notes-' + entry[0]);
+                    if (el) el.value = entry[1];
+                });
+            }
         }
     } catch (e) {}
 }
 
 async function generateSchedule() {
+    if (existingSchedule) {
+        if (!confirm('This will overwrite the existing schedule for the week of ' + currentWeekId + '. Continue?')) return;
+    }
     var btn = document.getElementById('generate-btn');
     btn.disabled = true; btn.textContent = 'Generating...';
     var schedule = {};
+    var dailyNotes = {};
     for (var idx = 0; idx < 7; idx++) {
         schedule[idx] = {};
         for (var v = 0; v < VESSELS.length; v++) {
@@ -205,13 +238,15 @@ async function generateSchedule() {
             var sel = document.getElementById(sid);
             schedule[idx][VESSELS[v]] = sel ? sel.value : '';
         }
+        var dn = document.getElementById('day-notes-' + idx);
+        if (dn && dn.value.trim()) dailyNotes[idx] = dn.value.trim();
     }
     var notes = document.getElementById('schedule-notes').value;
     try {
         var res = await fetch('/api/generate', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({week_id: currentWeekId, schedule: schedule, notes: notes}),
+            body: JSON.stringify({week_id: currentWeekId, schedule: schedule, notes: notes, daily_notes: dailyNotes}),
         });
         var data = await res.json();
         if (data.success) {

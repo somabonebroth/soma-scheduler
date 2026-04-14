@@ -18,7 +18,7 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ.get("SECRET_KEY", "soma-bone-broth-2026-change-me")
 
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "soma2026")
-VESSELS = ["K1", "K2", "K3", "K4(115L)"]
+VESSELS = ["K1", "K2", "K3", "115L"]
 DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "data"))
@@ -75,6 +75,44 @@ def login_required(f):
             if request.is_json or request.path.startswith("/api/"):
                 return jsonify({"error": "Not authenticated"}), 401
             return redirect(url_for("login_page"))
+        return f(*args, **kwargs)
+    return decorated
+
+
+def validate_week_id(week_id):
+    """Ensure week_id is a valid YYYY-MM-DD date string."""
+    if not re.match(r'^\d{4}-\d{2}-\d{2}$', week_id):
+        return False
+    try:
+        datetime.strptime(week_id, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
+
+
+def validate_day_idx(day_idx):
+    """Ensure day_idx is 0-6."""
+    return 0 <= day_idx <= 6
+
+
+def require_valid_week(f):
+    """Decorator: reject requests with invalid week_id."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        week_id = kwargs.get("week_id") or (args[0] if args else None)
+        if week_id and not validate_week_id(week_id):
+            return jsonify({"error": "Invalid week ID"}), 400
+        return f(*args, **kwargs)
+    return decorated
+
+
+def require_valid_day(f):
+    """Decorator: reject requests with day_idx outside 0-6."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        day_idx = kwargs.get("day_idx")
+        if day_idx is not None and not validate_day_idx(day_idx):
+            return jsonify({"error": "Invalid day index"}), 400
         return f(*args, **kwargs)
     return decorated
 
@@ -293,11 +331,15 @@ def weekly_schedule_page():
 
 @app.route("/daily-production/<week_id>/<int:day_idx>")
 @login_required
+@require_valid_week
+@require_valid_day
 def daily_production_page(week_id, day_idx):
     return render_template("daily_production.html", week_id=week_id, day_idx=day_idx)
 
 @app.route("/checklist/<week_id>/<int:day_idx>")
 @login_required
+@require_valid_week
+@require_valid_day
 def checklist_page(week_id, day_idx):
     return render_template("checklist.html", week_id=week_id, day_idx=day_idx)
 
@@ -503,6 +545,7 @@ def upload_recipe():
 # ── Schedule API ───────────────────────────────────────────────────────
 @app.route("/api/schedule/<week_id>", methods=["GET"])
 @login_required
+@require_valid_week
 def get_schedule(week_id):
     data = load_schedule(week_id)
     if data:
@@ -516,6 +559,7 @@ def get_schedules():
 
 @app.route("/api/schedule/<week_id>", methods=["DELETE"])
 @login_required
+@require_valid_week
 def delete_schedule(week_id):
     path = os.path.join(SCHEDULES_DIR, week_id + ".json")
     if os.path.exists(path):
@@ -531,8 +575,9 @@ def generate_pdfs():
     week_id = data.get("week_id", get_current_week_id())
     schedule = data.get("schedule", {})
     notes = data.get("notes", "")
+    daily_notes = data.get("daily_notes", {})
 
-    save_schedule(week_id, {"schedule": schedule, "notes": notes})
+    save_schedule(week_id, {"schedule": schedule, "notes": notes, "daily_notes": daily_notes})
 
     week_start = datetime.strptime(week_id, "%Y-%m-%d")
     recipes = load_recipes()
@@ -573,12 +618,14 @@ def generate_pdfs():
 # ── PDF downloads ──────────────────────────────────────────────────────
 @app.route("/api/pdf/<week_id>/<filename>", methods=["GET"])
 @login_required
+@require_valid_week
 def download_pdf(week_id, filename):
     week_pdf_dir = os.path.join(PDF_DIR, week_id)
     return send_from_directory(week_pdf_dir, filename, as_attachment=True)
 
 @app.route("/api/pdfs/<week_id>", methods=["GET"])
 @login_required
+@require_valid_week
 def list_pdfs(week_id):
     week_pdf_dir = os.path.join(PDF_DIR, week_id)
     if not os.path.exists(week_pdf_dir):
@@ -588,6 +635,7 @@ def list_pdfs(week_id):
 
 @app.route("/api/pdfs/<week_id>/download-all", methods=["GET"])
 @login_required
+@require_valid_week
 def download_all_pdfs(week_id):
     week_pdf_dir = os.path.join(PDF_DIR, week_id)
     if not os.path.exists(week_pdf_dir):
@@ -604,9 +652,52 @@ def download_all_pdfs(week_id):
                      download_name=f"Soma_Production_{week_id}.zip")
 
 
+# ── 115L Halving Helper ──────────────────────────────────────────────
+def _halve_for_115L(recipe_data):
+    """Return a copy of recipe_data with quantities halved for the 115L vessel.
+    Items containing 'per liter', 'per litre', 'per/L', 'g/L', 'ml/L' are NOT halved.
+    """
+    import copy
+    halved = copy.deepcopy(recipe_data)
+
+    # Halve yield
+    if halved.get("yield"):
+        try:
+            halved["yield"] = round(int(halved["yield"]) / 2)
+        except (ValueError, TypeError):
+            pass
+
+    # Halve ingredient quantities in all sections
+    per_l_patterns = ["per liter", "per litre", "per/l", "g/l", "ml/l", "/l "]
+    for section in ["kettle_overnight", "after_skim", "finishing", "add_to_jar"]:
+        if section in halved and isinstance(halved[section], list):
+            new_items = []
+            for item in halved[section]:
+                # Check if this is a per/L item — skip halving
+                if any(p in item.lower() for p in per_l_patterns):
+                    new_items.append(item)
+                    continue
+                # Try to find and halve the leading number
+                m = re.match(r'^(\d+\.?\d*)\s*(.*)', item)
+                if m:
+                    val = float(m.group(1)) / 2
+                    # Show as int if whole number
+                    if val == int(val):
+                        val = int(val)
+                    new_items.append(f"{val} {m.group(2)}")
+                else:
+                    new_items.append(item)
+            halved[section] = new_items
+
+    halved["_halved"] = True
+    return halved
+
+
 # ── Daily Production API ──────────────────────────────────────────────
 @app.route("/api/daily-production/<week_id>/<int:day_idx>", methods=["GET"])
 @login_required
+@require_valid_week
+@require_valid_day
 def get_daily_production(week_id, day_idx):
     schedule_data = load_schedule(week_id)
     recipes = load_recipes()
@@ -618,13 +709,28 @@ def get_daily_production(week_id, day_idx):
 
     if schedule_data and schedule_data.get("schedule"):
         today_key = str(day_idx)
-        prev_key = str(day_idx - 1)
-        next_key = str(day_idx + 1)
         today_schedule = schedule_data["schedule"].get(today_key, {})
+
         if day_idx > 0:
-            prev_schedule = schedule_data["schedule"].get(prev_key, {})
+            prev_schedule = schedule_data["schedule"].get(str(day_idx - 1), {})
         if day_idx < 6:
-            next_schedule = schedule_data["schedule"].get(next_key, {})
+            next_schedule = schedule_data["schedule"].get(str(day_idx + 1), {})
+
+    # Cross-week: Monday FINISH needs previous week's Sunday (day 6)
+    if day_idx == 0:
+        prev_week_start = datetime.strptime(week_id, "%Y-%m-%d") - timedelta(days=7)
+        prev_week_id = prev_week_start.strftime("%Y-%m-%d")
+        prev_week_data = load_schedule(prev_week_id)
+        if prev_week_data and prev_week_data.get("schedule"):
+            prev_schedule = prev_week_data["schedule"].get("6", {})
+
+    # Cross-week: Sunday START needs next week's Monday (day 0)
+    if day_idx == 6:
+        next_week_start = datetime.strptime(week_id, "%Y-%m-%d") + timedelta(days=7)
+        next_week_id = next_week_start.strftime("%Y-%m-%d")
+        next_week_data = load_schedule(next_week_id)
+        if next_week_data and next_week_data.get("schedule"):
+            next_schedule = next_week_data["schedule"].get("0", {})
 
     # FINISH = previous day's assigned recipe (it was started yesterday, finishing today)
     # START = tomorrow's assigned recipe (prepping tonight so it can finish tomorrow)
@@ -637,9 +743,11 @@ def get_daily_production(week_id, day_idx):
         if prev_recipe_name and prev_recipe_name.strip():
             prev_recipe_data = recipes.get(prev_recipe_name, {})
             if prev_recipe_data:
+                details = _halve_for_115L(prev_recipe_data) if vessel == "115L" else prev_recipe_data
                 finish_kettles[vessel] = {
                     "recipe": prev_recipe_name,
-                    "details": prev_recipe_data,
+                    "details": details,
+                    "halved": vessel == "115L",
                 }
 
         # START: tomorrow's recipe (what we're prepping tonight)
@@ -647,14 +755,21 @@ def get_daily_production(week_id, day_idx):
         if next_recipe_name and next_recipe_name.strip():
             next_recipe_data = recipes.get(next_recipe_name, {})
             if next_recipe_data:
+                details = _halve_for_115L(next_recipe_data) if vessel == "115L" else next_recipe_data
                 start_kettles[vessel] = {
                     "recipe": next_recipe_name,
-                    "details": next_recipe_data,
+                    "details": details,
+                    "halved": vessel == "115L",
                 }
 
     week_start = datetime.strptime(week_id, "%Y-%m-%d")
     date = week_start + timedelta(days=day_idx)
     prev_date = date - timedelta(days=1)
+
+    # Get daily notes for this day
+    daily_notes = ""
+    if schedule_data and schedule_data.get("daily_notes"):
+        daily_notes = schedule_data["daily_notes"].get(str(day_idx), "")
 
     return jsonify({
         "date": date.strftime("%A, %d/%m/%Y"),
@@ -667,10 +782,13 @@ def get_daily_production(week_id, day_idx):
         "start": start_kettles,
         "checklist": checklist,
         "notes": schedule_data.get("notes", "") if schedule_data else "",
+        "daily_notes": daily_notes,
     })
 
 @app.route("/api/daily-production/<week_id>/<int:day_idx>/save", methods=["POST"])
 @login_required
+@require_valid_week
+@require_valid_day
 def save_daily_production(week_id, day_idx):
     data = request.json
     data["last_updated"] = datetime.now().isoformat()
@@ -717,6 +835,8 @@ def generate_label():
 # ── Digital Checklists ─────────────────────────────────────────────────
 @app.route("/api/checklist/<week_id>/<int:day_idx>", methods=["GET"])
 @login_required
+@require_valid_week
+@require_valid_day
 def get_checklist_route(week_id, day_idx):
     data = load_checklist(week_id, day_idx)
     schedule_data = load_schedule(week_id)
@@ -729,6 +849,8 @@ def get_checklist_route(week_id, day_idx):
 
 @app.route("/api/checklist/<week_id>/<int:day_idx>", methods=["POST"])
 @login_required
+@require_valid_week
+@require_valid_day
 def save_checklist_route(week_id, day_idx):
     data = request.json
     data["last_updated"] = datetime.now().isoformat()
@@ -737,6 +859,8 @@ def save_checklist_route(week_id, day_idx):
 
 @app.route("/api/checklist/<week_id>/<int:day_idx>/complete", methods=["POST"])
 @login_required
+@require_valid_week
+@require_valid_day
 def complete_checklist(week_id, day_idx):
     data = request.json
     data["last_updated"] = datetime.now().isoformat()
@@ -808,6 +932,7 @@ def _has_meaningful_data(checklist_data):
 
 @app.route("/api/checklist-status/<week_id>", methods=["GET"])
 @login_required
+@require_valid_week
 def checklist_status(week_id):
     statuses = {}
     for d_idx in range(7):
@@ -873,6 +998,8 @@ def get_traceability():
 
 @app.route("/api/traceability/<week_id>/<int:day_idx>", methods=["DELETE"])
 @login_required
+@require_valid_week
+@require_valid_day
 def delete_traceability_record(week_id, day_idx):
     path = os.path.join(CHECKLISTS_DIR, week_id + "_day" + str(day_idx) + ".json")
     if os.path.exists(path):
@@ -885,8 +1012,35 @@ def delete_traceability_record(week_id, day_idx):
 
 
 # ── Production Tracker ────────────────────────────────────────────────
+def _week_totals(week_id):
+    """Calculate totals for a single week."""
+    totals = {"produced": 0, "bb": 0, "kettles_end": 0}
+    for d_idx in range(7):
+        cl = load_checklist(week_id, d_idx)
+        if cl:
+            if cl.get("produced"):
+                for vessel_id, amount in cl["produced"].items():
+                    try:
+                        totals["produced"] += int(amount)
+                    except (ValueError, TypeError):
+                        pass
+            if cl.get("bb_produced"):
+                for vessel_id, amount in cl["bb_produced"].items():
+                    try:
+                        totals["bb"] += int(amount)
+                    except (ValueError, TypeError):
+                        pass
+            try:
+                totals["kettles_end"] += int(cl.get("kettles_end", 0))
+            except (ValueError, TypeError):
+                pass
+    totals["total"] = totals["produced"] + totals["bb"] + totals["kettles_end"]
+    return totals
+
+
 @app.route("/api/production-tracker/<week_id>", methods=["GET"])
 @login_required
+@require_valid_week
 def get_production_tracker(week_id):
     daily_totals = []
     for d_idx in range(7):
@@ -921,6 +1075,73 @@ def get_production_tracker(week_id):
             "has_data": cl is not None and _has_meaningful_data(cl) if cl else False,
         })
     return jsonify(daily_totals)
+
+
+@app.route("/api/production-tracker/month/<year_month>", methods=["GET"])
+@login_required
+def get_production_tracker_month(year_month):
+    """Return weekly totals for a given month (format: YYYY-MM)."""
+    if not re.match(r'^\d{4}-\d{2}$', year_month):
+        return jsonify({"error": "Invalid month format, use YYYY-MM"}), 400
+    try:
+        year, month = int(year_month[:4]), int(year_month[5:7])
+        # Find all Mondays in this month
+        from calendar import monthrange
+        _, days_in_month = monthrange(year, month)
+        first_day = datetime(year, month, 1)
+        last_day = datetime(year, month, days_in_month)
+
+        # Find the Monday on or before the 1st
+        start_monday = first_day - timedelta(days=first_day.weekday())
+        weeks = []
+        current = start_monday
+        while current <= last_day:
+            wid = current.strftime("%Y-%m-%d")
+            end_date = current + timedelta(days=6)
+            totals = _week_totals(wid)
+            totals["week_id"] = wid
+            totals["label"] = current.strftime("%b %d") + " - " + end_date.strftime("%b %d")
+            weeks.append(totals)
+            current += timedelta(days=7)
+        return jsonify(weeks)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/production-tracker/year/<int:year>", methods=["GET"])
+@login_required
+def get_production_tracker_year(year):
+    """Return monthly totals for a given year."""
+    if year < 2020 or year > 2099:
+        return jsonify({"error": "Invalid year"}), 400
+    months = []
+    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    for m in range(1, 13):
+        from calendar import monthrange
+        _, days_in_month = monthrange(year, m)
+        first_day = datetime(year, m, 1)
+        last_day = datetime(year, m, days_in_month)
+        start_monday = first_day - timedelta(days=first_day.weekday())
+
+        month_total = {"produced": 0, "bb": 0, "kettles_end": 0}
+        current = start_monday
+        seen_weeks = set()
+        while current <= last_day:
+            wid = current.strftime("%Y-%m-%d")
+            if wid not in seen_weeks:
+                seen_weeks.add(wid)
+                wt = _week_totals(wid)
+                month_total["produced"] += wt["produced"]
+                month_total["bb"] += wt["bb"]
+                month_total["kettles_end"] += wt["kettles_end"]
+            current += timedelta(days=7)
+
+        month_total["total"] = month_total["produced"] + month_total["bb"] + month_total["kettles_end"]
+        month_total["month"] = m
+        month_total["label"] = month_names[m - 1]
+        months.append(month_total)
+    return jsonify(months)
 
 
 # ── Init ──────────────────────────────────────────────────────────────

@@ -1,0 +1,28 @@
+{
+  "name": "Soma Bone Broth - Production Scheduler",
+  "short_name": "Soma",
+  "description": "Production scheduling, recipe management, and CCP checklists for Soma Bone Broth",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f5f0",
+  "theme_color": "#4a6741",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/static/logo.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "/static/logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "/static/logo.jpg",
+      "sizes": "any",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}
