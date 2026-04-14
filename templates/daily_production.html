@@ -56,6 +56,10 @@
 .complete-msg { margin-top: 10px; font-size: 13px; }
 .info-bar { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; }
 .info-bar strong { color: var(--dark); }
+.daily-notes-banner { background: #fffdf5; border: 1px dashed #e0c97f; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; color: var(--text); line-height: 1.5; }
+.daily-notes-banner strong { color: var(--dark); display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.halved-badge { display: inline-block; background: #fef3e2; color: #e67e22; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
+.kettle-header.halved { background: #3d2e1e; }
 .save-indicator { font-size: 12px; color: var(--text-light); text-align: center; margin-bottom: 8px; }
 .save-indicator.saved { color: var(--accent); }
 .pct-bar { background: var(--border); border-radius: 4px; height: 8px; margin-bottom: 16px; overflow: hidden; }
@@ -103,7 +107,7 @@
 var WEEK_ID='{{ week_id }}';
 var DAY_IDX={{ day_idx }};
 var DAYS_LIST=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-var VESSELS=['K1','K2','K3','K4(115L)'];
+var VESSELS=['K1','K2','K3','115L'];
 var productionData=null;
 var ccpSections=[];
 var saveTimeout=null;
@@ -117,6 +121,13 @@ async function init(){
     var clData=await clRes.json();
     document.getElementById('header-sub').textContent=productionData.day_name+' - '+productionData.date;
     document.getElementById('info-bar').innerHTML='<strong>DATE:</strong> '+productionData.date+'&nbsp;&nbsp;&nbsp;<strong>START LOT#:</strong> '+productionData.lot+'&nbsp;&nbsp;&nbsp;<strong>FINISH LOT#:</strong> '+productionData.prev_lot;
+    // Show daily notes if any
+    if(productionData.daily_notes && productionData.daily_notes.trim()){
+        var notesBanner=document.createElement('div');
+        notesBanner.className='daily-notes-banner';
+        notesBanner.innerHTML='<strong>Day Notes</strong>'+productionData.daily_notes.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+        document.getElementById('info-bar').after(notesBanner);
+    }
     buildKettles();buildCCP();
     if(clData.checklist)restoreData(clData.checklist);
     updatePct();
@@ -128,7 +139,9 @@ function buildKettles(){
     for(var vi=0;vi<VESSELS.length;vi++){
         var vessel=VESSELS[vi];var finish=productionData.finish[vessel];var start=productionData.start[vessel];
         if(!finish&&!start)continue;
-        html+='<div class="kettle-block"><div class="kettle-header">'+vessel+'</div><div class="t-layout">';
+        var headerClass=vessel==='115L'?'kettle-header halved':'kettle-header';
+        var halvedTag=vessel==='115L'?'<span class="halved-badge">½ QTY</span>':'';
+        html+='<div class="kettle-block"><div class="'+headerClass+'">'+vessel+halvedTag+'</div><div class="t-layout">';
         html+='<div class="t-side"><span class="t-label finish">FINISH</span>';
         if(finish)html+=buildRecipeCard(finish,vessel,'finish');
         else html+='<div class="no-production">No production to finish</div>';
@@ -144,7 +157,8 @@ function buildKettles(){
 function buildRecipeCard(data,vessel,side){
     var r=data.details;var name=data.recipe;
     var brandDisplay=r.brand?(r.brand+' - '):'';
-    var html='<div class="recipe-title">'+brandDisplay+name+'</div>';
+    var halvedNote=data.halved?'<span class="halved-badge">½ QUANTITIES</span>':'';
+    var html='<div class="recipe-title">'+brandDisplay+name+halvedNote+'</div>';
     html+='<div class="recipe-format">'+(r.format||'')+' | Target: '+(r.yield||'--')+' units</div>';
     if(r.special_instructions&&r.special_instructions.length){html+='<div class="special-box">';for(var i=0;i<r.special_instructions.length;i++)html+=r.special_instructions[i]+'<br>';html+='</div>';}
     var secs=[['Add to kettle overnight',r.kettle_overnight],['Add after skim',r.after_skim],['Finishing',r.finishing],['Add to jar/container',r.add_to_jar]];

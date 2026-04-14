@@ -40,6 +40,9 @@
 .notes-card { background: var(--card-bg, #fff); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; }
 .notes-card h3 { font-size: 13px; color: var(--text-light); margin-bottom: 6px; }
 .notes-card p { font-size: 14px; color: var(--dark); white-space: pre-wrap; }
+.vessel-label.half-vessel { color: #e67e22; }
+.yield-val.halved { color: #e67e22; }
+.day-note-display { padding: 8px 16px; background: #fffdf5; border-top: 1px dashed var(--border); font-size: 12px; color: var(--text); line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -62,7 +65,7 @@
 </div>
 <script>
 var DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-var VESSELS = ['K1','K2','K3','K4(115L)'];
+var VESSELS = ['K1','K2','K3','115L'];
 var currentWeekId = '';
 
 function getCurrentMonday() {
@@ -164,18 +167,33 @@ async function loadWeek(weekId) {
                     hasProduction = true;
                     var brand = recipeData.brand || '';
                     displayName = brand ? brand + '-' + recipeName : recipeName;
-                    target = recipeData.yield ? recipeData.yield + ' units' : '';
+                    var yieldVal = recipeData.yield || 0;
+                    if (vessel === '115L' && yieldVal) {
+                        yieldVal = Math.round(yieldVal / 2);
+                        target = yieldVal + ' units (½)';
+                    } else {
+                        target = yieldVal ? yieldVal + ' units' : '';
+                    }
                 }
 
-                html += '<div class="vessel-row"><span class="vessel-label">' + vessel + '</span>';
+                var vesselLabelClass = vessel === '115L' ? 'vessel-label half-vessel' : 'vessel-label';
+                html += '<div class="vessel-row"><span class="' + vesselLabelClass + '">' + vessel + '</span>';
                 if (displayName) {
                     html += '<span class="recipe-display"><span class="full-name">' + displayName + '</span></span>';
-                    html += '<span class="yield-val">' + target + '</span>';
+                    var yieldClass = vessel === '115L' ? 'yield-val halved' : 'yield-val';
+                    html += '<span class="' + yieldClass + '">' + target + '</span>';
                 } else {
                     html += '<span class="recipe-display"><span class="no-prod">No production</span></span>';
                     html += '<span class="yield-val"></span>';
                 }
                 html += '</div>';
+            }
+
+            // Show daily notes if any
+            var dailyNotes = data.daily_notes || {};
+            var dayNote = dailyNotes[String(idx)] || '';
+            if (dayNote) {
+                html += '<div class="day-note-display"><strong>Notes:</strong> ' + dayNote.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>') + '</div>';
             }
 
             if (hasProduction) {

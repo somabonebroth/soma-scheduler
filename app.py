@@ -351,7 +351,7 @@ def recipes_page():
 @app.route("/ccp-master")
 @login_required
 def ccp_master_page():
-    return render_template("ccp_master.html")
+    return render_template("master_ccp.html")
 
 @app.route("/traceability")
 @login_required
