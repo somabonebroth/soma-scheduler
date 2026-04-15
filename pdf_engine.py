@@ -146,35 +146,34 @@ def draw_recipe_card(c, x, y, card_w, recipe_name, recipe_data, vessel):
 # -- Label PDF --
 def generate_label_pdf(output, brand_name, recipe_format, lot, best_before):
     label_w = 2 * inch
-    label_h = 2 * inch
+    label_h = 1 * inch
     c = canvas.Canvas(output, pagesize=(label_w, label_h))
 
-    y = label_h - 22
+    y = label_h - 14
 
     # Brand name bold
-    c.setFont(FONT_BOLD, 9)
+    c.setFont(FONT_BOLD, 7)
     c.setFillColor(black)
-    brand_lines = _wrap_text(brand_name, 9, label_w - 16)
+    brand_lines = _wrap_text(brand_name, 7, label_w - 12)
     for line in brand_lines:
         c.drawCentredString(label_w / 2, y, line)
-        y = y - 12
+        y = y - 9
 
     # Recipe name + format
-    y = y - 2
-    c.setFont(FONT, 8)
-    rf_lines = _wrap_text(recipe_format, 8, label_w - 16)
+    c.setFont(FONT, 6)
+    rf_lines = _wrap_text(recipe_format, 6, label_w - 12)
     for line in rf_lines:
         c.drawCentredString(label_w / 2, y, line)
-        y = y - 11
+        y = y - 8
 
     # LOT#
-    y = y - 6
-    c.setFont(FONT_BOLD, 7)
+    y = y - 2
+    c.setFont(FONT_BOLD, 6)
     c.drawCentredString(label_w / 2, y, "LOT#: " + lot)
 
     # Best before
-    y = y - 12
-    c.setFont(FONT, 7)
+    y = y - 9
+    c.setFont(FONT, 6)
     c.drawCentredString(label_w / 2, y, "Best Before: " + best_before)
 
     # Border
