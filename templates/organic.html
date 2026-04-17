@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soma - Organic Certification</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.tab-bar { display: flex; gap: 0; margin-bottom: 20px; overflow-x: auto; }
+.tab-btn { padding: 10px 18px; border: 1px solid var(--border); font-size: 13px; font-weight: 600; cursor: pointer; background: var(--card-bg); color: var(--text); white-space: nowrap; }
+.tab-btn:first-child { border-radius: 6px 0 0 6px; }
+.tab-btn:last-child { border-radius: 0 6px 6px 0; }
+.tab-btn.active { background: #2e7d32; color: #fff; border-color: #2e7d32; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.organic-badge { background: #e8f5e9; color: #2e7d32; font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 700; }
+.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.form-field label { display: block; font-size: 11px; font-weight: 600; color: var(--text-light); margin-bottom: 3px; }
+.form-field input, .form-field select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+.inv-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.inv-table th { background: var(--dark); color: #fff; padding: 8px 10px; text-align: left; font-size: 11px; font-weight: 600; }
+.inv-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); }
+.inv-table tr:nth-child(even) { background: var(--row-alt); }
+.inv-table .negative { color: #dc3545; font-weight: 700; }
+.inv-table .low { color: #e67e22; font-weight: 600; }
+.run-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+.run-header { padding: 10px 14px; font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+.run-header.scheduled { background: #fff3cd; }
+.run-header.completed { background: #d4edda; }
+.run-body { padding: 10px 14px; border-top: 1px solid var(--border); display: none; font-size: 12px; }
+.run-body.open { display: block; }
+.run-detail { margin-bottom: 6px; }
+.run-detail strong { color: var(--dark); }
+.ing-list { margin: 6px 0; padding-left: 16px; }
+.ing-list li { margin-bottom: 3px; }
+.ing-list .flag { color: #dc3545; font-weight: 700; }
+.sale-form { background: #f9f9f6; border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+.search-bar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: flex-end; }
+.search-bar select, .search-bar input { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+.search-bar input { flex: 1; min-width: 180px; }
+.trace-section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+.trace-section h3 { font-size: 14px; margin-bottom: 8px; color: var(--dark); }
+.empty-state { text-align: center; padding: 40px 20px; color: var(--text-light); font-size: 13px; }
+.fg-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 8px; }
+.fg-row:last-child { border-bottom: none; }
+.fg-info { font-size: 13px; }
+.fg-info .lot-tag { font-size: 11px; background: var(--dark); color: #fff; padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
+.fg-qty { font-size: 14px; font-weight: 700; color: var(--accent); }
+.fg-qty.negative { color: #dc3545; }
+</style>
+</head>
+<body>
+<div class="header">
+    <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+    <div class="header-text"><h1>Organic Certification</h1><p>Chain of custody tracking</p></div>
+    <div class="header-right"><a href="/" class="header-btn">Back to Dashboard</a></div>
+</div>
+<div class="main">
+    <div class="tab-bar">
+        <button class="tab-btn active" onclick="showTab('raw')">Raw Materials</button>
+        <button class="tab-btn" onclick="showTab('runs')">Production Runs</button>
+        <button class="tab-btn" onclick="showTab('fg')">Finished Goods</button>
+        <button class="tab-btn" onclick="showTab('trace')">Search &amp; Trace</button>
+    </div>
+
+    <!-- TAB 1: Raw Materials -->
+    <div class="tab-content active" id="tab-raw">
+        <div class="card">
+            <h2>Add Raw Material</h2>
+            <div class="form-row">
+                <div class="form-field"><label>Item</label><select id="rm-item"><option value="">Loading...</option></select></div>
+                <div class="form-field"><label>Supplier</label><input id="rm-supplier" placeholder="Company name"></div>
+                <div class="form-field"><label>Date Received</label><input type="date" id="rm-date"></div>
+            </div>
+            <div class="form-row">
+                <div class="form-field"><label>Supplier LOT#</label><input id="rm-lot" placeholder="Supplier lot number"></div>
+                <div class="form-field"><label>Quantity</label><input type="number" id="rm-qty" placeholder="0" step="0.1"></div>
+                <div class="form-field"><label>Unit</label><input id="rm-unit" placeholder="kg, units, L, etc."></div>
+            </div>
+            <button class="btn btn-primary" onclick="addRawMaterial()">Add to Inventory</button>
+            <div id="rm-status" class="status" style="margin-top:10px;"></div>
+        </div>
+        <div class="card">
+            <h2>Current Inventory <span class="organic-badge">Organic</span></h2>
+            <div id="rm-table-container"><div class="empty-state">Loading...</div></div>
+        </div>
+    </div>
+
+    <!-- TAB 2: Production Runs -->
+    <div class="tab-content" id="tab-runs">
+        <div class="card">
+            <h2>Organic Production Runs</h2>
+            <p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Auto-populated when organic recipes are scheduled. Raw materials deducted when daily production is completed.</p>
+            <div id="runs-container"><div class="empty-state">Loading...</div></div>
+        </div>
+    </div>
+
+    <!-- TAB 3: Finished Goods -->
+    <div class="tab-content" id="tab-fg">
+        <div class="card">
+            <h2>Finished Goods Inventory <span class="organic-badge">Organic</span></h2>
+            <div id="fg-container"><div class="empty-state">Loading...</div></div>
+        </div>
+        <div class="card">
+            <h2>Record Sale</h2>
+            <div class="form-row">
+                <div class="form-field"><label>Finished Good</label><select id="sale-fg"><option value="">Select...</option></select></div>
+                <div class="form-field"><label>Quantity (units)</label><input type="number" id="sale-qty" placeholder="0"></div>
+                <div class="form-field"><label>Sale Date</label><input type="date" id="sale-date"></div>
+            </div>
+            <div class="form-row">
+                <div class="form-field"><label>Buyer / Distributor</label><input id="sale-buyer" placeholder="Company name"></div>
+                <div class="form-field"><label>Case LOT# (optional)</label><input id="sale-case-lot" placeholder="Case lot number"></div>
+            </div>
+            <button class="btn btn-primary" onclick="addSale()">Record Sale</button>
+            <div id="sale-status" class="status" style="margin-top:10px;"></div>
+        </div>
+        <div class="card">
+            <h2>Sales History</h2>
+            <div id="sales-container"><div class="empty-state">Loading...</div></div>
+        </div>
+    </div>
+
+    <!-- TAB 4: Search & Trace -->
+    <div class="tab-content" id="tab-trace">
+        <div class="card">
+            <h2>Search &amp; Trace</h2>
+            <div class="search-bar">
+                <select id="trace-type">
+                    <option value="raw_lot">Raw Material LOT#</option>
+                    <option value="fg_lot">Finished Good LOT#</option>
+                </select>
+                <input id="trace-query" placeholder="Enter LOT# to search...">
+                <button class="btn btn-primary" onclick="doTrace()">Search</button>
+            </div>
+            <div id="trace-results"></div>
+        </div>
+    </div>
+</div>
+<script>
+function showTab(tab){
+    document.querySelectorAll('.tab-btn').forEach(function(b,i){b.classList.remove('active');});
+    document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active');});
+    document.getElementById('tab-'+tab).classList.add('active');
+    var tabs=['raw','runs','fg','trace'];
+    document.querySelectorAll('.tab-btn')[tabs.indexOf(tab)].classList.add('active');
+    if(tab==='raw')loadRawMaterials();
+    if(tab==='runs')loadRuns();
+    if(tab==='fg'){loadFinishedGoods();loadSales();populateFGDropdown();}
+}
+
+// ── Raw Materials ──
+async function loadIngredients(){
+    var res=await fetch('/api/organic/ingredients');
+    var items=await res.json();
+    var sel=document.getElementById('rm-item');
+    sel.innerHTML='<option value="">-- Select ingredient --</option>';
+    items.forEach(function(item){sel.innerHTML+='<option value="'+item+'">'+item+'</option>';});
+}
+
+async function loadRawMaterials(){
+    var res=await fetch('/api/organic/raw-materials');
+    var data=await res.json();
+    var container=document.getElementById('rm-table-container');
+    if(!data.length){container.innerHTML='<div class="empty-state">No raw materials in inventory. Add items above.</div>';return;}
+    var html='<table class="inv-table"><tr><th>Item</th><th>Supplier</th><th>Received</th><th>LOT#</th><th>Qty</th><th>Remaining</th><th>Unit</th><th></th></tr>';
+    data.forEach(function(m){
+        var remClass=m.remaining<0?'negative':m.remaining===0?'low':'';
+        html+='<tr><td>'+m.item+'</td><td>'+m.supplier+'</td><td>'+m.date_received+'</td><td>'+m.supplier_lot+'</td><td>'+m.quantity+'</td><td class="'+remClass+'">'+m.remaining+'</td><td>'+m.unit+'</td><td><button class="btn-danger" onclick="deleteRM(\''+m.id+'\')">Del</button></td></tr>';
+    });
+    html+='</table>';
+    container.innerHTML=html;
+}
+
+async function addRawMaterial(){
+    var item=document.getElementById('rm-item').value;
+    var supplier=document.getElementById('rm-supplier').value.trim();
+    var date=document.getElementById('rm-date').value;
+    var lot=document.getElementById('rm-lot').value.trim();
+    var qty=document.getElementById('rm-qty').value;
+    var unit=document.getElementById('rm-unit').value.trim();
+    var st=document.getElementById('rm-status');
+    if(!item){st.className='status error';st.textContent='Select an item';return;}
+    if(!qty||parseFloat(qty)<=0){st.className='status error';st.textContent='Enter a valid quantity';return;}
+    var res=await fetch('/api/organic/raw-materials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({item:item,supplier:supplier,date_received:date,supplier_lot:lot,quantity:qty,unit:unit})});
+    var data=await res.json();
+    if(data.success){st.className='status success';st.textContent='Added: '+item;document.getElementById('rm-lot').value='';document.getElementById('rm-qty').value='';loadRawMaterials();}
+    else{st.className='status error';st.textContent=data.error||'Failed';}
+}
+
+async function deleteRM(id){
+    if(!confirm('Delete this inventory entry?'))return;
+    await fetch('/api/organic/raw-materials/'+id,{method:'DELETE'});
+    loadRawMaterials();
+}
+
+// ── Production Runs ──
+async function loadRuns(){
+    var res=await fetch('/api/organic/production-runs');
+    var data=await res.json();
+    var container=document.getElementById('runs-container');
+    if(!data.length){container.innerHTML='<div class="empty-state">No organic production runs yet. Schedule an organic recipe to see runs here.</div>';return;}
+    // Sort newest first
+    data.sort(function(a,b){return(b.created_at||'').localeCompare(a.created_at||'');});
+    var html='';
+    data.forEach(function(run){
+        var hdrClass=run.status==='completed'?'run-header completed':'run-header scheduled';
+        var statusLabel=run.status==='completed'?'Completed':'Scheduled';
+        html+='<div class="run-card"><div class="'+hdrClass+'" onclick="this.nextElementSibling.classList.toggle(\'open\')">';
+        html+='<span>'+run.day_name+' — '+run.vessel+' — '+(run.brand?run.brand+' - ':'')+run.recipe+'</span>';
+        html+='<span><span class="organic-badge">'+statusLabel+'</span> LOT# '+run.lot+'</span>';
+        html+='</div><div class="run-body">';
+        html+='<div class="run-detail"><strong>Week:</strong> '+run.week_id+'</div>';
+        if(run.amount_produced)html+='<div class="run-detail"><strong>Amount Produced:</strong> '+run.amount_produced+' units</div>';
+        if(run.ingredients_used&&run.ingredients_used.length){
+            html+='<div class="run-detail"><strong>Raw Materials Used:</strong></div><ul class="ing-list">';
+            run.ingredients_used.forEach(function(ing){
+                var flag=ing.negative?'<span class="flag"> ⚠ INSUFFICIENT STOCK</span>':'';
+                html+='<li>'+ing.quantity_used+' × '+ing.item+' (LOT: '+ing.supplier_lot+')'+flag+'</li>';
+            });
+            html+='</ul>';
+        }
+        if(run.completed_at)html+='<div class="run-detail"><strong>Completed:</strong> '+run.completed_at.substring(0,16).replace('T',' ')+'</div>';
+        html+='</div></div>';
+    });
+    container.innerHTML=html;
+}
+
+// ── Finished Goods ──
+var fgData=[];
+async function loadFinishedGoods(){
+    var res=await fetch('/api/organic/finished-goods');
+    fgData=await res.json();
+    var container=document.getElementById('fg-container');
+    if(!fgData.length){container.innerHTML='<div class="empty-state">No finished goods yet. Complete organic daily production to generate inventory.</div>';return;}
+    var html='';
+    fgData.forEach(function(f){
+        var qtyClass=f.quantity_remaining<0?'fg-qty negative':'fg-qty';
+        html+='<div class="fg-row"><div class="fg-info">'+(f.brand?f.brand+' - ':'')+f.recipe+' '+f.format+'<span class="lot-tag">LOT# '+f.lot+'</span><br><span style="font-size:11px;color:var(--text-light);">Produced: '+f.quantity_produced+' | '+f.vessel+' | '+f.week_id+'</span></div><div class="'+qtyClass+'">'+f.quantity_remaining+' remaining</div></div>';
+    });
+    container.innerHTML=html;
+}
+
+async function populateFGDropdown(){
+    var res=await fetch('/api/organic/finished-goods');
+    var data=await res.json();
+    var sel=document.getElementById('sale-fg');
+    sel.innerHTML='<option value="">-- Select finished good --</option>';
+    data.forEach(function(f){
+        if(f.quantity_remaining>0){
+            sel.innerHTML+='<option value="'+f.id+'">'+(f.brand?f.brand+'-':'')+f.recipe+' LOT#'+f.lot+' ('+f.quantity_remaining+' avail)</option>';
+        }
+    });
+}
+
+// ── Sales ──
+async function loadSales(){
+    var res=await fetch('/api/organic/sales');
+    var data=await res.json();
+    var container=document.getElementById('sales-container');
+    if(!data.length){container.innerHTML='<div class="empty-state">No sales recorded yet.</div>';return;}
+    data.sort(function(a,b){return(b.created_at||'').localeCompare(a.created_at||'');});
+    var html='<table class="inv-table"><tr><th>Date</th><th>Product</th><th>FG LOT#</th><th>Qty</th><th>Buyer</th><th>Case LOT#</th><th></th></tr>';
+    data.forEach(function(s){
+        html+='<tr><td>'+s.sale_date+'</td><td>'+(s.brand?s.brand+'-':'')+s.recipe+'</td><td>'+s.fg_lot+'</td><td>'+s.quantity+'</td><td>'+s.buyer+'</td><td>'+(s.case_lot||'—')+'</td><td><button class="btn-danger" onclick="deleteSale(\''+s.id+'\')">Del</button></td></tr>';
+    });
+    html+='</table>';
+    container.innerHTML=html;
+}
+
+async function addSale(){
+    var fgId=document.getElementById('sale-fg').value;
+    var qty=document.getElementById('sale-qty').value;
+    var date=document.getElementById('sale-date').value;
+    var buyer=document.getElementById('sale-buyer').value.trim();
+    var caseLot=document.getElementById('sale-case-lot').value.trim();
+    var st=document.getElementById('sale-status');
+    if(!fgId){st.className='status error';st.textContent='Select a finished good';return;}
+    if(!qty||parseInt(qty)<=0){st.className='status error';st.textContent='Enter quantity';return;}
+    var res=await fetch('/api/organic/sales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fg_id:fgId,quantity:qty,sale_date:date,buyer:buyer,case_lot:caseLot})});
+    var data=await res.json();
+    if(data.success){st.className='status success';st.textContent='Sale recorded';document.getElementById('sale-qty').value='';document.getElementById('sale-buyer').value='';loadFinishedGoods();loadSales();populateFGDropdown();}
+    else{st.className='status error';st.textContent=data.error||'Failed';}
+}
+
+async function deleteSale(id){
+    if(!confirm('Delete this sale? Quantity will be restored to finished goods.'))return;
+    await fetch('/api/organic/sales/'+id,{method:'DELETE'});
+    loadFinishedGoods();loadSales();populateFGDropdown();
+}
+
+// ── Search & Trace ──
+async function doTrace(){
+    var type=document.getElementById('trace-type').value;
+    var q=document.getElementById('trace-query').value.trim();
+    var container=document.getElementById('trace-results');
+    if(!q){container.innerHTML='<div class="empty-state">Enter a LOT# to search.</div>';return;}
+    var res=await fetch('/api/organic/trace?type='+encodeURIComponent(type)+'&q='+encodeURIComponent(q));
+    var data=await res.json();
+    var html='';
+    if(type==='raw_lot'){
+        html+='<div class="trace-section"><h3>Raw Material LOT# "'+q+'" — Trace Results</h3>';
+        if(!data.runs||!data.runs.length){html+='<p style="color:var(--text-light);">No production runs found using this LOT#.</p>';}
+        else{
+            html+='<h3 style="font-size:13px;margin:10px 0 6px;">Production Runs</h3>';
+            data.runs.forEach(function(r){html+='<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">'+r.day_name+' '+r.week_id+' — '+r.vessel+' — '+(r.brand?r.brand+'-':'')+r.recipe+' (LOT# '+r.lot+') — <strong>'+r.status+'</strong></div>';});
+        }
+        if(data.finished_goods&&data.finished_goods.length){
+            html+='<h3 style="font-size:13px;margin:10px 0 6px;">Finished Goods Produced</h3>';
+            data.finished_goods.forEach(function(f){html+='<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">'+(f.brand?f.brand+'-':'')+f.recipe+' '+f.format+' — LOT# '+f.lot+' — Produced: '+f.quantity_produced+'</div>';});
+        }
+        if(data.sales&&data.sales.length){
+            html+='<h3 style="font-size:13px;margin:10px 0 6px;">Sales</h3>';
+            data.sales.forEach(function(s){html+='<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">'+s.sale_date+' — '+s.quantity+' units to '+s.buyer+(s.case_lot?' (Case: '+s.case_lot+')':'')+'</div>';});
+        }
+        html+='</div>';
+    }else{
+        html+='<div class="trace-section"><h3>Finished Good LOT# "'+q+'" — Trace Results</h3>';
+        if(!data.finished_goods||!data.finished_goods.length){html+='<p style="color:var(--text-light);">No finished goods found with this LOT#.</p>';}
+        else{
+            data.finished_goods.forEach(function(f){html+='<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">'+(f.brand?f.brand+'-':'')+f.recipe+' '+f.format+' — Produced: '+f.quantity_produced+' — Remaining: '+f.quantity_remaining+'</div>';});
+        }
+        if(data.runs&&data.runs.length){
+            html+='<h3 style="font-size:13px;margin:10px 0 6px;">Raw Materials Used</h3>';
+            data.runs.forEach(function(r){
+                if(r.ingredients_used&&r.ingredients_used.length){
+                    r.ingredients_used.forEach(function(ing){
+                        var flag=ing.negative?' <span style="color:#dc3545;font-weight:700;">⚠ INSUFFICIENT</span>':'';
+                        html+='<div style="padding:4px 0;font-size:12px;">'+ing.quantity_used+' × '+ing.item+' (Supplier LOT: '+ing.supplier_lot+')'+flag+'</div>';
+                    });
+                }
+            });
+        }
+        if(data.sales&&data.sales.length){
+            html+='<h3 style="font-size:13px;margin:10px 0 6px;">Sales from this LOT</h3>';
+            data.sales.forEach(function(s){html+='<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">'+s.sale_date+' — '+s.quantity+' units to '+s.buyer+(s.case_lot?' (Case: '+s.case_lot+')':'')+'</div>';});
+        }
+        html+='</div>';
+    }
+    container.innerHTML=html;
+}
+
+// ── Init ──
+document.addEventListener('DOMContentLoaded',function(){
+    loadIngredients();
+    loadRawMaterials();
+    document.getElementById('rm-date').value=new Date().toISOString().split('T')[0];
+    document.getElementById('sale-date').value=new Date().toISOString().split('T')[0];
+});
+</script>
+</body>
+</html>

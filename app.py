@@ -632,7 +632,14 @@ def generate_pdfs():
 
         return jsonify({"success": True, "files": generated, "week_id": week_id})
     except Exception as e:
+        # Schedule is already saved above, so organic check can still run
         return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        # Always check for organic recipes in the schedule
+        try:
+            _check_organic_schedule(week_id, schedule)
+        except Exception:
+            pass
 
 
 # ── PDF downloads ──────────────────────────────────────────────────────
@@ -826,11 +833,17 @@ def generate_label():
 
     best_before = prod_date + timedelta(days=365)
 
-    # FIX: Strip format from recipe_name if it already contains it to avoid doubling
+    # Build display name: strip format from recipe_name if already present, then show as base-format
     base_name = recipe_name
-    if recipe_format and recipe_name.endswith(recipe_format):
-        base_name = recipe_name[:-(len(recipe_format))].rstrip(" -")
-    recipe_format_display = base_name + "-" + recipe_format if recipe_format else recipe_name
+    if recipe_format:
+        # Remove format suffix regardless of separator (space, dash, or space-dash)
+        for suffix in [" " + recipe_format, "-" + recipe_format, " -" + recipe_format]:
+            if base_name.endswith(suffix):
+                base_name = base_name[:-len(suffix)]
+                break
+        recipe_format_display = base_name + "-" + recipe_format
+    else:
+        recipe_format_display = recipe_name
 
     label_buffer = io.BytesIO()
     generate_label_pdf(label_buffer, brand_name, recipe_format_display, lot, best_before.strftime("%d/%m/%Y"))
@@ -901,6 +914,12 @@ def complete_checklist(week_id, day_idx):
     filename = DAYS[day_idx] + "_Completed_Checklist.pdf"
     pdf_path = os.path.join(week_pdf_dir, filename)
     generate_filled_checklist_pdf(pdf_path, date, active_vessels, data, logo_path)
+
+    # Check if any organic runs need completing
+    try:
+        _check_organic_completion(week_id, day_idx, data)
+    except Exception:
+        pass
 
     return jsonify({"success": True, "filename": filename})
 
@@ -1154,6 +1173,409 @@ def get_production_tracker_year(year):
 
 
 # ── Init ──────────────────────────────────────────────────────────────
+
+# Organic data paths
+ORGANIC_DIR = os.path.join(DATA_DIR, "organic")
+ORGANIC_RAW_PATH = os.path.join(ORGANIC_DIR, "raw_materials.json")
+ORGANIC_RUNS_PATH = os.path.join(ORGANIC_DIR, "production_runs.json")
+ORGANIC_FG_PATH = os.path.join(ORGANIC_DIR, "finished_goods.json")
+ORGANIC_SALES_PATH = os.path.join(ORGANIC_DIR, "sales.json")
+os.makedirs(ORGANIC_DIR, exist_ok=True)
+
+
+def _load_json(path, default=None):
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            return json.load(f)
+    return default if default is not None else []
+
+
+def _save_json(path, data):
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+# ── Organic Page ──────────────────────────────────────────────────────
+@app.route("/organic")
+@login_required
+def organic_page():
+    return render_template("organic.html")
+
+
+# ── Organic: Get ingredient list from organic recipes ─────────────────
+@app.route("/api/organic/ingredients", methods=["GET"])
+@login_required
+def organic_ingredients():
+    recipes = load_recipes()
+    ingredients = set()
+    for name, data in recipes.items():
+        cert = (data.get("certification") or "").lower()
+        if cert != "organic":
+            continue
+        for section in ["kettle_overnight", "after_skim", "finishing", "add_to_jar"]:
+            items = data.get(section, [])
+            for item in items:
+                ingredients.add(item.strip())
+    return jsonify(sorted(ingredients))
+
+
+# ── Organic: Raw Material Inventory (FIFO) ────────────────────────────
+@app.route("/api/organic/raw-materials", methods=["GET"])
+@login_required
+def get_raw_materials():
+    return jsonify(_load_json(ORGANIC_RAW_PATH, []))
+
+
+@app.route("/api/organic/raw-materials", methods=["POST"])
+@login_required
+def add_raw_material():
+    data = request.json
+    materials = _load_json(ORGANIC_RAW_PATH, [])
+    entry = {
+        "id": datetime.now().strftime("%Y%m%d%H%M%S") + str(len(materials)),
+        "item": data.get("item", ""),
+        "supplier": data.get("supplier", ""),
+        "date_received": data.get("date_received", ""),
+        "supplier_lot": data.get("supplier_lot", ""),
+        "quantity": float(data.get("quantity", 0)),
+        "unit": data.get("unit", ""),
+        "remaining": float(data.get("quantity", 0)),
+        "created_at": datetime.now().isoformat(),
+    }
+    materials.append(entry)
+    _save_json(ORGANIC_RAW_PATH, materials)
+    return jsonify({"success": True, "entry": entry})
+
+
+@app.route("/api/organic/raw-materials/<entry_id>", methods=["DELETE"])
+@login_required
+def delete_raw_material(entry_id):
+    materials = _load_json(ORGANIC_RAW_PATH, [])
+    materials = [m for m in materials if m.get("id") != entry_id]
+    _save_json(ORGANIC_RAW_PATH, materials)
+    return jsonify({"success": True})
+
+
+# ── Organic: Production Runs ──────────────────────────────────────────
+@app.route("/api/organic/production-runs", methods=["GET"])
+@login_required
+def get_organic_runs():
+    return jsonify(_load_json(ORGANIC_RUNS_PATH, []))
+
+
+def _create_organic_run(week_id, day_idx, vessel, recipe_name, recipe_data, lot):
+    """Create a production run record when an organic recipe is scheduled."""
+    runs = _load_json(ORGANIC_RUNS_PATH, [])
+    # Check if already exists
+    for r in runs:
+        if r.get("week_id") == week_id and r.get("day_idx") == day_idx and r.get("vessel") == vessel:
+            return  # Already tracked
+    run = {
+        "id": f"{week_id}_{day_idx}_{vessel}",
+        "week_id": week_id,
+        "day_idx": day_idx,
+        "day_name": DAYS[day_idx],
+        "vessel": vessel,
+        "recipe": recipe_name,
+        "lot": lot,
+        "brand": recipe_data.get("brand", ""),
+        "status": "scheduled",
+        "ingredients_used": [],
+        "amount_produced": 0,
+        "created_at": datetime.now().isoformat(),
+    }
+    runs.append(run)
+    _save_json(ORGANIC_RUNS_PATH, runs)
+
+
+def _complete_organic_run(week_id, day_idx, produced_data):
+    """When daily production is completed, deduct raw materials and create finished goods."""
+    runs = _load_json(ORGANIC_RUNS_PATH, [])
+    materials = _load_json(ORGANIC_RAW_PATH, [])
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    recipes = load_recipes()
+
+    for run in runs:
+        if run.get("week_id") != week_id or run.get("day_idx") != day_idx:
+            continue
+        if run.get("status") == "completed":
+            continue
+
+        vessel = run["vessel"]
+        recipe_name = run["recipe"]
+        recipe_data = recipes.get(recipe_name, {})
+        if not recipe_data:
+            continue
+
+        # Get amount produced for this vessel
+        vid = vessel.replace("(", "").replace(")", "")
+        amount = 0
+        if produced_data.get("produced"):
+            try:
+                amount = int(produced_data["produced"].get(vid, 0))
+            except (ValueError, TypeError):
+                pass
+
+        # Deduct raw materials (FIFO) based on recipe ingredients
+        ingredients_used = []
+        is_115L = vessel == "115L"
+        for section in ["kettle_overnight", "after_skim", "finishing", "add_to_jar"]:
+            items = recipe_data.get(section, [])
+            for item in items:
+                # Parse quantity from ingredient line
+                m = re.match(r'^(\d+\.?\d*)\s*(.*)', item.strip())
+                if m:
+                    qty_needed = float(m.group(1))
+                    if is_115L:
+                        qty_needed = qty_needed / 2
+                    item_name = m.group(2).strip()
+                else:
+                    item_name = item.strip()
+                    qty_needed = 0
+
+                if qty_needed <= 0:
+                    continue
+
+                # FIFO deduction
+                qty_remaining = qty_needed
+                for mat in materials:
+                    if mat["remaining"] <= 0:
+                        continue
+                    # Match by checking if the raw material item contains the ingredient name or vice versa
+                    if not _ingredient_matches(mat["item"], item_name):
+                        continue
+                    deduct = min(qty_remaining, mat["remaining"])
+                    mat["remaining"] = round(mat["remaining"] - deduct, 2)
+                    qty_remaining = round(qty_remaining - deduct, 2)
+                    ingredients_used.append({
+                        "item": mat["item"],
+                        "supplier_lot": mat["supplier_lot"],
+                        "quantity_used": deduct,
+                        "raw_material_id": mat["id"],
+                    })
+                    if qty_remaining <= 0:
+                        break
+
+                # If still remaining, record negative (flagged)
+                if qty_remaining > 0:
+                    ingredients_used.append({
+                        "item": item_name,
+                        "supplier_lot": "INSUFFICIENT_STOCK",
+                        "quantity_used": qty_remaining,
+                        "negative": True,
+                    })
+
+        run["status"] = "completed"
+        run["ingredients_used"] = ingredients_used
+        run["amount_produced"] = amount
+        run["completed_at"] = datetime.now().isoformat()
+
+        # Create finished goods entry
+        if amount > 0:
+            fg_entry = {
+                "id": f"fg_{week_id}_{day_idx}_{vessel}",
+                "run_id": run["id"],
+                "recipe": recipe_name,
+                "brand": recipe_data.get("brand", ""),
+                "format": recipe_data.get("format", ""),
+                "lot": run["lot"],
+                "quantity_produced": amount,
+                "quantity_remaining": amount,
+                "vessel": vessel,
+                "week_id": week_id,
+                "day_idx": day_idx,
+                "created_at": datetime.now().isoformat(),
+            }
+            fg.append(fg_entry)
+
+    _save_json(ORGANIC_RUNS_PATH, runs)
+    _save_json(ORGANIC_RAW_PATH, materials)
+    _save_json(ORGANIC_FG_PATH, fg)
+
+
+def _ingredient_matches(raw_item, recipe_ingredient):
+    """Check if a raw material inventory item matches a recipe ingredient line."""
+    raw_lower = raw_item.lower().strip()
+    ing_lower = recipe_ingredient.lower().strip()
+    # Direct containment check
+    if raw_lower in ing_lower or ing_lower in raw_lower:
+        return True
+    # Check significant words overlap
+    raw_words = set(raw_lower.split())
+    ing_words = set(ing_lower.split())
+    # Remove common filler words
+    filler = {"of", "the", "a", "an", "and", "or", "to", "in", "per", "with"}
+    raw_words -= filler
+    ing_words -= filler
+    if raw_words and ing_words:
+        overlap = raw_words & ing_words
+        if len(overlap) >= min(len(raw_words), len(ing_words)):
+            return True
+    return False
+
+
+# ── Organic: Finished Goods ──────────────────────────────────────────
+@app.route("/api/organic/finished-goods", methods=["GET"])
+@login_required
+def get_finished_goods():
+    return jsonify(_load_json(ORGANIC_FG_PATH, []))
+
+
+# ── Organic: Sales ───────────────────────────────────────────────────
+@app.route("/api/organic/sales", methods=["GET"])
+@login_required
+def get_organic_sales():
+    return jsonify(_load_json(ORGANIC_SALES_PATH, []))
+
+
+@app.route("/api/organic/sales", methods=["POST"])
+@login_required
+def add_organic_sale():
+    data = request.json
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    fg = _load_json(ORGANIC_FG_PATH, [])
+
+    fg_id = data.get("fg_id", "")
+    quantity = int(data.get("quantity", 0))
+
+    # Find finished good and reduce
+    fg_entry = None
+    for f in fg:
+        if f["id"] == fg_id:
+            fg_entry = f
+            break
+
+    if not fg_entry:
+        return jsonify({"error": "Finished good not found"}), 404
+
+    sale = {
+        "id": datetime.now().strftime("%Y%m%d%H%M%S") + str(len(sales)),
+        "fg_id": fg_id,
+        "fg_lot": fg_entry.get("lot", ""),
+        "recipe": fg_entry.get("recipe", ""),
+        "brand": fg_entry.get("brand", ""),
+        "format": fg_entry.get("format", ""),
+        "quantity": quantity,
+        "buyer": data.get("buyer", ""),
+        "sale_date": data.get("sale_date", ""),
+        "case_lot": data.get("case_lot", ""),
+        "created_at": datetime.now().isoformat(),
+    }
+    sales.append(sale)
+
+    fg_entry["quantity_remaining"] = fg_entry.get("quantity_remaining", 0) - quantity
+    _save_json(ORGANIC_SALES_PATH, sales)
+    _save_json(ORGANIC_FG_PATH, fg)
+    return jsonify({"success": True, "sale": sale})
+
+
+@app.route("/api/organic/sales/<sale_id>", methods=["DELETE"])
+@login_required
+def delete_organic_sale(sale_id):
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    sale = None
+    for s in sales:
+        if s.get("id") == sale_id:
+            sale = s
+            break
+    if sale:
+        # Restore quantity to finished goods
+        for f in fg:
+            if f["id"] == sale.get("fg_id"):
+                f["quantity_remaining"] = f.get("quantity_remaining", 0) + sale["quantity"]
+                break
+        sales = [s for s in sales if s.get("id") != sale_id]
+        _save_json(ORGANIC_SALES_PATH, sales)
+        _save_json(ORGANIC_FG_PATH, fg)
+    return jsonify({"success": True})
+
+
+# ── Organic: Search / Trace ──────────────────────────────────────────
+@app.route("/api/organic/trace", methods=["GET"])
+@login_required
+def organic_trace():
+    search_type = request.args.get("type", "")  # "raw_lot" or "fg_lot"
+    query = request.args.get("q", "").strip()
+    if not query:
+        return jsonify({"results": []})
+
+    runs = _load_json(ORGANIC_RUNS_PATH, [])
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+
+    if search_type == "raw_lot":
+        # Find all runs that used this raw material LOT
+        matched_runs = []
+        for run in runs:
+            for ing in run.get("ingredients_used", []):
+                if ing.get("supplier_lot", "").lower() == query.lower():
+                    matched_runs.append(run)
+                    break
+        # Find finished goods from those runs
+        run_ids = {r["id"] for r in matched_runs}
+        matched_fg = [f for f in fg if f.get("run_id") in run_ids]
+        # Find sales of those finished goods
+        fg_ids = {f["id"] for f in matched_fg}
+        matched_sales = [s for s in sales if s.get("fg_id") in fg_ids]
+        return jsonify({
+            "search_type": "raw_lot",
+            "query": query,
+            "runs": matched_runs,
+            "finished_goods": matched_fg,
+            "sales": matched_sales,
+        })
+
+    elif search_type == "fg_lot":
+        # Find finished goods with this LOT
+        matched_fg = [f for f in fg if f.get("lot", "").lower() == query.lower()]
+        # Find runs that produced them
+        run_ids = {f.get("run_id") for f in matched_fg}
+        matched_runs = [r for r in runs if r.get("id") in run_ids]
+        # Find sales
+        fg_ids = {f["id"] for f in matched_fg}
+        matched_sales = [s for s in sales if s.get("fg_id") in fg_ids]
+        return jsonify({
+            "search_type": "fg_lot",
+            "query": query,
+            "runs": matched_runs,
+            "finished_goods": matched_fg,
+            "sales": matched_sales,
+        })
+
+    return jsonify({"results": []})
+
+
+# ── Hook: Auto-create organic runs when schedule is generated ─────────
+def _check_organic_schedule(week_id, schedule):
+    """Scan a schedule for organic recipes and create production run records."""
+    recipes = load_recipes()
+    week_start = datetime.strptime(week_id, "%Y-%m-%d")
+    for day_key, vessels in schedule.items():
+        day_idx = int(day_key)
+        date = week_start + timedelta(days=day_idx)
+        lot = date.strftime("%d%m%y")
+        for vessel, recipe_name in vessels.items():
+            if not recipe_name:
+                continue
+            recipe_data = recipes.get(recipe_name, {})
+            cert = (recipe_data.get("certification") or "").lower()
+            if cert == "organic":
+                _create_organic_run(week_id, day_idx, vessel, recipe_name, recipe_data, lot)
+
+
+# ── Hook: Complete organic runs when daily production is filed ─────────
+def _check_organic_completion(week_id, day_idx, checklist_data):
+    """When daily production is completed, process organic runs for that day."""
+    runs = _load_json(ORGANIC_RUNS_PATH, [])
+    has_organic = any(
+        r.get("week_id") == week_id and r.get("day_idx") == day_idx and r.get("status") != "completed"
+        for r in runs
+    )
+    if has_organic:
+        _complete_organic_run(week_id, day_idx, checklist_data)
+
+
 if not os.path.exists(RECIPES_PATH):
     from default_recipes import DEFAULT_RECIPES
     save_recipes(DEFAULT_RECIPES)
