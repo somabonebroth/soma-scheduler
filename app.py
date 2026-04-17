@@ -833,14 +833,17 @@ def generate_label():
 
     best_before = prod_date + timedelta(days=365)
 
-    # Build display name: strip format from recipe_name if already present, then show as base-format
+    # Build display name: strip ANY format suffix from recipe_name, then show as base-format
     base_name = recipe_name
     if recipe_format:
-        # Remove format suffix regardless of separator (space, dash, or space-dash)
-        for suffix in [" " + recipe_format, "-" + recipe_format, " -" + recipe_format]:
-            if base_name.endswith(suffix):
-                base_name = base_name[:-len(suffix)]
-                break
+        # Known format patterns to strip from recipe name
+        format_patterns = ["SS-876ML", "SS-750ML", "FZ-750ML", "iQ-750ML", "BB-750ML"]
+        for fmt in format_patterns:
+            for sep in [" ", "-", " -"]:
+                suffix = sep + fmt
+                if base_name.endswith(suffix):
+                    base_name = base_name[:-len(suffix)]
+                    break
         recipe_format_display = base_name + "-" + recipe_format
     else:
         recipe_format_display = recipe_name
