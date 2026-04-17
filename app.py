@@ -1180,6 +1180,7 @@ ORGANIC_RAW_PATH = os.path.join(ORGANIC_DIR, "raw_materials.json")
 ORGANIC_RUNS_PATH = os.path.join(ORGANIC_DIR, "production_runs.json")
 ORGANIC_FG_PATH = os.path.join(ORGANIC_DIR, "finished_goods.json")
 ORGANIC_SALES_PATH = os.path.join(ORGANIC_DIR, "sales.json")
+ORGANIC_CONTACTS_PATH = os.path.join(ORGANIC_DIR, "contacts.json")
 os.makedirs(ORGANIC_DIR, exist_ok=True)
 
 
@@ -1207,7 +1208,9 @@ def organic_page():
 @login_required
 def organic_ingredients():
     recipes = load_recipes()
-    ingredients = set()
+    # Map ingredient name -> unit
+    ingredient_map = {}
+    skip_patterns = ["filtered water", "top up water", "top kettle", "water to", "water -"]
     for name, data in recipes.items():
         cert = (data.get("certification") or "").lower()
         if cert != "organic":
@@ -1215,8 +1218,42 @@ def organic_ingredients():
         for section in ["kettle_overnight", "after_skim", "finishing", "add_to_jar"]:
             items = data.get(section, [])
             for item in items:
-                ingredients.add(item.strip())
-    return jsonify(sorted(ingredients))
+                item = item.strip()
+                if not item:
+                    continue
+                # Skip water items
+                if any(p in item.lower() for p in skip_patterns):
+                    continue
+                # Parse "50 kg Chicken Bones" or "500 ml Honey" etc.
+                m = re.match(r'^(\d+\.?\d*)\s*(kg|g|ml|l|L)\s+(.+)', item, re.IGNORECASE)
+                if m:
+                    unit = m.group(2).lower()
+                    if unit == "l":
+                        unit = "L"
+                    ing_name = m.group(3).strip()
+                    ingredient_map[ing_name] = unit
+                else:
+                    # Check for "per liter" type items
+                    if "per liter" in item.lower() or "per litre" in item.lower() or "/l" in item.lower():
+                        m2 = re.match(r'^(\d+\.?\d*)\s*(.*)', item)
+                        if m2:
+                            ingredient_map[m2.group(2).strip()] = "ml"
+                        continue
+                    # Items like "10 Onion" (count-based)
+                    m3 = re.match(r'^(\d+\.?\d*)\s+(.+)', item)
+                    if m3:
+                        ing_name = m3.group(2).strip()
+                        # Special case: Turmeric Juice = container (750ml)
+                        if "turmeric juice" in ing_name.lower():
+                            ingredient_map[ing_name] = "container (750ml)"
+                        else:
+                            ingredient_map[ing_name] = "units"
+                    else:
+                        ingredient_map[item] = "units"
+
+    # Return as list of {name, unit} sorted alphabetically
+    result = [{"name": k, "unit": v} for k, v in sorted(ingredient_map.items())]
+    return jsonify(result)
 
 
 # ── Organic: Raw Material Inventory (FIFO) ────────────────────────────
@@ -1244,6 +1281,10 @@ def add_raw_material():
     }
     materials.append(entry)
     _save_json(ORGANIC_RAW_PATH, materials)
+    # Auto-save supplier to contacts
+    supplier = data.get("supplier", "").strip()
+    if supplier:
+        _add_contact("supplier", supplier)
     return jsonify({"success": True, "entry": entry})
 
 
@@ -1254,6 +1295,22 @@ def delete_raw_material(entry_id):
     materials = [m for m in materials if m.get("id") != entry_id]
     _save_json(ORGANIC_RAW_PATH, materials)
     return jsonify({"success": True})
+
+
+# ── Organic: Contacts (suppliers, buyers, distributors) ───────────────
+def _add_contact(contact_type, name):
+    contacts = _load_json(ORGANIC_CONTACTS_PATH, {})
+    if contact_type not in contacts:
+        contacts[contact_type] = []
+    if name not in contacts[contact_type]:
+        contacts[contact_type].append(name)
+        _save_json(ORGANIC_CONTACTS_PATH, contacts)
+
+
+@app.route("/api/organic/contacts", methods=["GET"])
+@login_required
+def get_organic_contacts():
+    return jsonify(_load_json(ORGANIC_CONTACTS_PATH, {}))
 
 
 # ── Organic: Production Runs ──────────────────────────────────────────
@@ -1466,6 +1523,10 @@ def add_organic_sale():
     fg_entry["quantity_remaining"] = fg_entry.get("quantity_remaining", 0) - quantity
     _save_json(ORGANIC_SALES_PATH, sales)
     _save_json(ORGANIC_FG_PATH, fg)
+    # Auto-save buyer to contacts
+    buyer = data.get("buyer", "").strip()
+    if buyer:
+        _add_contact("buyer", buyer)
     return jsonify({"success": True, "sale": sale})
 
 

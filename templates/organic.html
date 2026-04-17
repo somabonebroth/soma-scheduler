@@ -68,14 +68,14 @@
         <div class="card">
             <h2>Add Raw Material</h2>
             <div class="form-row">
-                <div class="form-field"><label>Item</label><select id="rm-item"><option value="">Loading...</option></select></div>
-                <div class="form-field"><label>Supplier</label><input id="rm-supplier" placeholder="Company name"></div>
+                <div class="form-field"><label>Item</label><select id="rm-item" onchange="onIngredientSelect()"><option value="">Loading...</option></select></div>
+                <div class="form-field"><label>Supplier</label><input id="rm-supplier" list="supplier-list" placeholder="Company name"><datalist id="supplier-list"></datalist></div>
                 <div class="form-field"><label>Date Received</label><input type="date" id="rm-date"></div>
             </div>
             <div class="form-row">
                 <div class="form-field"><label>Supplier LOT#</label><input id="rm-lot" placeholder="Supplier lot number"></div>
                 <div class="form-field"><label>Quantity</label><input type="number" id="rm-qty" placeholder="0" step="0.1"></div>
-                <div class="form-field"><label>Unit</label><input id="rm-unit" placeholder="kg, units, L, etc."></div>
+                <div class="form-field"><label>Unit</label><input id="rm-unit" readonly style="background:#f5f5f0;"></div>
             </div>
             <button class="btn btn-primary" onclick="addRawMaterial()">Add to Inventory</button>
             <div id="rm-status" class="status" style="margin-top:10px;"></div>
@@ -109,7 +109,7 @@
                 <div class="form-field"><label>Sale Date</label><input type="date" id="sale-date"></div>
             </div>
             <div class="form-row">
-                <div class="form-field"><label>Buyer / Distributor</label><input id="sale-buyer" placeholder="Company name"></div>
+                <div class="form-field"><label>Buyer / Distributor</label><input id="sale-buyer" list="buyer-list" placeholder="Company name"><datalist id="buyer-list"></datalist></div>
                 <div class="form-field"><label>Case LOT# (optional)</label><input id="sale-case-lot" placeholder="Case lot number"></div>
             </div>
             <button class="btn btn-primary" onclick="addSale()">Record Sale</button>
@@ -150,12 +150,36 @@ function showTab(tab){
 }
 
 // ── Raw Materials ──
+var ingredientData=[];
+
 async function loadIngredients(){
     var res=await fetch('/api/organic/ingredients');
-    var items=await res.json();
+    ingredientData=await res.json();
     var sel=document.getElementById('rm-item');
     sel.innerHTML='<option value="">-- Select ingredient --</option>';
-    items.forEach(function(item){sel.innerHTML+='<option value="'+item+'">'+item+'</option>';});
+    ingredientData.forEach(function(item){
+        sel.innerHTML+='<option value="'+item.name+'" data-unit="'+item.unit+'">'+item.name+' ('+item.unit+')</option>';
+    });
+}
+
+function onIngredientSelect(){
+    var sel=document.getElementById('rm-item');
+    var opt=sel.options[sel.selectedIndex];
+    var unit=opt.getAttribute('data-unit')||'';
+    document.getElementById('rm-unit').value=unit;
+}
+
+async function loadContacts(){
+    try{
+        var res=await fetch('/api/organic/contacts');
+        var contacts=await res.json();
+        var supplierList=document.getElementById('supplier-list');
+        var buyerList=document.getElementById('buyer-list');
+        supplierList.innerHTML='';
+        buyerList.innerHTML='';
+        if(contacts.supplier){contacts.supplier.forEach(function(s){supplierList.innerHTML+='<option value="'+s+'">';});}
+        if(contacts.buyer){contacts.buyer.forEach(function(b){buyerList.innerHTML+='<option value="'+b+'">';});}
+    }catch(e){}
 }
 
 async function loadRawMaterials(){
@@ -184,7 +208,7 @@ async function addRawMaterial(){
     if(!qty||parseFloat(qty)<=0){st.className='status error';st.textContent='Enter a valid quantity';return;}
     var res=await fetch('/api/organic/raw-materials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({item:item,supplier:supplier,date_received:date,supplier_lot:lot,quantity:qty,unit:unit})});
     var data=await res.json();
-    if(data.success){st.className='status success';st.textContent='Added: '+item;document.getElementById('rm-lot').value='';document.getElementById('rm-qty').value='';loadRawMaterials();}
+    if(data.success){st.className='status success';st.textContent='Added: '+item;document.getElementById('rm-lot').value='';document.getElementById('rm-qty').value='';loadRawMaterials();loadContacts();}
     else{st.className='status error';st.textContent=data.error||'Failed';}
 }
 
@@ -279,7 +303,7 @@ async function addSale(){
     if(!qty||parseInt(qty)<=0){st.className='status error';st.textContent='Enter quantity';return;}
     var res=await fetch('/api/organic/sales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fg_id:fgId,quantity:qty,sale_date:date,buyer:buyer,case_lot:caseLot})});
     var data=await res.json();
-    if(data.success){st.className='status success';st.textContent='Sale recorded';document.getElementById('sale-qty').value='';document.getElementById('sale-buyer').value='';loadFinishedGoods();loadSales();populateFGDropdown();}
+    if(data.success){st.className='status success';st.textContent='Sale recorded';document.getElementById('sale-qty').value='';document.getElementById('sale-buyer').value='';loadFinishedGoods();loadSales();populateFGDropdown();loadContacts();}
     else{st.className='status error';st.textContent=data.error||'Failed';}
 }
 
@@ -344,6 +368,7 @@ async function doTrace(){
 document.addEventListener('DOMContentLoaded',function(){
     loadIngredients();
     loadRawMaterials();
+    loadContacts();
     document.getElementById('rm-date').value=new Date().toISOString().split('T')[0];
     document.getElementById('sale-date').value=new Date().toISOString().split('T')[0];
 });

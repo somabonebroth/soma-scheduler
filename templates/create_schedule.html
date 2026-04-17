@@ -110,7 +110,7 @@ function weekChanged() {
 
 function buildGroupedOptions() {
     var html = '<option value="">-- No production --</option>';
-    var brands = Object.keys(groupedRecipes).sort();
+    var brands = Object.keys(groupedRecipes);
     for (var b = 0; b < brands.length; b++) {
         var brand = brands[b];
         html += '<optgroup label="' + brand + '">';
