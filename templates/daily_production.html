@@ -154,15 +154,36 @@ function buildKettles(){
     container.innerHTML=html;
 }
 
+function fmtIng(item){
+    if(item==null)return '';
+    if(typeof item==='string')return item;
+    var amt=item.amount;var unit=item.unit||'';var name=item.name||'';var proc=item.process||'';
+    var parts=[];
+    if(amt!==0&&amt!=null&&amt!=='')parts.push(String(amt));
+    if(unit)parts.push(unit);
+    if(name)parts.push(name);
+    var base=parts.length?parts.join(' '):name;
+    return proc?(base+' \u2014 '+proc):base;
+}
+function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
 function buildRecipeCard(data,vessel,side){
     var r=data.details;var name=data.recipe;
     var brandDisplay=r.brand?(r.brand+' - '):'';
     var halvedNote=data.halved?'<span class="halved-badge">½ QUANTITIES</span>':'';
     var html='<div class="recipe-title">'+brandDisplay+name+halvedNote+'</div>';
     html+='<div class="recipe-format">'+(r.format||'')+' | Target: '+(r.yield||'--')+' units</div>';
-    if(r.special_instructions&&r.special_instructions.length){html+='<div class="special-box">';for(var i=0;i<r.special_instructions.length;i++)html+=r.special_instructions[i]+'<br>';html+='</div>';}
+    if(r.special_instructions&&r.special_instructions.length){html+='<div class="special-box">';for(var i=0;i<r.special_instructions.length;i++)html+=escHtml(r.special_instructions[i])+'<br>';html+='</div>';}
     var secs=[['Add to kettle overnight',r.kettle_overnight],['Add after skim',r.after_skim],['Finishing',r.finishing],['Add to jar/container',r.add_to_jar]];
-    for(var s=0;s<secs.length;s++){if(secs[s][1]&&secs[s][1].length){html+='<div class="ingredient-section"><div class="ingredient-header">'+secs[s][0]+'</div>';for(var j=0;j<secs[s][1].length;j++)html+='<div class="ingredient-item">'+secs[s][1][j]+'</div>';html+='</div>';}}
+    for(var s=0;s<secs.length;s++){
+        if(secs[s][1]&&secs[s][1].length){
+            html+='<div class="ingredient-section"><div class="ingredient-header">'+secs[s][0]+'</div>';
+            for(var j=0;j<secs[s][1].length;j++){
+                html+='<div class="ingredient-item">'+escHtml(fmtIng(secs[s][1][j]))+'</div>';
+            }
+            html+='</div>';
+        }
+    }
     if(side==='finish'){
         var vid=vessel.replace(/[()]/g,'');
         html+='<div class="finish-inputs">';

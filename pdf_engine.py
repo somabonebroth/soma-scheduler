@@ -67,6 +67,34 @@ def _wrap_text(text, size, max_width):
     return lines
 
 
+def _fmt_ingredient(item):
+    """Format a structured ingredient dict or legacy string for PDF rendering."""
+    if item is None:
+        return ""
+    if isinstance(item, str):
+        return item
+    if not isinstance(item, dict):
+        return str(item)
+    amount = item.get("amount", 0)
+    unit = item.get("unit", "") or ""
+    name = item.get("name", "") or ""
+    process = item.get("process", "") or ""
+    parts = []
+    if amount not in (0, None, ""):
+        if isinstance(amount, float) and amount == int(amount):
+            parts.append(str(int(amount)))
+        else:
+            parts.append(str(amount))
+    if unit:
+        parts.append(unit)
+    if name:
+        parts.append(name)
+    base = " ".join(parts) if parts else name
+    if process:
+        return base + " \u2014 " + process
+    return base
+
+
 def estimate_card_height(recipe_data, card_w):
     n_items = sum(len(recipe_data.get(k, [])) for k in ["kettle_overnight", "after_skim", "finishing", "add_to_jar"])
     n_sections = sum(1 for k in ["kettle_overnight", "after_skim", "finishing", "add_to_jar"] if recipe_data.get(k))
@@ -130,7 +158,7 @@ def draw_recipe_card(c, x, y, card_w, recipe_name, recipe_data, vessel):
             c.line(x, y - line_h, x + card_w, y - line_h)
             c.setFillColor(black)
             c.setFont(FONT, 7)
-            c.drawString(x + margin + 2, y - 8, str(item))
+            c.drawString(x + margin + 2, y - 8, _fmt_ingredient(item))
             cx = x + card_w - margin - 10
             c.setFillColor(white)
             c.rect(cx, y - line_h + 1, 9, 9, fill=1, stroke=1)

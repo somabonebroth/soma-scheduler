@@ -121,7 +121,14 @@ def require_valid_day(f):
 def load_recipes():
     if os.path.exists(RECIPES_PATH):
         with open(RECIPES_PATH, "r") as f:
-            return json.load(f)
+            recipes = json.load(f)
+        # Auto-migrate in-memory (disk unchanged until explicit save)
+        for name, data in recipes.items():
+            try:
+                migrate_recipe_ingredients(data)
+            except Exception:
+                pass
+        return recipes
     return {}
 
 def save_recipes(recipes):
@@ -182,6 +189,235 @@ def get_current_week_id():
     today = datetime.today()
     monday = today - timedelta(days=today.weekday())
     return monday.strftime("%Y-%m-%d")
+
+
+# ── Structured Ingredient Helpers ──────────────────────────────────────
+VALID_UNITS = ["kg", "g", "L", "ml", "each", "tbsp", "tsp", "pinch", "per L"]
+INGREDIENT_SECTIONS = ["kettle_overnight", "after_skim", "finishing", "add_to_jar"]
+
+# Unit aliases for parsing (lowercase input -> canonical unit)
+UNIT_ALIASES = {
+    "kg": "kg", "kgs": "kg", "kilogram": "kg", "kilograms": "kg",
+    "g": "g", "gr": "g", "gram": "g", "grams": "g",
+    "l": "L", "lt": "L", "ltr": "L", "liter": "L", "liters": "L", "litre": "L", "litres": "L",
+    "ml": "ml", "millilitre": "ml", "milliliter": "ml",
+    "tbsp": "tbsp", "tbs": "tbsp", "tablespoon": "tbsp", "tablespoons": "tbsp",
+    "tsp": "tsp", "teaspoon": "tsp", "teaspoons": "tsp",
+    "pinch": "pinch", "pinches": "pinch",
+    "each": "each", "x": "each",
+}
+
+# Patterns that signal a "per L" (non-halving) item
+PER_L_RE = re.compile(r"\b(per\s*l(?:iter|itre)?|g\s*/\s*l|ml\s*/\s*l)\b", re.IGNORECASE)
+
+# Leading amount + unit + name pattern
+# Matches: "2.5 kg Celery", "4g Salt", "8 each Lemons", "1.5 L Water"
+INGREDIENT_LINE_RE = re.compile(
+    r"^\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s+(.+?)\s*$"
+)
+
+
+def parse_ingredient_line(line):
+    """Parse a free-text ingredient line into a structured ingredient object.
+    Returns dict: {name, amount, unit, process, needs_review}.
+    Flags needs_review=True if parsing is ambiguous."""
+    original = line.strip()
+    if not original:
+        return None
+
+    # Detect "per L" items first — these keep their amount but are never halved.
+    # Strip leading unit + per-L phrase from name so "4g per liter Pink Salt" -> "Pink Salt".
+    if PER_L_RE.search(original):
+        m = re.match(r"^\s*(\d+(?:\.\d+)?)\s*(.+)$", original)
+        if m:
+            amount = float(m.group(1))
+            rest = m.group(2).strip()
+            rest = re.sub(
+                r"^\s*(?:g|ml|kg|l)?\s*(?:per\s*l(?:iter|itre)?|g\s*/\s*l|ml\s*/\s*l)\b[\s,.\-]*",
+                "",
+                rest,
+                flags=re.IGNORECASE,
+            ).strip()
+            return {
+                "name": rest or original,
+                "amount": amount if amount != int(amount) else int(amount),
+                "unit": "per L",
+                "process": "",
+                "needs_review": not bool(rest),
+            }
+        return {
+            "name": original,
+            "amount": 0,
+            "unit": "per L",
+            "process": "",
+            "needs_review": True,
+        }
+
+    # Split out process hints after a comma or em-dash/hyphen
+    # e.g. "2.5 kg Celery, diced" -> name="Celery", process="diced"
+    process = ""
+    body = original
+    # Try em-dash / en-dash / " - " separator first
+    for sep in [" — ", " – ", " - "]:
+        if sep in body:
+            parts = body.split(sep, 1)
+            body = parts[0].strip()
+            process = parts[1].strip()
+            break
+    # Then try comma (only if not already split and comma is late in the string)
+    if not process and "," in body:
+        parts = body.split(",", 1)
+        # Only treat as process if the first part looks like "<num> <unit> <name>"
+        if re.match(r"^\s*\d+(?:\.\d+)?\s+\S+", parts[0]):
+            body = parts[0].strip()
+            process = parts[1].strip()
+
+    m = INGREDIENT_LINE_RE.match(body)
+    if not m:
+        # No leading number — flag for review, keep original text as name
+        return {
+            "name": original,
+            "amount": 0,
+            "unit": "",
+            "process": "",
+            "needs_review": True,
+        }
+
+    amount_str = m.group(1)
+    unit_token = (m.group(2) or "").strip().lower()
+    name = m.group(3).strip()
+
+    try:
+        amount = float(amount_str)
+    except ValueError:
+        amount = 0
+
+    # Resolve unit
+    if unit_token and unit_token in UNIT_ALIASES:
+        unit = UNIT_ALIASES[unit_token]
+        needs_review = False
+    elif unit_token:
+        # There was a token but it's not a recognized unit — it's probably part of the name
+        name = unit_token + " " + name
+        unit = ""
+        needs_review = True
+    else:
+        unit = "each"  # fallback for bare numbers like "8 Lemons"
+        needs_review = False
+
+    # Clean int display
+    if amount == int(amount):
+        amount = int(amount)
+
+    return {
+        "name": name,
+        "amount": amount,
+        "unit": unit,
+        "process": process,
+        "needs_review": needs_review,
+    }
+
+
+def format_ingredient(ing):
+    """Render a structured ingredient back to a display string."""
+    if not isinstance(ing, dict):
+        return str(ing)
+    amount = ing.get("amount", 0)
+    unit = ing.get("unit", "")
+    name = ing.get("name", "")
+    process = ing.get("process", "")
+
+    parts = []
+    if amount:
+        # Display clean int when whole number
+        if isinstance(amount, float) and amount == int(amount):
+            parts.append(str(int(amount)))
+        else:
+            parts.append(str(amount))
+    if unit:
+        parts.append(unit)
+    if name:
+        parts.append(name)
+
+    base = " ".join(parts) if parts else name
+    if process:
+        return base + " — " + process
+    return base
+
+
+def halve_ingredient(ing):
+    """Return a new ingredient with amount halved. 'per L' items are not halved."""
+    if not isinstance(ing, dict):
+        return ing
+    new = dict(ing)
+    if new.get("unit") == "per L":
+        return new
+    amt = new.get("amount", 0)
+    try:
+        halved = float(amt) / 2
+        if halved == int(halved):
+            halved = int(halved)
+        new["amount"] = halved
+    except (ValueError, TypeError):
+        pass
+    return new
+
+
+def ingredients_match(raw_item_name, recipe_ing_name):
+    """Check if a raw material matches a recipe ingredient by name."""
+    if not raw_item_name or not recipe_ing_name:
+        return False
+    a = raw_item_name.lower().strip()
+    b = recipe_ing_name.lower().strip()
+    if a == b or a in b or b in a:
+        return True
+    # Word overlap fallback
+    filler = {"of", "the", "a", "an", "and", "or", "to", "in", "with", "fresh", "raw"}
+    a_words = set(a.split()) - filler
+    b_words = set(b.split()) - filler
+    if a_words and b_words:
+        overlap = a_words & b_words
+        if len(overlap) >= min(len(a_words), len(b_words)):
+            return True
+    return False
+
+
+def is_structured_ingredient(item):
+    """Check if an item is already in structured object form."""
+    return isinstance(item, dict) and "name" in item and "amount" in item
+
+
+def migrate_recipe_ingredients(recipe_data):
+    """In-place: convert any string-format ingredient lines to structured objects.
+    Returns True if any changes were made."""
+    if not isinstance(recipe_data, dict):
+        return False
+    changed = False
+    for section in INGREDIENT_SECTIONS:
+        items = recipe_data.get(section, [])
+        if not isinstance(items, list):
+            continue
+        new_items = []
+        for item in items:
+            if is_structured_ingredient(item):
+                new_items.append(item)
+            elif isinstance(item, str):
+                parsed = parse_ingredient_line(item)
+                if parsed:
+                    new_items.append(parsed)
+                    changed = True
+            elif isinstance(item, dict):
+                # Dict without required fields — coerce
+                new_items.append({
+                    "name": item.get("name", str(item)),
+                    "amount": item.get("amount", 0),
+                    "unit": item.get("unit", ""),
+                    "process": item.get("process", ""),
+                    "needs_review": True,
+                })
+                changed = True
+        recipe_data[section] = new_items
+    return changed
 
 
 # ── Recipe parser ──────────────────────────────────────────────────────
@@ -251,6 +487,12 @@ def parse_recipe_pdf_text(text):
     # Parse recipe body
     current_section = None
     in_special = False
+
+    def _append_ing(section, raw_line):
+        parsed = parse_ingredient_line(raw_line)
+        if parsed:
+            recipe[section].append(parsed)
+
     for i, line in enumerate(lines):
         if i in header_lines_used:
             continue
@@ -269,7 +511,7 @@ def parse_recipe_pdf_text(text):
             continue
         if ll.startswith("water") and ("removing solids" in ll or "top kettle" in ll):
             current_section = "finishing"
-            recipe["finishing"].append(line)
+            _append_ing("finishing", line)
             continue
         if "add to jar" in ll or "add to container" in ll:
             current_section = "add_to_jar"
@@ -277,13 +519,13 @@ def parse_recipe_pdf_text(text):
         if any(ll.startswith(p) for p in ["no salt", "g per liter", "ml per liter"]) or "per liter" in ll or "per litre" in ll:
             if current_section != "finishing":
                 current_section = "finishing"
-            recipe["finishing"].append(line)
+            _append_ing("finishing", line)
             continue
         if in_special:
             recipe["special_instructions"].append(line)
             continue
         if current_section and current_section in recipe:
-            recipe[current_section].append(line)
+            _append_ing(current_section, line)
 
     return {"name": name, "data": recipe}
 
@@ -412,6 +654,45 @@ def delete_recipe(name):
         save_recipes(recipes)
         return jsonify({"success": True})
     return jsonify({"error": "Recipe not found"}), 404
+
+
+@app.route("/api/recipes/migrate-all", methods=["POST"])
+@login_required
+def migrate_all_recipes():
+    """Force-persist structured-ingredient migration to disk for all recipes.
+    Returns a report of which recipes were changed and which items need review."""
+    # Read raw file (bypass auto-migration in load_recipes so we can count changes)
+    raw_recipes = {}
+    if os.path.exists(RECIPES_PATH):
+        with open(RECIPES_PATH, "r") as f:
+            raw_recipes = json.load(f)
+
+    changed_recipes = []
+    review_items = []  # list of {recipe, section, index, name}
+
+    for name, data in raw_recipes.items():
+        changed = migrate_recipe_ingredients(data)
+        if changed:
+            changed_recipes.append(name)
+        for section in INGREDIENT_SECTIONS:
+            for idx, item in enumerate(data.get(section, [])):
+                if isinstance(item, dict) and item.get("needs_review"):
+                    review_items.append({
+                        "recipe": name,
+                        "section": section,
+                        "index": idx,
+                        "name": item.get("name", ""),
+                    })
+
+    save_recipes(raw_recipes)
+    return jsonify({
+        "success": True,
+        "total": len(raw_recipes),
+        "changed": len(changed_recipes),
+        "changed_recipes": changed_recipes,
+        "review_count": len(review_items),
+        "review_items": review_items,
+    })
 
 # Photo upload
 PHOTOS_DIR = os.path.join(DATA_DIR, "photos")
@@ -682,7 +963,7 @@ def download_all_pdfs(week_id):
 # ── 115L Halving Helper ──────────────────────────────────────────────
 def _halve_for_115L(recipe_data):
     """Return a copy of recipe_data with quantities halved for the 115L vessel.
-    Items containing 'per liter', 'per litre', 'per/L', 'g/L', 'ml/L' are NOT halved.
+    Structured ingredients with unit='per L' are NOT halved.
     """
     import copy
     halved = copy.deepcopy(recipe_data)
@@ -694,27 +975,14 @@ def _halve_for_115L(recipe_data):
         except (ValueError, TypeError):
             pass
 
-    # Halve ingredient quantities in all sections
-    per_l_patterns = ["per liter", "per litre", "per/l", "g/l", "ml/l", "/l "]
-    for section in ["kettle_overnight", "after_skim", "finishing", "add_to_jar"]:
-        if section in halved and isinstance(halved[section], list):
-            new_items = []
-            for item in halved[section]:
-                # Check if this is a per/L item — skip halving
-                if any(p in item.lower() for p in per_l_patterns):
-                    new_items.append(item)
-                    continue
-                # Try to find and halve the leading number
-                m = re.match(r'^(\d+\.?\d*)\s*(.*)', item)
-                if m:
-                    val = float(m.group(1)) / 2
-                    # Show as int if whole number
-                    if val == int(val):
-                        val = int(val)
-                    new_items.append(f"{val} {m.group(2)}")
-                else:
-                    new_items.append(item)
-            halved[section] = new_items
+    # Migrate first (safety: in case a legacy recipe slipped through)
+    migrate_recipe_ingredients(halved)
+
+    # Halve each structured ingredient
+    for section in INGREDIENT_SECTIONS:
+        items = halved.get(section, [])
+        if isinstance(items, list):
+            halved[section] = [halve_ingredient(it) for it in items]
 
     halved["_halved"] = True
     return halved
@@ -1207,15 +1475,15 @@ def organic_page():
 
 
 # ── Organic: Get ingredient list from organic recipes ─────────────────
-# Curated master list of organic raw material items
-ORGANIC_INGREDIENTS = [
+# Fallback master list used only if no organic recipes exist yet
+ORGANIC_INGREDIENTS_FALLBACK = [
     {"name": "Chicken Bones", "unit": "kg"},
     {"name": "Ginger Juice", "unit": "ml"},
     {"name": "Honey", "unit": "ml"},
     {"name": "Lemon Juice", "unit": "ml"},
-    {"name": "Lemons", "unit": "8x Halved"},
+    {"name": "Lemons", "unit": "each"},
     {"name": "Pink Salt", "unit": "g"},
-    {"name": "Turmeric Juice", "unit": "750ml"},
+    {"name": "Turmeric Juice", "unit": "ml"},
 ]
 
 ORGANIC_CUSTOM_ITEMS_PATH = os.path.join(ORGANIC_DIR, "custom_ingredients.json")
@@ -1224,14 +1492,43 @@ ORGANIC_CUSTOM_ITEMS_PATH = os.path.join(ORGANIC_DIR, "custom_ingredients.json")
 @app.route("/api/organic/ingredients", methods=["GET"])
 @login_required
 def organic_ingredients():
-    # Combine master list with any custom items added by user
+    """Return unique {name, unit} pairs pulled from organic-certified recipes,
+    merged with user-added custom items. Skips 'per L' items (non-ingredient specs)
+    and items flagged needs_review (ambiguous)."""
+    recipes = load_recipes()
+    derived = {}  # key: lowercased name -> {name, unit}
+
+    for name, rdata in recipes.items():
+        if (rdata.get("certification") or "").lower() != "organic":
+            continue
+        for section in INGREDIENT_SECTIONS:
+            for item in rdata.get(section, []):
+                if not is_structured_ingredient(item):
+                    continue
+                if item.get("needs_review"):
+                    continue
+                ing_name = (item.get("name") or "").strip()
+                unit = (item.get("unit") or "").strip()
+                if not ing_name or unit == "per L":
+                    continue
+                key = ing_name.lower()
+                if key not in derived:
+                    derived[key] = {"name": ing_name, "unit": unit or "each"}
+
+    all_items = list(derived.values())
+
+    # Fallback if nothing derived yet
+    if not all_items:
+        all_items = list(ORGANIC_INGREDIENTS_FALLBACK)
+
+    # Merge in custom user-added items (never duplicate by name)
     custom = _load_json(ORGANIC_CUSTOM_ITEMS_PATH, [])
-    all_items = list(ORGANIC_INGREDIENTS)
     existing_names = {i["name"].lower() for i in all_items}
     for c in custom:
         if c.get("name", "").lower() not in existing_names:
             all_items.append(c)
             existing_names.add(c["name"].lower())
+
     all_items.sort(key=lambda x: x["name"])
     return jsonify(all_items)
 
@@ -1246,9 +1543,9 @@ def add_organic_ingredient():
     if not name:
         return jsonify({"error": "Name required"}), 400
     custom = _load_json(ORGANIC_CUSTOM_ITEMS_PATH, [])
-    # Check not already in master or custom
-    existing = {i["name"].lower() for i in ORGANIC_INGREDIENTS}
-    existing.update(c["name"].lower() for c in custom)
+    # Check not already in derived/fallback or custom
+    existing = {c["name"].lower() for c in custom}
+    existing.update(i["name"].lower() for i in ORGANIC_INGREDIENTS_FALLBACK)
     if name.lower() in existing:
         return jsonify({"error": "Already exists"}), 400
     custom.append({"name": name, "unit": unit or "units"})
@@ -1376,30 +1673,45 @@ def _complete_organic_run(week_id, day_idx, produced_data):
         # Deduct raw materials (FIFO) based on recipe ingredients
         ingredients_used = []
         is_115L = vessel == "115L"
-        for section in ["kettle_overnight", "after_skim", "finishing", "add_to_jar"]:
+        for section in INGREDIENT_SECTIONS:
             items = recipe_data.get(section, [])
             for item in items:
-                # Parse quantity from ingredient line
-                m = re.match(r'^(\d+\.?\d*)\s*(.*)', item.strip())
-                if m:
-                    qty_needed = float(m.group(1))
+                # Structured ingredient path (expected)
+                if is_structured_ingredient(item):
+                    unit = item.get("unit", "")
+                    # Skip "per L" items — these are concentration specs, not tracked inventory
+                    if unit == "per L":
+                        continue
+                    if item.get("needs_review"):
+                        continue
+                    item_name = (item.get("name") or "").strip()
+                    try:
+                        qty_needed = float(item.get("amount") or 0)
+                    except (ValueError, TypeError):
+                        qty_needed = 0
                     if is_115L:
                         qty_needed = qty_needed / 2
-                    item_name = m.group(2).strip()
                 else:
-                    item_name = item.strip()
-                    qty_needed = 0
+                    # Legacy string fallback (shouldn't happen after migration)
+                    m = re.match(r'^(\d+\.?\d*)\s*(.*)', str(item).strip())
+                    if m:
+                        qty_needed = float(m.group(1))
+                        if is_115L:
+                            qty_needed = qty_needed / 2
+                        item_name = m.group(2).strip()
+                    else:
+                        item_name = str(item).strip()
+                        qty_needed = 0
 
-                if qty_needed <= 0:
+                if qty_needed <= 0 or not item_name:
                     continue
 
-                # FIFO deduction
+                # FIFO deduction by ingredient name
                 qty_remaining = qty_needed
                 for mat in materials:
                     if mat["remaining"] <= 0:
                         continue
-                    # Match by checking if the raw material item contains the ingredient name or vice versa
-                    if not _ingredient_matches(mat["item"], item_name):
+                    if not ingredients_match(mat["item"], item_name):
                         continue
                     deduct = min(qty_remaining, mat["remaining"])
                     mat["remaining"] = round(mat["remaining"] - deduct, 2)
@@ -1413,7 +1725,7 @@ def _complete_organic_run(week_id, day_idx, produced_data):
                     if qty_remaining <= 0:
                         break
 
-                # If still remaining, record negative (flagged)
+                # If still remaining, record insufficient-stock (flagged)
                 if qty_remaining > 0:
                     ingredients_used.append({
                         "item": item_name,
@@ -1448,27 +1760,6 @@ def _complete_organic_run(week_id, day_idx, produced_data):
     _save_json(ORGANIC_RUNS_PATH, runs)
     _save_json(ORGANIC_RAW_PATH, materials)
     _save_json(ORGANIC_FG_PATH, fg)
-
-
-def _ingredient_matches(raw_item, recipe_ingredient):
-    """Check if a raw material inventory item matches a recipe ingredient line."""
-    raw_lower = raw_item.lower().strip()
-    ing_lower = recipe_ingredient.lower().strip()
-    # Direct containment check
-    if raw_lower in ing_lower or ing_lower in raw_lower:
-        return True
-    # Check significant words overlap
-    raw_words = set(raw_lower.split())
-    ing_words = set(ing_lower.split())
-    # Remove common filler words
-    filler = {"of", "the", "a", "an", "and", "or", "to", "in", "per", "with"}
-    raw_words -= filler
-    ing_words -= filler
-    if raw_words and ing_words:
-        overlap = raw_words & ing_words
-        if len(overlap) >= min(len(raw_words), len(ing_words)):
-            return True
-    return False
 
 
 # ── Organic: Finished Goods ──────────────────────────────────────────

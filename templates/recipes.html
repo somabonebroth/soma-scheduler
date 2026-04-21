@@ -43,6 +43,19 @@
 .photo-upload-area { margin-top: 12px; padding: 12px; border: 1px dashed var(--border); border-radius: 6px; text-align: center; cursor: pointer; }
 .photo-upload-area:hover { border-color: var(--accent); }
 .photo-upload-area input { display: none; }
+.ing-section { margin-bottom: 14px; border: 1px solid var(--border); border-radius: 6px; padding: 10px; background: #fafafa; }
+.ing-section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.ing-section-title { font-size: 12px; font-weight: 600; color: var(--text); }
+.ing-row { display: grid; grid-template-columns: 70px 90px 1fr 1fr 28px; gap: 6px; margin-bottom: 6px; align-items: center; }
+.ing-row input, .ing-row select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; font-family: inherit; width: 100%; box-sizing: border-box; }
+.ing-row.needs-review { background: #fff8e1; border-radius: 4px; padding: 4px; border-left: 3px solid #f9a825; }
+.ing-row-btn { background: #d32f2f; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; height: 28px; padding: 0; }
+.ing-add-btn { background: var(--accent); color: #fff; border: none; border-radius: 4px; padding: 5px 10px; font-size: 11px; cursor: pointer; font-weight: 600; }
+.ing-review-label { font-size: 10px; color: #f9a825; font-weight: 700; margin-left: 6px; }
+.migrate-banner { background: #fff3cd; border: 1px solid #ffe08a; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: #856404; display: none; }
+.migrate-banner.show { display: block; }
+.migrate-banner button { margin-left: 10px; padding: 4px 10px; font-size: 11px; background: #856404; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+.ing-row-header { display: grid; grid-template-columns: 70px 90px 1fr 1fr 28px; gap: 6px; font-size: 10px; font-weight: 600; color: var(--text-light); margin-bottom: 4px; text-transform: uppercase; }
 </style>
 </head>
 <body>
@@ -52,6 +65,7 @@
     <div class="header-right"><a href="/" class="header-btn">Back to Dashboard</a></div>
 </div>
 <div class="main">
+    <div class="migrate-banner" id="migrate-banner"><span id="migrate-msg"></span><button onclick="runMigration()">Migrate &amp; Save</button></div>
     <div class="card">
         <h2>Add Recipe</h2>
         <div class="add-btns">
@@ -73,7 +87,7 @@
 <script>
 var recipes={};var editingName='';var isAdding=false;var currentFilter='all';var brandOrder=[];var recipeOrder={};var viewingName='';
 function closeModal(id){document.getElementById(id).classList.remove('active');}
-document.addEventListener('DOMContentLoaded',async function(){recipes=await(await fetch('/api/recipes')).json();await loadOrder();renderList();});
+document.addEventListener('DOMContentLoaded',async function(){recipes=await(await fetch('/api/recipes')).json();await loadOrder();renderList();checkMigration();});
 async function loadOrder(){try{var res=await fetch('/api/recipes/grouped');var g=await res.json();brandOrder=Object.keys(g);recipeOrder={};Object.keys(g).forEach(function(b){recipeOrder[b]=g[b].map(function(r){return r.name;});});}catch(e){}}
 function setFilter(f,btn){currentFilter=f;document.querySelectorAll('.filter-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');renderList();}
 
@@ -170,11 +184,39 @@ function viewRecipe(name){
     var photoHtml='';if(r.photo){photoHtml='<img src="/api/photos/'+r.photo+'" class="recipe-photo">';}
     document.getElementById('view-photo').innerHTML=photoHtml;
     var html='';
-    if(r.special_instructions&&r.special_instructions.length){html+='<div class="modal-section"><div class="modal-section-title warning">Special Instructions</div>';r.special_instructions.forEach(function(s){html+='<div class="modal-item">'+s+'</div>';});html+='</div>';}
-    [['Add to kettle overnight','kettle_overnight'],['Add after skim','after_skim'],['Finishing','finishing'],['Add to jar/container','add_to_jar']].forEach(function(pair){var items=r[pair[1]];if(items&&items.length){html+='<div class="modal-section"><div class="modal-section-title">'+pair[0]+'</div>';items.forEach(function(item){html+='<div class="modal-item">'+item+'</div>';});html+='</div>';}});
+    if(r.special_instructions&&r.special_instructions.length){html+='<div class="modal-section"><div class="modal-section-title warning">Special Instructions</div>';r.special_instructions.forEach(function(s){html+='<div class="modal-item">'+esc(s)+'</div>';});html+='</div>';}
+    [['Add to kettle overnight','kettle_overnight'],['Add after skim','after_skim'],['Finishing','finishing'],['Add to jar/container','add_to_jar']].forEach(function(pair){
+        var items=r[pair[1]];
+        if(items&&items.length){
+            html+='<div class="modal-section"><div class="modal-section-title">'+pair[0]+'</div>';
+            items.forEach(function(item){
+                var disp=formatIngredient(item);
+                var flag=(item&&item.needs_review)?'<span class="ing-review-label">NEEDS REVIEW</span>':'';
+                html+='<div class="modal-item">'+esc(disp)+flag+'</div>';
+            });
+            html+='</div>';
+        }
+    });
     document.getElementById('view-body').innerHTML=html;
     document.getElementById('photo-area').style.display='block';
     document.getElementById('view-modal').classList.add('active');
+}
+
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+function formatIngredient(item){
+    if(item==null)return '';
+    if(typeof item==='string')return item;
+    var amt=item.amount;
+    var unit=item.unit||'';
+    var name=item.name||'';
+    var proc=item.process||'';
+    var parts=[];
+    if(amt!==0&&amt!=null&&amt!=='')parts.push(String(amt));
+    if(unit)parts.push(unit);
+    if(name)parts.push(name);
+    var base=parts.length?parts.join(' '):name;
+    return proc?(base+' \u2014 '+proc):base;
 }
 
 // Photo upload
@@ -189,18 +231,76 @@ photoInput.addEventListener('change',async function(){
     if(data.success){recipes=await(await fetch('/api/recipes')).json();viewRecipe(viewingName);}
 });
 
+var UNITS=['kg','g','L','ml','each','tbsp','tsp','pinch','per L'];
+
+function ingRowHTML(sectionId,idx,item){
+    item=item||{name:'',amount:'',unit:'',process:''};
+    var isObj=(typeof item==='object'&&item!==null);
+    var amt=isObj?(item.amount===0||item.amount==null||item.amount===''?'':item.amount):'';
+    var unit=isObj?(item.unit||''):'';
+    var name=isObj?(item.name||''):String(item||'');
+    var proc=isObj?(item.process||''):'';
+    var review=isObj&&item.needs_review?' needs-review':'';
+    var unitOpts='<option value=""></option>';
+    UNITS.forEach(function(u){unitOpts+='<option value="'+u+'"'+(u===unit?' selected':'')+'>'+u+'</option>';});
+    return '<div class="ing-row'+review+'" data-section="'+sectionId+'" data-idx="'+idx+'">'+
+        '<input type="number" step="any" class="ing-amount" value="'+esc(amt)+'" placeholder="Qty">'+
+        '<select class="ing-unit">'+unitOpts+'</select>'+
+        '<input type="text" class="ing-name" value="'+esc(name)+'" placeholder="Ingredient name">'+
+        '<input type="text" class="ing-process" value="'+esc(proc)+'" placeholder="Process (optional)">'+
+        '<button type="button" class="ing-row-btn" onclick="removeIngRow(this)">×</button>'+
+        '</div>';
+}
+
+function ingSectionHTML(sectionId,title,items){
+    items=items||[];
+    var rows='';
+    items.forEach(function(it,i){rows+=ingRowHTML(sectionId,i,it);});
+    return '<div class="ing-section" id="ing-sec-'+sectionId+'">'+
+        '<div class="ing-section-header"><span class="ing-section-title">'+title+'</span>'+
+        '<button type="button" class="ing-add-btn" onclick="addIngRow(\''+sectionId+'\')">+ Add</button></div>'+
+        '<div class="ing-row-header"><div>Amount</div><div>Unit</div><div>Name</div><div>Process</div><div></div></div>'+
+        '<div class="ing-rows" id="ing-rows-'+sectionId+'">'+rows+'</div></div>';
+}
+
+function addIngRow(sectionId){
+    var rows=document.getElementById('ing-rows-'+sectionId);
+    var idx=rows.children.length;
+    var tmp=document.createElement('div');tmp.innerHTML=ingRowHTML(sectionId,idx,null);
+    rows.appendChild(tmp.firstChild);
+}
+function removeIngRow(btn){
+    var row=btn.closest('.ing-row');if(row)row.remove();
+}
+
+function collectIngRows(sectionId){
+    var rows=document.querySelectorAll('#ing-rows-'+sectionId+' .ing-row');
+    var out=[];
+    rows.forEach(function(r){
+        var amtStr=r.querySelector('.ing-amount').value.trim();
+        var unit=r.querySelector('.ing-unit').value.trim();
+        var name=r.querySelector('.ing-name').value.trim();
+        var proc=r.querySelector('.ing-process').value.trim();
+        if(!name&&!amtStr&&!unit&&!proc)return;
+        var amt=0;
+        if(amtStr!==''){var n=parseFloat(amtStr);if(!isNaN(n))amt=(n===Math.floor(n))?Math.floor(n):n;}
+        out.push({name:name,amount:amt,unit:unit,process:proc,needs_review:false});
+    });
+    return out;
+}
+
 function buildEditForm(name,r){
     var html='';
-    html+='<div class="edit-field"><label>Brand Name</label><input id="e-brand" value="'+((r&&r.brand)||'').replace(/"/g,'&quot;')+'" placeholder="e.g. Ripe, SOMA"></div>';
-    html+='<div class="edit-field"><label>Recipe Name</label><input id="e-name" value="'+(name||'').replace(/"/g,'&quot;')+'" placeholder="e.g. Liquid Gold"></div>';
-    html+='<div class="edit-field"><label>Format</label><input id="e-format" value="'+((r&&r.format)||'')+'" placeholder="SS-876ML, FZ-750ML, SS-750ML"></div>';
+    html+='<div class="edit-field"><label>Brand Name</label><input id="e-brand" value="'+esc((r&&r.brand)||'')+'" placeholder="e.g. Ripe, SOMA"></div>';
+    html+='<div class="edit-field"><label>Recipe Name</label><input id="e-name" value="'+esc(name||'')+'" placeholder="e.g. Liquid Gold"></div>';
+    html+='<div class="edit-field"><label>Format</label><input id="e-format" value="'+esc((r&&r.format)||'')+'" placeholder="SS-876ML, FZ-750ML, SS-750ML"></div>';
     html+='<div class="edit-field"><label>Target Yield</label><input type="number" id="e-yield" value="'+((r&&r.yield)||'')+'" placeholder="150"></div>';
     html+='<div class="edit-field"><label>Certification</label><select id="e-cert"><option value=""'+(!(r&&r.certification)?' selected':'')+'>None</option><option value="Organic"'+((r&&r.certification&&r.certification.toLowerCase()==='organic')?' selected':'')+'>Organic</option></select></div>';
-    html+='<div class="edit-field"><label>Special Instructions (one per line)</label><textarea id="e-special">'+((r&&r.special_instructions)||[]).join('\n')+'</textarea></div>';
-    html+='<div class="edit-field"><label>Kettle Overnight (one per line)</label><textarea id="e-overnight">'+((r&&r.kettle_overnight)||[]).join('\n')+'</textarea></div>';
-    html+='<div class="edit-field"><label>After Skim (one per line)</label><textarea id="e-skim">'+((r&&r.after_skim)||[]).join('\n')+'</textarea></div>';
-    html+='<div class="edit-field"><label>Finishing (one per line)</label><textarea id="e-finishing">'+((r&&r.finishing)||[]).join('\n')+'</textarea></div>';
-    html+='<div class="edit-field"><label>Add to Jar (one per line)</label><textarea id="e-jar">'+((r&&r.add_to_jar)||[]).join('\n')+'</textarea></div>';
+    html+='<div class="edit-field"><label>Special Instructions (one per line)</label><textarea id="e-special">'+esc(((r&&r.special_instructions)||[]).join('\n'))+'</textarea></div>';
+    html+=ingSectionHTML('overnight','Kettle Overnight',(r&&r.kettle_overnight)||[]);
+    html+=ingSectionHTML('skim','After Skim',(r&&r.after_skim)||[]);
+    html+=ingSectionHTML('finishing','Finishing',(r&&r.finishing)||[]);
+    html+=ingSectionHTML('jar','Add to Jar',(r&&r.add_to_jar)||[]);
     return html;
 }
 function openAddManual(){isAdding=true;editingName='';document.getElementById('edit-title').textContent='Add Recipe';document.getElementById('edit-save-btn').textContent='Add Recipe';document.getElementById('edit-form').innerHTML=buildEditForm('',null);document.getElementById('edit-modal').classList.add('active');}
@@ -208,10 +308,49 @@ function editRecipe(name){isAdding=false;editingName=name;document.getElementByI
 function toLines(id){return document.getElementById(id).value.split('\n').map(function(l){return l.trim();}).filter(function(l){return l;});}
 async function saveEdit(){
     var newName=document.getElementById('e-name').value.trim();if(!newName){alert('Recipe name required');return;}
-    var data={name:newName,data:{brand:document.getElementById('e-brand').value.trim(),format:document.getElementById('e-format').value.trim(),yield:parseInt(document.getElementById('e-yield').value)||150,certification:document.getElementById('e-cert').value,special_instructions:toLines('e-special'),kettle_overnight:toLines('e-overnight'),after_skim:toLines('e-skim'),finishing:toLines('e-finishing'),add_to_jar:toLines('e-jar')}};
+    var data={name:newName,data:{
+        brand:document.getElementById('e-brand').value.trim(),
+        format:document.getElementById('e-format').value.trim(),
+        yield:parseInt(document.getElementById('e-yield').value)||150,
+        certification:document.getElementById('e-cert').value,
+        special_instructions:toLines('e-special'),
+        kettle_overnight:collectIngRows('overnight'),
+        after_skim:collectIngRows('skim'),
+        finishing:collectIngRows('finishing'),
+        add_to_jar:collectIngRows('jar')
+    }};
+    // Preserve photo field if editing
+    if(!isAdding&&recipes[editingName]&&recipes[editingName].photo){data.data.photo=recipes[editingName].photo;}
     if(isAdding){await fetch('/api/recipes/upload-json',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:newName,data:data.data})});}
     else{await fetch('/api/recipes/'+encodeURIComponent(editingName),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});}
-    closeModal('edit-modal');recipes=await(await fetch('/api/recipes')).json();await loadOrder();renderList();
+    closeModal('edit-modal');recipes=await(await fetch('/api/recipes')).json();await loadOrder();renderList();checkMigration();
+}
+
+// Check if any recipes need migration/review and show banner
+function checkMigration(){
+    var needsReview=0;var total=0;
+    Object.keys(recipes).forEach(function(n){
+        ['kettle_overnight','after_skim','finishing','add_to_jar'].forEach(function(s){
+            var items=recipes[n][s]||[];
+            items.forEach(function(it){total++;if(it&&it.needs_review)needsReview++;});
+        });
+    });
+    var banner=document.getElementById('migrate-banner');
+    if(needsReview>0){
+        document.getElementById('migrate-msg').textContent=needsReview+' ingredient(s) need review after auto-migration. Open a recipe to fix highlighted rows, or save current state to disk:';
+        banner.classList.add('show');
+    } else {
+        banner.classList.remove('show');
+    }
+}
+
+async function runMigration(){
+    var res=await fetch('/api/recipes/migrate-all',{method:'POST'});
+    var data=await res.json();
+    if(data.success){
+        alert('Migrated '+data.changed+' of '+data.total+' recipes. '+data.review_count+' items flagged for review.');
+        recipes=await(await fetch('/api/recipes')).json();await loadOrder();renderList();checkMigration();
+    }
 }
 async function deleteRecipe(name){if(!confirm('Delete "'+name+'"?'))return;await fetch('/api/recipes/'+encodeURIComponent(name),{method:'DELETE'});recipes=await(await fetch('/api/recipes')).json();renderList();}
 
@@ -224,7 +363,7 @@ ui.addEventListener('change',function(){if(ui.files.length)doUpload(ui.files[0])
 async function doUpload(file){
     var st=document.getElementById('upload-status');st.className='status loading';st.textContent='Parsing...';st.style.display='block';
     var fd=new FormData();fd.append('file',file);
-    try{var res=await fetch('/api/recipes/upload',{method:'POST',body:fd});var data=await res.json();if(data.success){st.className='status success';st.textContent='Added: '+data.name;recipes=await(await fetch('/api/recipes')).json();await loadOrder();renderList();}else{st.className='status error';st.textContent=data.error||'Failed';}}
+    try{var res=await fetch('/api/recipes/upload',{method:'POST',body:fd});var data=await res.json();if(data.success){st.className='status success';st.textContent='Added: '+data.name;recipes=await(await fetch('/api/recipes')).json();await loadOrder();renderList();checkMigration();}else{st.className='status error';st.textContent=data.error||'Failed';}}
     catch(e){st.className='status error';st.textContent='Error: '+e.message;}
 }
 </script>
