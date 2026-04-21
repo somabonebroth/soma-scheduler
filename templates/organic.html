@@ -74,8 +74,8 @@
             </div>
             <div class="form-row">
                 <div class="form-field"><label>Supplier LOT#</label><input id="rm-lot" placeholder="Supplier lot number"></div>
-                <div class="form-field"><label>Quantity</label><input type="number" id="rm-qty" placeholder="0" step="0.1"></div>
-                <div class="form-field"><label>Unit</label><input id="rm-unit" readonly style="background:#f5f5f0;"></div>
+                <div class="form-field"><label>Quantity (# of units)</label><input type="number" id="rm-qty" placeholder="0" step="1"></div>
+                <div class="form-field"><label>Unit (pack size)</label><input id="rm-unit" readonly style="background:#f5f5f0;"></div>
             </div>
             <button class="btn btn-primary" onclick="addRawMaterial()">Add to Inventory</button>
             <button class="btn btn-outline" style="margin-left:8px;" onclick="addCustomIngredient()">+ New Ingredient</button>
@@ -158,16 +158,18 @@ async function loadIngredients(){
     ingredientData=await res.json();
     var sel=document.getElementById('rm-item');
     sel.innerHTML='<option value="">-- Select ingredient --</option>';
-    ingredientData.forEach(function(item){
-        sel.innerHTML+='<option value="'+item.name+'" data-unit="'+item.unit+'">'+item.name+' ('+item.unit+')</option>';
+    ingredientData.forEach(function(item,idx){
+        var label=item.pack_label||item.unit||'';
+        sel.innerHTML+='<option value="'+idx+'">'+item.name+' — '+label+'</option>';
     });
 }
 
 function onIngredientSelect(){
     var sel=document.getElementById('rm-item');
-    var opt=sel.options[sel.selectedIndex];
-    var unit=opt.getAttribute('data-unit')||'';
-    document.getElementById('rm-unit').value=unit;
+    var idx=parseInt(sel.value);
+    if(isNaN(idx)||!ingredientData[idx]){document.getElementById('rm-unit').value='';return;}
+    var item=ingredientData[idx];
+    document.getElementById('rm-unit').value=item.pack_label||item.unit||'';
 }
 
 async function loadContacts(){
@@ -188,28 +190,41 @@ async function loadRawMaterials(){
     var data=await res.json();
     var container=document.getElementById('rm-table-container');
     if(!data.length){container.innerHTML='<div class="empty-state">No raw materials in inventory. Add items above.</div>';return;}
-    var html='<table class="inv-table"><tr><th>Item</th><th>Supplier</th><th>Received</th><th>LOT#</th><th>Qty</th><th>Remaining</th><th>Unit</th><th></th></tr>';
+    var html='<table class="inv-table"><tr><th>Item</th><th>Supplier</th><th>Received</th><th>LOT#</th><th>Qty</th><th>Remaining</th><th>Pack Size</th><th></th></tr>';
     data.forEach(function(m){
         var remClass=m.remaining<0?'negative':m.remaining===0?'low':'';
-        html+='<tr><td>'+m.item+'</td><td>'+m.supplier+'</td><td>'+m.date_received+'</td><td>'+m.supplier_lot+'</td><td>'+m.quantity+'</td><td class="'+remClass+'">'+m.remaining+'</td><td>'+m.unit+'</td><td><button class="btn-danger" onclick="deleteRM(\''+m.id+'\')">Del</button></td></tr>';
+        var pack=m.pack_label||m.unit||'';
+        html+='<tr><td>'+m.item+'</td><td>'+m.supplier+'</td><td>'+m.date_received+'</td><td>'+m.supplier_lot+'</td><td>'+m.quantity+'</td><td class="'+remClass+'">'+m.remaining+'</td><td>'+pack+'</td><td><button class="btn-danger" onclick="deleteRM(\''+m.id+'\')">Del</button></td></tr>';
     });
     html+='</table>';
     container.innerHTML=html;
 }
 
 async function addRawMaterial(){
-    var item=document.getElementById('rm-item').value;
+    var sel=document.getElementById('rm-item');
+    var idx=parseInt(sel.value);
+    var st=document.getElementById('rm-status');
+    if(isNaN(idx)||!ingredientData[idx]){st.className='status error';st.textContent='Select an item';return;}
+    var item=ingredientData[idx];
     var supplier=document.getElementById('rm-supplier').value.trim();
     var date=document.getElementById('rm-date').value;
     var lot=document.getElementById('rm-lot').value.trim();
     var qty=document.getElementById('rm-qty').value;
-    var unit=document.getElementById('rm-unit').value.trim();
-    var st=document.getElementById('rm-status');
-    if(!item){st.className='status error';st.textContent='Select an item';return;}
-    if(!qty||parseFloat(qty)<=0){st.className='status error';st.textContent='Enter a valid quantity';return;}
-    var res=await fetch('/api/organic/raw-materials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({item:item,supplier:supplier,date_received:date,supplier_lot:lot,quantity:qty,unit:unit})});
+    if(!qty||parseFloat(qty)<=0){st.className='status error';st.textContent='Enter a valid quantity (number of packs)';return;}
+    var body={
+        item:item.name,
+        supplier:supplier,
+        date_received:date,
+        supplier_lot:lot,
+        quantity:qty,
+        unit:item.pack_label||item.unit||'',
+        pack_label:item.pack_label||item.unit||'',
+        pack_amount:item.pack_amount,
+        pack_unit:item.pack_unit||''
+    };
+    var res=await fetch('/api/organic/raw-materials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     var data=await res.json();
-    if(data.success){st.className='status success';st.textContent='Added: '+item;document.getElementById('rm-lot').value='';document.getElementById('rm-qty').value='';loadRawMaterials();loadContacts();}
+    if(data.success){st.className='status success';st.textContent='Added: '+item.name+' ('+qty+' × '+(item.pack_label||item.unit||'')+')';document.getElementById('rm-lot').value='';document.getElementById('rm-qty').value='';loadRawMaterials();loadContacts();}
     else{st.className='status error';st.textContent=data.error||'Failed';}
 }
 
@@ -222,11 +237,11 @@ async function deleteRM(id){
 async function addCustomIngredient(){
     var name=prompt('Ingredient name (e.g. Rosemary):');
     if(!name||!name.trim())return;
-    var unit=prompt('Unit of measure (e.g. kg, ml, g, units):');
-    if(!unit)unit='units';
-    var res=await fetch('/api/organic/ingredients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name.trim(),unit:unit.trim()})});
+    var packLabel=prompt('Pack size used per batch (e.g. "750 ml", "1 kg", "8 each"):');
+    if(!packLabel||!packLabel.trim()){alert('Pack size required');return;}
+    var res=await fetch('/api/organic/ingredients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name.trim(),pack_label:packLabel.trim()})});
     var data=await res.json();
-    if(data.success){loadIngredients();alert('Added: '+name.trim()+' ('+unit.trim()+')');}
+    if(data.success){loadIngredients();alert('Added: '+name.trim()+' — '+packLabel.trim());}
     else{alert(data.error||'Failed to add');}
 }
 
@@ -252,7 +267,8 @@ async function loadRuns(){
             html+='<div class="run-detail"><strong>Raw Materials Used:</strong></div><ul class="ing-list">';
             run.ingredients_used.forEach(function(ing){
                 var flag=ing.negative?'<span class="flag"> ⚠ INSUFFICIENT STOCK</span>':'';
-                html+='<li>'+ing.quantity_used+' × '+ing.item+' (LOT: '+ing.supplier_lot+')'+flag+'</li>';
+                var unitPart=ing.unit?(' '+ing.unit):'';
+                html+='<li>'+ing.quantity_used+unitPart+' × '+ing.item+' (LOT: '+ing.supplier_lot+')'+flag+'</li>';
             });
             html+='</ul>';
         }
@@ -362,7 +378,8 @@ async function doTrace(){
                 if(r.ingredients_used&&r.ingredients_used.length){
                     r.ingredients_used.forEach(function(ing){
                         var flag=ing.negative?' <span style="color:#dc3545;font-weight:700;">⚠ INSUFFICIENT</span>':'';
-                        html+='<div style="padding:4px 0;font-size:12px;">'+ing.quantity_used+' × '+ing.item+' (Supplier LOT: '+ing.supplier_lot+')'+flag+'</div>';
+                        var unitPart=ing.unit?(' '+ing.unit):'';
+                        html+='<div style="padding:4px 0;font-size:12px;">'+ing.quantity_used+unitPart+' × '+ing.item+' (Supplier LOT: '+ing.supplier_lot+')'+flag+'</div>';
                     });
                 }
             });

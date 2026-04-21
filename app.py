@@ -1475,30 +1475,41 @@ def organic_page():
 
 
 # ── Organic: Get ingredient list from organic recipes ─────────────────
-# Fallback master list used only if no organic recipes exist yet
+# Fallback master list used only if no organic recipes exist yet.
+# pack_label is the per-batch unit (e.g. "750 ml", "8 kg", "1 each").
 ORGANIC_INGREDIENTS_FALLBACK = [
-    {"name": "Chicken Bones", "unit": "kg"},
-    {"name": "Ginger Juice", "unit": "ml"},
-    {"name": "Honey", "unit": "ml"},
-    {"name": "Lemon Juice", "unit": "ml"},
-    {"name": "Lemons", "unit": "each"},
-    {"name": "Pink Salt", "unit": "g"},
-    {"name": "Turmeric Juice", "unit": "ml"},
+    {"name": "Chicken Bones", "pack_label": "1 kg", "pack_amount": 1, "pack_unit": "kg"},
+    {"name": "Ginger Juice", "pack_label": "500 ml", "pack_amount": 500, "pack_unit": "ml"},
+    {"name": "Honey", "pack_label": "500 ml", "pack_amount": 500, "pack_unit": "ml"},
+    {"name": "Lemon Juice", "pack_label": "500 ml", "pack_amount": 500, "pack_unit": "ml"},
+    {"name": "Lemons", "pack_label": "1 each", "pack_amount": 1, "pack_unit": "each"},
+    {"name": "Pink Salt", "pack_label": "1 kg", "pack_amount": 1, "pack_unit": "kg"},
+    {"name": "Turmeric Juice", "pack_label": "750 ml", "pack_amount": 750, "pack_unit": "ml"},
 ]
 
 ORGANIC_CUSTOM_ITEMS_PATH = os.path.join(ORGANIC_DIR, "custom_ingredients.json")
 
 
+def _format_pack_label(amount, unit):
+    """Format a pack label like '750 ml' or '8 kg' from structured amount+unit."""
+    if amount == int(amount):
+        amount = int(amount)
+    if unit:
+        return f"{amount} {unit}"
+    return str(amount)
+
+
 @app.route("/api/organic/ingredients", methods=["GET"])
 @login_required
 def organic_ingredients():
-    """Return unique {name, unit} pairs pulled from organic-certified recipes,
-    merged with user-added custom items. Skips 'per L' items (non-ingredient specs)
-    and items flagged needs_review (ambiguous)."""
+    """Return unique {name, pack_label, pack_amount, pack_unit} entries pulled
+    from organic-certified recipes. Each entry represents one pack size.
+    The same ingredient at different pack sizes produces separate entries.
+    Skips 'per L' items (concentration specs) and needs_review items."""
     recipes = load_recipes()
-    derived = {}  # key: lowercased name -> {name, unit}
+    derived = {}  # key: (name_lower, pack_label) -> entry
 
-    for name, rdata in recipes.items():
+    for rname, rdata in recipes.items():
         if (rdata.get("certification") or "").lower() != "organic":
             continue
         for section in INGREDIENT_SECTIONS:
@@ -1509,27 +1520,40 @@ def organic_ingredients():
                     continue
                 ing_name = (item.get("name") or "").strip()
                 unit = (item.get("unit") or "").strip()
-                if not ing_name or unit == "per L":
+                try:
+                    amount = float(item.get("amount") or 0)
+                except (ValueError, TypeError):
+                    amount = 0
+                if not ing_name or unit == "per L" or amount <= 0:
                     continue
-                key = ing_name.lower()
+                if amount == int(amount):
+                    amount = int(amount)
+                pack_unit = unit or "each"
+                pack_label = _format_pack_label(amount, pack_unit)
+                key = (ing_name.lower(), pack_label)
                 if key not in derived:
-                    derived[key] = {"name": ing_name, "unit": unit or "each"}
+                    derived[key] = {
+                        "name": ing_name,
+                        "pack_label": pack_label,
+                        "pack_amount": amount,
+                        "pack_unit": pack_unit,
+                    }
 
     all_items = list(derived.values())
 
-    # Fallback if nothing derived yet
     if not all_items:
         all_items = list(ORGANIC_INGREDIENTS_FALLBACK)
 
-    # Merge in custom user-added items (never duplicate by name)
+    # Merge in custom user-added items (never duplicate by name+pack_label)
     custom = _load_json(ORGANIC_CUSTOM_ITEMS_PATH, [])
-    existing_names = {i["name"].lower() for i in all_items}
+    existing = {(i["name"].lower(), i.get("pack_label", "")) for i in all_items}
     for c in custom:
-        if c.get("name", "").lower() not in existing_names:
+        key = (c.get("name", "").lower(), c.get("pack_label", ""))
+        if key not in existing:
             all_items.append(c)
-            existing_names.add(c["name"].lower())
+            existing.add(key)
 
-    all_items.sort(key=lambda x: x["name"])
+    all_items.sort(key=lambda x: (x["name"], x.get("pack_label", "")))
     return jsonify(all_items)
 
 
@@ -1539,16 +1563,38 @@ def add_organic_ingredient():
     """Add a custom ingredient to the organic raw materials list."""
     data = request.json
     name = data.get("name", "").strip()
-    unit = data.get("unit", "").strip()
+    pack_label = (data.get("pack_label") or "").strip()
+    pack_amount = data.get("pack_amount")
+    pack_unit = (data.get("pack_unit") or "").strip()
     if not name:
         return jsonify({"error": "Name required"}), 400
+    if not pack_label:
+        return jsonify({"error": "Pack size required (e.g. '750 ml')"}), 400
+    # Parse pack_label if pack_amount/pack_unit not provided explicitly
+    if pack_amount is None or not pack_unit:
+        m = re.match(r"^\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s*$", pack_label)
+        if m:
+            try:
+                pack_amount = float(m.group(1))
+                if pack_amount == int(pack_amount):
+                    pack_amount = int(pack_amount)
+            except ValueError:
+                pack_amount = 1
+            pack_unit = (m.group(2) or "each").strip()
+        else:
+            pack_amount = 1
+            pack_unit = "each"
     custom = _load_json(ORGANIC_CUSTOM_ITEMS_PATH, [])
-    # Check not already in derived/fallback or custom
-    existing = {c["name"].lower() for c in custom}
-    existing.update(i["name"].lower() for i in ORGANIC_INGREDIENTS_FALLBACK)
-    if name.lower() in existing:
+    existing = {(c.get("name", "").lower(), c.get("pack_label", "")) for c in custom}
+    existing.update((i["name"].lower(), i.get("pack_label", "")) for i in ORGANIC_INGREDIENTS_FALLBACK)
+    if (name.lower(), pack_label) in existing:
         return jsonify({"error": "Already exists"}), 400
-    custom.append({"name": name, "unit": unit or "units"})
+    custom.append({
+        "name": name,
+        "pack_label": pack_label,
+        "pack_amount": pack_amount,
+        "pack_unit": pack_unit,
+    })
     _save_json(ORGANIC_CUSTOM_ITEMS_PATH, custom)
     return jsonify({"success": True})
 
@@ -1572,7 +1618,10 @@ def add_raw_material():
         "date_received": data.get("date_received", ""),
         "supplier_lot": data.get("supplier_lot", ""),
         "quantity": float(data.get("quantity", 0)),
-        "unit": data.get("unit", ""),
+        "unit": data.get("unit", ""),  # retained for display/backward compat
+        "pack_label": data.get("pack_label", data.get("unit", "")),
+        "pack_amount": data.get("pack_amount"),
+        "pack_unit": data.get("pack_unit", ""),
         "remaining": float(data.get("quantity", 0)),
         "created_at": datetime.now().isoformat(),
     }
@@ -1670,67 +1719,92 @@ def _complete_organic_run(week_id, day_idx, produced_data):
             except (ValueError, TypeError):
                 pass
 
-        # Deduct raw materials (FIFO) based on recipe ingredients
+        # Deduct raw materials: 1 pack per batch (½ for 115L).
+        # Recipe specifies per-batch amount; raw materials are stored in pack units
+        # where 1 unit = 1 full per-batch allocation. So a batch consumes 1 pack.
         ingredients_used = []
         is_115L = vessel == "115L"
+        packs_per_batch = 0.5 if is_115L else 1.0
         for section in INGREDIENT_SECTIONS:
             items = recipe_data.get(section, [])
             for item in items:
-                # Structured ingredient path (expected)
                 if is_structured_ingredient(item):
                     unit = item.get("unit", "")
-                    # Skip "per L" items — these are concentration specs, not tracked inventory
                     if unit == "per L":
                         continue
                     if item.get("needs_review"):
                         continue
                     item_name = (item.get("name") or "").strip()
                     try:
-                        qty_needed = float(item.get("amount") or 0)
+                        recipe_amount = float(item.get("amount") or 0)
                     except (ValueError, TypeError):
-                        qty_needed = 0
-                    if is_115L:
-                        qty_needed = qty_needed / 2
+                        recipe_amount = 0
+                    if recipe_amount <= 0 or not item_name:
+                        continue
                 else:
-                    # Legacy string fallback (shouldn't happen after migration)
-                    m = re.match(r'^(\d+\.?\d*)\s*(.*)', str(item).strip())
-                    if m:
-                        qty_needed = float(m.group(1))
-                        if is_115L:
-                            qty_needed = qty_needed / 2
-                        item_name = m.group(2).strip()
-                    else:
-                        item_name = str(item).strip()
-                        qty_needed = 0
-
-                if qty_needed <= 0 or not item_name:
+                    # Legacy fallback: skip (can't determine pack size reliably)
                     continue
 
-                # FIFO deduction by ingredient name
-                qty_remaining = qty_needed
+                # Build the pack label for this recipe ingredient for matching
+                pack_label = _format_pack_label(
+                    recipe_amount if recipe_amount == int(recipe_amount) else recipe_amount,
+                    unit or "each",
+                )
+
+                packs_needed = packs_per_batch
+                packs_remaining = packs_needed
+
+                # FIFO deduction by name; prefer matching pack_label exactly
+                # Pass 1: match name AND pack_label
                 for mat in materials:
                     if mat["remaining"] <= 0:
                         continue
                     if not ingredients_match(mat["item"], item_name):
                         continue
-                    deduct = min(qty_remaining, mat["remaining"])
-                    mat["remaining"] = round(mat["remaining"] - deduct, 2)
-                    qty_remaining = round(qty_remaining - deduct, 2)
+                    if (mat.get("pack_label") or "") != pack_label:
+                        continue
+                    deduct = min(packs_remaining, mat["remaining"])
+                    mat["remaining"] = round(mat["remaining"] - deduct, 4)
+                    packs_remaining = round(packs_remaining - deduct, 4)
                     ingredients_used.append({
                         "item": mat["item"],
                         "supplier_lot": mat["supplier_lot"],
                         "quantity_used": deduct,
+                        "unit": mat.get("pack_label") or mat.get("unit") or "",
                         "raw_material_id": mat["id"],
                     })
-                    if qty_remaining <= 0:
+                    if packs_remaining <= 0:
                         break
 
-                # If still remaining, record insufficient-stock (flagged)
-                if qty_remaining > 0:
+                # Pass 2: match by name only (legacy inventory without pack_label)
+                if packs_remaining > 0:
+                    for mat in materials:
+                        if mat["remaining"] <= 0:
+                            continue
+                        if mat.get("pack_label"):
+                            continue  # already checked with exact match
+                        if not ingredients_match(mat["item"], item_name):
+                            continue
+                        deduct = min(packs_remaining, mat["remaining"])
+                        mat["remaining"] = round(mat["remaining"] - deduct, 4)
+                        packs_remaining = round(packs_remaining - deduct, 4)
+                        ingredients_used.append({
+                            "item": mat["item"],
+                            "supplier_lot": mat["supplier_lot"],
+                            "quantity_used": deduct,
+                            "unit": mat.get("unit") or "",
+                            "raw_material_id": mat["id"],
+                        })
+                        if packs_remaining <= 0:
+                            break
+
+                # If still remaining, record insufficient stock
+                if packs_remaining > 0:
                     ingredients_used.append({
                         "item": item_name,
                         "supplier_lot": "INSUFFICIENT_STOCK",
-                        "quantity_used": qty_remaining,
+                        "quantity_used": packs_remaining,
+                        "unit": pack_label,
                         "negative": True,
                     })
 
