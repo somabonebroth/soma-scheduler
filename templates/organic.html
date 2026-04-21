@@ -74,16 +74,45 @@
             </div>
             <div class="form-row">
                 <div class="form-field"><label>Supplier LOT#</label><input id="rm-lot" placeholder="Supplier lot number"></div>
-                <div class="form-field"><label>Quantity (# of units)</label><input type="number" id="rm-qty" placeholder="0" step="1"></div>
-                <div class="form-field"><label>Unit (pack size)</label><input id="rm-unit" readonly style="background:#f5f5f0;"></div>
+                <div class="form-field"><label id="rm-qty-label">Quantity</label><input type="number" id="rm-qty" placeholder="0" step="any"></div>
+                <div class="form-field"><label id="rm-unit-label">Unit</label><input id="rm-unit" readonly style="background:#f5f5f0;"></div>
             </div>
+            <div id="rm-mode-info" style="font-size:11px;color:var(--text-light);margin-bottom:8px;"></div>
             <button class="btn btn-primary" onclick="addRawMaterial()">Add to Inventory</button>
+            <button class="btn btn-outline" style="margin-left:8px;" onclick="openTrackingMode()">Change Tracking Mode</button>
             <button class="btn btn-outline" style="margin-left:8px;" onclick="addCustomIngredient()">+ New Ingredient</button>
             <div id="rm-status" class="status" style="margin-top:10px;"></div>
         </div>
         <div class="card">
             <h2>Current Inventory <span class="organic-badge">Organic</span></h2>
             <div id="rm-table-container"><div class="empty-state">Loading...</div></div>
+        </div>
+    </div>
+
+    <!-- Tracking mode modal -->
+    <div class="modal-overlay" id="tracking-modal">
+        <div class="modal" style="max-width:420px;">
+            <button class="modal-close" onclick="closeTrackingModal()">&times;</button>
+            <h2 id="tracking-title">Tracking Mode</h2>
+            <p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Choose how to count this ingredient in inventory:</p>
+            <div class="edit-field">
+                <label><input type="radio" name="track-mode" value="bulk" id="track-bulk"> <strong>Bulk</strong> — track by weight/volume (e.g. 10,000 g Pink Salt; deducts recipe amount per batch)</label>
+            </div>
+            <div class="edit-field">
+                <label><input type="radio" name="track-mode" value="pack" id="track-pack"> <strong>Pack</strong> — track whole units (e.g. 5 × 750 ml Turmeric; deducts 1 pack per batch)</label>
+            </div>
+            <div class="edit-field" id="track-bulk-fields">
+                <label>Base unit (g, ml, kg, each…)</label>
+                <input type="text" id="track-base-unit" placeholder="g">
+            </div>
+            <div class="edit-field" id="track-pack-fields" style="display:none;">
+                <label>Pack size (e.g. "750 ml", "1 kg")</label>
+                <input type="text" id="track-pack-label" placeholder="750 ml">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeTrackingModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveTrackingMode()">Save</button>
+            </div>
         </div>
     </div>
 
@@ -159,17 +188,110 @@ async function loadIngredients(){
     var sel=document.getElementById('rm-item');
     sel.innerHTML='<option value="">-- Select ingredient --</option>';
     ingredientData.forEach(function(item,idx){
-        var label=item.pack_label||item.unit||'';
-        sel.innerHTML+='<option value="'+idx+'">'+item.name+' — '+label+'</option>';
+        var label;
+        if(item.tracking_mode==='pack'){
+            label=item.pack_label||item.pack_unit||'pack';
+        } else {
+            label=item.base_unit||'bulk';
+        }
+        var modeTag=item.tracking_mode==='pack'?' [pack]':' [bulk]';
+        sel.innerHTML+='<option value="'+idx+'">'+item.name+' — '+label+modeTag+'</option>';
     });
 }
 
 function onIngredientSelect(){
     var sel=document.getElementById('rm-item');
     var idx=parseInt(sel.value);
-    if(isNaN(idx)||!ingredientData[idx]){document.getElementById('rm-unit').value='';return;}
+    var unitEl=document.getElementById('rm-unit');
+    var qtyLabel=document.getElementById('rm-qty-label');
+    var unitLabel=document.getElementById('rm-unit-label');
+    var info=document.getElementById('rm-mode-info');
+    if(isNaN(idx)||!ingredientData[idx]){
+        unitEl.value='';unitEl.readOnly=true;unitEl.style.background='#f5f5f0';
+        qtyLabel.textContent='Quantity';unitLabel.textContent='Unit';info.textContent='';
+        return;
+    }
     var item=ingredientData[idx];
-    document.getElementById('rm-unit').value=item.pack_label||item.unit||'';
+    if(item.tracking_mode==='pack'){
+        unitEl.value=item.pack_label||item.pack_unit||'';
+        unitEl.readOnly=true;unitEl.style.background='#f5f5f0';
+        qtyLabel.textContent='Quantity (# of packs)';
+        unitLabel.textContent='Unit (pack size)';
+        info.textContent='Pack mode — 1 pack deducted per batch (0.5 for 115L)';
+    } else {
+        unitEl.value=item.base_unit||'';
+        unitEl.readOnly=false;unitEl.style.background='';
+        qtyLabel.textContent='Quantity (amount in base unit)';
+        unitLabel.textContent='Unit (base)';
+        var perBatchNote='';
+        if(item.recipe_unit==='per L'){perBatchNote=' (recipe uses '+item.recipe_amount+' '+(item.base_unit||'g')+'/L × batch liters)';}
+        else if(item.recipe_amount){perBatchNote=' (recipe uses '+item.recipe_amount+' '+(item.recipe_unit||'')+' per batch)';}
+        info.textContent='Bulk mode — recipe amount deducted per batch'+perBatchNote;
+    }
+}
+
+function openTrackingMode(){
+    var sel=document.getElementById('rm-item');
+    var idx=parseInt(sel.value);
+    if(isNaN(idx)||!ingredientData[idx]){alert('Select an ingredient first');return;}
+    var item=ingredientData[idx];
+    document.getElementById('tracking-title').textContent='Tracking Mode — '+item.name;
+    if(item.tracking_mode==='pack'){
+        document.getElementById('track-pack').checked=true;
+        document.getElementById('track-pack-fields').style.display='block';
+        document.getElementById('track-bulk-fields').style.display='none';
+        document.getElementById('track-pack-label').value=item.pack_label||'';
+    } else {
+        document.getElementById('track-bulk').checked=true;
+        document.getElementById('track-bulk-fields').style.display='block';
+        document.getElementById('track-pack-fields').style.display='none';
+        document.getElementById('track-base-unit').value=item.base_unit||'';
+    }
+    document.querySelectorAll('input[name="track-mode"]').forEach(function(r){
+        r.onchange=function(){
+            document.getElementById('track-pack-fields').style.display=(r.value==='pack'&&r.checked)?'block':'none';
+            document.getElementById('track-bulk-fields').style.display=(r.value==='bulk'&&r.checked)?'block':'none';
+        };
+    });
+    document.getElementById('tracking-modal').classList.add('active');
+}
+
+function closeTrackingModal(){
+    document.getElementById('tracking-modal').classList.remove('active');
+}
+
+async function saveTrackingMode(){
+    var sel=document.getElementById('rm-item');
+    var idx=parseInt(sel.value);
+    if(isNaN(idx)||!ingredientData[idx])return;
+    var item=ingredientData[idx];
+    var mode=document.querySelector('input[name="track-mode"]:checked').value;
+    var body={name:item.name,mode:mode};
+    if(mode==='bulk'){
+        var bu=document.getElementById('track-base-unit').value.trim();
+        if(bu)body.base_unit=bu;
+    } else {
+        var pl=document.getElementById('track-pack-label').value.trim();
+        if(!pl){alert('Pack size required for pack mode');return;}
+        body.pack_label=pl;
+        // Try parsing amount + unit from label
+        var m=pl.match(/^\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s*$/);
+        if(m){
+            body.pack_amount=parseFloat(m[1]);
+            body.pack_unit=(m[2]||'each').trim();
+        }
+    }
+    var res=await fetch('/api/organic/tracking-mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    var data=await res.json();
+    if(data.success){
+        closeTrackingModal();
+        await loadIngredients();
+        // Re-select the same ingredient by name
+        var newIdx=ingredientData.findIndex(function(i){return i.name===item.name;});
+        if(newIdx>=0){document.getElementById('rm-item').value=newIdx;onIngredientSelect();}
+    } else {
+        alert(data.error||'Failed to save tracking mode');
+    }
 }
 
 async function loadContacts(){
@@ -190,11 +312,12 @@ async function loadRawMaterials(){
     var data=await res.json();
     var container=document.getElementById('rm-table-container');
     if(!data.length){container.innerHTML='<div class="empty-state">No raw materials in inventory. Add items above.</div>';return;}
-    var html='<table class="inv-table"><tr><th>Item</th><th>Supplier</th><th>Received</th><th>LOT#</th><th>Qty</th><th>Remaining</th><th>Pack Size</th><th></th></tr>';
+    var html='<table class="inv-table"><tr><th>Item</th><th>Mode</th><th>Supplier</th><th>Received</th><th>LOT#</th><th>Qty</th><th>Remaining</th><th>Unit</th><th></th></tr>';
     data.forEach(function(m){
         var remClass=m.remaining<0?'negative':m.remaining===0?'low':'';
-        var pack=m.pack_label||m.unit||'';
-        html+='<tr><td>'+m.item+'</td><td>'+m.supplier+'</td><td>'+m.date_received+'</td><td>'+m.supplier_lot+'</td><td>'+m.quantity+'</td><td class="'+remClass+'">'+m.remaining+'</td><td>'+pack+'</td><td><button class="btn-danger" onclick="deleteRM(\''+m.id+'\')">Del</button></td></tr>';
+        var mode=m.tracking_mode||(m.pack_label?'pack':'bulk');
+        var unitDisplay=mode==='pack'?(m.pack_label||m.unit||''):(m.base_unit||m.unit||'');
+        html+='<tr><td>'+m.item+'</td><td><span style="font-size:10px;background:'+(mode==='pack'?'#e3f2fd':'#fff3e0')+';padding:2px 6px;border-radius:8px;">'+mode+'</span></td><td>'+m.supplier+'</td><td>'+m.date_received+'</td><td>'+m.supplier_lot+'</td><td>'+m.quantity+'</td><td class="'+remClass+'">'+m.remaining+'</td><td>'+unitDisplay+'</td><td><button class="btn-danger" onclick="deleteRM(\''+m.id+'\')">Del</button></td></tr>';
     });
     html+='</table>';
     container.innerHTML=html;
@@ -210,22 +333,32 @@ async function addRawMaterial(){
     var date=document.getElementById('rm-date').value;
     var lot=document.getElementById('rm-lot').value.trim();
     var qty=document.getElementById('rm-qty').value;
-    if(!qty||parseFloat(qty)<=0){st.className='status error';st.textContent='Enter a valid quantity (number of packs)';return;}
+    var unit=document.getElementById('rm-unit').value.trim();
+    if(!qty||parseFloat(qty)<=0){st.className='status error';st.textContent='Enter a valid quantity';return;}
     var body={
         item:item.name,
         supplier:supplier,
         date_received:date,
         supplier_lot:lot,
         quantity:qty,
-        unit:item.pack_label||item.unit||'',
-        pack_label:item.pack_label||item.unit||'',
-        pack_amount:item.pack_amount,
-        pack_unit:item.pack_unit||''
+        unit:unit,
+        tracking_mode:item.tracking_mode
     };
+    if(item.tracking_mode==='pack'){
+        body.pack_label=item.pack_label||unit;
+        body.pack_amount=item.pack_amount;
+        body.pack_unit=item.pack_unit;
+    } else {
+        body.base_unit=unit||item.base_unit||'';
+    }
     var res=await fetch('/api/organic/raw-materials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     var data=await res.json();
-    if(data.success){st.className='status success';st.textContent='Added: '+item.name+' ('+qty+' × '+(item.pack_label||item.unit||'')+')';document.getElementById('rm-lot').value='';document.getElementById('rm-qty').value='';loadRawMaterials();loadContacts();}
-    else{st.className='status error';st.textContent=data.error||'Failed';}
+    if(data.success){
+        var suffix=item.tracking_mode==='pack'?(' × '+(item.pack_label||'')):(' '+unit);
+        st.className='status success';st.textContent='Added: '+item.name+' ('+qty+suffix+')';
+        document.getElementById('rm-lot').value='';document.getElementById('rm-qty').value='';
+        loadRawMaterials();loadContacts();
+    } else {st.className='status error';st.textContent=data.error||'Failed';}
 }
 
 async function deleteRM(id){
@@ -237,12 +370,29 @@ async function deleteRM(id){
 async function addCustomIngredient(){
     var name=prompt('Ingredient name (e.g. Rosemary):');
     if(!name||!name.trim())return;
-    var packLabel=prompt('Pack size used per batch (e.g. "750 ml", "1 kg", "8 each"):');
-    if(!packLabel||!packLabel.trim()){alert('Pack size required');return;}
-    var res=await fetch('/api/organic/ingredients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name.trim(),pack_label:packLabel.trim()})});
+    var mode=prompt('Tracking mode — type "pack" for whole units (e.g. 750ml bottles) or "bulk" for base units (e.g. grams):','bulk');
+    if(!mode)return;
+    mode=mode.trim().toLowerCase();
+    if(mode!=='pack'&&mode!=='bulk'){alert('Invalid mode. Must be "pack" or "bulk".');return;}
+    var body={name:name.trim(),tracking_mode:mode};
+    if(mode==='pack'){
+        var packLabel=prompt('Pack size used per batch (e.g. "750 ml", "1 kg"):');
+        if(!packLabel||!packLabel.trim()){alert('Pack size required');return;}
+        body.pack_label=packLabel.trim();
+        var m=packLabel.match(/^\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s*$/);
+        if(m){body.pack_amount=parseFloat(m[1]);body.pack_unit=(m[2]||'each').trim();}
+    } else {
+        var baseUnit=prompt('Base unit of measure (e.g. g, ml, kg, each):','g');
+        if(!baseUnit)baseUnit='each';
+        body.base_unit=baseUnit.trim();
+    }
+    // Save ingredient then persist tracking mode
+    var res=await fetch('/api/organic/ingredients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     var data=await res.json();
-    if(data.success){loadIngredients();alert('Added: '+name.trim()+' — '+packLabel.trim());}
-    else{alert(data.error||'Failed to add');}
+    if(!data.success){alert(data.error||'Failed to add');return;}
+    await fetch('/api/organic/tracking-mode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    loadIngredients();
+    alert('Added: '+name.trim()+' ('+mode+')');
 }
 
 // ── Production Runs ──
