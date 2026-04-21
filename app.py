@@ -1207,56 +1207,53 @@ def organic_page():
 
 
 # ── Organic: Get ingredient list from organic recipes ─────────────────
+# Curated master list of organic raw material items
+ORGANIC_INGREDIENTS = [
+    {"name": "Chicken Bones", "unit": "kg"},
+    {"name": "Ginger Juice", "unit": "ml"},
+    {"name": "Honey", "unit": "ml"},
+    {"name": "Lemon Juice", "unit": "ml"},
+    {"name": "Lemons", "unit": "8x Halved"},
+    {"name": "Pink Salt", "unit": "g"},
+    {"name": "Turmeric Juice", "unit": "750ml"},
+]
+
+ORGANIC_CUSTOM_ITEMS_PATH = os.path.join(ORGANIC_DIR, "custom_ingredients.json")
+
+
 @app.route("/api/organic/ingredients", methods=["GET"])
 @login_required
 def organic_ingredients():
-    recipes = load_recipes()
-    # Map ingredient name -> unit
-    ingredient_map = {}
-    skip_patterns = ["filtered water", "top up water", "top kettle", "water to", "water -"]
-    for name, data in recipes.items():
-        cert = (data.get("certification") or "").lower()
-        if cert != "organic":
-            continue
-        for section in ["kettle_overnight", "after_skim", "finishing", "add_to_jar"]:
-            items = data.get(section, [])
-            for item in items:
-                item = item.strip()
-                if not item:
-                    continue
-                # Skip water items
-                if any(p in item.lower() for p in skip_patterns):
-                    continue
-                # Parse "50 kg Chicken Bones" or "500 ml Honey" etc.
-                m = re.match(r'^(\d+\.?\d*)\s*(kg|g|ml|l|L)\s+(.+)', item, re.IGNORECASE)
-                if m:
-                    unit = m.group(2).lower()
-                    if unit == "l":
-                        unit = "L"
-                    ing_name = m.group(3).strip()
-                    ingredient_map[ing_name] = unit
-                else:
-                    # Check for "per liter" type items
-                    if "per liter" in item.lower() or "per litre" in item.lower() or "/l" in item.lower():
-                        m2 = re.match(r'^(\d+\.?\d*)\s*(.*)', item)
-                        if m2:
-                            ingredient_map[m2.group(2).strip()] = "ml"
-                        continue
-                    # Items like "10 Onion" (count-based)
-                    m3 = re.match(r'^(\d+\.?\d*)\s+(.+)', item)
-                    if m3:
-                        ing_name = m3.group(2).strip()
-                        # Special case: Turmeric Juice = container (750ml)
-                        if "turmeric juice" in ing_name.lower():
-                            ingredient_map[ing_name] = "container (750ml)"
-                        else:
-                            ingredient_map[ing_name] = "units"
-                    else:
-                        ingredient_map[item] = "units"
+    # Combine master list with any custom items added by user
+    custom = _load_json(ORGANIC_CUSTOM_ITEMS_PATH, [])
+    all_items = list(ORGANIC_INGREDIENTS)
+    existing_names = {i["name"].lower() for i in all_items}
+    for c in custom:
+        if c.get("name", "").lower() not in existing_names:
+            all_items.append(c)
+            existing_names.add(c["name"].lower())
+    all_items.sort(key=lambda x: x["name"])
+    return jsonify(all_items)
 
-    # Return as list of {name, unit} sorted alphabetically
-    result = [{"name": k, "unit": v} for k, v in sorted(ingredient_map.items())]
-    return jsonify(result)
+
+@app.route("/api/organic/ingredients", methods=["POST"])
+@login_required
+def add_organic_ingredient():
+    """Add a custom ingredient to the organic raw materials list."""
+    data = request.json
+    name = data.get("name", "").strip()
+    unit = data.get("unit", "").strip()
+    if not name:
+        return jsonify({"error": "Name required"}), 400
+    custom = _load_json(ORGANIC_CUSTOM_ITEMS_PATH, [])
+    # Check not already in master or custom
+    existing = {i["name"].lower() for i in ORGANIC_INGREDIENTS}
+    existing.update(c["name"].lower() for c in custom)
+    if name.lower() in existing:
+        return jsonify({"error": "Already exists"}), 400
+    custom.append({"name": name, "unit": unit or "units"})
+    _save_json(ORGANIC_CUSTOM_ITEMS_PATH, custom)
+    return jsonify({"success": True})
 
 
 # ── Organic: Raw Material Inventory (FIFO) ────────────────────────────
