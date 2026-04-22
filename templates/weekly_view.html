@@ -143,17 +143,39 @@ async function loadWeek(weekId) {
         var statusRes = await fetch('/api/checklist-status/' + weekId);
         var statuses = await statusRes.json();
 
+        // For Monday's "finish only" detection, we need last week's Sunday schedule
+        var prevWeekSunday = {};
+        try {
+            var prevWeekDate = new Date(weekId + 'T00:00:00');
+            prevWeekDate.setDate(prevWeekDate.getDate() - 7);
+            var prevWeekId = prevWeekDate.toISOString().slice(0, 10);
+            var prevRes = await fetch('/api/schedule/' + prevWeekId);
+            var prevData = await prevRes.json();
+            if (prevData && prevData.schedule) {
+                prevWeekSunday = prevData.schedule['6'] || {};
+            }
+        } catch (e) { /* no prev week */ }
+
         var schedule = data.schedule;
         var html = '';
 
         for (var idx = 0; idx < 7; idx++) {
             var dayData = schedule[String(idx)] || {};
+            // Previous day's schedule (for finish-only detection). Day 0 = Monday,
+            // which looks back at previous week's Sunday.
+            var prevDayData;
+            if (idx === 0) {
+                prevDayData = prevWeekSunday;
+            } else {
+                prevDayData = schedule[String(idx - 1)] || {};
+            }
             var d = new Date(weekId + 'T00:00:00');
             d.setDate(d.getDate() + idx);
             var ds = d.toLocaleDateString('en-GB', {day:'2-digit', month:'2-digit', year:'numeric'});
             var lot = d.toLocaleDateString('en-GB', {day:'2-digit', month:'2-digit', year:'2-digit'}).replace(/\//g, '');
 
-            var hasProduction = false;
+            var hasStart = false;
+            var hasFinish = false;
             html += '<div class="day-block"><div class="day-header"><span>' + DAYS[idx] + ' — ' + ds + '</span><span class="lot">LOT# ' + lot + '</span></div>';
 
             for (var v = 0; v < VESSELS.length; v++) {
@@ -163,8 +185,14 @@ async function loadWeek(weekId) {
                 var displayName = '';
                 var target = '';
 
+                // Check yesterday's recipe to detect finish-only rows
+                var prevRecipeName = prevDayData[vessel] || '';
+                if (prevRecipeName && recipes[prevRecipeName]) {
+                    hasFinish = true;
+                }
+
                 if (recipeName && recipeData) {
-                    hasProduction = true;
+                    hasStart = true;
                     var brand = recipeData.brand || '';
                     displayName = brand ? brand + '-' + recipeName : recipeName;
                     var yieldVal = recipeData.yield || 0;
@@ -182,6 +210,12 @@ async function loadWeek(weekId) {
                     html += '<span class="recipe-display"><span class="full-name">' + displayName + '</span></span>';
                     var yieldClass = vessel === '115L' ? 'yield-val halved' : 'yield-val';
                     html += '<span class="' + yieldClass + '">' + target + '</span>';
+                } else if (prevRecipeName && recipes[prevRecipeName]) {
+                    // Finish-only: this vessel has yesterday's recipe to finish, nothing starting today
+                    var prevBrand = recipes[prevRecipeName].brand || '';
+                    var prevDisplay = prevBrand ? prevBrand + '-' + prevRecipeName : prevRecipeName;
+                    html += '<span class="recipe-display"><span class="finish-only" style="color:#856404;font-size:11px;">Finish: ' + prevDisplay + '</span></span>';
+                    html += '<span class="yield-val"></span>';
                 } else {
                     html += '<span class="recipe-display"><span class="no-prod">No production</span></span>';
                     html += '<span class="yield-val"></span>';
@@ -196,11 +230,13 @@ async function loadWeek(weekId) {
                 html += '<div class="day-note-display"><strong>Notes:</strong> ' + dayNote.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>') + '</div>';
             }
 
+            var hasProduction = hasStart || hasFinish;
             if (hasProduction) {
                 var st = statuses[String(idx)] || 'not_started';
                 var pctClass = st === 'completed' ? 'pct-done' : st === 'in_progress' ? 'pct-partial' : 'pct-0';
                 var pctLabel = st === 'completed' ? 'Complete' : st === 'in_progress' ? 'In Progress' : 'Not Started';
-                html += '<div class="day-actions"><a href="/daily-production/' + weekId + '/' + idx + '" class="btn-daily">See Daily Production</a><span class="pct-badge ' + pctClass + '">' + pctLabel + '</span></div>';
+                var finishOnlyTag = (!hasStart && hasFinish) ? '<span class="pct-badge" style="background:#fff3cd;color:#856404;margin-right:6px;">Finish Only</span>' : '';
+                html += '<div class="day-actions"><a href="/daily-production/' + weekId + '/' + idx + '" class="btn-daily">See Daily Production</a>' + finishOnlyTag + '<span class="pct-badge ' + pctClass + '">' + pctLabel + '</span></div>';
             }
 
             html += '</div>';

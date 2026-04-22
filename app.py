@@ -118,14 +118,29 @@ def require_valid_day(f):
 
 
 # ── Data helpers ───────────────────────────────────────────────────────
+def _load_tracking_modes():
+    """Read tracking_modes.json directly (used during recipe migration).
+    Returns {} if missing."""
+    path = os.path.join(DATA_DIR, "organic", "tracking_modes.json")
+    if os.path.exists(path):
+        try:
+            with open(path, "r") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
 def load_recipes():
     if os.path.exists(RECIPES_PATH):
         with open(RECIPES_PATH, "r") as f:
             recipes = json.load(f)
-        # Auto-migrate in-memory (disk unchanged until explicit save)
+        # Auto-migrate in-memory (disk unchanged until explicit save).
+        # Pass tracking_modes for smart pack conversion.
+        tracking_modes = _load_tracking_modes()
         for name, data in recipes.items():
             try:
-                migrate_recipe_ingredients(data)
+                migrate_recipe_ingredients(data, tracking_modes)
             except Exception:
                 pass
         return recipes
@@ -192,7 +207,9 @@ def get_current_week_id():
 
 
 # ── Structured Ingredient Helpers ──────────────────────────────────────
-VALID_UNITS = ["kg", "g", "L", "ml", "each", "tbsp", "tsp", "pinch", "per L"]
+VALID_UNITS = ["kg", "g", "L", "ml", "lbs", "Bunch", "Pack", "Adjunct", "per L"]
+# Units where the raw recipe amount IS deducted directly (halved for 115L).
+# Only "per L" has special math (amount × batch_liters).
 INGREDIENT_SECTIONS = ["kettle_overnight", "after_skim", "finishing", "add_to_jar"]
 
 # Unit aliases for parsing (lowercase input -> canonical unit)
@@ -201,11 +218,17 @@ UNIT_ALIASES = {
     "g": "g", "gr": "g", "gram": "g", "grams": "g",
     "l": "L", "lt": "L", "ltr": "L", "liter": "L", "liters": "L", "litre": "L", "litres": "L",
     "ml": "ml", "millilitre": "ml", "milliliter": "ml",
-    "tbsp": "tbsp", "tbs": "tbsp", "tablespoon": "tbsp", "tablespoons": "tbsp",
-    "tsp": "tsp", "teaspoon": "tsp", "teaspoons": "tsp",
-    "pinch": "pinch", "pinches": "pinch",
-    "each": "each", "x": "each",
+    "lb": "lbs", "lbs": "lbs", "pound": "lbs", "pounds": "lbs",
+    "bunch": "Bunch", "bunches": "Bunch",
+    "pack": "Pack", "packs": "Pack", "packet": "Pack", "packets": "Pack", "bottle": "Pack", "bottles": "Pack",
+    "adjunct": "Adjunct", "adjuncts": "Adjunct",
 }
+
+# Units that were valid in prior versions but are now retired.
+# During migration these either convert to "Pack" (for "each") or get flagged
+# for manual review (tbsp/tsp/pinch — no safe auto-conversion to Pack).
+RETIRED_UNITS_TO_PACK = {"each"}
+RETIRED_UNITS_TO_REVIEW = {"tbsp", "tsp", "pinch"}
 
 # Patterns that signal a "per L" (non-halving) item
 PER_L_RE = re.compile(r"\b(per\s*l(?:iter|itre)?|g\s*/\s*l|ml\s*/\s*l)\b", re.IGNORECASE)
@@ -313,13 +336,15 @@ def parse_ingredient_line(line):
         unit = UNIT_ALIASES[unit_token]
         needs_review = False
     elif unit_token:
-        # There was a token but it's not a recognized unit — it's probably part of the name
+        # Token is not a recognized unit — fold it back into the name
         name = unit_token + " " + name
         unit = ""
         needs_review = True
     else:
-        unit = "each"  # fallback for bare numbers like "8 Lemons"
-        needs_review = False
+        # Bare number with no unit ("8 Lemons"). Can't safely guess unit
+        # in the new scheme (no 'each'). Flag for manual review.
+        unit = ""
+        needs_review = True
 
     # Clean int display
     if amount == int(amount):
@@ -403,11 +428,84 @@ def is_structured_ingredient(item):
     return isinstance(item, dict) and "name" in item and "amount" in item
 
 
-def migrate_recipe_ingredients(recipe_data):
-    """In-place: convert any string-format ingredient lines to structured objects.
+def _smart_upgrade_ingredient(item, tracking_modes):
+    """Upgrade an already-structured ingredient to the new unit scheme.
+
+    Returns (new_item, changed).
+
+    Rules:
+      1. If name matches a tracking_modes pack entry with matching pack_label,
+         convert to {amount: 1, unit: 'Pack', process: '<original>'}.
+      2. If unit is 'each', force to 'Pack' (same deduction, flag for review).
+      3. If unit is tbsp/tsp/pinch, clear unit and flag for review.
+      4. Otherwise leave alone.
+    """
+    if not is_structured_ingredient(item):
+        return item, False
+
+    name = (item.get("name") or "").strip()
+    name_key = name.lower()
+    unit = (item.get("unit") or "").strip()
+    amount = item.get("amount", 0)
+    try:
+        amount_f = float(amount or 0)
+    except (ValueError, TypeError):
+        amount_f = 0
+
+    # Rule 1: smart pack conversion via tracking_modes
+    tm = tracking_modes.get(name_key) if tracking_modes else None
+    if tm and tm.get("mode") == "pack" and unit not in ("", "Pack", "Adjunct", "Bunch", "per L"):
+        pack_label = (tm.get("pack_label") or "").strip()
+        line_label = _format_pack_label(
+            amount_f if amount_f == int(amount_f) else amount_f,
+            unit,
+        ) if amount_f > 0 and unit else ""
+        if pack_label and line_label and pack_label.lower() == line_label.lower():
+            # Exact match — auto-convert
+            new = dict(item)
+            new["amount"] = 1
+            new["unit"] = "Pack"
+            existing_process = (new.get("process") or "").strip()
+            # Preserve original pack size as process note
+            new["process"] = existing_process if existing_process else pack_label
+            new["needs_review"] = False
+            return new, True
+        else:
+            # Pack-tracked ingredient but label mismatch — flag for review
+            new = dict(item)
+            new["needs_review"] = True
+            return new, True
+
+    # Rule 2: 'each' → Pack, flagged for review
+    if unit in RETIRED_UNITS_TO_PACK:
+        new = dict(item)
+        new["unit"] = "Pack"
+        new["needs_review"] = True
+        return new, True
+
+    # Rule 3: tbsp/tsp/pinch → clear unit, flag for review
+    if unit in RETIRED_UNITS_TO_REVIEW:
+        new = dict(item)
+        # Preserve the retired unit in process so user can decide
+        retired_note = f"was {unit}"
+        existing_process = (new.get("process") or "").strip()
+        new["process"] = existing_process + (" — " if existing_process else "") + retired_note
+        new["unit"] = ""
+        new["needs_review"] = True
+        return new, True
+
+    # No change
+    return item, False
+
+
+def migrate_recipe_ingredients(recipe_data, tracking_modes=None):
+    """In-place: convert string-format ingredient lines to structured objects,
+    and upgrade structured items per the new unit scheme.
     Returns True if any changes were made."""
     if not isinstance(recipe_data, dict):
         return False
+    if tracking_modes is None:
+        tracking_modes = {}
     changed = False
     for section in INGREDIENT_SECTIONS:
         items = recipe_data.get(section, [])
@@ -416,11 +514,16 @@ def migrate_recipe_ingredients(recipe_data):
         new_items = []
         for item in items:
             if is_structured_ingredient(item):
-                new_items.append(item)
+                upgraded, item_changed = _smart_upgrade_ingredient(item, tracking_modes)
+                new_items.append(upgraded)
+                if item_changed:
+                    changed = True
             elif isinstance(item, str):
                 parsed = parse_ingredient_line(item)
                 if parsed:
-                    new_items.append(parsed)
+                    # Apply smart upgrades to freshly-parsed items too
+                    upgraded, _ = _smart_upgrade_ingredient(parsed, tracking_modes)
+                    new_items.append(upgraded)
                     changed = True
             elif isinstance(item, dict):
                 # Dict without required fields — coerce
@@ -676,6 +779,8 @@ def delete_recipe(name):
 @login_required
 def migrate_all_recipes():
     """Force-persist structured-ingredient migration to disk for all recipes.
+    Performs smart pack conversion using organic/tracking_modes.json, then
+    archives that file (renamed to .archived) so future runs don't reapply it.
     Returns a report of which recipes were changed and which items need review."""
     # Read raw file (bypass auto-migration in load_recipes so we can count changes)
     raw_recipes = {}
@@ -683,11 +788,13 @@ def migrate_all_recipes():
         with open(RECIPES_PATH, "r") as f:
             raw_recipes = json.load(f)
 
+    tracking_modes = _load_tracking_modes()
+
     changed_recipes = []
-    review_items = []  # list of {recipe, section, index, name}
+    review_items = []  # list of {recipe, section, index, name, reason}
 
     for name, data in raw_recipes.items():
-        changed = migrate_recipe_ingredients(data)
+        changed = migrate_recipe_ingredients(data, tracking_modes)
         if changed:
             changed_recipes.append(name)
         for section in INGREDIENT_SECTIONS:
@@ -698,9 +805,21 @@ def migrate_all_recipes():
                         "section": section,
                         "index": idx,
                         "name": item.get("name", ""),
+                        "unit": item.get("unit", ""),
+                        "amount": item.get("amount", 0),
+                        "process": item.get("process", ""),
                     })
 
     save_recipes(raw_recipes)
+
+    # Archive tracking_modes.json so it isn't reapplied on subsequent migrations
+    tm_path = os.path.join(DATA_DIR, "organic", "tracking_modes.json")
+    if os.path.exists(tm_path) and tracking_modes:
+        try:
+            os.rename(tm_path, tm_path + ".archived")
+        except OSError:
+            pass
+
     return jsonify({
         "success": True,
         "total": len(raw_recipes),
@@ -1468,7 +1587,6 @@ ORGANIC_RUNS_PATH = os.path.join(ORGANIC_DIR, "production_runs.json")
 ORGANIC_FG_PATH = os.path.join(ORGANIC_DIR, "finished_goods.json")
 ORGANIC_SALES_PATH = os.path.join(ORGANIC_DIR, "sales.json")
 ORGANIC_CONTACTS_PATH = os.path.join(ORGANIC_DIR, "contacts.json")
-ORGANIC_TRACKING_PATH = os.path.join(ORGANIC_DIR, "tracking_modes.json")
 os.makedirs(ORGANIC_DIR, exist_ok=True)
 
 
@@ -1493,22 +1611,22 @@ def organic_page():
 
 # ── Organic: Get ingredient list from organic recipes ─────────────────
 # Fallback master list used only if no organic recipes exist yet.
-# pack_label is the per-batch unit (e.g. "750 ml", "8 kg", "1 each").
 ORGANIC_INGREDIENTS_FALLBACK = [
-    {"name": "Chicken Bones", "pack_label": "1 kg", "pack_amount": 1, "pack_unit": "kg"},
-    {"name": "Ginger Juice", "pack_label": "500 ml", "pack_amount": 500, "pack_unit": "ml"},
-    {"name": "Honey", "pack_label": "500 ml", "pack_amount": 500, "pack_unit": "ml"},
-    {"name": "Lemon Juice", "pack_label": "500 ml", "pack_amount": 500, "pack_unit": "ml"},
-    {"name": "Lemons", "pack_label": "1 each", "pack_amount": 1, "pack_unit": "each"},
-    {"name": "Pink Salt", "pack_label": "1 kg", "pack_amount": 1, "pack_unit": "kg"},
-    {"name": "Turmeric Juice", "pack_label": "750 ml", "pack_amount": 750, "pack_unit": "ml"},
+    {"name": "Chicken Bones", "unit": "kg"},
+    {"name": "Ginger Juice", "unit": "ml"},
+    {"name": "Honey", "unit": "ml"},
+    {"name": "Lemon Juice", "unit": "ml"},
+    {"name": "Lemons", "unit": "Pack"},
+    {"name": "Pink Salt", "unit": "g"},
+    {"name": "Turmeric Juice", "unit": "Pack"},
 ]
 
 ORGANIC_CUSTOM_ITEMS_PATH = os.path.join(ORGANIC_DIR, "custom_ingredients.json")
 
 
 def _format_pack_label(amount, unit):
-    """Format a pack label like '750 ml' or '8 kg' from structured amount+unit."""
+    """Format a label like '750 ml' or '8 kg' from amount+unit. Used by the
+    migrator's smart-upgrade step to recognize pack labels from legacy config."""
     if amount == int(amount):
         amount = int(amount)
     if unit:
@@ -1533,21 +1651,15 @@ def _jar_volume_liters(recipe_data):
 @app.route("/api/organic/ingredients", methods=["GET"])
 @login_required
 def organic_ingredients():
-    """Return unique organic ingredients with tracking mode info.
+    """Return unique (name, unit) pairs pulled from organic-certified recipes.
 
-    Each entry: {name, base_unit, tracking_mode, pack_label, pack_amount, pack_unit, recipe_amount}
-    - tracking_mode: 'pack' (count whole units, e.g. 750ml Turmeric bottles) or
-                     'bulk' (track grams/ml directly, e.g. Pink Salt by the gram)
-    - Default mode is 'bulk'. Overrides stored in tracking_modes.json.
-    - 'per L' items always appear (as bulk by default), with base unit derived from context.
-    - Same ingredient with multiple pack sizes produces one entry per pack_label (for pack mode).
+    Each entry: {name, unit, recipe_amount}
+    - recipe_amount is informational (first-seen amount for this name+unit)
+    - Skips needs_review items.
+    - Custom user-added ingredients merged in.
     """
     recipes = load_recipes()
-    tracking = _load_json(ORGANIC_TRACKING_PATH, {})
-
-    # Pass 1: collect distinct (name, pack_label) candidates, plus base_unit per name
-    candidates = {}  # key: (name_lower, pack_label or '') -> entry
-    base_units = {}  # name_lower -> best-guess base unit (for bulk display)
+    derived = {}  # key: (name_lower, unit) -> entry
 
     for rname, rdata in recipes.items():
         if (rdata.get("certification") or "").lower() != "organic":
@@ -1564,204 +1676,58 @@ def organic_ingredients():
                     amount = float(item.get("amount") or 0)
                 except (ValueError, TypeError):
                     amount = 0
-                if not ing_name or amount <= 0:
+                if not ing_name or not unit or amount <= 0:
                     continue
-
-                name_key = ing_name.lower()
-
-                # Determine base unit for bulk display:
-                # - per L items: infer from the concentration unit (4 g/L -> 'g')
-                #   Here we treat the amount's unit context: "5 g per liter" is
-                #   5 g per L of base. We store 'g' as base unit.
-                if unit == "per L":
-                    # Try to recover base unit from item.process or fall back to 'g'
-                    # For now, default to 'g' for per-L items (most are salt-like)
-                    base_unit = "g"
-                else:
-                    base_unit = unit or "each"
-
-                # Keep first-seen base unit per ingredient
-                if name_key not in base_units:
-                    base_units[name_key] = base_unit
-
                 if amount == int(amount):
                     amount = int(amount)
+                key = (ing_name.lower(), unit)
+                if key not in derived:
+                    derived[key] = {
+                        "name": ing_name,
+                        "unit": unit,
+                        "recipe_amount": amount,
+                    }
 
-                if unit == "per L":
-                    # per-L items don't have a meaningful pack_label; key by name only
-                    key = (name_key, "")
-                    if key not in candidates:
-                        candidates[key] = {
-                            "name": ing_name,
-                            "recipe_amount": amount,      # per-L concentration
-                            "recipe_unit": "per L",
-                            "base_unit": base_unit,
-                            "pack_label": "",
-                            "pack_amount": amount,
-                            "pack_unit": base_unit,
-                        }
-                else:
-                    pack_unit = unit or "each"
-                    pack_label = _format_pack_label(amount, pack_unit)
-                    key = (name_key, pack_label)
-                    if key not in candidates:
-                        candidates[key] = {
-                            "name": ing_name,
-                            "recipe_amount": amount,
-                            "recipe_unit": pack_unit,
-                            "base_unit": pack_unit,
-                            "pack_label": pack_label,
-                            "pack_amount": amount,
-                            "pack_unit": pack_unit,
-                        }
+    all_items = list(derived.values())
 
-    # Pass 2: apply tracking mode preferences; collapse duplicates for bulk mode
-    all_items = []
-    seen_bulk_names = set()  # for bulk mode, one entry per ingredient name (no pack split)
-
-    for (name_key, pack_label), entry in sorted(candidates.items()):
-        mode_cfg = tracking.get(name_key) or {}
-        mode = mode_cfg.get("mode") or "bulk"  # default bulk
-        entry["tracking_mode"] = mode
-
-        if mode == "bulk":
-            # Bulk: one row per ingredient name; don't split by pack_label.
-            if name_key in seen_bulk_names:
-                continue
-            seen_bulk_names.add(name_key)
-            # Use stored base_unit override if set, else derived
-            entry["base_unit"] = mode_cfg.get("base_unit") or base_units.get(name_key) or entry.get("base_unit", "each")
-            # Clear pack-specific fields for bulk display
-            entry["pack_label"] = ""
-            entry["pack_amount"] = None
-            entry["pack_unit"] = ""
-            all_items.append(entry)
-        else:  # pack mode
-            # One entry per (name, pack_label). Skip entries without pack_label (per-L items)
-            # because per-L can't sensibly be tracked as packs.
-            if not pack_label:
-                continue
-            # Override base_unit/pack fields if config specifies them
-            if mode_cfg.get("pack_label"):
-                entry["pack_label"] = mode_cfg["pack_label"]
-                entry["pack_amount"] = mode_cfg.get("pack_amount", entry["pack_amount"])
-                entry["pack_unit"] = mode_cfg.get("pack_unit", entry["pack_unit"])
-            all_items.append(entry)
-
-    # Fallback if no organic recipes
     if not all_items:
-        all_items = [
-            {"name": "Chicken Bones", "tracking_mode": "bulk", "base_unit": "kg",
-             "pack_label": "", "pack_amount": None, "pack_unit": "", "recipe_amount": 0, "recipe_unit": "kg"},
-            {"name": "Pink Salt", "tracking_mode": "bulk", "base_unit": "g",
-             "pack_label": "", "pack_amount": None, "pack_unit": "", "recipe_amount": 0, "recipe_unit": "g"},
-        ]
+        all_items = [dict(i, recipe_amount=0) for i in ORGANIC_INGREDIENTS_FALLBACK]
 
-    # Merge custom user-added items
+    # Merge custom user-added items (never duplicate by (name, unit))
     custom = _load_json(ORGANIC_CUSTOM_ITEMS_PATH, [])
-    existing = {(i["name"].lower(), i.get("pack_label", "")) for i in all_items}
+    existing = {(i["name"].lower(), i.get("unit", "")) for i in all_items}
     for c in custom:
-        name_key = c.get("name", "").lower()
-        if not name_key:
+        name = c.get("name", "")
+        unit = c.get("unit", "")
+        if not name or not unit:
             continue
-        c_pack = c.get("pack_label", "")
-        if (name_key, c_pack) in existing:
+        key = (name.lower(), unit)
+        if key in existing:
             continue
-        # Apply tracking mode to custom too
-        mode_cfg = tracking.get(name_key) or {}
-        mode = mode_cfg.get("mode") or c.get("tracking_mode") or "bulk"
-        c_entry = {
-            "name": c["name"],
-            "tracking_mode": mode,
-            "base_unit": mode_cfg.get("base_unit") or c.get("base_unit") or c.get("pack_unit") or "each",
-            "pack_label": c_pack if mode == "pack" else "",
-            "pack_amount": c.get("pack_amount") if mode == "pack" else None,
-            "pack_unit": c.get("pack_unit", "") if mode == "pack" else "",
-            "recipe_amount": c.get("pack_amount", 0),
-            "recipe_unit": c.get("pack_unit", ""),
-        }
-        all_items.append(c_entry)
-        existing.add((name_key, c_pack))
+        all_items.append({"name": name, "unit": unit, "recipe_amount": 0})
+        existing.add(key)
 
-    all_items.sort(key=lambda x: (x["name"], x.get("pack_label", "")))
+    all_items.sort(key=lambda x: (x["name"], x["unit"]))
     return jsonify(all_items)
-
-
-@app.route("/api/organic/tracking-mode", methods=["POST"])
-@login_required
-def set_tracking_mode():
-    """Set tracking mode for an ingredient. Body: {name, mode, base_unit?, pack_label?, pack_amount?, pack_unit?}"""
-    data = request.json or {}
-    name = (data.get("name") or "").strip()
-    mode = (data.get("mode") or "").strip().lower()
-    if not name or mode not in ("pack", "bulk"):
-        return jsonify({"error": "name and mode ('pack'|'bulk') required"}), 400
-    tracking = _load_json(ORGANIC_TRACKING_PATH, {})
-    cfg = {"mode": mode}
-    if mode == "bulk":
-        base_unit = (data.get("base_unit") or "").strip()
-        if base_unit:
-            cfg["base_unit"] = base_unit
-    else:  # pack
-        if data.get("pack_label"):
-            cfg["pack_label"] = data["pack_label"].strip()
-        if data.get("pack_amount") is not None:
-            cfg["pack_amount"] = data["pack_amount"]
-        if data.get("pack_unit"):
-            cfg["pack_unit"] = data["pack_unit"].strip()
-    tracking[name.lower()] = cfg
-    _save_json(ORGANIC_TRACKING_PATH, tracking)
-    return jsonify({"success": True, "config": cfg})
 
 
 @app.route("/api/organic/ingredients", methods=["POST"])
 @login_required
 def add_organic_ingredient():
-    """Add a custom ingredient to the organic raw materials list.
-    Accepts bulk or pack mode. Bulk mode needs 'base_unit'; pack mode needs 'pack_label'."""
+    """Add a custom ingredient. Body: {name, unit}."""
     data = request.json or {}
     name = (data.get("name") or "").strip()
-    mode = (data.get("tracking_mode") or "bulk").lower()
+    unit = (data.get("unit") or "").strip()
     if not name:
         return jsonify({"error": "Name required"}), 400
-    if mode not in ("bulk", "pack"):
-        mode = "bulk"
-
-    entry = {"name": name, "tracking_mode": mode}
-
-    if mode == "pack":
-        pack_label = (data.get("pack_label") or "").strip()
-        if not pack_label:
-            return jsonify({"error": "Pack size required for pack mode (e.g. '750 ml')"}), 400
-        pack_amount = data.get("pack_amount")
-        pack_unit = (data.get("pack_unit") or "").strip()
-        # Parse pack_label if pack_amount/pack_unit missing
-        if pack_amount is None or not pack_unit:
-            m = re.match(r"^\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s*$", pack_label)
-            if m:
-                try:
-                    pack_amount = float(m.group(1))
-                    if pack_amount == int(pack_amount):
-                        pack_amount = int(pack_amount)
-                except ValueError:
-                    pack_amount = 1
-                pack_unit = (m.group(2) or "each").strip()
-            else:
-                pack_amount = 1
-                pack_unit = "each"
-        entry["pack_label"] = pack_label
-        entry["pack_amount"] = pack_amount
-        entry["pack_unit"] = pack_unit
-    else:  # bulk
-        base_unit = (data.get("base_unit") or "").strip() or "each"
-        entry["base_unit"] = base_unit
-
+    if unit not in VALID_UNITS:
+        return jsonify({"error": f"Unit must be one of: {', '.join(VALID_UNITS)}"}), 400
     custom = _load_json(ORGANIC_CUSTOM_ITEMS_PATH, [])
-    existing = {(c.get("name", "").lower(), c.get("pack_label", "")) for c in custom}
-    key = (name.lower(), entry.get("pack_label", ""))
+    existing = {(c.get("name", "").lower(), c.get("unit", "")) for c in custom}
+    key = (name.lower(), unit)
     if key in existing:
         return jsonify({"error": "Already exists"}), 400
-    custom.append(entry)
+    custom.append({"name": name, "unit": unit})
     _save_json(ORGANIC_CUSTOM_ITEMS_PATH, custom)
     return jsonify({"success": True})
 
@@ -1776,27 +1742,24 @@ def get_raw_materials():
 @app.route("/api/organic/raw-materials", methods=["POST"])
 @login_required
 def add_raw_material():
-    data = request.json
+    """Add a raw material lot. Body: {item, unit, quantity, supplier, date_received, supplier_lot}."""
+    data = request.json or {}
     materials = _load_json(ORGANIC_RAW_PATH, [])
-    mode = (data.get("tracking_mode") or "bulk").lower()
+    try:
+        qty = float(data.get("quantity", 0))
+    except (ValueError, TypeError):
+        qty = 0
     entry = {
         "id": datetime.now().strftime("%Y%m%d%H%M%S") + str(len(materials)),
         "item": data.get("item", ""),
         "supplier": data.get("supplier", ""),
         "date_received": data.get("date_received", ""),
         "supplier_lot": data.get("supplier_lot", ""),
-        "quantity": float(data.get("quantity", 0)),
+        "quantity": qty,
         "unit": data.get("unit", ""),
-        "tracking_mode": mode,
-        "remaining": float(data.get("quantity", 0)),
+        "remaining": qty,
         "created_at": datetime.now().isoformat(),
     }
-    if mode == "pack":
-        entry["pack_label"] = data.get("pack_label", data.get("unit", ""))
-        entry["pack_amount"] = data.get("pack_amount")
-        entry["pack_unit"] = data.get("pack_unit", "")
-    else:  # bulk
-        entry["base_unit"] = data.get("base_unit") or data.get("unit") or ""
     materials.append(entry)
     _save_json(ORGANIC_RAW_PATH, materials)
     # Auto-save supplier to contacts
@@ -1891,16 +1854,15 @@ def _complete_organic_run(week_id, day_idx, produced_data):
             except (ValueError, TypeError):
                 pass
 
-        # Deduct raw materials — two modes per ingredient:
-        #   pack: 1 pack per batch (0.5 for 115L)
-        #   bulk: recipe_amount per batch (halved for 115L), or
-        #         recipe_amount × batch_liters for per-L concentration items
-        tracking = _load_json(ORGANIC_TRACKING_PATH, {})
+        # Deduct raw materials. Simple model:
+        #   per L  → amount × batch_liters (halved for 115L)
+        #   other  → amount (halved for 115L)
+        # Inventory is matched by ingredient name + unit.
         ingredients_used = []
         is_115L = vessel == "115L"
         half_factor = 0.5 if is_115L else 1.0
 
-        # Compute batch liters from recipe format × yield
+        # Compute batch liters from recipe format × yield (for per-L items)
         recipe_yield = 0
         try:
             recipe_yield = int(recipe_data.get("yield") or 0)
@@ -1926,76 +1888,60 @@ def _complete_organic_run(week_id, day_idx, produced_data):
                 if recipe_amount <= 0:
                     continue
 
-                unit = item.get("unit", "") or ""
-                is_per_l = unit == "per L"
+                unit = (item.get("unit") or "").strip()
+                if not unit:
+                    # Missing unit → skip (flagged for review elsewhere)
+                    continue
 
-                # Look up tracking mode (default bulk)
-                cfg = tracking.get(item_name.lower()) or {}
-                mode = cfg.get("mode") or "bulk"
-
-                # Compute needed amount + display unit
-                if mode == "pack":
-                    if is_per_l:
-                        # per-L items can't be pack-tracked; fall back to bulk
-                        mode = "bulk"
-                if mode == "pack":
-                    pack_label = _format_pack_label(
-                        recipe_amount if recipe_amount == int(recipe_amount) else recipe_amount,
-                        unit or "each",
-                    )
-                    qty_needed = half_factor  # 1 pack (0.5 for 115L)
-                    display_unit = pack_label
-                else:  # bulk
-                    if is_per_l:
-                        # per-L: total = concentration × batch liters
-                        qty_needed = recipe_amount * batch_liters
-                        # base unit for per-L defaults to 'g' unless configured
-                        display_unit = cfg.get("base_unit") or "g"
-                    else:
-                        qty_needed = recipe_amount * half_factor
-                        display_unit = unit or "each"
+                # Compute needed amount
+                if unit == "per L":
+                    qty_needed = recipe_amount * batch_liters
+                    # Inventory for per-L items is in g (or ml). We don't know
+                    # which — rely on name match and let the stored unit win.
+                    display_unit = "g"
+                else:
+                    qty_needed = recipe_amount * half_factor
+                    display_unit = unit
 
                 if qty_needed <= 0:
                     continue
 
-                # Round to 4 decimal places to avoid float drift
                 qty_remaining = round(qty_needed, 4)
 
-                # FIFO deduction by ingredient name.
-                # For pack mode we prefer exact pack_label match first.
-                if mode == "pack":
-                    # Pass 1: match name + pack_label
-                    for mat in materials:
-                        if mat["remaining"] <= 0:
-                            continue
-                        if not ingredients_match(mat["item"], item_name):
-                            continue
-                        if (mat.get("pack_label") or "") != display_unit:
-                            continue
-                        deduct = min(qty_remaining, mat["remaining"])
-                        mat["remaining"] = round(mat["remaining"] - deduct, 4)
-                        qty_remaining = round(qty_remaining - deduct, 4)
-                        ingredients_used.append({
-                            "item": mat["item"],
-                            "supplier_lot": mat["supplier_lot"],
-                            "quantity_used": deduct,
-                            "unit": mat.get("pack_label") or mat.get("unit") or "",
-                            "mode": "pack",
-                            "raw_material_id": mat["id"],
-                        })
-                        if qty_remaining <= 0:
-                            break
+                # FIFO deduction: match by name (loose). Prefer exact unit match first,
+                # then fall back to name-only.
+                # Pass 1: name + unit match
+                for mat in materials:
+                    if mat["remaining"] <= 0:
+                        continue
+                    if not ingredients_match(mat["item"], item_name):
+                        continue
+                    mat_unit = (mat.get("unit") or "").strip()
+                    if unit != "per L" and mat_unit != display_unit:
+                        continue
+                    deduct = min(qty_remaining, mat["remaining"])
+                    mat["remaining"] = round(mat["remaining"] - deduct, 4)
+                    qty_remaining = round(qty_remaining - deduct, 4)
+                    ingredients_used.append({
+                        "item": mat["item"],
+                        "supplier_lot": mat["supplier_lot"],
+                        "quantity_used": deduct,
+                        "unit": mat_unit or display_unit,
+                        "raw_material_id": mat["id"],
+                    })
+                    if qty_remaining <= 0:
+                        break
 
-                # Pass 2: name-only match (legacy inventory, or bulk mode)
+                # Pass 2: name-only match (inventory with different/missing unit)
                 if qty_remaining > 0:
                     for mat in materials:
                         if mat["remaining"] <= 0:
                             continue
                         if not ingredients_match(mat["item"], item_name):
                             continue
-                        # For pack mode, skip rows with non-matching pack_label (already tried)
-                        if mode == "pack" and (mat.get("pack_label") or "") == display_unit:
-                            continue
+                        mat_unit = (mat.get("unit") or "").strip()
+                        if unit != "per L" and mat_unit == display_unit:
+                            continue  # already tried in pass 1
                         deduct = min(qty_remaining, mat["remaining"])
                         mat["remaining"] = round(mat["remaining"] - deduct, 4)
                         qty_remaining = round(qty_remaining - deduct, 4)
@@ -2003,8 +1949,7 @@ def _complete_organic_run(week_id, day_idx, produced_data):
                             "item": mat["item"],
                             "supplier_lot": mat["supplier_lot"],
                             "quantity_used": deduct,
-                            "unit": mat.get("pack_label") or mat.get("unit") or display_unit,
-                            "mode": mode,
+                            "unit": mat_unit or display_unit,
                             "raw_material_id": mat["id"],
                         })
                         if qty_remaining <= 0:
@@ -2017,7 +1962,6 @@ def _complete_organic_run(week_id, day_idx, produced_data):
                         "supplier_lot": "INSUFFICIENT_STOCK",
                         "quantity_used": qty_remaining,
                         "unit": display_unit,
-                        "mode": mode,
                         "negative": True,
                     })
 

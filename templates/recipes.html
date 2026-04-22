@@ -231,7 +231,7 @@ photoInput.addEventListener('change',async function(){
     if(data.success){recipes=await(await fetch('/api/recipes')).json();viewRecipe(viewingName);}
 });
 
-var UNITS=['kg','g','L','ml','each','tbsp','tsp','pinch','per L'];
+var UNITS=['kg','g','L','ml','lbs','Bunch','Pack','Adjunct','per L'];
 
 function ingRowHTML(sectionId,idx,item){
     item=item||{name:'',amount:'',unit:'',process:''};
