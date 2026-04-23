@@ -77,6 +77,12 @@
                 <div class="form-field"><label>Quantity</label><input type="number" id="rm-qty" placeholder="0" step="any"></div>
                 <div class="form-field"><label>Unit</label><input id="rm-unit" readonly style="background:#f5f5f0;"></div>
             </div>
+            <div class="form-row">
+                <div class="form-field" style="flex:2;">
+                    <label>Invoice (optional) <span style="color:var(--text-light);font-weight:400;font-size:11px;">— PDF/JPG/PNG/WebP/HEIC, max 10 MB</span></label>
+                    <input type="file" id="rm-invoice" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif">
+                </div>
+            </div>
             <div id="rm-info" style="font-size:11px;color:var(--text-light);margin-bottom:8px;"></div>
             <button class="btn btn-primary" onclick="addRawMaterial()">Add to Inventory</button>
             <button class="btn btn-outline" style="margin-left:8px;" onclick="addCustomIngredient()">+ New Ingredient</button>
@@ -86,6 +92,13 @@
             <h2>Current Inventory <span class="organic-badge">Organic</span></h2>
             <div id="rm-table-container"><div class="empty-state">Loading...</div></div>
         </div>
+        <div class="card">
+            <h2>Invoice Archive <span class="organic-badge">Organic</span></h2>
+            <p style="font-size:11px;color:var(--text-light);margin-bottom:10px;">All uploaded invoices in chronological order (newest first).</p>
+            <div id="invoice-archive-container"><div class="empty-state">Loading...</div></div>
+        </div>
+        <!-- Hidden file input reused for per-row invoice uploads -->
+        <input type="file" id="row-invoice-upload" style="display:none;" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif">
     </div>
 
     <!-- TAB 2: Production Runs -->
@@ -146,7 +159,7 @@ function showTab(tab){
     document.getElementById('tab-'+tab).classList.add('active');
     var tabs=['raw','runs','fg','trace'];
     document.querySelectorAll('.tab-btn')[tabs.indexOf(tab)].classList.add('active');
-    if(tab==='raw')loadRawMaterials();
+    if(tab==='raw'){loadRawMaterials();loadInvoiceArchive();}
     if(tab==='runs')loadRuns();
     if(tab==='fg'){loadFinishedGoods();loadSales();populateFGDropdown();}
 }
@@ -204,10 +217,68 @@ async function loadRawMaterials(){
     var data=await res.json();
     var container=document.getElementById('rm-table-container');
     if(!data.length){container.innerHTML='<div class="empty-state">No raw materials in inventory. Add items above.</div>';return;}
-    var html='<table class="inv-table"><tr><th>Item</th><th>Supplier</th><th>Received</th><th>LOT#</th><th>Qty</th><th>Remaining</th><th>Unit</th><th></th></tr>';
+    var html='<table class="inv-table"><tr><th>Item</th><th>Supplier</th><th>Received</th><th>LOT#</th><th>Qty</th><th>Remaining</th><th>Unit</th><th>Invoice</th><th></th></tr>';
     data.forEach(function(m){
         var remClass=m.remaining<0?'negative':m.remaining===0?'low':'';
-        html+='<tr><td>'+m.item+'</td><td>'+m.supplier+'</td><td>'+m.date_received+'</td><td>'+m.supplier_lot+'</td><td>'+m.quantity+'</td><td class="'+remClass+'">'+m.remaining+'</td><td>'+(m.unit||'')+'</td><td><button class="btn-danger" onclick="deleteRM(\''+m.id+'\')">Del</button></td></tr>';
+        var inv=m.invoice;
+        var invCell;
+        if(inv&&inv.filename){
+            var origName=inv.original_name||inv.filename;
+            var safeName=origName.replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            invCell='<a href="/api/organic/invoices/'+encodeURIComponent(inv.filename)+'" target="_blank" title="'+safeName+'" style="text-decoration:none;">📎 View</a> '+
+                    '<button class="btn-danger" style="font-size:10px;padding:2px 6px;" onclick="deleteRowInvoice(\''+m.id+'\')">×</button>';
+        } else {
+            invCell='<button class="btn btn-outline" style="font-size:10px;padding:3px 8px;" onclick="uploadRowInvoice(\''+m.id+'\')">Upload</button>';
+        }
+        html+='<tr><td>'+m.item+'</td><td>'+m.supplier+'</td><td>'+m.date_received+'</td><td>'+m.supplier_lot+'</td><td>'+m.quantity+'</td><td class="'+remClass+'">'+m.remaining+'</td><td>'+(m.unit||'')+'</td><td>'+invCell+'</td><td><button class="btn-danger" onclick="deleteRM(\''+m.id+'\')">Del</button></td></tr>';
+    });
+    html+='</table>';
+    container.innerHTML=html;
+}
+
+var _pendingUploadEntryId=null;
+function uploadRowInvoice(entryId){
+    _pendingUploadEntryId=entryId;
+    document.getElementById('row-invoice-upload').click();
+}
+async function deleteRowInvoice(entryId){
+    if(!confirm('Remove this invoice?'))return;
+    var res=await fetch('/api/organic/raw-materials/'+encodeURIComponent(entryId)+'/invoice',{method:'DELETE'});
+    var data=await res.json();
+    if(data.success){loadRawMaterials();loadInvoiceArchive();}
+    else{alert(data.error||'Failed to remove invoice');}
+}
+
+// Wire up hidden row-upload input (set once on load)
+document.addEventListener('DOMContentLoaded',function(){
+    var inp=document.getElementById('row-invoice-upload');
+    if(!inp)return;
+    inp.addEventListener('change',async function(){
+        if(!inp.files||!inp.files.length||!_pendingUploadEntryId)return;
+        var entryId=_pendingUploadEntryId;_pendingUploadEntryId=null;
+        var fd=new FormData();fd.append('file',inp.files[0]);
+        var res=await fetch('/api/organic/raw-materials/'+encodeURIComponent(entryId)+'/invoice',{method:'POST',body:fd});
+        var data=await res.json();
+        inp.value='';
+        if(data.success){loadRawMaterials();loadInvoiceArchive();}
+        else{alert(data.error||'Upload failed');}
+    });
+});
+
+async function loadInvoiceArchive(){
+    var res=await fetch('/api/organic/invoices');
+    var data=await res.json();
+    var container=document.getElementById('invoice-archive-container');
+    if(!data.length){container.innerHTML='<div class="empty-state">No invoices uploaded yet.</div>';return;}
+    var html='<table class="inv-table"><tr><th>Uploaded</th><th>Received</th><th>Item</th><th>Supplier</th><th>LOT#</th><th>Qty</th><th>File</th></tr>';
+    data.forEach(function(r){
+        var inv=r.invoice;
+        var uploaded=(inv.uploaded_at||'').substring(0,16).replace('T',' ');
+        var origName=inv.original_name||inv.filename;
+        var sizeKB=inv.size_bytes?' ('+Math.round(inv.size_bytes/1024)+' KB)':'';
+        var safeName=origName.replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        html+='<tr><td>'+uploaded+'</td><td>'+(r.date_received||'')+'</td><td>'+r.item+'</td><td>'+(r.supplier||'')+'</td><td>'+(r.supplier_lot||'')+'</td><td>'+(r.quantity||'')+' '+(r.unit||'')+'</td>'+
+              '<td><a href="/api/organic/invoices/'+encodeURIComponent(inv.filename)+'" target="_blank">📎 '+safeName+'</a>'+sizeKB+'</td></tr>';
     });
     html+='</table>';
     container.innerHTML=html;
@@ -223,21 +294,34 @@ async function addRawMaterial(){
     var date=document.getElementById('rm-date').value;
     var lot=document.getElementById('rm-lot').value.trim();
     var qty=document.getElementById('rm-qty').value;
+    var invoiceInput=document.getElementById('rm-invoice');
     if(!qty||parseFloat(qty)<=0){st.className='status error';st.textContent='Enter a valid quantity';return;}
-    var body={
-        item:item.name,
-        supplier:supplier,
-        date_received:date,
-        supplier_lot:lot,
-        quantity:qty,
-        unit:item.unit||''
-    };
-    var res=await fetch('/api/organic/raw-materials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    var hasFile=invoiceInput&&invoiceInput.files&&invoiceInput.files.length;
+    var res;
+    if(hasFile){
+        var fd=new FormData();
+        fd.append('item',item.name);
+        fd.append('supplier',supplier);
+        fd.append('date_received',date);
+        fd.append('supplier_lot',lot);
+        fd.append('quantity',qty);
+        fd.append('unit',item.unit||'');
+        fd.append('file',invoiceInput.files[0]);
+        res=await fetch('/api/organic/raw-materials',{method:'POST',body:fd});
+    } else {
+        var body={item:item.name,supplier:supplier,date_received:date,supplier_lot:lot,quantity:qty,unit:item.unit||''};
+        res=await fetch('/api/organic/raw-materials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    }
     var data=await res.json();
     if(data.success){
-        st.className='status success';st.textContent='Added: '+qty+' '+(item.unit||'')+' of '+item.name;
+        var msg='Added: '+qty+' '+(item.unit||'')+' of '+item.name;
+        if(data.invoice_error){msg+=' (invoice failed: '+data.invoice_error+')';st.className='status error';}
+        else if(hasFile){msg+=' (with invoice)';st.className='status success';}
+        else {st.className='status success';}
+        st.textContent=msg;
         document.getElementById('rm-lot').value='';document.getElementById('rm-qty').value='';
-        loadRawMaterials();loadContacts();
+        if(invoiceInput)invoiceInput.value='';
+        loadRawMaterials();loadContacts();loadInvoiceArchive();
     } else {st.className='status error';st.textContent=data.error||'Failed';}
 }
 
@@ -413,6 +497,7 @@ async function doTrace(){
 document.addEventListener('DOMContentLoaded',function(){
     loadIngredients();
     loadRawMaterials();
+    loadInvoiceArchive();
     loadContacts();
     document.getElementById('rm-date').value=new Date().toISOString().split('T')[0];
     document.getElementById('sale-date').value=new Date().toISOString().split('T')[0];

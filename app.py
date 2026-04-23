@@ -1742,8 +1742,16 @@ def get_raw_materials():
 @app.route("/api/organic/raw-materials", methods=["POST"])
 @login_required
 def add_raw_material():
-    """Add a raw material lot. Body: {item, unit, quantity, supplier, date_received, supplier_lot}."""
-    data = request.json or {}
+    """Add a raw material lot. JSON body {item, unit, quantity, supplier, date_received, supplier_lot}
+    OR multipart form with same fields plus optional 'file' for invoice."""
+    # Accept multipart (with optional invoice) or plain JSON
+    if request.files and "file" in request.files:
+        data = request.form.to_dict() or {}
+        invoice_file = request.files.get("file")
+    else:
+        data = request.json or {}
+        invoice_file = None
+
     materials = _load_json(ORGANIC_RAW_PATH, [])
     try:
         qty = float(data.get("quantity", 0))
@@ -1760,22 +1768,209 @@ def add_raw_material():
         "remaining": qty,
         "created_at": datetime.now().isoformat(),
     }
+
+    # Handle optional invoice upload. If it fails, we still save the entry
+    # but return the error note so frontend can surface it.
+    invoice_error = None
+    if invoice_file and invoice_file.filename:
+        try:
+            entry["invoice"] = _save_invoice_file(entry["id"], invoice_file)
+        except ValueError as e:
+            invoice_error = str(e)
+
     materials.append(entry)
     _save_json(ORGANIC_RAW_PATH, materials)
-    # Auto-save supplier to contacts
     supplier = data.get("supplier", "").strip()
     if supplier:
         _add_contact("supplier", supplier)
-    return jsonify({"success": True, "entry": entry})
+
+    resp = {"success": True, "entry": entry}
+    if invoice_error:
+        resp["invoice_error"] = invoice_error
+    return jsonify(resp)
 
 
 @app.route("/api/organic/raw-materials/<entry_id>", methods=["DELETE"])
 @login_required
 def delete_raw_material(entry_id):
     materials = _load_json(ORGANIC_RAW_PATH, [])
+    # Remove associated invoice file if present
+    entry = next((m for m in materials if m.get("id") == entry_id), None)
+    if entry:
+        inv = entry.get("invoice") or {}
+        fname = inv.get("filename") or ""
+        if fname:
+            _remove_invoice_file(fname)
     materials = [m for m in materials if m.get("id") != entry_id]
     _save_json(ORGANIC_RAW_PATH, materials)
     return jsonify({"success": True})
+
+
+# ── Organic: Invoices ─────────────────────────────────────────────────
+INVOICES_DIR = os.path.join(ORGANIC_DIR, "invoices")
+os.makedirs(INVOICES_DIR, exist_ok=True)
+
+ALLOWED_INVOICE_EXT = {".pdf", ".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
+MAX_INVOICE_BYTES = 10 * 1024 * 1024  # 10 MB
+
+INVOICE_MIME_MAP = {
+    ".pdf": "application/pdf",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".heic": "image/heic",
+    ".heif": "image/heif",
+}
+
+
+def _invoice_mime(filename):
+    ext = os.path.splitext(filename)[1].lower()
+    return INVOICE_MIME_MAP.get(ext, "application/octet-stream")
+
+
+def _remove_invoice_file(filename):
+    """Safely delete an invoice file. Returns True if removed, False otherwise."""
+    if not filename:
+        return False
+    # Guard against path traversal — only allow files directly inside INVOICES_DIR
+    safe = os.path.basename(filename)
+    if safe != filename:
+        return False
+    path = os.path.join(INVOICES_DIR, safe)
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+            return True
+    except OSError:
+        pass
+    return False
+
+
+def _save_invoice_file(entry_id, file_storage):
+    """Save an uploaded invoice. Returns metadata dict. Raises ValueError on bad input."""
+    if not file_storage or not file_storage.filename:
+        raise ValueError("No file provided")
+    original_name = file_storage.filename
+    ext = os.path.splitext(original_name)[1].lower()
+    if ext not in ALLOWED_INVOICE_EXT:
+        allowed = ", ".join(sorted(ALLOWED_INVOICE_EXT))
+        raise ValueError(f"Unsupported file type '{ext}'. Allowed: {allowed}")
+
+    # Peek size (Flask's FileStorage lets us seek)
+    try:
+        file_storage.stream.seek(0, os.SEEK_END)
+        size = file_storage.stream.tell()
+        file_storage.stream.seek(0)
+    except Exception:
+        size = 0
+    if size > MAX_INVOICE_BYTES:
+        raise ValueError(f"File too large ({size} bytes). Max {MAX_INVOICE_BYTES} bytes.")
+
+    # Build a filesystem-safe, unique filename
+    safe_id = re.sub(r"[^A-Za-z0-9_-]", "_", entry_id or "entry")
+    ts = datetime.now().strftime("%Y%m%d%H%M%S")
+    stored_name = f"{safe_id}_{ts}{ext}"
+    path = os.path.join(INVOICES_DIR, stored_name)
+    file_storage.save(path)
+
+    # Re-measure actual bytes on disk
+    try:
+        actual_size = os.path.getsize(path)
+    except OSError:
+        actual_size = size
+
+    return {
+        "filename": stored_name,
+        "original_name": original_name,
+        "uploaded_at": datetime.now().isoformat(),
+        "size_bytes": actual_size,
+        "mime_type": _invoice_mime(stored_name),
+    }
+
+
+@app.route("/api/organic/raw-materials/<entry_id>/invoice", methods=["POST"])
+@login_required
+def upload_raw_material_invoice(entry_id):
+    """Upload (or replace) an invoice attached to an organic raw material entry."""
+    materials = _load_json(ORGANIC_RAW_PATH, [])
+    entry = next((m for m in materials if m.get("id") == entry_id), None)
+    if not entry:
+        return jsonify({"error": "Raw material not found"}), 404
+
+    if "file" not in request.files:
+        return jsonify({"error": "No file in request"}), 400
+    f = request.files["file"]
+
+    try:
+        meta = _save_invoice_file(entry_id, f)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    # Replace existing invoice: delete old file first
+    old = entry.get("invoice") or {}
+    if old.get("filename"):
+        _remove_invoice_file(old["filename"])
+
+    entry["invoice"] = meta
+    _save_json(ORGANIC_RAW_PATH, materials)
+    return jsonify({"success": True, "invoice": meta})
+
+
+@app.route("/api/organic/raw-materials/<entry_id>/invoice", methods=["DELETE"])
+@login_required
+def delete_raw_material_invoice(entry_id):
+    """Remove the invoice from an organic raw material entry."""
+    materials = _load_json(ORGANIC_RAW_PATH, [])
+    entry = next((m for m in materials if m.get("id") == entry_id), None)
+    if not entry:
+        return jsonify({"error": "Raw material not found"}), 404
+    inv = entry.get("invoice") or {}
+    if inv.get("filename"):
+        _remove_invoice_file(inv["filename"])
+    entry["invoice"] = None
+    _save_json(ORGANIC_RAW_PATH, materials)
+    return jsonify({"success": True})
+
+
+@app.route("/api/organic/invoices/<path:filename>", methods=["GET"])
+@login_required
+def serve_organic_invoice(filename):
+    """Serve an invoice file inline (not as download) for in-browser viewing.
+    Path traversal protected."""
+    safe = os.path.basename(filename)
+    if safe != filename:
+        return jsonify({"error": "Invalid filename"}), 400
+    path = os.path.join(INVOICES_DIR, safe)
+    if not os.path.exists(path):
+        return jsonify({"error": "Not found"}), 404
+    return send_file(path, mimetype=_invoice_mime(safe), as_attachment=False,
+                     download_name=safe)
+
+
+@app.route("/api/organic/invoices", methods=["GET"])
+@login_required
+def list_organic_invoices():
+    """Return chronological list of invoices across all organic raw material entries.
+    Newest first. Shape: [{entry_id, item, supplier, date_received, invoice: {...}}]."""
+    materials = _load_json(ORGANIC_RAW_PATH, [])
+    out = []
+    for m in materials:
+        inv = m.get("invoice")
+        if not inv or not inv.get("filename"):
+            continue
+        out.append({
+            "entry_id": m.get("id"),
+            "item": m.get("item", ""),
+            "supplier": m.get("supplier", ""),
+            "date_received": m.get("date_received", ""),
+            "supplier_lot": m.get("supplier_lot", ""),
+            "quantity": m.get("quantity"),
+            "unit": m.get("unit", ""),
+            "invoice": inv,
+        })
+    out.sort(key=lambda r: r["invoice"].get("uploaded_at", ""), reverse=True)
+    return jsonify(out)
 
 
 # ── Organic: Contacts (suppliers, buyers, distributors) ───────────────
