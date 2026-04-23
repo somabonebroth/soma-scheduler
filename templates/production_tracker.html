@@ -236,13 +236,30 @@ function renderBarChart(data, labelFn, title){
     });
     html+='<div class="total-row"><span class="total-label">'+BUCKET_LABELS['FZ']+'</span><span class="total-value" style="color:'+BUCKET_COLORS['FZ']+';">'+grandTotals['FZ']+' units</span></div>';
     if(grandTotals['Other']>0){
-        html+='<div class="total-row"><span class="total-label">'+BUCKET_LABELS['Other']+'</span><span class="total-value" style="color:'+BUCKET_COLORS['Other']+';">'+grandTotals['Other']+' units</span></div>';
+        var whyLink = (currentView==='week') ? ' <a href="#" onclick="showOtherDetails(); return false;" style="font-size:11px;margin-left:8px;">(why?)</a>' : '';
+        html+='<div class="total-row"><span class="total-label">'+BUCKET_LABELS['Other']+whyLink+'</span><span class="total-value" style="color:'+BUCKET_COLORS['Other']+';">'+grandTotals['Other']+' units</span></div>';
     }
     html+='<div class="total-row"><span class="total-label">'+BUCKET_LABELS['Kettles End']+'</span><span class="total-value" style="color:'+BUCKET_COLORS['Kettles End']+';">'+grandTotals['Kettles End']+' units</span></div>';
     html+='<div class="total-row"><span class="total-label">'+BUCKET_LABELS['BB']+'</span><span class="total-value" style="color:'+BUCKET_COLORS['BB']+';">'+grandTotals['BB']+' units</span></div>';
     html+='<div class="total-row"><span class="total-label"><strong>Total</strong></span><span class="total-value total-all">'+grandTotal+' units</span></div>';
     html+='</div></div>';
     container.innerHTML=html;
+}
+
+async function showOtherDetails(){
+    if(currentView!=='week'){alert('Switch to Week view to see Other details.');return;}
+    var weekId=document.getElementById('week-date').value;
+    var res=await fetch('/api/production-tracker/'+weekId+'/other-details');
+    var rows=await res.json();
+    if(!rows.length){alert('No entries in Other for this week.');return;}
+    var msg='Entries classified as Other for this week:\n\n';
+    rows.forEach(function(r){
+        msg+='• '+r.day_name+' — '+r.vessel+' — '+r.amount+' units\n';
+        msg+='  Recipe: '+(r.scheduled_recipe||'(none)')+'\n';
+        msg+='  Format: '+(r.recipe_format||'(none)')+'\n';
+        msg+='  Reason: '+r.detail+'\n\n';
+    });
+    alert(msg);
 }
 
 document.addEventListener('DOMContentLoaded',function(){buildPicker();loadData();});

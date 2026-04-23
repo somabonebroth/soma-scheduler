@@ -1480,22 +1480,33 @@ TRACKER_BUCKETS = ["SS-876ML", "SS-750ML", "SS-473ML", "FZ", "Other", "Kettles E
 
 
 def _classify_format(recipe_format):
-    """Map a canonical format string to one of the standard-produced buckets.
-    Returns one of: 'SS-876ML', 'SS-750ML', 'SS-473ML', 'FZ', 'Other'."""
+    """Map any format string (canonical or not) to a bucket.
+    Returns one of: 'SS-876ML', 'SS-750ML', 'SS-473ML', 'FZ', 'Other'.
+
+    Normalizes first so 'ss-750ml', 'SS750ML', 'SS 750 ML', 'SS-750 ml' all
+    match the same bucket. Any recognizable format with an SS prefix and a
+    750/876/473 ml size hits its bucket; any FZ-prefixed format goes to FZ;
+    anything else is Other.
+    """
     if not recipe_format:
         return "Other"
-    f = recipe_format.upper()
-    # Exact SS size matches
-    if f == "SS-876ML":
-        return "SS-876ML"
-    if f == "SS-750ML":
-        return "SS-750ML"
-    if f == "SS-473ML":
-        return "SS-473ML"
-    # Any FZ-* variant goes into Frozen
-    if f.startswith("FZ-") or f.startswith("FZ"):
+    # Use the shared parser regex to pull out prefix + size
+    m = FORMAT_RE.search(recipe_format)
+    if not m:
+        return "Other"
+    prefix = m.group(1).upper()
+    size = m.group(2)
+    if prefix == "SS":
+        if size == "876":
+            return "SS-876ML"
+        if size == "750":
+            return "SS-750ML"
+        if size == "473":
+            return "SS-473ML"
+        return "Other"     # unknown SS size (e.g. 250, 1000)
+    if prefix == "FZ":
         return "FZ"
-    return "Other"
+    return "Other"         # BB-*, iQ-*, or any other prefix
 
 
 def _empty_buckets():
@@ -1631,6 +1642,62 @@ def get_production_tracker(week_id):
         }
         daily_totals.append(entry)
     return jsonify(daily_totals)
+
+
+@app.route("/api/production-tracker/<week_id>/other-details", methods=["GET"])
+@login_required
+@require_valid_week
+def get_tracker_other_details(week_id):
+    """Diagnostic: return every production entry in this week that classified
+    as 'Other', with the reason. Helps you see why something is in Other so
+    you can fix the root cause (rename recipe, fix format field, etc.)."""
+    schedule_data = load_schedule(week_id) or {}
+    recipes = load_recipes()
+    day_schedules = (schedule_data.get("schedule") or {}) if schedule_data else {}
+
+    rows = []
+    for d_idx in range(7):
+        cl = load_checklist(week_id, d_idx)
+        if not cl or not cl.get("produced"):
+            continue
+        day_sched = day_schedules.get(str(d_idx), {}) or {}
+        for vessel_id, amount in (cl.get("produced") or {}).items():
+            try:
+                amt = int(amount)
+            except (ValueError, TypeError):
+                continue
+            if amt <= 0:
+                continue
+            recipe_name = day_sched.get(vessel_id, "")
+            recipe_data = recipes.get(recipe_name) if recipe_name else None
+            fmt = (recipe_data or {}).get("format", "")
+            bucket = _classify_format(fmt)
+            if bucket != "Other":
+                continue
+            # Determine reason
+            if not recipe_name:
+                reason = "no_schedule_entry"
+                detail = f"No recipe scheduled for {vessel_id} on this day"
+            elif recipe_data is None:
+                reason = "recipe_not_found"
+                detail = f"Scheduled recipe '{recipe_name}' no longer exists"
+            elif not fmt:
+                reason = "recipe_missing_format"
+                detail = f"Recipe '{recipe_name}' has no format field set"
+            else:
+                reason = "unrecognized_format"
+                detail = f"Format '{fmt}' is not SS-876/750/473ML or FZ-*"
+            rows.append({
+                "day_idx": d_idx,
+                "day_name": DAYS[d_idx],
+                "vessel": vessel_id,
+                "amount": amt,
+                "scheduled_recipe": recipe_name or None,
+                "recipe_format": fmt or None,
+                "reason": reason,
+                "detail": detail,
+            })
+    return jsonify(rows)
 
 
 @app.route("/api/production-tracker/month/<year_month>", methods=["GET"])
