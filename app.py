@@ -540,11 +540,12 @@ def migrate_recipe_ingredients(recipe_data, tracking_modes=None):
 
 
 # ── Recipe parser ──────────────────────────────────────────────────────
-# Canonical prefix casing for known format families (so users see iQ not IQ, etc.)
+# Canonical prefix casing for known format families.
+# Only formats that actually appear as product SKUs belong here.
+# SS = Shelf-Stable, FZ = Frozen, BB = Back Bar label variant.
 FORMAT_PREFIX_CANONICAL = {
     "SS": "SS",
     "FZ": "FZ",
-    "IQ": "iQ",
     "BB": "BB",
 }
 
@@ -1472,68 +1473,163 @@ def delete_traceability_record(week_id, day_idx):
 
 
 # ── Production Tracker ────────────────────────────────────────────────
+# ── Production tracker helpers ────────────────────────────────────────
+# Buckets that appear in the tracker breakdown. Ordered for stacked-bar rendering
+# (bottom to top): SS sizes first, then Frozen, Other, Kettle's End, BB.
+TRACKER_BUCKETS = ["SS-876ML", "SS-750ML", "SS-473ML", "FZ", "Other", "Kettles End", "BB"]
+
+
+def _classify_format(recipe_format):
+    """Map a canonical format string to one of the standard-produced buckets.
+    Returns one of: 'SS-876ML', 'SS-750ML', 'SS-473ML', 'FZ', 'Other'."""
+    if not recipe_format:
+        return "Other"
+    f = recipe_format.upper()
+    # Exact SS size matches
+    if f == "SS-876ML":
+        return "SS-876ML"
+    if f == "SS-750ML":
+        return "SS-750ML"
+    if f == "SS-473ML":
+        return "SS-473ML"
+    # Any FZ-* variant goes into Frozen
+    if f.startswith("FZ-") or f.startswith("FZ"):
+        return "FZ"
+    return "Other"
+
+
+def _empty_buckets():
+    return {b: 0 for b in TRACKER_BUCKETS}
+
+
+def _day_buckets(week_id, d_idx, recipes_cache=None, schedule_cache=None):
+    """Return per-bucket totals for a single (week_id, day_idx).
+    Cross-references the schedule and recipes to classify each vessel's produced
+    units by format. BB units and Kettle's End are their own buckets regardless
+    of recipe.
+
+    recipes_cache / schedule_cache let callers avoid re-reading files repeatedly.
+    """
+    buckets = _empty_buckets()
+    cl = load_checklist(week_id, d_idx)
+    if not cl:
+        return buckets, False
+
+    # Resolve schedule + recipes
+    if schedule_cache is None:
+        schedule_data = load_schedule(week_id) or {}
+    else:
+        schedule_data = schedule_cache
+    if recipes_cache is None:
+        recipes = load_recipes()
+    else:
+        recipes = recipes_cache
+
+    day_schedule = {}
+    if schedule_data and schedule_data.get("schedule"):
+        day_schedule = schedule_data["schedule"].get(str(d_idx), {}) or {}
+
+    # Amount Produced per vessel → bucket by recipe format
+    produced = cl.get("produced") or {}
+    for vessel_id, amount in produced.items():
+        try:
+            amt = int(amount)
+        except (ValueError, TypeError):
+            continue
+        if amt <= 0:
+            continue
+        # Look up recipe for this vessel on this day
+        recipe_name = day_schedule.get(vessel_id, "")
+        recipe_data = recipes.get(recipe_name) if recipe_name else None
+        fmt = (recipe_data or {}).get("format", "")
+        bucket = _classify_format(fmt)
+        buckets[bucket] = buckets.get(bucket, 0) + amt
+
+    # BB produced (all into BB regardless of format)
+    bb = cl.get("bb_produced") or {}
+    for vessel_id, amount in bb.items():
+        try:
+            amt = int(amount)
+        except (ValueError, TypeError):
+            continue
+        if amt > 0:
+            buckets["BB"] += amt
+
+    # Kettle's End
+    try:
+        ke = int(cl.get("kettles_end", 0) or 0)
+    except (ValueError, TypeError):
+        ke = 0
+    if ke > 0:
+        buckets["Kettles End"] += ke
+
+    return buckets, _has_meaningful_data(cl)
+
+
+def _sum_buckets(target, source):
+    """Add all bucket values from source into target in-place."""
+    for k, v in source.items():
+        target[k] = target.get(k, 0) + v
+
+
+def _bucket_total(buckets):
+    return sum(buckets.values())
+
+
 def _week_totals(week_id):
-    """Calculate totals for a single week."""
-    totals = {"produced": 0, "bb": 0, "kettles_end": 0}
+    """Calculate bucketed totals for a single week.
+    Returns dict with bucket keys + 'total' + legacy keys (produced, bb, kettles_end)
+    for backward compatibility."""
+    schedule_data = load_schedule(week_id) or {}
+    recipes = load_recipes()
+    buckets = _empty_buckets()
     for d_idx in range(7):
-        cl = load_checklist(week_id, d_idx)
-        if cl:
-            if cl.get("produced"):
-                for vessel_id, amount in cl["produced"].items():
-                    try:
-                        totals["produced"] += int(amount)
-                    except (ValueError, TypeError):
-                        pass
-            if cl.get("bb_produced"):
-                for vessel_id, amount in cl["bb_produced"].items():
-                    try:
-                        totals["bb"] += int(amount)
-                    except (ValueError, TypeError):
-                        pass
-            try:
-                totals["kettles_end"] += int(cl.get("kettles_end", 0))
-            except (ValueError, TypeError):
-                pass
-    totals["total"] = totals["produced"] + totals["bb"] + totals["kettles_end"]
-    return totals
+        day_b, _ = _day_buckets(week_id, d_idx,
+                                recipes_cache=recipes,
+                                schedule_cache=schedule_data)
+        _sum_buckets(buckets, day_b)
+
+    # Also emit legacy flat fields so old consumers still work
+    legacy_produced = (buckets.get("SS-876ML", 0) + buckets.get("SS-750ML", 0)
+                       + buckets.get("SS-473ML", 0) + buckets.get("FZ", 0)
+                       + buckets.get("Other", 0))
+    out = dict(buckets)
+    out["produced"] = legacy_produced
+    out["bb"] = buckets.get("BB", 0)
+    out["kettles_end"] = buckets.get("Kettles End", 0)
+    out["total"] = _bucket_total(buckets)
+    return out
 
 
 @app.route("/api/production-tracker/<week_id>", methods=["GET"])
 @login_required
 @require_valid_week
 def get_production_tracker(week_id):
+    """Return per-day bucketed totals for a week. Each day contains per-bucket
+    counts plus legacy flat keys (produced/bb/kettles_end) for backward compat."""
+    schedule_data = load_schedule(week_id) or {}
+    recipes = load_recipes()
+
     daily_totals = []
     for d_idx in range(7):
-        cl = load_checklist(week_id, d_idx)
-        total_produced = 0
-        total_bb = 0
-        total_kettles_end = 0
-        if cl:
-            if cl.get("produced"):
-                for vessel_id, amount in cl["produced"].items():
-                    try:
-                        total_produced += int(amount)
-                    except (ValueError, TypeError):
-                        pass
-            if cl.get("bb_produced"):
-                for vessel_id, amount in cl["bb_produced"].items():
-                    try:
-                        total_bb += int(amount)
-                    except (ValueError, TypeError):
-                        pass
-            try:
-                total_kettles_end = int(cl.get("kettles_end", 0))
-            except (ValueError, TypeError):
-                total_kettles_end = 0
-        daily_totals.append({
+        buckets, has_data = _day_buckets(
+            week_id, d_idx,
+            recipes_cache=recipes, schedule_cache=schedule_data,
+        )
+        legacy_produced = (buckets.get("SS-876ML", 0) + buckets.get("SS-750ML", 0)
+                           + buckets.get("SS-473ML", 0) + buckets.get("FZ", 0)
+                           + buckets.get("Other", 0))
+        entry = {
             "day_idx": d_idx,
             "day_name": DAYS[d_idx],
-            "produced": total_produced,
-            "bb": total_bb,
-            "kettles_end": total_kettles_end,
-            "total": total_produced + total_bb + total_kettles_end,
-            "has_data": cl is not None and _has_meaningful_data(cl) if cl else False,
-        })
+            "buckets": dict(buckets),
+            "produced": legacy_produced,
+            "bb": buckets.get("BB", 0),
+            "kettles_end": buckets.get("Kettles End", 0),
+            "total": _bucket_total(buckets),
+            "has_data": has_data,
+        }
+        daily_totals.append(entry)
     return jsonify(daily_totals)
 
 
@@ -1559,6 +1655,8 @@ def get_production_tracker_month(year_month):
             wid = current.strftime("%Y-%m-%d")
             end_date = current + timedelta(days=6)
             totals = _week_totals(wid)
+            # Expose bucket dict explicitly for frontend convenience
+            totals["buckets"] = {b: totals.get(b, 0) for b in TRACKER_BUCKETS}
             totals["week_id"] = wid
             totals["label"] = current.strftime("%b %d") + " - " + end_date.strftime("%b %d")
             weeks.append(totals)
@@ -1584,7 +1682,7 @@ def get_production_tracker_year(year):
         last_day = datetime(year, m, days_in_month)
         start_monday = first_day - timedelta(days=first_day.weekday())
 
-        month_total = {"produced": 0, "bb": 0, "kettles_end": 0}
+        month_buckets = _empty_buckets()
         current = start_monday
         seen_weeks = set()
         while current <= last_day:
@@ -1592,12 +1690,22 @@ def get_production_tracker_year(year):
             if wid not in seen_weeks:
                 seen_weeks.add(wid)
                 wt = _week_totals(wid)
-                month_total["produced"] += wt["produced"]
-                month_total["bb"] += wt["bb"]
-                month_total["kettles_end"] += wt["kettles_end"]
+                # _week_totals returns bucket keys + legacy keys in same dict
+                for bucket in TRACKER_BUCKETS:
+                    month_buckets[bucket] += wt.get(bucket, 0)
             current += timedelta(days=7)
 
-        month_total["total"] = month_total["produced"] + month_total["bb"] + month_total["kettles_end"]
+        legacy_produced = (month_buckets.get("SS-876ML", 0)
+                           + month_buckets.get("SS-750ML", 0)
+                           + month_buckets.get("SS-473ML", 0)
+                           + month_buckets.get("FZ", 0)
+                           + month_buckets.get("Other", 0))
+        month_total = dict(month_buckets)
+        month_total["buckets"] = dict(month_buckets)
+        month_total["produced"] = legacy_produced
+        month_total["bb"] = month_buckets.get("BB", 0)
+        month_total["kettles_end"] = month_buckets.get("Kettles End", 0)
+        month_total["total"] = _bucket_total(month_buckets)
         month_total["month"] = m
         month_total["label"] = month_names[m - 1]
         months.append(month_total)
@@ -1662,8 +1770,8 @@ def _format_pack_label(amount, unit):
 
 def _jar_volume_liters(recipe_data):
     """Parse the jar volume in liters from a recipe's format string.
-    'SS-750ML' / 'FZ-750ML' / 'iQ-750ML' -> 0.75, 'SS-876ML' -> 0.876.
-    Returns None if unparseable (caller falls back to a safe default)."""
+    'SS-750ML' / 'FZ-750ML' / 'BB-750ML' -> 0.75, 'SS-876ML' -> 0.876,
+    'SS-473ML' -> 0.473. Returns None if unparseable (caller falls back)."""
     fmt = (recipe_data.get("format") or "").upper()
     m = re.search(r"(\d+)\s*ML", fmt)
     if m:
