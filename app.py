@@ -540,6 +540,41 @@ def migrate_recipe_ingredients(recipe_data, tracking_modes=None):
 
 
 # ── Recipe parser ──────────────────────────────────────────────────────
+# Canonical prefix casing for known format families (so users see iQ not IQ, etc.)
+FORMAT_PREFIX_CANONICAL = {
+    "SS": "SS",
+    "FZ": "FZ",
+    "IQ": "iQ",
+    "BB": "BB",
+}
+
+# Any <letters>[sep]<number>ML suffix — case-insensitive.
+# Separator can be nothing, a dash, or whitespace.
+FORMAT_RE = re.compile(r"\b([A-Za-z]{1,4})[\s-]*(\d+)\s*ML\b", re.IGNORECASE)
+
+
+def _normalize_format(text):
+    """Turn any 'SS-473ML', 'ss473ml', 'SS 473 ml', etc. into canonical 'SS-473ML'."""
+    if not text:
+        return ""
+    m = FORMAT_RE.search(text)
+    if not m:
+        return text.strip().upper()
+    prefix_raw = m.group(1)
+    canonical_prefix = FORMAT_PREFIX_CANONICAL.get(prefix_raw.upper(), prefix_raw.upper())
+    return f"{canonical_prefix}-{m.group(2)}ML"
+
+
+def _detect_format_in_text(text):
+    """Return the canonical format found in text, or '' if none."""
+    if not text:
+        return ""
+    m = FORMAT_RE.search(text)
+    if not m:
+        return ""
+    return _normalize_format(m.group(0))
+
+
 def parse_recipe_pdf_text(text):
     lines = [l.strip() for l in text.strip().split("\n") if l.strip()]
     if not lines:
@@ -566,17 +601,8 @@ def parse_recipe_pdf_text(text):
             recipe["certification"] = line.split(":", 1)[1].strip()
             header_lines_used.add(i)
         elif ll.startswith("format:"):
-            fmt = line.split(":", 1)[1].strip().upper()
-            if "SS-876ML" in fmt or "SS876ML" in fmt:
-                recipe["format"] = "SS-876ML"
-            elif "FZ-750ML" in fmt or "FZ750ML" in fmt:
-                recipe["format"] = "FZ-750ML"
-            elif "SS-750ML" in fmt or "SS750ML" in fmt:
-                recipe["format"] = "SS-750ML"
-            elif "IQ-750ML" in fmt or "IQ750ML" in fmt:
-                recipe["format"] = "iQ-750ML"
-            else:
-                recipe["format"] = fmt
+            fmt = line.split(":", 1)[1].strip()
+            recipe["format"] = _normalize_format(fmt)
             header_lines_used.add(i)
         elif "target yield" in ll:
             m = re.search(r"(\d+)", line)
@@ -588,19 +614,15 @@ def parse_recipe_pdf_text(text):
     if not name:
         name = lines[0]
         header_lines_used.add(0)
-        upper = name.upper()
-        if "SS-876ML" in upper or "SS876ML" in upper:
-            recipe["format"] = "SS-876ML"
-        elif "FZ-750ML" in upper or "FZ750ML" in upper:
-            recipe["format"] = "FZ-750ML"
-        elif "SS-750ML" in upper or "SS750ML" in upper:
-            recipe["format"] = "SS-750ML"
+        detected = _detect_format_in_text(name)
+        if detected:
+            recipe["format"] = detected
 
     if recipe["yield"] is None:
         recipe["yield"] = 190 if "FZ" in recipe["format"] else 150
 
-    # Append format to name for unique storage key
-    if recipe["format"] and not name.endswith(recipe["format"]):
+    # Append format to name for unique storage key — case-insensitive check
+    if recipe["format"] and not name.upper().endswith(recipe["format"].upper()):
         name = name + " " + recipe["format"]
 
     # Parse recipe body
@@ -1236,17 +1258,21 @@ def generate_label():
 
     best_before = prod_date + timedelta(days=365)
 
-    # Build display name: strip ANY format suffix from recipe_name, then show as base-format
+    # Build display name: strip ANY trailing "<prefix>[-/space]<NNN>ml" format
+    # suffix(es) from recipe_name (case-insensitive, repeated), then append the
+    # canonical format once. Handles any jar size and any number of duplicated
+    # suffixes from past buggy exports.
     base_name = recipe_name
     if recipe_format:
-        # Known format patterns to strip from recipe name
-        format_patterns = ["SS-876ML", "SS-750ML", "FZ-750ML", "iQ-750ML", "BB-750ML"]
-        for fmt in format_patterns:
-            for sep in [" ", "-", " -"]:
-                suffix = sep + fmt
-                if base_name.endswith(suffix):
-                    base_name = base_name[:-len(suffix)]
-                    break
+        suffix_re = re.compile(
+            r"[\s\-]*[A-Za-z]{1,4}[\s\-]*\d+\s*ML\s*$",
+            re.IGNORECASE,
+        )
+        # Peel off trailing format suffixes one at a time until none remain
+        prev = None
+        while prev != base_name:
+            prev = base_name
+            base_name = suffix_re.sub("", base_name).rstrip(" -")
         recipe_format_display = base_name + "-" + recipe_format
     else:
         recipe_format_display = recipe_name
