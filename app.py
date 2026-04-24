@@ -554,6 +554,63 @@ FORMAT_PREFIX_CANONICAL = {
 FORMAT_RE = re.compile(r"\b([A-Za-z]{1,4})[\s-]*(\d+)\s*ML\b", re.IGNORECASE)
 
 
+# Suffix regex used when stripping a trailing format from a recipe name.
+# Matches "<separator><letters><separator><digits>ML" at end of string.
+_FORMAT_SUFFIX_RE = re.compile(
+    r"[\s\-]*[A-Za-z]{1,4}[\s\-]*\d+\s*ML\s*$",
+    re.IGNORECASE,
+)
+
+
+def _strip_format_suffix(name):
+    """Remove ALL trailing format suffixes from a recipe name.
+    Repeats until no more remove — handles double-appended legacy names like
+    'Beef SS-750ML SS-750ML' -> 'Beef'."""
+    if not name:
+        return ""
+    prev = None
+    out = name
+    while prev != out:
+        prev = out
+        out = _FORMAT_SUFFIX_RE.sub("", out).rstrip(" -")
+    return out
+
+
+def build_display_name(recipe_data, recipe_name=""):
+    """Canonical display string used by every UI surface.
+
+    Shape: '{brand}-{name-without-format}-{format}'
+    Example: 'Ripe-Big Kahuna-SS-750ML'
+
+    If brand is missing, drops that segment. If format is missing, uses the
+    raw recipe_name as-is.
+
+    Accepts either a recipe dict with keys brand/format plus a separate
+    recipe_name, OR a single dict containing 'name' field for convenience.
+    """
+    if not isinstance(recipe_data, dict):
+        return recipe_name or ""
+    brand = (recipe_data.get("brand") or "").strip()
+    fmt = _normalize_format((recipe_data.get("format") or "").strip())
+    name = (recipe_name or recipe_data.get("name") or "").strip()
+
+    # Strip any format suffix(es) from the name
+    core = _strip_format_suffix(name)
+    # If stripping removed everything (e.g. name was literally "SS-750ML"),
+    # fall back to the original name
+    if not core:
+        core = name
+
+    parts = []
+    if brand:
+        parts.append(brand)
+    if core:
+        parts.append(core)
+    if fmt:
+        parts.append(fmt)
+    return "-".join(parts) if parts else name
+
+
 def _normalize_format(text):
     """Turn any 'SS-473ML', 'ss473ml', 'SS 473 ml', etc. into canonical 'SS-473ML'."""
     if not text:
@@ -1213,13 +1270,19 @@ def get_daily_production(week_id, day_idx):
     if schedule_data and schedule_data.get("daily_notes"):
         daily_notes = schedule_data["daily_notes"].get(str(day_idx), "")
 
+    # LOT# = expiry date (production date + 365 days) in ddmmyy format.
+    # prev_lot is used when generating labels for the recipe being finished today,
+    # which was started yesterday → expiry = yesterday + 365 days.
+    prev_expiry = prev_date + timedelta(days=365)
+    today_expiry = date + timedelta(days=365)
+
     return jsonify({
         "date": date.strftime("%A, %d/%m/%Y"),
         "day_name": DAYS[day_idx],
         "prev_date": prev_date.strftime("%d/%m/%Y"),
-        "prev_lot": prev_date.strftime("%d%m%y"),
-        "lot": date.strftime("%d%m%y"),
-        "today_lot": date.strftime("%d%m%y"),
+        "prev_lot": prev_expiry.strftime("%d%m%y"),
+        "lot": today_expiry.strftime("%d%m%y"),
+        "today_lot": today_expiry.strftime("%d%m%y"),
         "finish": finish_kettles,
         "start": start_kettles,
         "checklist": checklist,
@@ -1259,24 +1322,12 @@ def generate_label():
 
     best_before = prod_date + timedelta(days=365)
 
-    # Build display name: strip ANY trailing "<prefix>[-/space]<NNN>ml" format
-    # suffix(es) from recipe_name (case-insensitive, repeated), then append the
-    # canonical format once. Handles any jar size and any number of duplicated
-    # suffixes from past buggy exports.
-    base_name = recipe_name
-    if recipe_format:
-        suffix_re = re.compile(
-            r"[\s\-]*[A-Za-z]{1,4}[\s\-]*\d+\s*ML\s*$",
-            re.IGNORECASE,
-        )
-        # Peel off trailing format suffixes one at a time until none remain
-        prev = None
-        while prev != base_name:
-            prev = base_name
-            base_name = suffix_re.sub("", base_name).rstrip(" -")
-        recipe_format_display = base_name + "-" + recipe_format
-    else:
-        recipe_format_display = recipe_name
+    # Build the canonical 'recipe-format' portion using the shared helper.
+    # Brand is passed as a separate field to the label PDF (own line above).
+    recipe_format_display = build_display_name(
+        {"brand": "", "format": recipe_format},
+        recipe_name=recipe_name,
+    )
 
     label_buffer = io.BytesIO()
     generate_label_pdf(label_buffer, brand_name, recipe_format_display, lot, best_before.strftime("%d/%m/%Y"))
@@ -1513,34 +1564,56 @@ def _empty_buckets():
     return {b: 0 for b in TRACKER_BUCKETS}
 
 
+def _get_previous_day_schedule(week_id, d_idx, schedule_cache=None):
+    """Return the schedule dict for the day BEFORE (week_id, d_idx).
+
+    This is what was started yesterday, i.e. what's being finished/produced today.
+
+    For d_idx > 0: returns schedule[d_idx - 1] of this week.
+    For d_idx == 0 (Monday): crosses to previous week's Sunday (d_idx == 6).
+    Returns {} if no schedule data available.
+    """
+    if d_idx > 0:
+        sched = schedule_cache if schedule_cache is not None else (load_schedule(week_id) or {})
+        if sched and sched.get("schedule"):
+            return sched["schedule"].get(str(d_idx - 1), {}) or {}
+        return {}
+    # Monday → look back to last week's Sunday
+    try:
+        prev_week_start = datetime.strptime(week_id, "%Y-%m-%d") - timedelta(days=7)
+        prev_week_id = prev_week_start.strftime("%Y-%m-%d")
+    except ValueError:
+        return {}
+    prev_sched = load_schedule(prev_week_id) or {}
+    if prev_sched and prev_sched.get("schedule"):
+        return prev_sched["schedule"].get("6", {}) or {}
+    return {}
+
+
 def _day_buckets(week_id, d_idx, recipes_cache=None, schedule_cache=None):
     """Return per-bucket totals for a single (week_id, day_idx).
-    Cross-references the schedule and recipes to classify each vessel's produced
-    units by format. BB units and Kettle's End are their own buckets regardless
-    of recipe.
 
-    recipes_cache / schedule_cache let callers avoid re-reading files repeatedly.
+    KEY SEMANTIC: "Amount Produced" entered on day D refers to units that
+    FINISHED on day D — meaning the recipe started on day D-1. We therefore
+    look up the PREVIOUS day's schedule to classify format, not today's.
+
+    BB units and Kettle's End are their own buckets regardless of recipe.
     """
     buckets = _empty_buckets()
     cl = load_checklist(week_id, d_idx)
     if not cl:
         return buckets, False
 
-    # Resolve schedule + recipes
-    if schedule_cache is None:
-        schedule_data = load_schedule(week_id) or {}
-    else:
-        schedule_data = schedule_cache
+    # Resolve recipes (cached across week)
     if recipes_cache is None:
         recipes = load_recipes()
     else:
         recipes = recipes_cache
 
-    day_schedule = {}
-    if schedule_data and schedule_data.get("schedule"):
-        day_schedule = schedule_data["schedule"].get(str(d_idx), {}) or {}
+    # Look up PREVIOUS day's schedule (with cross-week Monday fallback)
+    prev_day_schedule = _get_previous_day_schedule(week_id, d_idx, schedule_cache)
 
-    # Amount Produced per vessel → bucket by recipe format
+    # Amount Produced per vessel → bucket by prev-day's recipe format
     produced = cl.get("produced") or {}
     for vessel_id, amount in produced.items():
         try:
@@ -1549,8 +1622,8 @@ def _day_buckets(week_id, d_idx, recipes_cache=None, schedule_cache=None):
             continue
         if amt <= 0:
             continue
-        # Look up recipe for this vessel on this day
-        recipe_name = day_schedule.get(vessel_id, "")
+        # The recipe that was STARTED yesterday and is being FINISHED today
+        recipe_name = prev_day_schedule.get(vessel_id, "")
         recipe_data = recipes.get(recipe_name) if recipe_name else None
         fmt = (recipe_data or {}).get("format", "")
         bucket = _classify_format(fmt)
@@ -1588,9 +1661,8 @@ def _bucket_total(buckets):
 
 
 def _week_totals(week_id):
-    """Calculate bucketed totals for a single week.
-    Returns dict with bucket keys + 'total' + legacy keys (produced, bb, kettles_end)
-    for backward compatibility."""
+    """Calculate bucketed totals for a single week. Returns dict with bucket
+    keys + 'total'. Used by month/year endpoints."""
     schedule_data = load_schedule(week_id) or {}
     recipes = load_recipes()
     buckets = _empty_buckets()
@@ -1599,15 +1671,7 @@ def _week_totals(week_id):
                                 recipes_cache=recipes,
                                 schedule_cache=schedule_data)
         _sum_buckets(buckets, day_b)
-
-    # Also emit legacy flat fields so old consumers still work
-    legacy_produced = (buckets.get("SS-876ML", 0) + buckets.get("SS-750ML", 0)
-                       + buckets.get("SS-473ML", 0) + buckets.get("FZ", 0)
-                       + buckets.get("Other", 0))
     out = dict(buckets)
-    out["produced"] = legacy_produced
-    out["bb"] = buckets.get("BB", 0)
-    out["kettles_end"] = buckets.get("Kettles End", 0)
     out["total"] = _bucket_total(buckets)
     return out
 
@@ -1627,16 +1691,10 @@ def get_production_tracker(week_id):
             week_id, d_idx,
             recipes_cache=recipes, schedule_cache=schedule_data,
         )
-        legacy_produced = (buckets.get("SS-876ML", 0) + buckets.get("SS-750ML", 0)
-                           + buckets.get("SS-473ML", 0) + buckets.get("FZ", 0)
-                           + buckets.get("Other", 0))
         entry = {
             "day_idx": d_idx,
             "day_name": DAYS[d_idx],
             "buckets": dict(buckets),
-            "produced": legacy_produced,
-            "bb": buckets.get("BB", 0),
-            "kettles_end": buckets.get("Kettles End", 0),
             "total": _bucket_total(buckets),
             "has_data": has_data,
         }
@@ -1649,18 +1707,15 @@ def get_production_tracker(week_id):
 @require_valid_week
 def get_tracker_other_details(week_id):
     """Diagnostic: return every production entry in this week that classified
-    as 'Other', with the reason. Helps you see why something is in Other so
-    you can fix the root cause (rename recipe, fix format field, etc.)."""
-    schedule_data = load_schedule(week_id) or {}
+    as 'Other', with the reason. Uses the SAME attribution logic as the tracker:
+    looks up the PREVIOUS day's recipe (what finished today), not today's start."""
     recipes = load_recipes()
-    day_schedules = (schedule_data.get("schedule") or {}) if schedule_data else {}
-
     rows = []
     for d_idx in range(7):
         cl = load_checklist(week_id, d_idx)
         if not cl or not cl.get("produced"):
             continue
-        day_sched = day_schedules.get(str(d_idx), {}) or {}
+        prev_day_sched = _get_previous_day_schedule(week_id, d_idx)
         for vessel_id, amount in (cl.get("produced") or {}).items():
             try:
                 amt = int(amount)
@@ -1668,19 +1723,18 @@ def get_tracker_other_details(week_id):
                 continue
             if amt <= 0:
                 continue
-            recipe_name = day_sched.get(vessel_id, "")
+            recipe_name = prev_day_sched.get(vessel_id, "")
             recipe_data = recipes.get(recipe_name) if recipe_name else None
             fmt = (recipe_data or {}).get("format", "")
             bucket = _classify_format(fmt)
             if bucket != "Other":
                 continue
-            # Determine reason
             if not recipe_name:
                 reason = "no_schedule_entry"
-                detail = f"No recipe scheduled for {vessel_id} on this day"
+                detail = f"No recipe scheduled yesterday for {vessel_id} — can't classify today's production"
             elif recipe_data is None:
                 reason = "recipe_not_found"
-                detail = f"Scheduled recipe '{recipe_name}' no longer exists"
+                detail = f"Yesterday's scheduled recipe '{recipe_name}' no longer exists"
             elif not fmt:
                 reason = "recipe_missing_format"
                 detail = f"Recipe '{recipe_name}' has no format field set"
@@ -1722,10 +1776,12 @@ def get_production_tracker_month(year_month):
             wid = current.strftime("%Y-%m-%d")
             end_date = current + timedelta(days=6)
             totals = _week_totals(wid)
-            # Expose bucket dict explicitly for frontend convenience
             totals["buckets"] = {b: totals.get(b, 0) for b in TRACKER_BUCKETS}
             totals["week_id"] = wid
             totals["label"] = current.strftime("%b %d") + " - " + end_date.strftime("%b %d")
+            # Strip raw bucket keys now that they're nested under 'buckets'
+            for b in TRACKER_BUCKETS:
+                totals.pop(b, None)
             weeks.append(totals)
             current += timedelta(days=7)
         return jsonify(weeks)
@@ -1757,24 +1813,16 @@ def get_production_tracker_year(year):
             if wid not in seen_weeks:
                 seen_weeks.add(wid)
                 wt = _week_totals(wid)
-                # _week_totals returns bucket keys + legacy keys in same dict
                 for bucket in TRACKER_BUCKETS:
                     month_buckets[bucket] += wt.get(bucket, 0)
             current += timedelta(days=7)
 
-        legacy_produced = (month_buckets.get("SS-876ML", 0)
-                           + month_buckets.get("SS-750ML", 0)
-                           + month_buckets.get("SS-473ML", 0)
-                           + month_buckets.get("FZ", 0)
-                           + month_buckets.get("Other", 0))
-        month_total = dict(month_buckets)
-        month_total["buckets"] = dict(month_buckets)
-        month_total["produced"] = legacy_produced
-        month_total["bb"] = month_buckets.get("BB", 0)
-        month_total["kettles_end"] = month_buckets.get("Kettles End", 0)
-        month_total["total"] = _bucket_total(month_buckets)
-        month_total["month"] = m
-        month_total["label"] = month_names[m - 1]
+        month_total = {
+            "buckets": dict(month_buckets),
+            "total": _bucket_total(month_buckets),
+            "month": m,
+            "label": month_names[m - 1],
+        }
         months.append(month_total)
     return jsonify(months)
 
@@ -1943,16 +1991,8 @@ def get_raw_materials():
 @app.route("/api/organic/raw-materials", methods=["POST"])
 @login_required
 def add_raw_material():
-    """Add a raw material lot. JSON body {item, unit, quantity, supplier, date_received, supplier_lot}
-    OR multipart form with same fields plus optional 'file' for invoice."""
-    # Accept multipart (with optional invoice) or plain JSON
-    if request.files and "file" in request.files:
-        data = request.form.to_dict() or {}
-        invoice_file = request.files.get("file")
-    else:
-        data = request.json or {}
-        invoice_file = None
-
+    """Add a raw material lot. JSON body: {item, unit, quantity, supplier, date_received, supplier_lot}"""
+    data = request.json or {}
     materials = _load_json(ORGANIC_RAW_PATH, [])
     try:
         qty = float(data.get("quantity", 0))
@@ -1969,47 +2009,27 @@ def add_raw_material():
         "remaining": qty,
         "created_at": datetime.now().isoformat(),
     }
-
-    # Handle optional invoice upload. If it fails, we still save the entry
-    # but return the error note so frontend can surface it.
-    invoice_error = None
-    if invoice_file and invoice_file.filename:
-        try:
-            entry["invoice"] = _save_invoice_file(entry["id"], invoice_file)
-        except ValueError as e:
-            invoice_error = str(e)
-
     materials.append(entry)
     _save_json(ORGANIC_RAW_PATH, materials)
     supplier = data.get("supplier", "").strip()
     if supplier:
         _add_contact("supplier", supplier)
-
-    resp = {"success": True, "entry": entry}
-    if invoice_error:
-        resp["invoice_error"] = invoice_error
-    return jsonify(resp)
+    return jsonify({"success": True, "entry": entry})
 
 
 @app.route("/api/organic/raw-materials/<entry_id>", methods=["DELETE"])
 @login_required
 def delete_raw_material(entry_id):
     materials = _load_json(ORGANIC_RAW_PATH, [])
-    # Remove associated invoice file if present
-    entry = next((m for m in materials if m.get("id") == entry_id), None)
-    if entry:
-        inv = entry.get("invoice") or {}
-        fname = inv.get("filename") or ""
-        if fname:
-            _remove_invoice_file(fname)
     materials = [m for m in materials if m.get("id") != entry_id]
     _save_json(ORGANIC_RAW_PATH, materials)
     return jsonify({"success": True})
 
 
-# ── Organic: Invoices ─────────────────────────────────────────────────
+# ── Organic: Invoices (standalone module, keyed by supplier + date + LOT#s) ──
 INVOICES_DIR = os.path.join(ORGANIC_DIR, "invoices")
 os.makedirs(INVOICES_DIR, exist_ok=True)
+INVOICES_INDEX_PATH = os.path.join(ORGANIC_DIR, "invoices.json")
 
 ALLOWED_INVOICE_EXT = {".pdf", ".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
 MAX_INVOICE_BYTES = 10 * 1024 * 1024  # 10 MB
@@ -2030,11 +2050,42 @@ def _invoice_mime(filename):
     return INVOICE_MIME_MAP.get(ext, "application/octet-stream")
 
 
+def _save_invoice_file_bytes(prefix, file_storage):
+    """Save uploaded invoice, return (filename, metadata). Raises ValueError on bad input."""
+    if not file_storage or not file_storage.filename:
+        raise ValueError("No file provided")
+    original_name = file_storage.filename
+    ext = os.path.splitext(original_name)[1].lower()
+    if ext not in ALLOWED_INVOICE_EXT:
+        allowed = ", ".join(sorted(ALLOWED_INVOICE_EXT))
+        raise ValueError(f"Unsupported file type '{ext}'. Allowed: {allowed}")
+    try:
+        file_storage.stream.seek(0, os.SEEK_END)
+        size = file_storage.stream.tell()
+        file_storage.stream.seek(0)
+    except Exception:
+        size = 0
+    if size > MAX_INVOICE_BYTES:
+        raise ValueError(f"File too large ({size} bytes). Max {MAX_INVOICE_BYTES} bytes.")
+    safe_prefix = re.sub(r"[^A-Za-z0-9_-]", "_", prefix or "inv")
+    ts = datetime.now().strftime("%Y%m%d%H%M%S")
+    stored_name = f"{safe_prefix}_{ts}{ext}"
+    path = os.path.join(INVOICES_DIR, stored_name)
+    file_storage.save(path)
+    try:
+        actual_size = os.path.getsize(path)
+    except OSError:
+        actual_size = size
+    return stored_name, {
+        "original_name": original_name,
+        "size_bytes": actual_size,
+        "mime_type": _invoice_mime(stored_name),
+    }
+
+
 def _remove_invoice_file(filename):
-    """Safely delete an invoice file. Returns True if removed, False otherwise."""
     if not filename:
         return False
-    # Guard against path traversal — only allow files directly inside INVOICES_DIR
     safe = os.path.basename(filename)
     if safe != filename:
         return False
@@ -2048,130 +2099,152 @@ def _remove_invoice_file(filename):
     return False
 
 
-def _save_invoice_file(entry_id, file_storage):
-    """Save an uploaded invoice. Returns metadata dict. Raises ValueError on bad input."""
-    if not file_storage or not file_storage.filename:
-        raise ValueError("No file provided")
-    original_name = file_storage.filename
-    ext = os.path.splitext(original_name)[1].lower()
-    if ext not in ALLOWED_INVOICE_EXT:
-        allowed = ", ".join(sorted(ALLOWED_INVOICE_EXT))
-        raise ValueError(f"Unsupported file type '{ext}'. Allowed: {allowed}")
-
-    # Peek size (Flask's FileStorage lets us seek)
+def _parse_lots_field(form_data):
+    """Pull LOT#s from a multipart form. Accepts repeated 'lots[]' or 'lots' fields,
+    or a single comma-separated 'lots' string."""
+    lots = []
+    # Flask's MultiDict supports getlist
     try:
-        file_storage.stream.seek(0, os.SEEK_END)
-        size = file_storage.stream.tell()
-        file_storage.stream.seek(0)
-    except Exception:
-        size = 0
-    if size > MAX_INVOICE_BYTES:
-        raise ValueError(f"File too large ({size} bytes). Max {MAX_INVOICE_BYTES} bytes.")
-
-    # Build a filesystem-safe, unique filename
-    safe_id = re.sub(r"[^A-Za-z0-9_-]", "_", entry_id or "entry")
-    ts = datetime.now().strftime("%Y%m%d%H%M%S")
-    stored_name = f"{safe_id}_{ts}{ext}"
-    path = os.path.join(INVOICES_DIR, stored_name)
-    file_storage.save(path)
-
-    # Re-measure actual bytes on disk
-    try:
-        actual_size = os.path.getsize(path)
-    except OSError:
-        actual_size = size
-
-    return {
-        "filename": stored_name,
-        "original_name": original_name,
-        "uploaded_at": datetime.now().isoformat(),
-        "size_bytes": actual_size,
-        "mime_type": _invoice_mime(stored_name),
-    }
+        for v in form_data.getlist("lots[]"):
+            if v and v.strip():
+                lots.append(v.strip())
+        for v in form_data.getlist("lots"):
+            if v and v.strip():
+                for item in v.split(","):
+                    if item.strip():
+                        lots.append(item.strip())
+    except AttributeError:
+        # Plain dict fallback
+        raw = form_data.get("lots", "")
+        if raw:
+            for item in str(raw).split(","):
+                if item.strip():
+                    lots.append(item.strip())
+    # Dedupe preserving order
+    seen = set()
+    out = []
+    for l in lots:
+        if l not in seen:
+            seen.add(l)
+            out.append(l)
+    return out
 
 
-@app.route("/api/organic/raw-materials/<entry_id>/invoice", methods=["POST"])
+@app.route("/api/organic/invoices", methods=["POST"])
 @login_required
-def upload_raw_material_invoice(entry_id):
-    """Upload (or replace) an invoice attached to an organic raw material entry."""
-    materials = _load_json(ORGANIC_RAW_PATH, [])
-    entry = next((m for m in materials if m.get("id") == entry_id), None)
-    if not entry:
-        return jsonify({"error": "Raw material not found"}), 404
-
+def upload_invoice():
+    """Create a new invoice record. Multipart form:
+      supplier (str), invoice_date (YYYY-MM-DD), lots[] (repeated or comma-sep),
+      file (uploaded invoice)."""
     if "file" not in request.files:
-        return jsonify({"error": "No file in request"}), 400
+        return jsonify({"error": "File required"}), 400
     f = request.files["file"]
+    supplier = (request.form.get("supplier") or "").strip()
+    invoice_date = (request.form.get("invoice_date") or "").strip()
+    lots = _parse_lots_field(request.form)
 
+    if not supplier:
+        return jsonify({"error": "Supplier required"}), 400
+    if not invoice_date:
+        return jsonify({"error": "Invoice date required"}), 400
+
+    inv_id = datetime.now().strftime("%Y%m%d%H%M%S%f")
     try:
-        meta = _save_invoice_file(entry_id, f)
+        filename, meta = _save_invoice_file_bytes(inv_id, f)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
-    # Replace existing invoice: delete old file first
-    old = entry.get("invoice") or {}
-    if old.get("filename"):
-        _remove_invoice_file(old["filename"])
-
-    entry["invoice"] = meta
-    _save_json(ORGANIC_RAW_PATH, materials)
-    return jsonify({"success": True, "invoice": meta})
-
-
-@app.route("/api/organic/raw-materials/<entry_id>/invoice", methods=["DELETE"])
-@login_required
-def delete_raw_material_invoice(entry_id):
-    """Remove the invoice from an organic raw material entry."""
-    materials = _load_json(ORGANIC_RAW_PATH, [])
-    entry = next((m for m in materials if m.get("id") == entry_id), None)
-    if not entry:
-        return jsonify({"error": "Raw material not found"}), 404
-    inv = entry.get("invoice") or {}
-    if inv.get("filename"):
-        _remove_invoice_file(inv["filename"])
-    entry["invoice"] = None
-    _save_json(ORGANIC_RAW_PATH, materials)
-    return jsonify({"success": True})
-
-
-@app.route("/api/organic/invoices/<path:filename>", methods=["GET"])
-@login_required
-def serve_organic_invoice(filename):
-    """Serve an invoice file inline (not as download) for in-browser viewing.
-    Path traversal protected."""
-    safe = os.path.basename(filename)
-    if safe != filename:
-        return jsonify({"error": "Invalid filename"}), 400
-    path = os.path.join(INVOICES_DIR, safe)
-    if not os.path.exists(path):
-        return jsonify({"error": "Not found"}), 404
-    return send_file(path, mimetype=_invoice_mime(safe), as_attachment=False,
-                     download_name=safe)
+    record = {
+        "id": inv_id,
+        "supplier": supplier,
+        "invoice_date": invoice_date,
+        "lots": lots,
+        "filename": filename,
+        "original_name": meta["original_name"],
+        "size_bytes": meta["size_bytes"],
+        "mime_type": meta["mime_type"],
+        "uploaded_at": datetime.now().isoformat(),
+    }
+    invoices = _load_json(INVOICES_INDEX_PATH, [])
+    invoices.append(record)
+    _save_json(INVOICES_INDEX_PATH, invoices)
+    if supplier:
+        _add_contact("supplier", supplier)
+    return jsonify({"success": True, "invoice": record})
 
 
 @app.route("/api/organic/invoices", methods=["GET"])
 @login_required
-def list_organic_invoices():
-    """Return chronological list of invoices across all organic raw material entries.
-    Newest first. Shape: [{entry_id, item, supplier, date_received, invoice: {...}}]."""
-    materials = _load_json(ORGANIC_RAW_PATH, [])
-    out = []
-    for m in materials:
-        inv = m.get("invoice")
-        if not inv or not inv.get("filename"):
-            continue
-        out.append({
-            "entry_id": m.get("id"),
-            "item": m.get("item", ""),
-            "supplier": m.get("supplier", ""),
-            "date_received": m.get("date_received", ""),
-            "supplier_lot": m.get("supplier_lot", ""),
-            "quantity": m.get("quantity"),
-            "unit": m.get("unit", ""),
-            "invoice": inv,
-        })
-    out.sort(key=lambda r: r["invoice"].get("uploaded_at", ""), reverse=True)
-    return jsonify(out)
+def list_invoices():
+    """Return all invoices, newest invoice_date first (ties broken by uploaded_at)."""
+    lot_filter = (request.args.get("lot") or "").strip()
+    invoices = _load_json(INVOICES_INDEX_PATH, [])
+    if lot_filter:
+        lf = lot_filter.lower()
+        invoices = [inv for inv in invoices
+                    if any(lf in (l or "").lower() for l in (inv.get("lots") or []))]
+    invoices.sort(key=lambda r: (r.get("invoice_date", ""), r.get("uploaded_at", "")),
+                  reverse=True)
+    return jsonify(invoices)
+
+
+@app.route("/api/organic/invoices/<inv_id>/file", methods=["GET"])
+@login_required
+def serve_invoice(inv_id):
+    """Serve the invoice file inline (not forced download)."""
+    invoices = _load_json(INVOICES_INDEX_PATH, [])
+    rec = next((i for i in invoices if i.get("id") == inv_id), None)
+    if not rec:
+        return jsonify({"error": "Not found"}), 404
+    fname = rec.get("filename", "")
+    safe = os.path.basename(fname)
+    if safe != fname:
+        return jsonify({"error": "Invalid filename"}), 400
+    path = os.path.join(INVOICES_DIR, safe)
+    if not os.path.exists(path):
+        return jsonify({"error": "File missing"}), 404
+    return send_file(path, mimetype=_invoice_mime(safe),
+                     as_attachment=False, download_name=safe)
+
+
+@app.route("/api/organic/invoices/<inv_id>", methods=["DELETE"])
+@login_required
+def delete_invoice(inv_id):
+    invoices = _load_json(INVOICES_INDEX_PATH, [])
+    rec = next((i for i in invoices if i.get("id") == inv_id), None)
+    if not rec:
+        return jsonify({"error": "Not found"}), 404
+    _remove_invoice_file(rec.get("filename", ""))
+    invoices = [i for i in invoices if i.get("id") != inv_id]
+    _save_json(INVOICES_INDEX_PATH, invoices)
+    return jsonify({"success": True})
+
+
+def _cleanup_legacy_invoices():
+    """One-time cleanup on startup: wipe old per-raw-material invoices and files."""
+    try:
+        materials = _load_json(ORGANIC_RAW_PATH, [])
+        dirty = False
+        for m in materials:
+            if "invoice" in m:
+                m.pop("invoice", None)
+                dirty = True
+        if dirty:
+            _save_json(ORGANIC_RAW_PATH, materials)
+        # Wipe invoice files that don't match any record in the new index
+        known = {r.get("filename", "") for r in _load_json(INVOICES_INDEX_PATH, [])}
+        if os.path.exists(INVOICES_DIR):
+            for fname in os.listdir(INVOICES_DIR):
+                if fname not in known:
+                    try:
+                        os.remove(os.path.join(INVOICES_DIR, fname))
+                    except OSError:
+                        pass
+    except Exception:
+        pass
+
+
+_cleanup_legacy_invoices()
 
 
 # ── Organic: Contacts (suppliers, buyers, distributors) ───────────────

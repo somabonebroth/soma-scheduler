@@ -167,12 +167,28 @@ function fmtIng(item){
 }
 function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
+// Canonical display name: 'Brand-Name-Format' (all dashes). See weekly_view for parity.
+function buildDisplayName(brand, recipeName, format) {
+    var name = (recipeName || '').trim();
+    var fmt = (format || '').trim();
+    var b = (brand || '').trim();
+    var suffixRe = /[\s\-]*[A-Za-z]{1,4}[\s\-]*\d+\s*ML\s*$/i;
+    var prev = null;
+    while (prev !== name) { prev = name; name = name.replace(suffixRe, '').replace(/[\s\-]+$/, ''); }
+    if (!name) name = (recipeName || '').trim();
+    var parts = [];
+    if (b) parts.push(b);
+    if (name) parts.push(name);
+    if (fmt) parts.push(fmt);
+    return parts.join('-');
+}
+
 function buildRecipeCard(data,vessel,side){
     var r=data.details;var name=data.recipe;
-    var brandDisplay=r.brand?(r.brand+' - '):'';
+    var display=buildDisplayName(r.brand||'', name, r.format||'');
     var halvedNote=data.halved?'<span class="halved-badge">½ QUANTITIES</span>':'';
-    var html='<div class="recipe-title">'+brandDisplay+name+halvedNote+'</div>';
-    html+='<div class="recipe-format">'+(r.format||'')+' | Target: '+(r.yield||'--')+' units</div>';
+    var html='<div class="recipe-title">'+escHtml(display)+halvedNote+'</div>';
+    html+='<div class="recipe-format">Target: '+(r.yield||'--')+' units</div>';
     if(r.special_instructions&&r.special_instructions.length){html+='<div class="special-box">';for(var i=0;i<r.special_instructions.length;i++)html+=escHtml(r.special_instructions[i])+'<br>';html+='</div>';}
     var secs=[['Add to kettle overnight',r.kettle_overnight],['Add after skim',r.after_skim],['Finishing',r.finishing],['Add to jar/container',r.add_to_jar]];
     for(var s=0;s<secs.length;s++){

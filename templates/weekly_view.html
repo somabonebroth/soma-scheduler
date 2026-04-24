@@ -65,6 +65,23 @@
 </div>
 <script>
 var DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+// Canonical display name: 'Brand-Name-Format' (all dashes).
+// Strips any format suffix already present in the name so we don't double-append.
+function buildDisplayName(brand, recipeName, format) {
+    var name = (recipeName || '').trim();
+    var fmt = (format || '').trim();
+    var b = (brand || '').trim();
+    // Strip trailing format suffix(es) from name, repeatedly (handles double-appended legacy names)
+    var suffixRe = /[\s\-]*[A-Za-z]{1,4}[\s\-]*\d+\s*ML\s*$/i;
+    var prev = null;
+    while (prev !== name) { prev = name; name = name.replace(suffixRe, '').replace(/[\s\-]+$/, ''); }
+    if (!name) name = (recipeName || '').trim();
+    var parts = [];
+    if (b) parts.push(b);
+    if (name) parts.push(name);
+    if (fmt) parts.push(fmt);
+    return parts.join('-');
+}
 var VESSELS = ['K1','K2','K3','115L'];
 var currentWeekId = '';
 
@@ -193,8 +210,7 @@ async function loadWeek(weekId) {
 
                 if (recipeName && recipeData) {
                     hasStart = true;
-                    var brand = recipeData.brand || '';
-                    displayName = brand ? brand + '-' + recipeName : recipeName;
+                    displayName = buildDisplayName(recipeData.brand || '', recipeName, recipeData.format || '');
                     var yieldVal = recipeData.yield || 0;
                     if (vessel === '115L' && yieldVal) {
                         yieldVal = Math.round(yieldVal / 2);
@@ -212,8 +228,8 @@ async function loadWeek(weekId) {
                     html += '<span class="' + yieldClass + '">' + target + '</span>';
                 } else if (prevRecipeName && recipes[prevRecipeName]) {
                     // Finish-only: this vessel has yesterday's recipe to finish, nothing starting today
-                    var prevBrand = recipes[prevRecipeName].brand || '';
-                    var prevDisplay = prevBrand ? prevBrand + '-' + prevRecipeName : prevRecipeName;
+                    var prevRecipe = recipes[prevRecipeName];
+                    var prevDisplay = buildDisplayName(prevRecipe.brand || '', prevRecipeName, prevRecipe.format || '');
                     html += '<span class="recipe-display"><span class="finish-only" style="color:#856404;font-size:11px;">Finish: ' + prevDisplay + '</span></span>';
                     html += '<span class="yield-val"></span>';
                 } else {
