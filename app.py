@@ -875,11 +875,39 @@ def update_recipe(name):
 @login_required
 def delete_recipe(name):
     recipes = load_recipes()
-    if name in recipes:
-        del recipes[name]
-        save_recipes(recipes)
-        return jsonify({"success": True})
-    return jsonify({"error": "Recipe not found"}), 404
+    if name not in recipes:
+        return jsonify({"error": "Recipe not found"}), 404
+
+    # Block deletion if any completed organic runs reference this recipe —
+    # those runs are part of the traceability record and need the recipe
+    # context for the tracker, traceability page, and label re-generation.
+    # Suggest archiving instead.
+    completed_refs = []
+    try:
+        runs = _load_json(ORGANIC_RUNS_PATH, [])
+        for r in runs:
+            if r.get("status") == "completed" and r.get("recipe") == name:
+                completed_refs.append({
+                    "run_id": r.get("id"),
+                    "week_id": r.get("week_id"),
+                    "day_idx": r.get("day_idx"),
+                    "vessel": r.get("vessel"),
+                })
+    except Exception:
+        pass
+    if completed_refs:
+        return jsonify({
+            "error": (f"Cannot delete '{name}' — it has been used in "
+                      f"{len(completed_refs)} completed organic production run(s). "
+                      f"Deleting would orphan those traceability records. "
+                      f"Use Archive instead to hide it from new schedules while "
+                      f"preserving history."),
+            "completed_runs": completed_refs,
+        }), 409
+
+    del recipes[name]
+    save_recipes(recipes)
+    return jsonify({"success": True})
 
 
 def _schedules_using_recipe(recipe_name):
@@ -1213,6 +1241,17 @@ def delete_schedule(week_id):
     path = os.path.join(SCHEDULES_DIR, week_id + ".json")
     if os.path.exists(path):
         os.unlink(path)
+    # Remove scheduled (uncompleted) organic runs for this week.
+    # Completed runs are preserved — they're traceability data.
+    try:
+        runs = _load_json(ORGANIC_RUNS_PATH, [])
+        before = len(runs)
+        runs = [r for r in runs
+                if not (r.get("week_id") == week_id and r.get("status") != "completed")]
+        if len(runs) != before:
+            _save_json(ORGANIC_RUNS_PATH, runs)
+    except Exception:
+        pass
     return jsonify({"success": True})
 
 
@@ -1436,11 +1475,12 @@ def save_daily_production(week_id, day_idx):
     save_checklist_data(week_id, day_idx, data)
     # Process any organic runs scheduled on the previous day —
     # the produced amounts entered today are the finish of yesterday's runs.
+    warnings = []
     try:
-        _check_organic_completion(week_id, day_idx, data)
+        warnings = _check_organic_completion(week_id, day_idx, data) or []
     except Exception:
         pass
-    return jsonify({"success": True})
+    return jsonify({"success": True, "warnings": warnings})
 
 
 # ── Label Generation ──────────────────────────────────────────────────
@@ -1542,12 +1582,13 @@ def complete_checklist(week_id, day_idx):
     generate_filled_checklist_pdf(pdf_path, date, active_vessels, data, logo_path)
 
     # Check if any organic runs need completing
+    warnings = []
     try:
-        _check_organic_completion(week_id, day_idx, data)
+        warnings = _check_organic_completion(week_id, day_idx, data) or []
     except Exception:
         pass
 
-    return jsonify({"success": True, "filename": filename})
+    return jsonify({"success": True, "filename": filename, "warnings": warnings})
 
 
 # ── Checklist Status ──────────────────────────────────────────────────
@@ -2078,6 +2119,16 @@ os.makedirs(ORGANIC_DIR, exist_ok=True)
 
 
 def _load_json(path, default=None):
+    """Read a JSON file. Returns `default` (or [] if not given) when the file
+    is missing.
+
+    CONCURRENCY: This is a plain read with no file locking. The Soma app uses
+    JSON files for all persistent state and assumes a single-user, low-
+    concurrency environment. Two simultaneous writes are LAST-WRITE-WINS and
+    can lose data — but in practice the kitchen has one user editing at a
+    time, so this constraint is acceptable. If multi-user concurrent editing
+    becomes a requirement, switch to SQLite (file-locked) or a real DB.
+    """
     if os.path.exists(path):
         with open(path, "r") as f:
             return json.load(f)
@@ -2085,6 +2136,8 @@ def _load_json(path, default=None):
 
 
 def _save_json(path, data):
+    """Write JSON. See _load_json's docstring for the concurrency caveat —
+    no locking, last-write-wins on simultaneous writes."""
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
@@ -2236,13 +2289,18 @@ def add_raw_material():
     """Add a raw material lot. JSON body: {item, unit, quantity, supplier, date_received, supplier_lot}"""
     data = request.json or {}
     materials = _load_json(ORGANIC_RAW_PATH, [])
+    item = (data.get("item") or "").strip()
+    if not item:
+        return jsonify({"error": "Item name required"}), 400
     try:
         qty = float(data.get("quantity", 0))
     except (ValueError, TypeError):
         qty = 0
+    if qty <= 0:
+        return jsonify({"error": "Quantity must be greater than 0"}), 400
     entry = {
         "id": datetime.now().strftime("%Y%m%d%H%M%S") + str(len(materials)),
-        "item": data.get("item", ""),
+        "item": item,
         "supplier": data.get("supplier", ""),
         "date_received": data.get("date_received", ""),
         "supplier_lot": data.get("supplier_lot", ""),
@@ -2257,6 +2315,61 @@ def add_raw_material():
     if supplier:
         _add_contact("supplier", supplier)
     return jsonify({"success": True, "entry": entry})
+
+
+def _runs_using_raw_material(entry_id):
+    """Return list of completed organic runs that have deducted from this raw material entry."""
+    runs = _load_json(ORGANIC_RUNS_PATH, [])
+    matches = []
+    for r in runs:
+        if r.get("status") != "completed":
+            continue
+        for used in (r.get("ingredients_used") or []):
+            if used.get("raw_material_id") == entry_id:
+                matches.append({
+                    "run_id": r.get("id"),
+                    "week_id": r.get("week_id"),
+                    "day_idx": r.get("day_idx"),
+                    "vessel": r.get("vessel"),
+                    "recipe": r.get("recipe"),
+                    "quantity_used": used.get("quantity_used"),
+                    "unit": used.get("unit"),
+                })
+                break
+    return matches
+
+
+@app.route("/api/organic/raw-materials/<entry_id>", methods=["PUT"])
+@login_required
+def update_raw_material(entry_id):
+    """Manually adjust the remaining quantity of a raw material entry.
+    Body: {remaining}. Use for stock counts / corrections.
+    Other fields (item, unit, original quantity) are NOT editable here —
+    they would invalidate prior production-run deductions if changed.
+    """
+    data = request.json or {}
+    materials = _load_json(ORGANIC_RAW_PATH, [])
+    entry = next((m for m in materials if m.get("id") == entry_id), None)
+    if not entry:
+        return jsonify({"error": "Entry not found"}), 404
+    if "remaining" not in data:
+        return jsonify({"error": "remaining required"}), 400
+    try:
+        new_remaining = float(data.get("remaining"))
+    except (ValueError, TypeError):
+        return jsonify({"error": "remaining must be a number"}), 400
+    entry["remaining"] = round(new_remaining, 4)
+    entry["last_adjusted_at"] = datetime.now().isoformat()
+    _save_json(ORGANIC_RAW_PATH, materials)
+    return jsonify({"success": True, "entry": entry})
+
+
+@app.route("/api/organic/raw-materials/<entry_id>/usage", methods=["GET"])
+@login_required
+def get_raw_material_usage(entry_id):
+    """Return list of completed runs that deducted from this entry. Frontend
+    uses this to warn the user before deletion."""
+    return jsonify({"used_in": _runs_using_raw_material(entry_id)})
 
 
 @app.route("/api/organic/raw-materials/<entry_id>", methods=["DELETE"])
@@ -2512,31 +2625,6 @@ def get_organic_runs():
     return jsonify(_load_json(ORGANIC_RUNS_PATH, []))
 
 
-def _create_organic_run(week_id, day_idx, vessel, recipe_name, recipe_data, lot):
-    """Create a production run record when an organic recipe is scheduled."""
-    runs = _load_json(ORGANIC_RUNS_PATH, [])
-    # Check if already exists
-    for r in runs:
-        if r.get("week_id") == week_id and r.get("day_idx") == day_idx and r.get("vessel") == vessel:
-            return  # Already tracked
-    run = {
-        "id": f"{week_id}_{day_idx}_{vessel}",
-        "week_id": week_id,
-        "day_idx": day_idx,
-        "day_name": DAYS[day_idx],
-        "vessel": vessel,
-        "recipe": recipe_name,
-        "lot": lot,
-        "brand": recipe_data.get("brand", ""),
-        "status": "scheduled",
-        "ingredients_used": [],
-        "amount_produced": 0,
-        "created_at": datetime.now().isoformat(),
-    }
-    runs.append(run)
-    _save_json(ORGANIC_RUNS_PATH, runs)
-
-
 def _previous_day_coords(week_id, day_idx):
     """Return (prev_week_id, prev_day_idx) for the day BEFORE (week_id, day_idx).
     For Monday (d_idx=0), crosses back to last week's Sunday (d_idx=6)."""
@@ -2567,6 +2655,9 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
     fg = _load_json(ORGANIC_FG_PATH, [])
     sales = _load_json(ORGANIC_SALES_PATH, []) if os.path.exists(ORGANIC_SALES_PATH) else []
     recipes = load_recipes()
+
+    # Warnings surfaced to the user via the save endpoint response
+    warnings = []
 
     # Find runs scheduled on the START day (yesterday relative to finish day)
     start_week_id, start_day_idx = _previous_day_coords(finish_week_id, finish_day_idx)
@@ -2722,6 +2813,18 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
                             "unit": display_unit,
                             "negative": True,
                         })
+                        warnings.append({
+                            "kind": "insufficient_stock",
+                            "vessel": vessel,
+                            "recipe": recipe_name,
+                            "ingredient": item_name,
+                            "shortfall": qty_remaining_to_deduct,
+                            "unit": display_unit,
+                            "message": (f"Insufficient {item_name}: short by "
+                                        f"{qty_remaining_to_deduct} {display_unit} "
+                                        f"on {vessel} ({recipe_name}). "
+                                        f"Production proceeded with what was on hand."),
+                        })
 
         run["status"] = "completed" if amount > 0 else "scheduled"
         run["ingredients_used"] = ingredients_used
@@ -2738,6 +2841,29 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
                     already_sold += int(s.get("quantity", 0))
                 except (ValueError, TypeError):
                     pass
+
+        # Detect manual lot-adjust collision: if an existing FG entry shows a
+        # remaining quantity inconsistent with (produced - sold), the user has
+        # manually adjusted it (e.g., for breakage). Re-saving daily production
+        # will overwrite that adjustment — warn the user.
+        if existing_fg and amount > 0:
+            prev_produced = int(existing_fg.get("quantity_produced") or 0)
+            prev_remaining = int(existing_fg.get("quantity_remaining") or 0)
+            implied_remaining = max(0, prev_produced - already_sold)
+            if existing_fg.get("last_adjusted_at") or prev_remaining != implied_remaining:
+                manual_delta = implied_remaining - prev_remaining
+                if manual_delta != 0:
+                    warnings.append({
+                        "kind": "lot_adjust_overwritten",
+                        "vessel": vessel,
+                        "recipe": recipe_name,
+                        "manual_delta": manual_delta,
+                        "message": (f"A manual stock adjustment on {vessel} "
+                                    f"({recipe_name}) of {-manual_delta:+d} units "
+                                    f"was overwritten by re-saving production. "
+                                    f"If breakage / loss still applies, re-enter "
+                                    f"the adjustment from Finished Goods."),
+                    })
 
         if amount > 0:
             new_remaining = max(0, amount - already_sold)
@@ -2759,9 +2885,11 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
                 "updated_at": datetime.now().isoformat(),
             }
             if existing_fg:
-                # Update in place
+                # Update in place — but explicitly clear last_adjusted_at since
+                # the re-save resets the manual adjustment
                 for k, v in new_fg.items():
                     existing_fg[k] = v
+                existing_fg.pop("last_adjusted_at", None)
             else:
                 fg.append(new_fg)
         else:
@@ -2772,13 +2900,15 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
     _save_json(ORGANIC_RUNS_PATH, runs)
     _save_json(ORGANIC_RAW_PATH, materials)
     _save_json(ORGANIC_FG_PATH, fg)
+    return warnings
 
 
 # ── Organic: Finished Goods ──────────────────────────────────────────
 def _sku_key(brand, recipe, fmt):
     """Stable identifier for a SKU group: 'BRAND|RECIPE|FORMAT'.
+    Format is normalized so 'SS-750ML' and 'ss-750ml' collapse into one SKU.
     Separator chosen so it can't appear in any of the components."""
-    return "|".join([(brand or ""), (recipe or ""), (fmt or "")])
+    return "|".join([(brand or ""), (recipe or ""), _normalize_format(fmt or "")])
 
 
 def _sku_display(brand, recipe, fmt):
@@ -2891,11 +3021,123 @@ def _aggregate_lots_for_sku(fg, sku_key):
     return out
 
 
+# ── Organic: Finished Goods endpoints ──────────────────────────────────
+# ORDERING NOTE: Flask matches routes top-to-bottom, but the methods
+# disambiguate /finished-goods/<fg_id> (PUT/DELETE) from /finished-goods/grouped
+# (GET) and /finished-goods/sku/<key> (GET). A future maintainer adding a new
+# GET on /<fg_id> would shadow grouped/sku — so if you add one, also reorder
+# so /grouped and /sku/<path:sku_key> come BEFORE the generic /<fg_id> route.
+
 @app.route("/api/organic/finished-goods", methods=["GET"])
 @login_required
 def get_finished_goods():
     """Returns raw per-kettle FG entries. Used by traceability/legacy callers."""
     return jsonify(_load_json(ORGANIC_FG_PATH, []))
+
+
+@app.route("/api/organic/finished-goods/<fg_id>", methods=["PUT"])
+@login_required
+def update_finished_good(fg_id):
+    """Manually adjust the remaining quantity on a finished goods entry.
+    Body: {remaining}. Use for inventory corrections (loss, breakage, recount).
+    The original quantity_produced and LOT# are preserved unchanged."""
+    data = request.json or {}
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    entry = next((f for f in fg if f.get("id") == fg_id), None)
+    if not entry:
+        return jsonify({"error": "Finished goods entry not found"}), 404
+    if "remaining" not in data:
+        return jsonify({"error": "remaining required"}), 400
+    try:
+        new_remaining = int(data.get("remaining"))
+    except (ValueError, TypeError):
+        return jsonify({"error": "remaining must be an integer"}), 400
+    if new_remaining < 0:
+        return jsonify({"error": "remaining cannot be negative"}), 400
+    entry["quantity_remaining"] = new_remaining
+    entry["last_adjusted_at"] = datetime.now().isoformat()
+    _save_json(ORGANIC_FG_PATH, fg)
+    return jsonify({"success": True, "entry": entry})
+
+
+@app.route("/api/organic/finished-goods/<fg_id>", methods=["DELETE"])
+@login_required
+def delete_finished_good(fg_id):
+    """Delete a finished goods entry. Sales already made against this entry
+    keep their records (they stand as historical sales) but no inventory
+    is restored anywhere — the FG entry is simply removed."""
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    if not any(f.get("id") == fg_id for f in fg):
+        return jsonify({"error": "Finished goods entry not found"}), 404
+    fg = [f for f in fg if f.get("id") != fg_id]
+    _save_json(ORGANIC_FG_PATH, fg)
+    return jsonify({"success": True})
+
+
+@app.route("/api/organic/finished-goods/lot-adjust", methods=["POST"])
+@login_required
+def adjust_lot_remaining():
+    """Set the total remaining quantity for a LOT within a SKU. Body:
+    {sku_key, lot, new_remaining}. The delta from current is distributed across
+    underlying FG entries (same LOT can span multiple kettles).
+    Used for manual stock corrections (loss, breakage, recount)."""
+    data = request.json or {}
+    sku_key = (data.get("sku_key") or "").strip()
+    lot = (data.get("lot") or "").strip()
+    if not sku_key or not lot:
+        return jsonify({"error": "sku_key and lot required"}), 400
+    try:
+        new_remaining = int(data.get("new_remaining"))
+    except (ValueError, TypeError):
+        return jsonify({"error": "new_remaining must be an integer"}), 400
+    if new_remaining < 0:
+        return jsonify({"error": "new_remaining cannot be negative"}), 400
+
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    matching = [f for f in fg
+                if _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")) == sku_key
+                and f.get("lot") == lot]
+    if not matching:
+        return jsonify({"error": "No FG entries match that SKU + LOT"}), 404
+    current_total = sum(int(f.get("quantity_remaining") or 0) for f in matching)
+    produced_total = sum(int(f.get("quantity_produced") or 0) for f in matching)
+    delta = new_remaining - current_total
+
+    warnings = []
+    if new_remaining > produced_total:
+        warnings.append({
+            "kind": "exceeds_produced",
+            "message": (f"Adjusted remaining ({new_remaining}) exceeds total produced "
+                        f"for this LOT ({produced_total}). The adjustment was applied, "
+                        f"but verify this isn't a typo."),
+        })
+
+    if delta == 0:
+        return jsonify({"success": True, "current_total": current_total,
+                        "new_total": new_remaining, "warnings": warnings})
+
+    if delta < 0:
+        # Reducing — drain from entries in order until delta absorbed
+        to_remove = -delta
+        for f in matching:
+            if to_remove <= 0:
+                break
+            avail = int(f.get("quantity_remaining") or 0)
+            take = min(avail, to_remove)
+            f["quantity_remaining"] = avail - take
+            f["last_adjusted_at"] = datetime.now().isoformat()
+            to_remove -= take
+    else:
+        # Increasing — add to first entry (it's an inventory correction; we
+        # don't try to redistribute proportionally because the user's intent
+        # is "the LOT total should be N", and the bucket is logically one).
+        first = matching[0]
+        first["quantity_remaining"] = int(first.get("quantity_remaining") or 0) + delta
+        first["last_adjusted_at"] = datetime.now().isoformat()
+
+    _save_json(ORGANIC_FG_PATH, fg)
+    return jsonify({"success": True, "previous_total": current_total,
+                    "new_total": new_remaining, "warnings": warnings})
 
 
 @app.route("/api/organic/finished-goods/grouped", methods=["GET"])
@@ -3022,9 +3264,17 @@ def add_organic_sale():
             remaining_to_deduct -= take
             lot = entry.get("lot", "")
             if lot not in lot_summary:
-                lot_summary[lot] = {"lot": lot, "quantity": 0, "fg_ids": []}
+                lot_summary[lot] = {
+                    "lot": lot, "quantity": 0,
+                    "fg_ids": [],            # legacy/display convenience
+                    "breakdown": [],         # exact per-fg_id deduction (for accurate restore)
+                }
             lot_summary[lot]["quantity"] += take
             lot_summary[lot]["fg_ids"].append(entry.get("id"))
+            lot_summary[lot]["breakdown"].append({
+                "fg_id": entry.get("id"),
+                "quantity": take,
+            })
         sale_lots = list(lot_summary.values())
 
     else:
@@ -3043,6 +3293,7 @@ def add_organic_sale():
             "lot": fg_entry.get("lot", ""),
             "quantity": quantity,
             "fg_ids": [fg_entry.get("id")],
+            "breakdown": [{"fg_id": fg_entry.get("id"), "quantity": quantity}],
         }]
 
     sale = {
@@ -3083,20 +3334,29 @@ def delete_organic_sale(sale_id):
 
     # Restore inventory
     if sale.get("lots"):
-        # New shape: restore proportionally to the fg_ids the sale drew from
         for lot_entry in sale["lots"]:
-            fg_ids = lot_entry.get("fg_ids") or []
             qty_to_restore = int(lot_entry.get("quantity") or 0)
-            if not fg_ids or qty_to_restore <= 0:
+            if qty_to_restore <= 0:
                 continue
-            # Restore to first available FG id (we don't track per-fg-id breakdown)
+            # Preferred: per-fg_id breakdown (post-2026-05 sales) — restores
+            # exactly to where each unit was deducted from.
+            breakdown = lot_entry.get("breakdown")
+            if breakdown:
+                for b in breakdown:
+                    target = next((f for f in fg if f.get("id") == b.get("fg_id")), None)
+                    if target:
+                        target["quantity_remaining"] = int(target.get("quantity_remaining") or 0) + int(b.get("quantity") or 0)
+                continue
+            # Fallback: legacy lot record without breakdown — restore everything
+            # to the first matching fg_id (best-effort; preserves SKU total).
+            fg_ids = lot_entry.get("fg_ids") or []
             for fid in fg_ids:
                 target = next((f for f in fg if f.get("id") == fid), None)
                 if target:
                     target["quantity_remaining"] = int(target.get("quantity_remaining") or 0) + qty_to_restore
-                    break  # Restore the whole LOT quantity to the first matching entry
+                    break
     elif sale.get("fg_id"):
-        # Legacy shape
+        # Pre-multi-LOT legacy shape
         target = next((f for f in fg if f.get("id") == sale["fg_id"]), None)
         if target:
             target["quantity_remaining"] = int(target.get("quantity_remaining") or 0) + int(sale.get("quantity") or 0)
@@ -3199,26 +3459,100 @@ def organic_trace():
 
 # ── Hook: Auto-create organic runs when schedule is generated ─────────
 def _check_organic_schedule(week_id, schedule):
-    """Scan a schedule for organic recipes and create production run records."""
+    """Reconcile organic production runs with the current schedule.
+
+    For each (day, vessel) in this week:
+      - If the schedule has an organic recipe → ensure a scheduled run exists
+        (creating it if missing, or updating recipe/lot if the recipe changed)
+      - If the schedule has no organic recipe → remove any orphaned SCHEDULED run
+
+    COMPLETED runs are NEVER touched. Once a run is completed it is part of the
+    traceability record (raw materials deducted, finished goods generated) and
+    must not be erased by retroactive schedule edits.
+    """
+    runs = _load_json(ORGANIC_RUNS_PATH, [])
     recipes = load_recipes()
     week_start = datetime.strptime(week_id, "%Y-%m-%d")
-    for day_key, vessels in schedule.items():
-        day_idx = int(day_key)
-        date = week_start + timedelta(days=day_idx)
-        lot = date.strftime("%d%m%y")
-        for vessel, recipe_name in vessels.items():
+
+    # Build the set of (day_idx, vessel) → desired organic recipe for this week
+    desired = {}  # (day_idx, vessel) -> recipe_name
+    for day_key, vessels in (schedule or {}).items():
+        try:
+            day_idx = int(day_key)
+        except (ValueError, TypeError):
+            continue
+        for vessel, recipe_name in (vessels or {}).items():
             if not recipe_name:
                 continue
-            recipe_data = recipes.get(recipe_name, {})
-            cert = (recipe_data.get("certification") or "").lower()
-            if cert == "organic":
-                _create_organic_run(week_id, day_idx, vessel, recipe_name, recipe_data, lot)
+            recipe_data = recipes.get(recipe_name) or {}
+            if (recipe_data.get("certification") or "").lower() != "organic":
+                continue
+            desired[(day_idx, vessel)] = recipe_name
+
+    out = []
+    seen_keys = set()
+    for run in runs:
+        # Only touch runs in THIS week. Other weeks' runs pass through unchanged.
+        if run.get("week_id") != week_id:
+            out.append(run)
+            continue
+        # Completed runs are immutable from the schedule side
+        if run.get("status") == "completed":
+            out.append(run)
+            continue
+        key = (run.get("day_idx"), run.get("vessel"))
+        if key in desired:
+            # Schedule still wants this slot. Update recipe if it changed.
+            new_recipe = desired[key]
+            if run.get("recipe") != new_recipe:
+                rdata = recipes.get(new_recipe) or {}
+                run["recipe"] = new_recipe
+                run["brand"] = rdata.get("brand", "")
+                # Recompute LOT from the new schedule context
+                try:
+                    date = week_start + timedelta(days=key[0])
+                    run["lot"] = date.strftime("%d%m%y")
+                except Exception:
+                    pass
+            seen_keys.add(key)
+            out.append(run)
+        # else: scheduled run no longer matches — drop it (orphan removal)
+
+    # Add any newly-scheduled organic slots that don't yet have a run
+    for (day_idx, vessel), recipe_name in desired.items():
+        if (day_idx, vessel) in seen_keys:
+            continue
+        # Check if a completed run already exists for this slot (don't duplicate)
+        if any(r.get("week_id") == week_id and r.get("day_idx") == day_idx
+               and r.get("vessel") == vessel for r in out):
+            continue
+        date = week_start + timedelta(days=day_idx)
+        lot = date.strftime("%d%m%y")
+        rdata = recipes.get(recipe_name) or {}
+        run = {
+            "id": f"{week_id}_{day_idx}_{vessel}",
+            "week_id": week_id,
+            "day_idx": day_idx,
+            "day_name": DAYS[day_idx] if 0 <= day_idx < 7 else "",
+            "vessel": vessel,
+            "recipe": recipe_name,
+            "lot": lot,
+            "brand": rdata.get("brand", ""),
+            "status": "scheduled",
+            "ingredients_used": [],
+            "amount_produced": 0,
+            "created_at": datetime.now().isoformat(),
+        }
+        out.append(run)
+
+    _save_json(ORGANIC_RUNS_PATH, out)
 
 
 # ── Hook: Complete organic runs when daily production is filed ─────────
 def _check_organic_completion(finish_week_id, finish_day_idx, checklist_data):
     """When daily production is saved on the FINISH day, process any organic
-    runs that were scheduled on the PREVIOUS day (which are now finishing)."""
+    runs that were scheduled on the PREVIOUS day (which are now finishing).
+    Returns a list of warning dicts for the UI to surface."""
     runs = _load_json(ORGANIC_RUNS_PATH, [])
     start_week_id, start_day_idx = _previous_day_coords(finish_week_id, finish_day_idx)
     has_organic = any(
@@ -3226,7 +3560,8 @@ def _check_organic_completion(finish_week_id, finish_day_idx, checklist_data):
         for r in runs
     )
     if has_organic:
-        _complete_organic_run(finish_week_id, finish_day_idx, checklist_data)
+        return _complete_organic_run(finish_week_id, finish_day_idx, checklist_data) or []
+    return []
 
 
 if not os.path.exists(RECIPES_PATH):

@@ -270,11 +270,33 @@ function restoreData(d){
     updatePct();
 }
 
+function showWarnings(warnings){
+    var box=document.getElementById('save-warnings');
+    if(!box){
+        box=document.createElement('div');
+        box.id='save-warnings';
+        box.style.cssText='margin:12px auto;max-width:1100px;padding:12px 16px;background:#fff8e1;border:1px solid #b38b00;border-left:4px solid #b38b00;border-radius:6px;font-size:13px;color:#5a4500;';
+        var main=document.querySelector('.main')||document.body;
+        main.insertBefore(box,main.firstChild);
+    }
+    if(!warnings||!warnings.length){box.style.display='none';box.innerHTML='';return;}
+    var html='<strong>⚠ Production saved with '+warnings.length+' warning'+(warnings.length===1?'':'s')+':</strong><ul style="margin:6px 0 0 18px;padding:0;">';
+    warnings.forEach(function(w){html+='<li>'+(w.message||JSON.stringify(w)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</li>';});
+    html+='</ul>';
+    box.innerHTML=html;
+    box.style.display='block';
+}
+
 function autoSave(){
     var ind=document.getElementById('save-indicator');ind.textContent='Saving...';ind.className='save-indicator';
     if(saveTimeout)clearTimeout(saveTimeout);
     saveTimeout=setTimeout(async function(){
-        try{await fetch('/api/daily-production/'+WEEK_ID+'/'+DAY_IDX+'/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collectData())});ind.textContent='Saved';ind.className='save-indicator saved';}
+        try{
+            var r=await fetch('/api/daily-production/'+WEEK_ID+'/'+DAY_IDX+'/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collectData())});
+            var data;try{data=await r.json();}catch(e){data={};}
+            ind.textContent='Saved';ind.className='save-indicator saved';
+            showWarnings(data.warnings||[]);
+        }
         catch(e){ind.textContent='Save failed';}
     },800);
 }
@@ -295,7 +317,15 @@ async function completeAndFile(){
     try{
         var res=await fetch('/api/checklist/'+WEEK_ID+'/'+DAY_IDX+'/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collectData())});
         var result=await res.json();
-        if(result.success){msg.style.color='var(--accent)';msg.textContent='Signed and completed. Redirecting…';setTimeout(function(){window.location.href='/';},1500);}
+        if(result.success){
+            showWarnings(result.warnings||[]);
+            var redirectDelay=(result.warnings&&result.warnings.length)?5000:1500;
+            msg.style.color='var(--accent)';
+            msg.textContent=(result.warnings&&result.warnings.length)
+                ?'Signed and completed with '+result.warnings.length+' warning(s). Review above. Redirecting in 5s…'
+                :'Signed and completed. Redirecting…';
+            setTimeout(function(){window.location.href='/';},redirectDelay);
+        }
         else{msg.style.color='#dc3545';msg.textContent=result.error||'Failed';btn.disabled=false;btn.textContent='Sign & Complete';}
     }catch(e){msg.style.color='#dc3545';msg.textContent='Error: '+e.message;btn.disabled=false;btn.textContent='Sign & Complete';}
 }

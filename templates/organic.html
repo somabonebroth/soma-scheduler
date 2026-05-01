@@ -260,10 +260,75 @@ async function loadRawMaterials(){
     var html='<table class="inv-table"><tr><th>Item</th><th>Supplier</th><th>Received</th><th>LOT#</th><th>Qty</th><th>Remaining</th><th>Unit</th><th></th></tr>';
     data.forEach(function(m){
         var remClass=m.remaining<0?'negative':m.remaining===0?'low':'';
-        html+='<tr><td>'+m.item+'</td><td>'+m.supplier+'</td><td>'+m.date_received+'</td><td>'+m.supplier_lot+'</td><td>'+m.quantity+'</td><td class="'+remClass+'">'+m.remaining+'</td><td>'+(m.unit||'')+'</td><td><button class="btn-danger" onclick="deleteRM(\''+m.id+'\')">Del</button></td></tr>';
+        html+='<tr>'+
+              '<td>'+escSku(m.item)+'</td>'+
+              '<td>'+escSku(m.supplier)+'</td>'+
+              '<td>'+escSku(m.date_received)+'</td>'+
+              '<td>'+escSku(m.supplier_lot)+'</td>'+
+              '<td>'+m.quantity+'</td>'+
+              '<td class="'+remClass+'">'+m.remaining+'</td>'+
+              '<td>'+escSku(m.unit||'')+'</td>'+
+              '<td style="white-space:nowrap;">'+
+                '<button class="btn-sm" data-rm-action="edit" data-rm-id="'+escSku(m.id)+'" data-rm-remaining="'+m.remaining+'" data-rm-item="'+escSku(m.item)+'" data-rm-unit="'+escSku(m.unit||'')+'" style="margin-right:4px;">Edit Qty</button>'+
+                '<button class="btn-danger" data-rm-action="delete" data-rm-id="'+escSku(m.id)+'">Del</button>'+
+              '</td></tr>';
     });
     html+='</table>';
     container.innerHTML=html;
+    attachRMClickDelegationOnce();
+}
+
+function attachRMClickDelegationOnce(){
+    var c=document.getElementById('rm-table-container');
+    if(!c || c.dataset.delegated)return;
+    c.dataset.delegated='1';
+    c.addEventListener('click',function(e){
+        var btn=e.target.closest('[data-rm-action]');
+        if(!btn)return;
+        var action=btn.getAttribute('data-rm-action');
+        var id=btn.getAttribute('data-rm-id');
+        if(action==='edit'){
+            var current=btn.getAttribute('data-rm-remaining');
+            var item=btn.getAttribute('data-rm-item');
+            var unit=btn.getAttribute('data-rm-unit');
+            editRMRemaining(id,item,unit,current);
+        } else if(action==='delete'){
+            deleteRM(id);
+        }
+    });
+}
+
+async function editRMRemaining(id,item,unit,current){
+    var input=prompt('Adjust remaining quantity for:\n  '+item+(unit?' ('+unit+')':'')+
+                     '\n\nCurrent: '+current+'\n\nNew remaining quantity:',current);
+    if(input===null)return;
+    input=input.trim();
+    if(input==='')return;
+    var n=parseFloat(input);
+    if(isNaN(n)){alert('Enter a number');return;}
+    var res=await fetch('/api/organic/raw-materials/'+encodeURIComponent(id),{
+        method:'PUT',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({remaining:n}),
+    });
+    var data=await res.json();
+    if(!data.success){alert(data.error||'Update failed');return;}
+    loadRawMaterials();
+}
+
+async function deleteRM(id){
+    // Check usage first to show informed warning
+    var msg='Delete this inventory entry?';
+    try{
+        var ur=await fetch('/api/organic/raw-materials/'+encodeURIComponent(id)+'/usage');
+        var udata=await ur.json();
+        var used=(udata.used_in)||[];
+        if(used.length){
+            msg='WARNING: This entry has been used in '+used.length+' completed production run'+(used.length===1?'':'s')+'. Deleting it will not affect those runs (the deduction history is preserved on the run record itself), but the raw-material entry will be gone from inventory.\n\nContinue with deletion?';
+        }
+    }catch(e){}
+    if(!confirm(msg))return;
+    await fetch('/api/organic/raw-materials/'+encodeURIComponent(id),{method:'DELETE'});
+    loadRawMaterials();
 }
 
 // ── Invoices (standalone module) ──
@@ -383,12 +448,6 @@ async function addRawMaterial(){
         st.className='status error';
         st.textContent=data.error||'Failed';
     }
-}
-
-async function deleteRM(id){
-    if(!confirm('Delete this inventory entry?'))return;
-    await fetch('/api/organic/raw-materials/'+id,{method:'DELETE'});
-    loadRawMaterials();
 }
 
 async function addCustomIngredient(){
@@ -524,9 +583,10 @@ async function renderSkuDetail(skuKey){
         el.innerHTML='<span style="color:var(--text-light);font-size:12px;">No LOTs.</span>';
         return;
     }
+    var skuKeyEnc=encodeURIComponent(skuKey);
     var html='<table class="inv-table" style="margin:0;font-size:12px;"><tr>'+
              '<th>LOT#</th><th>Production Date</th><th>Best Before</th>'+
-             '<th>Vessels</th><th>Produced</th><th>Remaining</th>'+
+             '<th>Vessels</th><th>Produced</th><th>Remaining</th><th></th>'+
              '</tr>';
     data.lots.forEach(function(l){
         var rowStyle=l.remaining<=0?' style="opacity:0.45;"':'';
@@ -540,10 +600,48 @@ async function renderSkuDetail(skuKey){
               '<td>'+escSku(vessels)+'</td>'+
               '<td>'+l.produced+'</td>'+
               '<td>'+l.remaining+(l.remaining<=0?' <span style="font-size:10px;color:var(--text-light);">(depleted)</span>':'')+'</td>'+
+              '<td><button class="btn-sm" data-fg-action="edit-lot" data-sku-key="'+skuKeyEnc+'" data-lot="'+escSku(l.lot)+'" data-current="'+l.remaining+'" style="font-size:11px;padding:3px 8px;">Edit Qty</button></td>'+
               '</tr>';
     });
     html+='</table>';
     el.innerHTML=html;
+    attachLotClickDelegationOnce(el);
+}
+
+function attachLotClickDelegationOnce(container){
+    if(!container || container.dataset.lotDelegated)return;
+    container.dataset.lotDelegated='1';
+    container.addEventListener('click',function(e){
+        var btn=e.target.closest('[data-fg-action]');
+        if(!btn)return;
+        var action=btn.getAttribute('data-fg-action');
+        if(action==='edit-lot'){
+            var skuKey=decodeURIComponent(btn.getAttribute('data-sku-key'));
+            var lot=btn.getAttribute('data-lot');
+            var current=btn.getAttribute('data-current');
+            editLotRemaining(skuKey,lot,current);
+        }
+    });
+}
+
+async function editLotRemaining(skuKey,lot,current){
+    var input=prompt('Adjust remaining units for LOT '+lot+'\n\nCurrent total remaining: '+current+
+                     '\n\nNew remaining quantity:',current);
+    if(input===null)return;
+    input=input.trim();
+    if(input==='')return;
+    var n=parseInt(input);
+    if(isNaN(n)||n<0){alert('Enter a non-negative integer');return;}
+    var res=await fetch('/api/organic/finished-goods/lot-adjust',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({sku_key:skuKey,lot:lot,new_remaining:n}),
+    });
+    var data=await res.json();
+    if(!data.success){alert(data.error||'Update failed');return;}
+    if(data.warnings&&data.warnings.length){
+        alert('Saved with warnings:\n\n'+data.warnings.map(function(w){return '• '+w.message;}).join('\n'));
+    }
+    loadFinishedGoods();
 }
 
 // Sell form (modal) — pre-fills with the SKU you clicked

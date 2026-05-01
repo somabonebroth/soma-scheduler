@@ -443,7 +443,17 @@ async function runMigration(){
         recipes=await(await fetch('/api/recipes')).json();await loadOrder();renderList();checkMigration();
     }
 }
-async function deleteRecipe(name){if(!confirm('Delete "'+name+'"?'))return;await fetch('/api/recipes/'+encodeURIComponent(name),{method:'DELETE'});recipes=await(await fetch('/api/recipes')).json();renderList();}
+async function deleteRecipe(name){
+    if(!confirm('Delete "'+name+'"?'))return;
+    var res=await fetch('/api/recipes/'+encodeURIComponent(name),{method:'DELETE'});
+    if(!res.ok){
+        var data;try{data=await res.json();}catch(e){data={error:'Delete failed'};}
+        alert(data.error||'Delete failed');
+        return;
+    }
+    recipes=await(await fetch('/api/recipes')).json();
+    renderList();
+}
 
 async function duplicateRecipe(name){
     var defaultName='(copy) '+name;
