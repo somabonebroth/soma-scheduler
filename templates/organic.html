@@ -463,13 +463,13 @@ async function loadFinishedGoods(){
         var displaySafe=escSku(s.display);
         var isExpanded=(expandedSku===s.sku_key);
         html+='<div class="fg-row sku-row" data-sku="'+keyAttr+'" style="cursor:pointer;">'+
-              '<div class="fg-info" onclick="toggleSku(\''+keyAttr+'\')">'+
+              '<div class="fg-info" data-action="toggle" data-sku-key="'+keyAttr+'">'+
                 '<strong>'+displaySafe+'</strong>'+
                 '<br><span style="font-size:11px;color:var(--text-light);">'+lotNote+' • '+s.total_produced+' produced lifetime</span>'+
               '</div>'+
               '<div class="'+qtyClass+'">'+s.total_remaining+' remaining</div>'+
               '<div style="margin-left:12px;">'+
-                '<button class="btn btn-primary" style="font-size:12px;padding:4px 10px;" onclick="event.stopPropagation();openSellForm(\''+keyAttr+'\')">Sell</button>'+
+                '<button class="btn btn-primary" style="font-size:12px;padding:4px 10px;" data-action="sell" data-sku-key="'+keyAttr+'">Sell</button>'+
               '</div>'+
               '</div>';
         if(isExpanded){
@@ -477,9 +477,31 @@ async function loadFinishedGoods(){
         }
     });
     container.innerHTML=html;
+    attachFgClickDelegationOnce();
     if(expandedSku){
         renderSkuDetail(expandedSku);
     }
+}
+
+// Click delegation for the FG inventory list — attached ONCE to the stable
+// container element. Re-rendering children doesn't break the listener, but
+// reattaching would stack copies and fire each click N times.
+function attachFgClickDelegationOnce(){
+    var c=document.getElementById('fg-container');
+    if(!c || c.dataset.delegated)return;
+    c.dataset.delegated='1';
+    c.addEventListener('click',function(e){
+        var el=e.target.closest('[data-action]');
+        if(!el)return;
+        var action=el.getAttribute('data-action');
+        var skuKey=el.getAttribute('data-sku-key');
+        if(action==='toggle'){
+            toggleSku(skuKey);
+        } else if(action==='sell'){
+            e.stopPropagation();
+            openSellForm(skuKey);
+        }
+    });
 }
 
 async function toggleSku(skuKeyEnc){
