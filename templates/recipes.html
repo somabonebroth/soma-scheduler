@@ -385,6 +385,16 @@ function editRecipe(name){isAdding=false;editingName=name;document.getElementByI
 function toLines(id){return document.getElementById(id).value.split('\n').map(function(l){return l.trim();}).filter(function(l){return l;});}
 async function saveEdit(){
     var newName=document.getElementById('e-name').value.trim();if(!newName){alert('Recipe name required');return;}
+    // Rename collision pre-check (gives faster feedback than waiting on server).
+    // Only fires if user changed the name in the form.
+    if(!isAdding && newName!==editingName && recipes[newName]){
+        alert('A different recipe named "'+newName+'" already exists. Choose another name or delete that recipe first.');
+        return;
+    }
+    if(isAdding && recipes[newName]){
+        alert('A recipe named "'+newName+'" already exists.');
+        return;
+    }
     var data={name:newName,data:{
         brand:document.getElementById('e-brand').value.trim(),
         format:document.getElementById('e-format').value.trim(),
@@ -398,8 +408,12 @@ async function saveEdit(){
     }};
     // Preserve photo field if editing
     if(!isAdding&&recipes[editingName]&&recipes[editingName].photo){data.data.photo=recipes[editingName].photo;}
-    if(isAdding){await fetch('/api/recipes/upload-json',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:newName,data:data.data})});}
-    else{await fetch('/api/recipes/'+encodeURIComponent(editingName),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});}
+    var res;
+    if(isAdding){res=await fetch('/api/recipes/upload-json',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:newName,data:data.data})});}
+    else{res=await fetch('/api/recipes/'+encodeURIComponent(editingName),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});}
+    var resData;
+    try{resData=await res.json();}catch(e){resData={error:'Server error'};}
+    if(!res.ok){alert(resData.error||'Save failed');return;}
     closeModal('edit-modal');recipes=await(await fetch('/api/recipes')).json();await loadOrder();renderList();checkMigration();
 }
 

@@ -844,15 +844,32 @@ def get_recipe(name):
 @app.route("/api/recipes/<path:name>", methods=["PUT"])
 @login_required
 def update_recipe(name):
-    data = request.json
+    """Update an existing recipe. If the body's 'name' differs from the URL
+    name, this is treated as a rename. We REFUSE to silently overwrite a
+    different existing recipe — caller must choose a non-colliding name."""
+    data = request.json or {}
     recipes = load_recipes()
-    new_name = data.get("name", name)
+    new_name = (data.get("name") or name).strip()
     recipe_data = data.get("data", {})
-    if name in recipes and new_name != name:
+
+    if name not in recipes:
+        return jsonify({"error": f"Recipe '{name}' not found"}), 404
+
+    # Rename collision check: if the new name is different AND is already
+    # taken by a different recipe, refuse. This prevents the edit form from
+    # accidentally overwriting an unrelated recipe (which was previously
+    # destroying data when a user renamed a duplicate to match an original).
+    if new_name != name and new_name in recipes:
+        return jsonify({
+            "error": f"A different recipe named '{new_name}' already exists. "
+                     f"Choose a different name or delete the other one first."
+        }), 409
+
+    if new_name != name:
         del recipes[name]
     recipes[new_name] = recipe_data
     save_recipes(recipes)
-    return jsonify({"success": True})
+    return jsonify({"success": True, "name": new_name})
 
 @app.route("/api/recipes/<path:name>", methods=["DELETE"])
 @login_required
