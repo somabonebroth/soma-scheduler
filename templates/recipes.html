@@ -164,6 +164,7 @@ function renderList(){
     }
 
     container.innerHTML=html;
+    attachClickDelegationOnce();
     attachDragListeners();
 }
 
@@ -182,9 +183,14 @@ function toggleArchived(){
 var draggedBrand=null;
 var draggedRecipe=null;var draggedRecipeBrand=null;
 
-function attachDragListeners(){
-    // Button clicks via delegation
-    document.getElementById('recipe-list').addEventListener('click',function(e){
+// Attached ONCE to the stable #recipe-list element. Re-rendering the children
+// via innerHTML doesn't break this delegated handler, but RE-ATTACHING it on
+// every renderList() would stack copies and cause N popups per click.
+function attachClickDelegationOnce(){
+    var list=document.getElementById('recipe-list');
+    if(!list || list.dataset.delegated)return;
+    list.dataset.delegated='1';
+    list.addEventListener('click',function(e){
         var btn=e.target.closest('[data-action]');
         if(!btn)return;
         e.stopPropagation();
@@ -197,6 +203,11 @@ function attachDragListeners(){
         else if(action==='archive')archiveRecipe(name);
         else if(action==='unarchive')unarchiveRecipe(name);
     });
+}
+
+function attachDragListeners(){
+    // Drag listeners attach to specific child elements that are recreated on
+    // each renderList(); they go away with the old DOM, so re-attaching is fine.
 
     // Brand drag
     document.querySelectorAll('.brand-header[data-brand-drag]').forEach(function(el){
@@ -423,18 +434,24 @@ async function deleteRecipe(name){if(!confirm('Delete "'+name+'"?'))return;await
 async function duplicateRecipe(name){
     var defaultName='(copy) '+name;
     var newName=prompt('Name for the duplicate:', defaultName);
-    if(newName===null)return;
+    if(newName===null)return;  // user cancelled
     newName=newName.trim();
     if(!newName){alert('Name cannot be empty');return;}
+    if(newName===name){alert('Pick a different name from the original');return;}
+    // The backend re-checks for collisions authoritatively; we still pre-check
+    // against the current snapshot to give faster feedback.
     if(recipes[newName]){alert('A recipe named "'+newName+'" already exists');return;}
     var res=await fetch('/api/recipes/'+encodeURIComponent(name)+'/duplicate',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({new_name:newName}),
     });
-    var data=await res.json();
-    if(!data.success){alert(data.error||'Duplicate failed');return;}
+    var data;
+    try{data=await res.json();}catch(e){data={error:'Server error'};}
+    if(!res.ok || !data.success){alert(data.error||'Duplicate failed');return;}
+    // Reload from server so the original is guaranteed visible alongside the copy
     recipes=await(await fetch('/api/recipes')).json();
+    await loadOrder();
     renderList();
 }
 
