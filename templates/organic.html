@@ -144,25 +144,35 @@
     <div class="tab-content" id="tab-fg">
         <div class="card">
             <h2>Finished Goods Inventory <span class="organic-badge">Organic</span></h2>
+            <p style="font-size:11px;color:var(--text-light);margin-bottom:10px;">One row per SKU (brand + recipe + format). Click a row to see LOT-level FIFO detail. Use the Sell button to deduct from inventory — sales draw from the oldest LOT first.</p>
             <div id="fg-container"><div class="empty-state">Loading...</div></div>
-        </div>
-        <div class="card">
-            <h2>Record Sale</h2>
-            <div class="form-row">
-                <div class="form-field"><label>Finished Good</label><select id="sale-fg"><option value="">Select...</option></select></div>
-                <div class="form-field"><label>Quantity (units)</label><input type="number" id="sale-qty" placeholder="0"></div>
-                <div class="form-field"><label>Sale Date</label><input type="date" id="sale-date"></div>
-            </div>
-            <div class="form-row">
-                <div class="form-field"><label>Buyer / Distributor</label><input id="sale-buyer" list="buyer-list" placeholder="Company name"><datalist id="buyer-list"></datalist></div>
-                <div class="form-field"><label>Case LOT# (optional)</label><input id="sale-case-lot" placeholder="Case lot number"></div>
-            </div>
-            <button class="btn btn-primary" onclick="addSale()">Record Sale</button>
-            <div id="sale-status" class="status" style="margin-top:10px;"></div>
         </div>
         <div class="card">
             <h2>Sales History</h2>
             <div id="sales-container"><div class="empty-state">Loading...</div></div>
+        </div>
+    </div>
+
+    <!-- Sale modal (opens from per-SKU "Sell" button) -->
+    <div class="modal-overlay" id="sale-modal">
+        <div class="modal">
+            <button class="modal-close" onclick="closeSellForm()">&times;</button>
+            <h2>Record Sale</h2>
+            <input type="hidden" id="sale-sku-key">
+            <div id="sale-sku-display" style="background:#fafaf5;padding:10px;border-radius:4px;margin-bottom:14px;font-size:13px;"></div>
+            <div class="form-row">
+                <div class="form-field"><label>Quantity (units)</label><input type="number" id="sale-qty-modal" placeholder="0" min="1"></div>
+                <div class="form-field"><label>Sale Date</label><input type="date" id="sale-date-modal"></div>
+            </div>
+            <div class="form-row">
+                <div class="form-field"><label>Buyer / Distributor</label><input id="sale-buyer-modal" list="buyer-list" placeholder="Company name"><datalist id="buyer-list"></datalist></div>
+                <div class="form-field"><label>Case LOT# (optional)</label><input id="sale-case-lot-modal" placeholder="Case lot number"></div>
+            </div>
+            <div id="sale-status-modal" class="status" style="margin:10px 0;"></div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeSellForm()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitSale()">Record Sale</button>
+            </div>
         </div>
     </div>
 
@@ -191,7 +201,7 @@ function showTab(tab){
     document.querySelectorAll('.tab-btn')[tabs.indexOf(tab)].classList.add('active');
     if(tab==='raw'){loadRawMaterials();loadInvoices();}
     if(tab==='runs')loadRuns();
-    if(tab==='fg'){loadFinishedGoods();loadSales();populateFGDropdown();}
+    if(tab==='fg'){loadFinishedGoods();loadSales();}
 }
 
 // ── Raw Materials ──
@@ -428,31 +438,133 @@ async function loadRuns(){
     container.innerHTML=html;
 }
 
-// ── Finished Goods ──
-var fgData=[];
-async function loadFinishedGoods(){
-    var res=await fetch('/api/organic/finished-goods');
-    fgData=await res.json();
-    var container=document.getElementById('fg-container');
-    if(!fgData.length){container.innerHTML='<div class="empty-state">No finished goods yet. Complete organic daily production to generate inventory.</div>';return;}
-    var html='';
-    fgData.forEach(function(f){
-        var qtyClass=f.quantity_remaining<0?'fg-qty negative':'fg-qty';
-        html+='<div class="fg-row"><div class="fg-info">'+(f.brand?f.brand+' - ':'')+f.recipe+' '+f.format+'<span class="lot-tag">LOT# '+f.lot+'</span><br><span style="font-size:11px;color:var(--text-light);">Produced: '+f.quantity_produced+' | '+f.vessel+' | '+f.week_id+'</span></div><div class="'+qtyClass+'">'+f.quantity_remaining+' remaining</div></div>';
-    });
-    container.innerHTML=html;
-}
+// ── Finished Goods (SKU-grouped) ──
+var fgSkus=[];
+var expandedSku=null;
 
-async function populateFGDropdown(){
-    var res=await fetch('/api/organic/finished-goods');
-    var data=await res.json();
-    var sel=document.getElementById('sale-fg');
-    sel.innerHTML='<option value="">-- Select finished good --</option>';
-    data.forEach(function(f){
-        if(f.quantity_remaining>0){
-            sel.innerHTML+='<option value="'+f.id+'">'+(f.brand?f.brand+'-':'')+f.recipe+' LOT#'+f.lot+' ('+f.quantity_remaining+' avail)</option>';
+function escSku(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+async function loadFinishedGoods(){
+    var res=await fetch('/api/organic/finished-goods/grouped');
+    fgSkus=await res.json();
+    var container=document.getElementById('fg-container');
+    if(!fgSkus.length){container.innerHTML='<div class="empty-state">No finished goods yet. Complete organic daily production to generate inventory.</div>';return;}
+    var html='';
+    fgSkus.forEach(function(s){
+        var qtyClass=s.total_remaining<=0?'fg-qty':(s.total_remaining<10?'fg-qty':'fg-qty');
+        var lotNote='';
+        if(s.active_lot_count>0){
+            lotNote=s.active_lot_count+' active LOT'+(s.active_lot_count===1?'':'s');
+            if(s.lot_count>s.active_lot_count){lotNote+=' • '+(s.lot_count-s.active_lot_count)+' depleted';}
+        } else if(s.lot_count>0){
+            lotNote=s.lot_count+' LOT'+(s.lot_count===1?'':'s')+' (all depleted)';
+        }
+        var keyAttr=encodeURIComponent(s.sku_key);
+        var displaySafe=escSku(s.display);
+        var isExpanded=(expandedSku===s.sku_key);
+        html+='<div class="fg-row sku-row" data-sku="'+keyAttr+'" style="cursor:pointer;">'+
+              '<div class="fg-info" onclick="toggleSku(\''+keyAttr+'\')">'+
+                '<strong>'+displaySafe+'</strong>'+
+                '<br><span style="font-size:11px;color:var(--text-light);">'+lotNote+' • '+s.total_produced+' produced lifetime</span>'+
+              '</div>'+
+              '<div class="'+qtyClass+'">'+s.total_remaining+' remaining</div>'+
+              '<div style="margin-left:12px;">'+
+                '<button class="btn btn-primary" style="font-size:12px;padding:4px 10px;" onclick="event.stopPropagation();openSellForm(\''+keyAttr+'\')">Sell</button>'+
+              '</div>'+
+              '</div>';
+        if(isExpanded){
+            html+='<div id="sku-detail-'+keyAttr+'" class="sku-detail" style="background:#fafaf5;padding:10px 18px;border-left:3px solid var(--accent);margin-bottom:8px;">Loading…</div>';
         }
     });
+    container.innerHTML=html;
+    if(expandedSku){
+        renderSkuDetail(expandedSku);
+    }
+}
+
+async function toggleSku(skuKeyEnc){
+    var skuKey=decodeURIComponent(skuKeyEnc);
+    if(expandedSku===skuKey){
+        expandedSku=null;
+    } else {
+        expandedSku=skuKey;
+    }
+    loadFinishedGoods();
+}
+
+async function renderSkuDetail(skuKey){
+    var keyAttr=encodeURIComponent(skuKey);
+    var el=document.getElementById('sku-detail-'+keyAttr);
+    if(!el)return;
+    var res=await fetch('/api/organic/finished-goods/sku/'+encodeURIComponent(skuKey));
+    var data=await res.json();
+    if(!data.lots||!data.lots.length){
+        el.innerHTML='<span style="color:var(--text-light);font-size:12px;">No LOTs.</span>';
+        return;
+    }
+    var html='<table class="inv-table" style="margin:0;font-size:12px;"><tr>'+
+             '<th>LOT#</th><th>Production Date</th><th>Best Before</th>'+
+             '<th>Vessels</th><th>Produced</th><th>Remaining</th>'+
+             '</tr>';
+    data.lots.forEach(function(l){
+        var rowStyle=l.remaining<=0?' style="opacity:0.45;"':'';
+        var vessels=(l.vessels||[]).join(', ')||'—';
+        var pd=l.production_date||'—';
+        var bb=l.best_before||'—';
+        html+='<tr'+rowStyle+'>'+
+              '<td><strong>'+escSku(l.lot)+'</strong></td>'+
+              '<td>'+escSku(pd)+'</td>'+
+              '<td>'+escSku(bb)+'</td>'+
+              '<td>'+escSku(vessels)+'</td>'+
+              '<td>'+l.produced+'</td>'+
+              '<td>'+l.remaining+(l.remaining<=0?' <span style="font-size:10px;color:var(--text-light);">(depleted)</span>':'')+'</td>'+
+              '</tr>';
+    });
+    html+='</table>';
+    el.innerHTML=html;
+}
+
+// Sell form (modal) — pre-fills with the SKU you clicked
+function openSellForm(skuKeyEnc){
+    var skuKey=decodeURIComponent(skuKeyEnc);
+    var sku=fgSkus.find(function(s){return s.sku_key===skuKey;});
+    if(!sku){alert('SKU not found');return;}
+    document.getElementById('sale-sku-key').value=skuKey;
+    document.getElementById('sale-sku-display').textContent=sku.display+' — '+sku.total_remaining+' available (FIFO across LOTs)';
+    document.getElementById('sale-modal').classList.add('active');
+    document.getElementById('sale-qty-modal').focus();
+}
+
+function closeSellForm(){
+    document.getElementById('sale-modal').classList.remove('active');
+    document.getElementById('sale-status-modal').textContent='';
+    document.getElementById('sale-qty-modal').value='';
+    document.getElementById('sale-buyer-modal').value='';
+    document.getElementById('sale-case-lot-modal').value='';
+}
+
+async function submitSale(){
+    var skuKey=document.getElementById('sale-sku-key').value;
+    var qty=document.getElementById('sale-qty-modal').value;
+    var date=document.getElementById('sale-date-modal').value;
+    var buyer=document.getElementById('sale-buyer-modal').value.trim();
+    var caseLot=document.getElementById('sale-case-lot-modal').value.trim();
+    var st=document.getElementById('sale-status-modal');
+    if(!skuKey){st.className='status error';st.textContent='No SKU selected';return;}
+    if(!qty||parseInt(qty)<=0){st.className='status error';st.textContent='Enter a positive quantity';return;}
+    if(!date){st.className='status error';st.textContent='Sale date required';return;}
+    var res=await fetch('/api/organic/sales',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({sku_key:skuKey,quantity:parseInt(qty),sale_date:date,buyer:buyer,case_lot:caseLot})});
+    var data=await res.json();
+    if(data.success){
+        var lotsUsed=(data.sale.lots||[]).map(function(l){return l.lot+' ('+l.quantity+')';}).join(', ');
+        st.className='status success';
+        st.textContent='Sale recorded — drew from LOT(s): '+lotsUsed;
+        loadFinishedGoods();loadSales();loadContacts();
+        setTimeout(closeSellForm,1500);
+    } else {
+        st.className='status error';st.textContent=data.error||'Failed';
+    }
 }
 
 // ── Sales ──
@@ -462,33 +574,27 @@ async function loadSales(){
     var container=document.getElementById('sales-container');
     if(!data.length){container.innerHTML='<div class="empty-state">No sales recorded yet.</div>';return;}
     data.sort(function(a,b){return(b.created_at||'').localeCompare(a.created_at||'');});
-    var html='<table class="inv-table"><tr><th>Date</th><th>Product</th><th>FG LOT#</th><th>Qty</th><th>Buyer</th><th>Case LOT#</th><th></th></tr>';
+    var html='<table class="inv-table"><tr><th>Date</th><th>Product</th><th>LOT#(s)</th><th>Qty</th><th>Buyer</th><th>Case LOT#</th><th></th></tr>';
     data.forEach(function(s){
-        html+='<tr><td>'+s.sale_date+'</td><td>'+(s.brand?s.brand+'-':'')+s.recipe+'</td><td>'+s.fg_lot+'</td><td>'+s.quantity+'</td><td>'+s.buyer+'</td><td>'+(s.case_lot||'—')+'</td><td><button class="btn-danger" onclick="deleteSale(\''+s.id+'\')">Del</button></td></tr>';
+        var lotsDisplay='';
+        if(s.lots&&s.lots.length){
+            lotsDisplay=s.lots.map(function(l){
+                return s.lots.length>1?(l.lot+' ('+l.quantity+')'):l.lot;
+            }).join(', ');
+        } else {
+            lotsDisplay=s.fg_lot||'';
+        }
+        var product=(s.brand?s.brand+'-':'')+s.recipe;
+        html+='<tr><td>'+(s.sale_date||'')+'</td><td>'+escSku(product)+'</td><td>'+escSku(lotsDisplay)+'</td><td>'+s.quantity+'</td><td>'+escSku(s.buyer||'')+'</td><td>'+escSku(s.case_lot||'—')+'</td><td><button class="btn-danger" onclick="deleteSale(\''+s.id+'\')">Del</button></td></tr>';
     });
     html+='</table>';
     container.innerHTML=html;
 }
 
-async function addSale(){
-    var fgId=document.getElementById('sale-fg').value;
-    var qty=document.getElementById('sale-qty').value;
-    var date=document.getElementById('sale-date').value;
-    var buyer=document.getElementById('sale-buyer').value.trim();
-    var caseLot=document.getElementById('sale-case-lot').value.trim();
-    var st=document.getElementById('sale-status');
-    if(!fgId){st.className='status error';st.textContent='Select a finished good';return;}
-    if(!qty||parseInt(qty)<=0){st.className='status error';st.textContent='Enter quantity';return;}
-    var res=await fetch('/api/organic/sales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fg_id:fgId,quantity:qty,sale_date:date,buyer:buyer,case_lot:caseLot})});
-    var data=await res.json();
-    if(data.success){st.className='status success';st.textContent='Sale recorded';document.getElementById('sale-qty').value='';document.getElementById('sale-buyer').value='';loadFinishedGoods();loadSales();populateFGDropdown();loadContacts();}
-    else{st.className='status error';st.textContent=data.error||'Failed';}
-}
-
 async function deleteSale(id){
     if(!confirm('Delete this sale? Quantity will be restored to finished goods.'))return;
     await fetch('/api/organic/sales/'+id,{method:'DELETE'});
-    loadFinishedGoods();loadSales();populateFGDropdown();
+    loadFinishedGoods();loadSales();
 }
 
 // ── Search & Trace ──
@@ -552,7 +658,7 @@ document.addEventListener('DOMContentLoaded',function(){
     var today=new Date().toISOString().split('T')[0];
     document.getElementById('rm-date').value=today;
     document.getElementById('inv-date').value=today;
-    document.getElementById('sale-date').value=today;
+    document.getElementById('sale-date-modal').value=today;
 });
 </script>
 </body>

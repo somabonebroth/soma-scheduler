@@ -423,6 +423,16 @@ def ingredients_match(raw_item_name, recipe_ing_name):
     return False
 
 
+def is_untracked_ingredient(name):
+    """Returns True for ingredients that should never be tracked as raw material
+    inventory or trigger insufficient-stock warnings. Water is treated as
+    unlimited — it's a measured recipe ingredient but not an inventoried supply.
+    Match: any ingredient name containing the word 'water' (case-insensitive)."""
+    if not name:
+        return False
+    return "water" in name.lower()
+
+
 def is_structured_ingredient(item):
     """Check if an item is already in structured object form."""
     return isinstance(item, dict) and "name" in item and "amount" in item
@@ -1588,10 +1598,51 @@ def update_ccp_master():
 
 
 # ── Traceability ──────────────────────────────────────────────────────
+WEEKLY_SIGNOFFS_PATH = os.path.join(DATA_DIR, "weekly_signoffs.json")
+
+
+def _load_weekly_signoffs():
+    return _load_json(WEEKLY_SIGNOFFS_PATH, {})
+
+
+def _save_weekly_signoffs(data):
+    _save_json(WEEKLY_SIGNOFFS_PATH, data)
+
+
+def _week_completion_state(week_id):
+    """Return ('all_complete' | 'partial' | 'none') for a week, plus the
+    list of scheduled-and-complete day_idxs vs scheduled-but-incomplete.
+
+    'all_complete' means every day that had a schedule entry is also a
+    completed checklist. (Days with no scheduled vessels don't block.)
+    """
+    schedule_data = load_schedule(week_id) or {}
+    sched = (schedule_data.get("schedule") or {}) if schedule_data else {}
+    scheduled_days = []
+    for d_idx in range(7):
+        day = sched.get(str(d_idx), {}) or {}
+        if any((day.get(v) or "").strip() for v in VESSELS):
+            scheduled_days.append(d_idx)
+    if not scheduled_days:
+        return "none", [], []
+    complete = []
+    incomplete = []
+    for d_idx in scheduled_days:
+        cl = load_checklist(week_id, d_idx)
+        if cl and cl.get("completed"):
+            complete.append(d_idx)
+        else:
+            incomplete.append(d_idx)
+    if not incomplete:
+        return "all_complete", complete, incomplete
+    return "partial", complete, incomplete
+
+
 @app.route("/api/traceability", methods=["GET"])
 @login_required
 def get_traceability():
     weeks = list_schedules()
+    signoffs = _load_weekly_signoffs()
     records = []
     for week_id in weeks:
         week_record = {"week_id": week_id, "days": []}
@@ -1620,8 +1671,17 @@ def get_traceability():
                     "certification": certification,
                 })
         if week_record["days"]:
+            # Annotate with completion state + HOO signoff
+            state, complete_idxs, incomplete_idxs = _week_completion_state(week_id)
+            week_record["completion_state"] = state
+            week_record["scheduled_complete_days"] = complete_idxs
+            week_record["scheduled_incomplete_days"] = [
+                {"day_idx": di, "day_name": DAYS[di]} for di in incomplete_idxs
+            ]
+            week_record["hoo_signoff"] = signoffs.get(week_id) or None
             records.append(week_record)
     return jsonify(records)
+
 
 @app.route("/api/traceability/<week_id>/<int:day_idx>", methods=["DELETE"])
 @login_required
@@ -1636,6 +1696,52 @@ def delete_traceability_record(week_id, day_idx):
             os.unlink(pdf_path)
         return jsonify({"success": True})
     return jsonify({"error": "Record not found"}), 404
+
+
+@app.route("/api/weekly-signoff/<week_id>", methods=["POST"])
+@login_required
+@require_valid_week
+def sign_off_week(week_id):
+    """Head of Operations confirms a week's production records.
+
+    Requires that all days that had a schedule entry have completed checklists.
+    Body: {name, notes (optional)}
+    """
+    data = request.json or {}
+    name = (data.get("name") or "").strip()
+    notes = (data.get("notes") or "").strip()
+    if not name:
+        return jsonify({"error": "Name required to sign off"}), 400
+
+    state, _, incomplete = _week_completion_state(week_id)
+    if state == "none":
+        return jsonify({"error": "No production scheduled for this week"}), 400
+    if state == "partial":
+        labels = ", ".join(DAYS[di] for di in incomplete)
+        return jsonify({
+            "error": f"Cannot sign off — {len(incomplete)} scheduled day(s) still incomplete: {labels}"
+        }), 400
+
+    signoffs = _load_weekly_signoffs()
+    signoffs[week_id] = {
+        "name": name,
+        "notes": notes,
+        "signed_at": datetime.now().isoformat(),
+    }
+    _save_weekly_signoffs(signoffs)
+    return jsonify({"success": True, "signoff": signoffs[week_id]})
+
+
+@app.route("/api/weekly-signoff/<week_id>", methods=["DELETE"])
+@login_required
+@require_valid_week
+def unsign_week(week_id):
+    """Reverse a weekly sign-off (HOO can undo)."""
+    signoffs = _load_weekly_signoffs()
+    if week_id in signoffs:
+        del signoffs[week_id]
+        _save_weekly_signoffs(signoffs)
+    return jsonify({"success": True})
 
 
 # ── Production Tracker ────────────────────────────────────────────────
@@ -2036,6 +2142,10 @@ def organic_ingredients():
                     continue
                 ing_name = (item.get("name") or "").strip()
                 unit = (item.get("unit") or "").strip()
+                # Untracked ingredients (e.g. water) are unlimited — they
+                # appear on recipe cards but are never tracked as raw materials.
+                if is_untracked_ingredient(ing_name):
+                    continue
                 try:
                     amount = float(item.get("amount") or 0)
                 except (ValueError, TypeError):
@@ -2522,6 +2632,10 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
                     item_name = (item.get("name") or "").strip()
                     if not item_name:
                         continue
+                    # Untracked ingredients (e.g. water) are unlimited — never
+                    # deduct from inventory and never flag insufficient stock.
+                    if is_untracked_ingredient(item_name):
+                        continue
                     try:
                         recipe_amount = float(item.get("amount") or 0)
                     except (ValueError, TypeError):
@@ -2644,10 +2758,167 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
 
 
 # ── Organic: Finished Goods ──────────────────────────────────────────
+def _sku_key(brand, recipe, fmt):
+    """Stable identifier for a SKU group: 'BRAND|RECIPE|FORMAT'.
+    Separator chosen so it can't appear in any of the components."""
+    return "|".join([(brand or ""), (recipe or ""), (fmt or "")])
+
+
+def _sku_display(brand, recipe, fmt):
+    """Human-readable SKU label using the canonical helper."""
+    return build_display_name({"brand": brand, "format": fmt}, recipe_name=recipe)
+
+
+def _group_fg_by_sku(fg):
+    """Aggregate FG entries into one dict per (brand, recipe, format).
+    Returns list of dicts sorted by display name."""
+    groups = {}
+    for entry in fg:
+        key = _sku_key(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", ""))
+        if key not in groups:
+            groups[key] = {
+                "sku_key": key,
+                "brand": entry.get("brand", ""),
+                "recipe": entry.get("recipe", ""),
+                "format": entry.get("format", ""),
+                "display": _sku_display(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", "")),
+                "total_produced": 0,
+                "total_remaining": 0,
+                "lot_count": 0,
+                "active_lot_count": 0,
+            }
+        g = groups[key]
+        try:
+            g["total_produced"] += int(entry.get("quantity_produced") or 0)
+            g["total_remaining"] += int(entry.get("quantity_remaining") or 0)
+        except (ValueError, TypeError):
+            pass
+
+    # Compute lot counts per group (distinct LOT#s)
+    lots_per_group = {}
+    for entry in fg:
+        key = _sku_key(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", ""))
+        lot = entry.get("lot", "")
+        lots_per_group.setdefault(key, {})
+        lots_per_group[key].setdefault(lot, {"produced": 0, "remaining": 0})
+        try:
+            lots_per_group[key][lot]["produced"] += int(entry.get("quantity_produced") or 0)
+            lots_per_group[key][lot]["remaining"] += int(entry.get("quantity_remaining") or 0)
+        except (ValueError, TypeError):
+            pass
+    for key, g in groups.items():
+        g["lot_count"] = len(lots_per_group.get(key, {}))
+        g["active_lot_count"] = sum(1 for v in lots_per_group.get(key, {}).values() if v["remaining"] > 0)
+
+    out = list(groups.values())
+    out.sort(key=lambda r: (r["brand"], r["recipe"], r["format"]))
+    return out
+
+
+def _aggregate_lots_for_sku(fg, sku_key):
+    """Return LOT-level rollup for a given SKU. One row per distinct LOT#,
+    aggregating across all kettles that share that LOT.
+    Sorted FIFO by production date (oldest first)."""
+    rows = {}
+    for entry in fg:
+        key = _sku_key(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", ""))
+        if key != sku_key:
+            continue
+        lot = entry.get("lot", "")
+        if lot not in rows:
+            rows[lot] = {
+                "lot": lot,
+                "produced": 0,
+                "remaining": 0,
+                "production_date": None,    # finish date string YYYY-MM-DD
+                "best_before": "",            # parsed ddmmyy → dd/mm/yyyy
+                "vessels": set(),
+                "fg_ids": [],
+            }
+        r = rows[lot]
+        try:
+            r["produced"] += int(entry.get("quantity_produced") or 0)
+            r["remaining"] += int(entry.get("quantity_remaining") or 0)
+        except (ValueError, TypeError):
+            pass
+        if entry.get("vessel"):
+            r["vessels"].add(entry["vessel"])
+        r["fg_ids"].append(entry.get("id"))
+
+        # Compute production_date from finish_week_id + day_idx (preferred)
+        # falling back to created_at
+        prod_date = None
+        wid = entry.get("week_id")
+        d_idx = entry.get("day_idx")
+        if wid is not None and d_idx is not None:
+            try:
+                pd = datetime.strptime(wid, "%Y-%m-%d") + timedelta(days=int(d_idx))
+                prod_date = pd.strftime("%Y-%m-%d")
+            except (ValueError, TypeError):
+                pass
+        if not prod_date and entry.get("created_at"):
+            prod_date = entry["created_at"][:10]
+        if prod_date and (r["production_date"] is None or prod_date < r["production_date"]):
+            r["production_date"] = prod_date
+
+        # Parse best-before from LOT (ddmmyy → dd/mm/yyyy)
+        if lot and len(lot) == 6 and lot.isdigit():
+            r["best_before"] = f"{lot[0:2]}/{lot[2:4]}/20{lot[4:6]}"
+
+    out = []
+    for lot, r in rows.items():
+        r["vessels"] = sorted(r["vessels"])
+        out.append(r)
+    # FIFO: oldest production date first; depleted lots sorted within their date
+    out.sort(key=lambda r: (r["production_date"] or "9999-99-99", r["lot"]))
+    return out
+
+
 @app.route("/api/organic/finished-goods", methods=["GET"])
 @login_required
 def get_finished_goods():
+    """Returns raw per-kettle FG entries. Used by traceability/legacy callers."""
     return jsonify(_load_json(ORGANIC_FG_PATH, []))
+
+
+@app.route("/api/organic/finished-goods/grouped", methods=["GET"])
+@login_required
+def get_finished_goods_grouped():
+    """Returns one row per SKU (brand+recipe+format). Each row aggregates total
+    produced and remaining across all kettles + LOTs. Use this for the inventory
+    list view; click a row and call /sku/<key> for LOT-level detail."""
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    return jsonify(_group_fg_by_sku(fg))
+
+
+@app.route("/api/organic/finished-goods/sku/<path:sku_key>", methods=["GET"])
+@login_required
+def get_finished_goods_sku_detail(sku_key):
+    """Return LOT-level FIFO detail for a single SKU.
+    Each LOT row aggregates same-LOT entries from multiple kettles."""
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    lots = _aggregate_lots_for_sku(fg, sku_key)
+    if not lots:
+        # Validate that the SKU exists at all
+        groups = _group_fg_by_sku(fg)
+        if not any(g["sku_key"] == sku_key for g in groups):
+            return jsonify({"error": "SKU not found"}), 404
+    # Pull the SKU's display info from any matching FG entry
+    display_info = None
+    for entry in fg:
+        if _sku_key(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", "")) == sku_key:
+            display_info = {
+                "sku_key": sku_key,
+                "brand": entry.get("brand", ""),
+                "recipe": entry.get("recipe", ""),
+                "format": entry.get("format", ""),
+                "display": _sku_display(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", "")),
+            }
+            break
+    return jsonify({
+        "sku": display_info or {"sku_key": sku_key},
+        "lots": lots,
+    })
 
 
 # ── Organic: Sales ───────────────────────────────────────────────────
@@ -2660,42 +2931,122 @@ def get_organic_sales():
 @app.route("/api/organic/sales", methods=["POST"])
 @login_required
 def add_organic_sale():
-    data = request.json
+    """Record a sale. Two body shapes accepted:
+
+    NEW (preferred): {sku_key, quantity, buyer, sale_date, case_lot}
+        FIFO-deducts across LOTs of that SKU (oldest production date first).
+        Sale record stores a 'lots' array with the breakdown.
+
+    LEGACY: {fg_id, quantity, buyer, sale_date, case_lot}
+        Deducts from a specific FG entry (per-kettle batch). Kept for
+        traceability flows that target a specific batch.
+    """
+    data = request.json or {}
     sales = _load_json(ORGANIC_SALES_PATH, [])
     fg = _load_json(ORGANIC_FG_PATH, [])
 
-    fg_id = data.get("fg_id", "")
-    quantity = int(data.get("quantity", 0))
+    try:
+        quantity = int(data.get("quantity", 0))
+    except (ValueError, TypeError):
+        quantity = 0
+    if quantity <= 0:
+        return jsonify({"error": "Quantity must be positive"}), 400
 
-    # Find finished good and reduce
-    fg_entry = None
-    for f in fg:
-        if f["id"] == fg_id:
-            fg_entry = f
-            break
+    sku_key = (data.get("sku_key") or "").strip()
+    fg_id = (data.get("fg_id") or "").strip()
 
-    if not fg_entry:
-        return jsonify({"error": "Finished good not found"}), 404
+    if not sku_key and not fg_id:
+        return jsonify({"error": "Either sku_key or fg_id required"}), 400
+
+    sale_lots = []   # records what was deducted
+    brand = recipe = fmt = ""
+
+    if sku_key:
+        # NEW path: FIFO across the SKU's LOTs (oldest production date first)
+        # Build a list of FG entries belonging to this SKU, ordered FIFO
+        candidates = [f for f in fg
+                      if _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")) == sku_key
+                      and (f.get("quantity_remaining") or 0) > 0]
+        if not candidates:
+            return jsonify({"error": "No inventory available for this SKU"}), 400
+
+        def _entry_prod_date(e):
+            wid = e.get("week_id")
+            d_idx = e.get("day_idx")
+            if wid is not None and d_idx is not None:
+                try:
+                    return (datetime.strptime(wid, "%Y-%m-%d") + timedelta(days=int(d_idx))).strftime("%Y-%m-%d")
+                except (ValueError, TypeError):
+                    pass
+            return (e.get("created_at") or "")[:10]
+
+        candidates.sort(key=lambda e: (_entry_prod_date(e), e.get("lot", ""), e.get("id", "")))
+
+        total_available = sum(int(e.get("quantity_remaining") or 0) for e in candidates)
+        if quantity > total_available:
+            return jsonify({"error": f"Not enough inventory: requested {quantity}, available {total_available}"}), 400
+
+        first = candidates[0]
+        brand = first.get("brand", "")
+        recipe = first.get("recipe", "")
+        fmt = first.get("format", "")
+
+        remaining_to_deduct = quantity
+        # Group same-LOT deductions for the sale's lots[] summary
+        lot_summary = {}
+        for entry in candidates:
+            if remaining_to_deduct <= 0:
+                break
+            avail = int(entry.get("quantity_remaining") or 0)
+            if avail <= 0:
+                continue
+            take = min(avail, remaining_to_deduct)
+            entry["quantity_remaining"] = avail - take
+            remaining_to_deduct -= take
+            lot = entry.get("lot", "")
+            if lot not in lot_summary:
+                lot_summary[lot] = {"lot": lot, "quantity": 0, "fg_ids": []}
+            lot_summary[lot]["quantity"] += take
+            lot_summary[lot]["fg_ids"].append(entry.get("id"))
+        sale_lots = list(lot_summary.values())
+
+    else:
+        # LEGACY path: single fg_id
+        fg_entry = next((f for f in fg if f.get("id") == fg_id), None)
+        if not fg_entry:
+            return jsonify({"error": "Finished good not found"}), 404
+        avail = int(fg_entry.get("quantity_remaining") or 0)
+        if quantity > avail:
+            return jsonify({"error": f"Not enough inventory: requested {quantity}, available {avail}"}), 400
+        fg_entry["quantity_remaining"] = avail - quantity
+        brand = fg_entry.get("brand", "")
+        recipe = fg_entry.get("recipe", "")
+        fmt = fg_entry.get("format", "")
+        sale_lots = [{
+            "lot": fg_entry.get("lot", ""),
+            "quantity": quantity,
+            "fg_ids": [fg_entry.get("id")],
+        }]
 
     sale = {
         "id": datetime.now().strftime("%Y%m%d%H%M%S") + str(len(sales)),
-        "fg_id": fg_id,
-        "fg_lot": fg_entry.get("lot", ""),
-        "recipe": fg_entry.get("recipe", ""),
-        "brand": fg_entry.get("brand", ""),
-        "format": fg_entry.get("format", ""),
+        "sku_key": sku_key or _sku_key(brand, recipe, fmt),
+        "brand": brand,
+        "recipe": recipe,
+        "format": fmt,
         "quantity": quantity,
+        "lots": sale_lots,
+        # Convenience fields for legacy display
+        "fg_lot": (sale_lots[0]["lot"] if len(sale_lots) == 1 else ""),
+        "fg_id": (sale_lots[0]["fg_ids"][0] if len(sale_lots) == 1 and len(sale_lots[0]["fg_ids"]) == 1 else ""),
         "buyer": data.get("buyer", ""),
         "sale_date": data.get("sale_date", ""),
         "case_lot": data.get("case_lot", ""),
         "created_at": datetime.now().isoformat(),
     }
     sales.append(sale)
-
-    fg_entry["quantity_remaining"] = fg_entry.get("quantity_remaining", 0) - quantity
     _save_json(ORGANIC_SALES_PATH, sales)
     _save_json(ORGANIC_FG_PATH, fg)
-    # Auto-save buyer to contacts
     buyer = data.get("buyer", "").strip()
     if buyer:
         _add_contact("buyer", buyer)
@@ -2705,23 +3056,73 @@ def add_organic_sale():
 @app.route("/api/organic/sales/<sale_id>", methods=["DELETE"])
 @login_required
 def delete_organic_sale(sale_id):
+    """Restore quantity back to the FG entries the sale drew from.
+    Handles both new (lots[] array) and legacy (single fg_id) sale shapes."""
     sales = _load_json(ORGANIC_SALES_PATH, [])
     fg = _load_json(ORGANIC_FG_PATH, [])
-    sale = None
-    for s in sales:
-        if s.get("id") == sale_id:
-            sale = s
-            break
-    if sale:
-        # Restore quantity to finished goods
-        for f in fg:
-            if f["id"] == sale.get("fg_id"):
-                f["quantity_remaining"] = f.get("quantity_remaining", 0) + sale["quantity"]
-                break
-        sales = [s for s in sales if s.get("id") != sale_id]
-        _save_json(ORGANIC_SALES_PATH, sales)
-        _save_json(ORGANIC_FG_PATH, fg)
+    sale = next((s for s in sales if s.get("id") == sale_id), None)
+    if not sale:
+        return jsonify({"success": True})  # Already gone
+
+    # Restore inventory
+    if sale.get("lots"):
+        # New shape: restore proportionally to the fg_ids the sale drew from
+        for lot_entry in sale["lots"]:
+            fg_ids = lot_entry.get("fg_ids") or []
+            qty_to_restore = int(lot_entry.get("quantity") or 0)
+            if not fg_ids or qty_to_restore <= 0:
+                continue
+            # Restore to first available FG id (we don't track per-fg-id breakdown)
+            for fid in fg_ids:
+                target = next((f for f in fg if f.get("id") == fid), None)
+                if target:
+                    target["quantity_remaining"] = int(target.get("quantity_remaining") or 0) + qty_to_restore
+                    break  # Restore the whole LOT quantity to the first matching entry
+    elif sale.get("fg_id"):
+        # Legacy shape
+        target = next((f for f in fg if f.get("id") == sale["fg_id"]), None)
+        if target:
+            target["quantity_remaining"] = int(target.get("quantity_remaining") or 0) + int(sale.get("quantity") or 0)
+
+    sales = [s for s in sales if s.get("id") != sale_id]
+    _save_json(ORGANIC_SALES_PATH, sales)
+    _save_json(ORGANIC_FG_PATH, fg)
     return jsonify({"success": True})
+
+
+def _migrate_legacy_sales():
+    """Convert old-style sales (single fg_id) to new lots[] shape.
+    Idempotent: only migrates entries that don't already have a 'lots' field."""
+    if not os.path.exists(ORGANIC_SALES_PATH):
+        return
+    try:
+        sales = _load_json(ORGANIC_SALES_PATH, [])
+    except Exception:
+        return
+    changed = False
+    for s in sales:
+        if s.get("lots"):
+            continue
+        # Old shape — wrap in single-LOT array
+        if s.get("fg_id") or s.get("fg_lot"):
+            s["lots"] = [{
+                "lot": s.get("fg_lot", ""),
+                "quantity": int(s.get("quantity") or 0),
+                "fg_ids": [s["fg_id"]] if s.get("fg_id") else [],
+            }]
+            # Add sku_key for completeness
+            if not s.get("sku_key"):
+                s["sku_key"] = _sku_key(s.get("brand", ""), s.get("recipe", ""), s.get("format", ""))
+            changed = True
+    if changed:
+        _save_json(ORGANIC_SALES_PATH, sales)
+        try:
+            print(f"[startup] organic sales migrated to multi-LOT shape")
+        except Exception:
+            pass
+
+
+_migrate_legacy_sales()
 
 
 # ── Organic: Search / Trace ──────────────────────────────────────────

@@ -15,12 +15,17 @@
 <link rel="apple-touch-icon" sizes="192x192" href="/static/logo-192.png">
 <link rel="apple-touch-icon" sizes="512x512" href="/static/logo-512.png">
 <!-- /PWA tags -->
-<title>Soma - Traceability Records</title>
+<title>Soma - Completed Production</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
 .week-record { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
-.week-header { background: var(--dark); color: #fff; padding: 12px 18px; font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+.week-header { background: var(--dark); color: #fff; padding: 12px 18px; font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; gap: 12px; }
 .week-header:hover { background: #2a2a4e; }
+.week-header-label { display: flex; align-items: center; gap: 10px; flex: 1; }
+.week-status-badge { font-size: 10px; padding: 2px 8px; border-radius: 8px; font-weight: 700; letter-spacing: 0.4px; }
+.week-status-badge.confirmed { background: #2d5f3f; color: #fff; }
+.week-status-badge.ready { background: #b38b00; color: #fff; }
+.week-status-badge.partial { background: #6c757d; color: #fff; }
 .week-days { padding: 0; display: none; }
 .week-days.open { display: block; }
 .day-record { display: flex; justify-content: space-between; align-items: center; padding: 10px 18px; border-bottom: 1px solid var(--border); font-size: 13px; }
@@ -39,12 +44,29 @@
 .filter-bar { display: flex; gap: 8px; margin-bottom: 16px; }
 .filter-btn { padding: 6px 14px; border: 1px solid var(--border); border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; background: var(--card-bg); color: var(--text); }
 .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* HOO sign-off panel */
+.hoo-panel { padding: 14px 18px; background: #fafaf5; border-bottom: 1px solid var(--border); }
+.hoo-panel.confirmed { background: #ebf5ee; border-left: 4px solid #2d5f3f; }
+.hoo-panel.ready { background: #fff8e1; border-left: 4px solid #b38b00; }
+.hoo-panel.partial { background: #f5f5f0; border-left: 4px solid #999; }
+.hoo-panel h4 { margin: 0 0 8px 0; font-size: 13px; }
+.hoo-form-row { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; }
+.hoo-form-row input, .hoo-form-row textarea { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; }
+.hoo-form-row input { min-width: 200px; }
+.hoo-form-row textarea { min-width: 260px; min-height: 36px; flex: 1; }
+.hoo-meta { font-size: 12px; color: var(--text-light); margin-top: 6px; }
+.hoo-confirmed-line { font-size: 13px; }
+.hoo-confirmed-name { font-weight: 600; color: #2d5f3f; }
+.hoo-notes { background: #fff; padding: 8px 10px; border-radius: 4px; margin-top: 8px; font-size: 12px; border: 1px solid var(--border); }
+.hoo-actions { margin-top: 10px; }
+.hoo-incomplete-list { font-size: 12px; color: #555; margin-top: 4px; }
 </style>
 </head>
 <body>
 <div class="header">
     <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-    <div class="header-text"><h1>Traceability Records</h1><p id="trace-subtitle">Non-Organic Certified</p></div>
+    <div class="header-text"><h1>Completed Production</h1><p id="trace-subtitle">All production records — review and confirm weekly</p></div>
     <div class="header-right"><a href="/" class="header-btn">Back to Dashboard</a></div>
 </div>
 <div class="main">
@@ -58,12 +80,14 @@
 <script>
 var currentFilter='all';
 
+function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
 async function loadRecords(filter,btn){
     if(filter)currentFilter=filter;
     if(btn){document.querySelectorAll('.filter-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');}
-    var subtitle='All Records';
-    if(currentFilter==='organic')subtitle='Organic Certified';
-    else if(currentFilter==='non-organic')subtitle='Non-Organic Certified';
+    var subtitle='All production records — review and confirm weekly';
+    if(currentFilter==='organic')subtitle='Organic-certified production only';
+    else if(currentFilter==='non-organic')subtitle='Non-organic production only';
     document.getElementById('trace-subtitle').textContent=subtitle;
 
     var url='/api/traceability';
@@ -77,16 +101,83 @@ async function loadRecords(filter,btn){
         var rec=records[i];
         var weekStart=new Date(rec.week_id+'T00:00:00');
         var label=weekStart.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
-        html+='<div class="week-record"><div class="week-header" onclick="toggleWeek(this)"><span>Week of '+label+'</span><span class="download-week"><a href="/api/pdfs/'+rec.week_id+'/download-all" style="color:#aaa;text-decoration:none;" onclick="event.stopPropagation();">Download All</a></span></div><div class="week-days">';
+
+        var statusBadge='';
+        var statusClass='partial';
+        if(rec.hoo_signoff){statusBadge='<span class="week-status-badge confirmed">CONFIRMED</span>';statusClass='confirmed';}
+        else if(rec.completion_state==='all_complete'){statusBadge='<span class="week-status-badge ready">READY TO SIGN</span>';statusClass='ready';}
+        else {statusBadge='<span class="week-status-badge partial">IN PROGRESS</span>';statusClass='partial';}
+
+        html+='<div class="week-record"><div class="week-header" onclick="toggleWeek(this)">'+
+              '<div class="week-header-label"><span>Week of '+label+'</span>'+statusBadge+'</div>'+
+              '<span class="download-week"><a href="/api/pdfs/'+rec.week_id+'/download-all" style="color:#aaa;text-decoration:none;" onclick="event.stopPropagation();">Download All</a></span>'+
+              '</div><div class="week-days">';
+
+        // HOO sign-off panel
+        html+=renderHooPanel(rec,statusClass);
+
         for(var j=0;j<rec.days.length;j++){
             var day=rec.days[j];
             var timeStr=day.last_updated?day.last_updated.substring(0,16).replace('T',' '):'';
-            var orgBadge=day.has_organic?'<span class="organic-badge">Organic</span>':'';
-            html+='<div class="day-record"><div><span class="day-name">'+day.day_name+'</span>'+orgBadge+'<br><span class="day-time">Completed: '+timeStr+'</span></div><div class="day-actions"><a href="/daily-production/'+rec.week_id+'/'+day.day_idx+'">View</a><a href="/api/pdf/'+rec.week_id+'/'+day.day_name+'_Completed_Checklist.pdf" target="_blank">Download PDF</a><button onclick="deleteRecord(\''+rec.week_id+'\','+day.day_idx+',\''+day.day_name+'\')">Delete</button></div></div>';
+            var orgBadge=day.has_organic||day.certification?'<span class="organic-badge">Organic</span>':'';
+            var deleteBtn=rec.hoo_signoff?'':'<button onclick="deleteRecord(\''+rec.week_id+'\','+day.day_idx+',\''+day.day_name+'\')">Delete</button>';
+            html+='<div class="day-record"><div><span class="day-name">'+day.day_name+'</span>'+orgBadge+'<br><span class="day-time">Completed: '+timeStr+'</span></div><div class="day-actions"><a href="/daily-production/'+rec.week_id+'/'+day.day_idx+'">View</a><a href="/api/pdf/'+rec.week_id+'/'+day.day_name+'_Completed_Checklist.pdf" target="_blank">Download PDF</a>'+deleteBtn+'</div></div>';
         }
         html+='</div></div>';
     }
     container.innerHTML=html;
+}
+
+function renderHooPanel(rec,statusClass){
+    var weekId=rec.week_id;
+    if(rec.hoo_signoff){
+        var so=rec.hoo_signoff;
+        var when=so.signed_at?so.signed_at.substring(0,16).replace('T',' '):'';
+        var notes=so.notes?'<div class="hoo-notes"><strong>Notes:</strong> '+escHtml(so.notes)+'</div>':'';
+        return '<div class="hoo-panel confirmed">'+
+               '<h4>✓ Confirmed by Head of Operations</h4>'+
+               '<div class="hoo-confirmed-line"><span class="hoo-confirmed-name">'+escHtml(so.name)+'</span> &middot; '+escHtml(when)+'</div>'+
+               notes+
+               '<div class="hoo-actions"><button class="btn btn-outline" style="font-size:11px;padding:4px 12px;" onclick="unsignWeek(\''+weekId+'\')">Unsign</button></div>'+
+               '</div>';
+    }
+    if(rec.completion_state==='all_complete'){
+        return '<div class="hoo-panel ready">'+
+               '<h4>Ready for Head of Operations sign-off</h4>'+
+               '<p style="font-size:12px;margin:0 0 10px 0;color:#555;">All scheduled days are complete. Review the days below, then sign to confirm the week.</p>'+
+               '<div class="hoo-form-row">'+
+                 '<input type="text" id="hoo-name-'+weekId+'" placeholder="HOO name" autocomplete="off">'+
+                 '<textarea id="hoo-notes-'+weekId+'" placeholder="Optional notes (e.g. Reviewed all CCPs, no issues)"></textarea>'+
+                 '<button class="btn btn-primary" style="font-size:13px;" onclick="signWeek(\''+weekId+'\')">Sign &amp; Confirm Week</button>'+
+               '</div>'+
+               '<div class="hoo-meta" id="hoo-status-'+weekId+'"></div>'+
+               '</div>';
+    }
+    // Partial
+    var incomplete=rec.scheduled_incomplete_days||[];
+    var listed=incomplete.map(function(d){return d.day_name;}).join(', ')||'—';
+    return '<div class="hoo-panel partial">'+
+           '<h4>Awaiting daily completions</h4>'+
+           '<p style="font-size:12px;margin:0;color:#555;">Sign-off becomes available once all scheduled days are completed.</p>'+
+           '<div class="hoo-incomplete-list">Pending: '+escHtml(listed)+'</div>'+
+           '</div>';
+}
+
+async function signWeek(weekId){
+    var name=document.getElementById('hoo-name-'+weekId).value.trim();
+    var notes=document.getElementById('hoo-notes-'+weekId).value.trim();
+    var st=document.getElementById('hoo-status-'+weekId);
+    if(!name){st.textContent='Enter your name to sign.';st.style.color='#dc3545';return;}
+    var res=await fetch('/api/weekly-signoff/'+weekId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,notes:notes})});
+    var data=await res.json();
+    if(data.success){loadRecords();}
+    else{st.textContent=data.error||'Failed';st.style.color='#dc3545';}
+}
+
+async function unsignWeek(weekId){
+    if(!confirm('Reverse this week\'s sign-off? You can re-sign at any time.'))return;
+    var res=await fetch('/api/weekly-signoff/'+weekId,{method:'DELETE'});
+    if(res.ok)loadRecords();
 }
 
 function toggleWeek(el){el.nextElementSibling.classList.toggle('open');}

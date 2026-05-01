@@ -382,26 +382,21 @@ def _draw_checklist_content(c, w, h, date, active_vessels, logo_path=None, fille
     c.rect(30, y - 18, w - 60, 18, fill=1, stroke=0)
     c.setFillColor(HEADER_TEXT)
     c.setFont(FONT_BOLD, 9)
-    c.drawString(40, y - 13, "FINAL SIGN-OFF")
+    c.drawString(40, y - 13, "KITCHEN LEAD SIGN-OFF")
     y = y - 18
     c.setFillColor(LIGHT_BG)
-    c.rect(30, y - 40, w - 60, 40, fill=1, stroke=0)
+    c.rect(30, y - 28, w - 60, 28, fill=1, stroke=0)
     c.setStrokeColor(LIGHT_GRAY)
-    c.rect(30, y - 40, w - 60, 40, fill=0, stroke=1)
+    c.rect(30, y - 28, w - 60, 28, fill=0, stroke=1)
     c.setFillColor(black)
     c.setFont(FONT, 9)
     kitchen = filled_data.get("signoff_kitchen", "") if is_filled else ""
-    manager = filled_data.get("signoff_manager", "") if is_filled else ""
     if kitchen:
-        c.drawString(40, y - 14, "Kitchen Lead: " + kitchen)
+        c.drawString(40, y - 17, "Kitchen Lead: " + kitchen)
     else:
-        c.drawString(40, y - 14, "Kitchen Lead: ________________________________")
-    if manager:
-        c.drawString(40, y - 30, "Production Manager: " + manager)
-    else:
-        c.drawString(40, y - 30, "Production Manager: ________________________________")
+        c.drawString(40, y - 17, "Kitchen Lead: ________________________________")
     if is_filled and filled_data.get("last_updated"):
-        c.drawString(310, y - 14, "Completed: " + filled_data["last_updated"][:16])
+        c.drawString(310, y - 17, "Completed: " + filled_data["last_updated"][:16])
 
     c.setFillColor(MEDIUM_GRAY)
     c.setFont(FONT, 6)
