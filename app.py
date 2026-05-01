@@ -855,6 +855,110 @@ def delete_recipe(name):
     return jsonify({"error": "Recipe not found"}), 404
 
 
+def _schedules_using_recipe(recipe_name):
+    """Return list of (week_id, day_idx, vessel) tuples where recipe_name is scheduled."""
+    refs = []
+    if not os.path.exists(SCHEDULES_DIR):
+        return refs
+    for fn in os.listdir(SCHEDULES_DIR):
+        if not fn.endswith(".json"):
+            continue
+        week_id = fn[:-5]
+        try:
+            with open(os.path.join(SCHEDULES_DIR, fn)) as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            continue
+        sched = (data or {}).get("schedule") or {}
+        for d_idx_str, day in sched.items():
+            if not isinstance(day, dict):
+                continue
+            for vessel, name in day.items():
+                if name == recipe_name:
+                    try:
+                        d_idx = int(d_idx_str)
+                    except ValueError:
+                        d_idx = -1
+                    refs.append({"week_id": week_id, "day_idx": d_idx, "vessel": vessel})
+    return refs
+
+
+@app.route("/api/recipes/<path:name>/duplicate", methods=["POST"])
+@login_required
+def duplicate_recipe(name):
+    """Duplicate a recipe with a new name. Body: {new_name}.
+    Copies all data including ingredients/yield/brand/format. If the source
+    has a photo, the photo file is copied to a new filename keyed to the
+    duplicate's name."""
+    data = request.json or {}
+    new_name = (data.get("new_name") or "").strip()
+    if not new_name:
+        return jsonify({"error": "new_name required"}), 400
+
+    recipes = load_recipes()
+    if name not in recipes:
+        return jsonify({"error": "Source recipe not found"}), 404
+    if new_name in recipes:
+        return jsonify({"error": "A recipe with that name already exists"}), 400
+
+    # Deep copy via JSON round-trip
+    new_data = json.loads(json.dumps(recipes[name]))
+
+    # Copy photo file if present
+    src_photo = new_data.get("photo")
+    if src_photo:
+        src_path = os.path.join(PHOTOS_DIR, src_photo)
+        if os.path.exists(src_path):
+            ext = os.path.splitext(src_photo)[1].lower() or ".jpg"
+            safe = re.sub(r'[^a-zA-Z0-9_-]', '_', new_name)
+            new_photo = safe + ext
+            new_path = os.path.join(PHOTOS_DIR, new_photo)
+            try:
+                import shutil
+                shutil.copy2(src_path, new_path)
+                new_data["photo"] = new_photo
+            except OSError:
+                # If copy fails, drop the photo reference rather than fail the whole duplicate
+                new_data.pop("photo", None)
+        else:
+            new_data.pop("photo", None)
+
+    # Mark as not archived even if source was
+    new_data["archived"] = False
+
+    recipes[new_name] = new_data
+    save_recipes(recipes)
+    return jsonify({"success": True, "name": new_name, "data": new_data})
+
+
+@app.route("/api/recipes/<path:name>/archive", methods=["POST"])
+@login_required
+def archive_recipe(name):
+    """Mark a recipe as archived. It stays in storage so old schedules and
+    tracker entries still resolve, but it's hidden from the new-schedule
+    recipe picker. Returns 200 with a list of schedule references so the
+    frontend can warn the user about active uses."""
+    recipes = load_recipes()
+    if name not in recipes:
+        return jsonify({"error": "Recipe not found"}), 404
+    recipes[name]["archived"] = True
+    save_recipes(recipes)
+    refs = _schedules_using_recipe(name)
+    return jsonify({"success": True, "schedule_refs": refs})
+
+
+@app.route("/api/recipes/<path:name>/unarchive", methods=["POST"])
+@login_required
+def unarchive_recipe(name):
+    """Restore an archived recipe to active."""
+    recipes = load_recipes()
+    if name not in recipes:
+        return jsonify({"error": "Recipe not found"}), 404
+    recipes[name]["archived"] = False
+    save_recipes(recipes)
+    return jsonify({"success": True})
+
+
 @app.route("/api/recipes/migrate-all", methods=["POST"])
 @login_required
 def migrate_all_recipes():
@@ -941,10 +1045,15 @@ def serve_photo(filename):
 @app.route("/api/recipes/grouped", methods=["GET"])
 @login_required
 def get_recipes_grouped():
+    """Return recipes grouped by brand for the schedule picker.
+    Excludes archived recipes by default. Pass ?include_archived=1 to include them."""
+    include_archived = request.args.get("include_archived", "0") in ("1", "true", "yes")
     recipes = load_recipes()
     order = load_recipe_order()
     groups = {}
     for name, data in recipes.items():
+        if not include_archived and data.get("archived"):
+            continue
         brand = data.get("brand", "Other")
         if not brand:
             brand = "Other"
@@ -1298,6 +1407,12 @@ def save_daily_production(week_id, day_idx):
     data = request.json
     data["last_updated"] = datetime.now().isoformat()
     save_checklist_data(week_id, day_idx, data)
+    # Process any organic runs scheduled on the previous day —
+    # the produced amounts entered today are the finish of yesterday's runs.
+    try:
+        _check_organic_completion(week_id, day_idx, data)
+    except Exception:
+        pass
     return jsonify({"success": True})
 
 
@@ -2295,125 +2410,148 @@ def _create_organic_run(week_id, day_idx, vessel, recipe_name, recipe_data, lot)
     _save_json(ORGANIC_RUNS_PATH, runs)
 
 
-def _complete_organic_run(week_id, day_idx, produced_data):
-    """When daily production is completed, deduct raw materials and create finished goods."""
+def _previous_day_coords(week_id, day_idx):
+    """Return (prev_week_id, prev_day_idx) for the day BEFORE (week_id, day_idx).
+    For Monday (d_idx=0), crosses back to last week's Sunday (d_idx=6)."""
+    if day_idx > 0:
+        return week_id, day_idx - 1
+    try:
+        prev_week_start = datetime.strptime(week_id, "%Y-%m-%d") - timedelta(days=7)
+    except ValueError:
+        return week_id, day_idx
+    return prev_week_start.strftime("%Y-%m-%d"), 6
+
+
+def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
+    """Process organic production amounts entered on the FINISH day.
+
+    Semantic: 'Amount Produced' entered on day D is the output of the recipe
+    that was STARTED on day D-1. So this function:
+      1. Finds organic runs scheduled on the previous day (start day)
+      2. Matches each run's vessel against produced_data[vessel]
+      3. Deducts raw materials based on amount produced
+      4. Creates / updates a finished goods entry, timestamped to the FINISH day
+         with LOT# = finish_date + 365 days (packaging day expiry)
+    Idempotent: re-saving updates in place. Sales already made against an
+    edited entry are preserved (quantity_remaining = new_qty - already_sold).
+    """
     runs = _load_json(ORGANIC_RUNS_PATH, [])
     materials = _load_json(ORGANIC_RAW_PATH, [])
     fg = _load_json(ORGANIC_FG_PATH, [])
+    sales = _load_json(ORGANIC_SALES_PATH, []) if os.path.exists(ORGANIC_SALES_PATH) else []
     recipes = load_recipes()
 
-    for run in runs:
-        if run.get("week_id") != week_id or run.get("day_idx") != day_idx:
-            continue
-        if run.get("status") == "completed":
-            continue
+    # Find runs scheduled on the START day (yesterday relative to finish day)
+    start_week_id, start_day_idx = _previous_day_coords(finish_week_id, finish_day_idx)
 
-        vessel = run["vessel"]
-        recipe_name = run["recipe"]
+    # Compute finish-day expiry LOT# (packaging-day + 365 days)
+    try:
+        finish_date = datetime.strptime(finish_week_id, "%Y-%m-%d") + timedelta(days=finish_day_idx)
+        expiry_lot = (finish_date + timedelta(days=365)).strftime("%d%m%y")
+    except ValueError:
+        finish_date = datetime.now()
+        expiry_lot = (finish_date + timedelta(days=365)).strftime("%d%m%y")
+
+    produced = (produced_data or {}).get("produced") or {}
+
+    for run in runs:
+        if run.get("week_id") != start_week_id or run.get("day_idx") != start_day_idx:
+            continue
+        # Only process organic runs (defensive — runs are only created for organic recipes)
+        recipe_name = run.get("recipe", "")
         recipe_data = recipes.get(recipe_name, {})
         if not recipe_data:
             continue
+        if (recipe_data.get("certification") or "").lower() != "organic":
+            continue
 
-        # Get amount produced for this vessel
+        vessel = run["vessel"]
+
+        # Get amount produced for this vessel from the FINISH day's checklist
         vid = vessel.replace("(", "").replace(")", "")
-        amount = 0
-        if produced_data.get("produced"):
-            try:
-                amount = int(produced_data["produced"].get(vid, 0))
-            except (ValueError, TypeError):
-                pass
+        try:
+            amount = int(produced.get(vid, 0))
+        except (ValueError, TypeError):
+            amount = 0
 
-        # Deduct raw materials. Simple model:
-        #   per L  → amount × batch_liters (halved for 115L)
-        #   other  → amount (halved for 115L)
-        # Inventory is matched by ingredient name + unit.
+        # Find existing finished goods entry for this run (idempotency key:
+        # finish_week + finish_day + vessel)
+        fg_id = f"fg_{finish_week_id}_{finish_day_idx}_{vessel}"
+        existing_fg = next((f for f in fg if f.get("id") == fg_id), None)
+
+        # If amount is 0 and no prior FG exists, skip entirely (no production)
+        if amount <= 0 and not existing_fg:
+            continue
+
+        # Deduct raw materials based on the new amount.
+        # If we're updating an existing entry, first restore any previously-deducted
+        # materials so we can recompute clean. (Simpler: always restore, then deduct fresh.)
+        prev_used = run.get("ingredients_used") or []
+        if run.get("status") == "completed" and prev_used:
+            for used in prev_used:
+                if used.get("negative"):
+                    continue  # Insufficient-stock markers don't restore inventory
+                rm_id = used.get("raw_material_id")
+                qty = used.get("quantity_used", 0)
+                if rm_id and qty:
+                    for mat in materials:
+                        if mat.get("id") == rm_id:
+                            mat["remaining"] = round(mat.get("remaining", 0) + qty, 4)
+                            break
+
         ingredients_used = []
         is_115L = vessel == "115L"
         half_factor = 0.5 if is_115L else 1.0
 
-        # Compute batch liters from recipe format × yield (for per-L items)
         recipe_yield = 0
         try:
             recipe_yield = int(recipe_data.get("yield") or 0)
         except (ValueError, TypeError):
             recipe_yield = 0
-        jar_l = _jar_volume_liters(recipe_data) or 0.75  # safe default
-        batch_liters = recipe_yield * jar_l * half_factor  # 115L halves yield too
+        jar_l = _jar_volume_liters(recipe_data) or 0.75
+        batch_liters = recipe_yield * jar_l * half_factor
 
-        for section in INGREDIENT_SECTIONS:
-            items = recipe_data.get(section, [])
-            for item in items:
-                if not is_structured_ingredient(item):
-                    continue
-                if item.get("needs_review"):
-                    continue
-                item_name = (item.get("name") or "").strip()
-                if not item_name:
-                    continue
-                try:
-                    recipe_amount = float(item.get("amount") or 0)
-                except (ValueError, TypeError):
-                    recipe_amount = 0
-                if recipe_amount <= 0:
-                    continue
-
-                unit = (item.get("unit") or "").strip()
-                if not unit:
-                    # Missing unit → skip (flagged for review elsewhere)
-                    continue
-
-                # Compute needed amount
-                if unit == "per L":
-                    qty_needed = recipe_amount * batch_liters
-                    # Inventory for per-L items is in g (or ml). We don't know
-                    # which — rely on name match and let the stored unit win.
-                    display_unit = "g"
-                else:
-                    qty_needed = recipe_amount * half_factor
-                    display_unit = unit
-
-                if qty_needed <= 0:
-                    continue
-
-                qty_remaining = round(qty_needed, 4)
-
-                # FIFO deduction: match by name (loose). Prefer exact unit match first,
-                # then fall back to name-only.
-                # Pass 1: name + unit match
-                for mat in materials:
-                    if mat["remaining"] <= 0:
+        if amount > 0:
+            for section in INGREDIENT_SECTIONS:
+                items = recipe_data.get(section, [])
+                for item in items:
+                    if not is_structured_ingredient(item):
                         continue
-                    if not ingredients_match(mat["item"], item_name):
+                    if item.get("needs_review"):
                         continue
-                    mat_unit = (mat.get("unit") or "").strip()
-                    if unit != "per L" and mat_unit != display_unit:
+                    item_name = (item.get("name") or "").strip()
+                    if not item_name:
                         continue
-                    deduct = min(qty_remaining, mat["remaining"])
-                    mat["remaining"] = round(mat["remaining"] - deduct, 4)
-                    qty_remaining = round(qty_remaining - deduct, 4)
-                    ingredients_used.append({
-                        "item": mat["item"],
-                        "supplier_lot": mat["supplier_lot"],
-                        "quantity_used": deduct,
-                        "unit": mat_unit or display_unit,
-                        "raw_material_id": mat["id"],
-                    })
-                    if qty_remaining <= 0:
-                        break
-
-                # Pass 2: name-only match (inventory with different/missing unit)
-                if qty_remaining > 0:
+                    try:
+                        recipe_amount = float(item.get("amount") or 0)
+                    except (ValueError, TypeError):
+                        recipe_amount = 0
+                    if recipe_amount <= 0:
+                        continue
+                    unit = (item.get("unit") or "").strip()
+                    if not unit:
+                        continue
+                    if unit == "per L":
+                        qty_needed = recipe_amount * batch_liters
+                        display_unit = "g"
+                    else:
+                        qty_needed = recipe_amount * half_factor
+                        display_unit = unit
+                    if qty_needed <= 0:
+                        continue
+                    qty_remaining_to_deduct = round(qty_needed, 4)
+                    # Pass 1: name + exact unit
                     for mat in materials:
                         if mat["remaining"] <= 0:
                             continue
                         if not ingredients_match(mat["item"], item_name):
                             continue
                         mat_unit = (mat.get("unit") or "").strip()
-                        if unit != "per L" and mat_unit == display_unit:
-                            continue  # already tried in pass 1
-                        deduct = min(qty_remaining, mat["remaining"])
+                        if unit != "per L" and mat_unit != display_unit:
+                            continue
+                        deduct = min(qty_remaining_to_deduct, mat["remaining"])
                         mat["remaining"] = round(mat["remaining"] - deduct, 4)
-                        qty_remaining = round(qty_remaining - deduct, 4)
+                        qty_remaining_to_deduct = round(qty_remaining_to_deduct - deduct, 4)
                         ingredients_used.append({
                             "item": mat["item"],
                             "supplier_lot": mat["supplier_lot"],
@@ -2421,41 +2559,84 @@ def _complete_organic_run(week_id, day_idx, produced_data):
                             "unit": mat_unit or display_unit,
                             "raw_material_id": mat["id"],
                         })
-                        if qty_remaining <= 0:
+                        if qty_remaining_to_deduct <= 0:
                             break
+                    # Pass 2: name-only fallback
+                    if qty_remaining_to_deduct > 0:
+                        for mat in materials:
+                            if mat["remaining"] <= 0:
+                                continue
+                            if not ingredients_match(mat["item"], item_name):
+                                continue
+                            mat_unit = (mat.get("unit") or "").strip()
+                            if unit != "per L" and mat_unit == display_unit:
+                                continue
+                            deduct = min(qty_remaining_to_deduct, mat["remaining"])
+                            mat["remaining"] = round(mat["remaining"] - deduct, 4)
+                            qty_remaining_to_deduct = round(qty_remaining_to_deduct - deduct, 4)
+                            ingredients_used.append({
+                                "item": mat["item"],
+                                "supplier_lot": mat["supplier_lot"],
+                                "quantity_used": deduct,
+                                "unit": mat_unit or display_unit,
+                                "raw_material_id": mat["id"],
+                            })
+                            if qty_remaining_to_deduct <= 0:
+                                break
+                    if qty_remaining_to_deduct > 0:
+                        ingredients_used.append({
+                            "item": item_name,
+                            "supplier_lot": "INSUFFICIENT_STOCK",
+                            "quantity_used": qty_remaining_to_deduct,
+                            "unit": display_unit,
+                            "negative": True,
+                        })
 
-                # If still short, record insufficient stock
-                if qty_remaining > 0:
-                    ingredients_used.append({
-                        "item": item_name,
-                        "supplier_lot": "INSUFFICIENT_STOCK",
-                        "quantity_used": qty_remaining,
-                        "unit": display_unit,
-                        "negative": True,
-                    })
-
-        run["status"] = "completed"
+        run["status"] = "completed" if amount > 0 else "scheduled"
         run["ingredients_used"] = ingredients_used
         run["amount_produced"] = amount
-        run["completed_at"] = datetime.now().isoformat()
+        run["completed_at"] = datetime.now().isoformat() if amount > 0 else None
+        run["finish_week_id"] = finish_week_id
+        run["finish_day_idx"] = finish_day_idx
 
-        # Create finished goods entry
+        # Compute already-sold quantity for this FG so quantity_remaining is correct on edit
+        already_sold = 0
+        for s in sales:
+            if s.get("fg_id") == fg_id:
+                try:
+                    already_sold += int(s.get("quantity", 0))
+                except (ValueError, TypeError):
+                    pass
+
         if amount > 0:
-            fg_entry = {
-                "id": f"fg_{week_id}_{day_idx}_{vessel}",
+            new_remaining = max(0, amount - already_sold)
+            new_fg = {
+                "id": fg_id,
                 "run_id": run["id"],
                 "recipe": recipe_name,
                 "brand": recipe_data.get("brand", ""),
                 "format": recipe_data.get("format", ""),
-                "lot": run["lot"],
+                "lot": expiry_lot,
                 "quantity_produced": amount,
-                "quantity_remaining": amount,
+                "quantity_remaining": new_remaining,
                 "vessel": vessel,
-                "week_id": week_id,
-                "day_idx": day_idx,
-                "created_at": datetime.now().isoformat(),
+                "week_id": finish_week_id,
+                "day_idx": finish_day_idx,
+                "start_week_id": start_week_id,
+                "start_day_idx": start_day_idx,
+                "created_at": existing_fg.get("created_at") if existing_fg else datetime.now().isoformat(),
+                "updated_at": datetime.now().isoformat(),
             }
-            fg.append(fg_entry)
+            if existing_fg:
+                # Update in place
+                for k, v in new_fg.items():
+                    existing_fg[k] = v
+            else:
+                fg.append(new_fg)
+        else:
+            # Amount went to zero — drop the FG entry (no production after all)
+            if existing_fg:
+                fg = [f for f in fg if f.get("id") != fg_id]
 
     _save_json(ORGANIC_RUNS_PATH, runs)
     _save_json(ORGANIC_RAW_PATH, materials)
@@ -2617,15 +2798,17 @@ def _check_organic_schedule(week_id, schedule):
 
 
 # ── Hook: Complete organic runs when daily production is filed ─────────
-def _check_organic_completion(week_id, day_idx, checklist_data):
-    """When daily production is completed, process organic runs for that day."""
+def _check_organic_completion(finish_week_id, finish_day_idx, checklist_data):
+    """When daily production is saved on the FINISH day, process any organic
+    runs that were scheduled on the PREVIOUS day (which are now finishing)."""
     runs = _load_json(ORGANIC_RUNS_PATH, [])
+    start_week_id, start_day_idx = _previous_day_coords(finish_week_id, finish_day_idx)
     has_organic = any(
-        r.get("week_id") == week_id and r.get("day_idx") == day_idx and r.get("status") != "completed"
+        r.get("week_id") == start_week_id and r.get("day_idx") == start_day_idx
         for r in runs
     )
     if has_organic:
-        _complete_organic_run(week_id, day_idx, checklist_data)
+        _complete_organic_run(finish_week_id, finish_day_idx, checklist_data)
 
 
 if not os.path.exists(RECIPES_PATH):
@@ -2634,6 +2817,67 @@ if not os.path.exists(RECIPES_PATH):
 
 if not os.path.exists(CCP_MASTER_PATH):
     save_ccp_master(DEFAULT_CCP_SECTIONS)
+
+
+def _backfill_organic_finished_goods():
+    """One-time, idempotent: scan past checklists and build finished goods entries
+    for organic production where they're missing. Safe to run on every startup
+    because _complete_organic_run is idempotent (updates in place).
+
+    For every existing organic run, looks at the FINISH day's checklist (run start
+    day + 1, with cross-week Sunday→Monday). If that checklist has a 'produced'
+    amount for the run's vessel, processes it.
+    """
+    if not os.path.exists(CHECKLISTS_DIR):
+        return
+    runs = _load_json(ORGANIC_RUNS_PATH, [])
+    if not runs:
+        return
+    # Group runs by (start_week, start_day) so we process each finish-day once
+    by_finish = {}
+    for run in runs:
+        sw = run.get("week_id")
+        sd = run.get("day_idx")
+        if sw is None or sd is None:
+            continue
+        # Compute finish day = start day + 1 (with Sunday→next Monday rollover)
+        try:
+            start_dt = datetime.strptime(sw, "%Y-%m-%d") + timedelta(days=int(sd))
+        except (ValueError, TypeError):
+            continue
+        finish_dt = start_dt + timedelta(days=1)
+        # Find the Monday of finish_dt's week
+        finish_monday = finish_dt - timedelta(days=finish_dt.weekday())
+        finish_week = finish_monday.strftime("%Y-%m-%d")
+        finish_day = (finish_dt - finish_monday).days
+        by_finish.setdefault((finish_week, finish_day), True)
+
+    backfilled = 0
+    for (fw, fd) in by_finish:
+        cl_path = os.path.join(CHECKLISTS_DIR, f"{fw}_day{fd}.json")
+        if not os.path.exists(cl_path):
+            continue
+        try:
+            with open(cl_path) as f:
+                checklist = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if not (checklist or {}).get("produced"):
+            continue
+        try:
+            _check_organic_completion(fw, fd, checklist)
+            backfilled += 1
+        except Exception:
+            pass
+    if backfilled:
+        try:
+            print(f"[startup] organic finished-goods backfill processed {backfilled} day(s)")
+        except Exception:
+            pass
+
+
+_backfill_organic_finished_goods()
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
