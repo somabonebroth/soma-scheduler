@@ -3374,6 +3374,93 @@ def add_baseline_finished_good():
     return jsonify({"success": True, "entry": entry})
 
 
+@app.route("/api/organic/finished-goods/baseline-bulk", methods=["POST"])
+@login_required
+def add_baseline_finished_goods_bulk():
+    """Bulk-create baseline FG entries in a single request. JSON body:
+      {entries: [{recipe, quantity, notes (optional)}, ...]}
+
+    Used by the Day-Zero bulk grid: user fills in counts for many recipes
+    at once and submits everything together.
+
+    Behavior:
+    - All entries share the same BL-DDMMYY LOT (same migration date)
+    - Skips entries with quantity <= 0 (so user can leave most rows blank)
+    - Validates each recipe exists; returns 400 if any are unknown
+    - Atomic: either all valid entries save, or none if any validation fails
+    - Returns count of entries created and the list of LOTs
+    """
+    data = request.json or {}
+    entries_in = data.get("entries") or []
+    if not isinstance(entries_in, list):
+        return jsonify({"error": "entries must be a list"}), 400
+
+    # Validate every entry first — atomic semantics
+    recipes = load_recipes()
+    to_create = []
+    errors = []
+    for idx, e in enumerate(entries_in):
+        if not isinstance(e, dict):
+            errors.append(f"row {idx}: not an object")
+            continue
+        recipe_name = (e.get("recipe") or "").strip()
+        if not recipe_name:
+            continue  # silently skip blank rows
+        try:
+            qty = int(e.get("quantity") or 0)
+        except (ValueError, TypeError):
+            qty = 0
+        if qty <= 0:
+            continue  # user left this row blank or zero — skip it
+        recipe = recipes.get(recipe_name)
+        if not recipe:
+            errors.append(f"row {idx}: recipe '{recipe_name}' not found")
+            continue
+        to_create.append({
+            "recipe_name": recipe_name,
+            "recipe": recipe,
+            "quantity": qty,
+            "notes": (e.get("notes") or "").strip(),
+        })
+
+    if errors:
+        return jsonify({"error": "Validation failed", "details": errors}), 400
+
+    if not to_create:
+        return jsonify({"success": True, "created": 0, "entries": []})
+
+    lot = "BL-" + datetime.now().strftime("%d%m%y")
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    created = []
+    base_ts = datetime.now()
+    for i, item in enumerate(to_create):
+        recipe = item["recipe"]
+        # Make IDs deterministically distinct even when created within the
+        # same second by appending the index.
+        entry = {
+            "id": "fg_baseline_" + base_ts.strftime("%Y%m%d%H%M%S") + f"_{i:03d}",
+            "recipe": item["recipe_name"],
+            "brand": (recipe.get("brand") or "").strip(),
+            "format": (recipe.get("format") or "").strip(),
+            "certification": (recipe.get("certification") or "").strip(),
+            "lot": lot,
+            "quantity_produced": item["quantity"],
+            "quantity_remaining": item["quantity"],
+            "vessel": "Pre-migration",
+            "week_id": None,
+            "day_idx": None,
+            "created_at": base_ts.isoformat(),
+            "migration_baseline": True,
+        }
+        if item["notes"]:
+            entry["notes"] = item["notes"]
+        fg.append(entry)
+        created.append(entry)
+
+    _save_json(ORGANIC_FG_PATH, fg)
+    return jsonify({"success": True, "created": len(created), "lot": lot, "entries": created})
+
+
 # ── Manual inventory adjustments ────────────────────────────────────
 # These cover everyday cases AFTER day-zero migration: returns, found stock,
 # breakage, spillage, theft, sampling, donations, recount discrepancies.
