@@ -2359,6 +2359,184 @@ def organic_ingredients():
     return jsonify(all_items)
 
 
+# ── Raw material category buckets for the inventory list view ──
+# Each ingredient is bucketed into one of these labels for grouping.
+# Order matters: this is the display order. Items not matching any rule
+# fall through to "9. Other".
+RAW_CATEGORIES = [
+    "1. Bones & Proteins",
+    "2. Fresh Vegetables",
+    "3. Fresh Herbs & Aromatics",
+    "4. Mushrooms",
+    "5. Adjuncts & Specialty",
+    "6. Dried Herbs & Powders",
+    "7. Spices",
+    "8. Salts, Liquids & Finishers",
+    "9. Other",
+]
+
+
+def _categorize_ingredient(name):
+    """Return the display category bucket for a raw material name.
+    Lowercase substring matching — order of rules matters (first match wins)."""
+    if not name:
+        return "9. Other"
+    n = name.lower()
+
+    # Bones & proteins (the big-ticket items, listed first)
+    if "bone" in n or "feet" in n or "neck" in n or "turkey" in n or ("lamb" in n and "meat" in n):
+        return "1. Bones & Proteins"
+    # Whole turkey / lamb meat caught by "lamb meat" above
+    if name in ("Onion", "Carrot", "Celery", "Green Onion", "Garlic", "Raw Garlic"):
+        return "2. Fresh Vegetables"
+    if "fresh " in n or "turmeric root" in n or "ginger root" in n or "lemon" in n or "lemongrass" in n or "red chili" in n or "chili pepper" in n:
+        return "3. Fresh Herbs & Aromatics"
+    if "mushroom" in n:
+        return "4. Mushrooms"
+    if "adjunct" in n or "goji" in n:
+        return "5. Adjuncts & Specialty"
+    if "dried" in n or "powder" in n or "chunks" in n or "rose petals" in n or "kaffir" in n:
+        return "6. Dried Herbs & Powders"
+    if name in ("Black Peppercorn", "Black Pepper", "Bay Leaf", "Star Anise", "Clove",
+                "Fennel Seed", "Coriander Seed", "Dried Chili Flakes", "Cumin Powder"):
+        return "7. Spices"
+    if "salt" in n or "honey" in n or "juice" in n or "vinegar" in n or "paste" in n or "milk" in n:
+        return "8. Salts, Liquids & Finishers"
+    return "9. Other"
+
+
+@app.route("/api/organic/raw-materials/grouped", methods=["GET"])
+@login_required
+def get_raw_materials_grouped():
+    """Catalog-aware raw materials view.
+
+    Returns one row per unique ingredient (name + unit) — unioning the
+    ingredient picker (every active recipe contributes ingredients, plus
+    custom user-added items) with actual receipt LOT data.
+
+    Each row aggregates total received and remaining across all LOTs of
+    that ingredient. Ingredients with no receipts ever still appear, with
+    catalog_only=true and total_remaining=0.
+
+    The response includes a 'category' field for display grouping.
+    """
+    # Get the canonical ingredient list (same as the picker dropdown)
+    recipes = load_recipes()
+    derived = {}  # key: (name_lower, unit) -> {name, unit}
+    for rname, rdata in recipes.items():
+        if rdata.get("archived"):
+            continue
+        for section in INGREDIENT_SECTIONS:
+            for item in rdata.get(section, []):
+                if not is_structured_ingredient(item):
+                    continue
+                if item.get("needs_review"):
+                    continue
+                ing_name = (item.get("name") or "").strip()
+                unit = (item.get("unit") or "").strip()
+                if is_untracked_ingredient(ing_name):
+                    continue
+                if not ing_name or not unit:
+                    continue
+                key = (ing_name.lower(), unit)
+                if key not in derived:
+                    derived[key] = {"name": ing_name, "unit": unit}
+
+    # Merge custom user-added items
+    custom = _load_json(ORGANIC_CUSTOM_ITEMS_PATH, [])
+    for c in custom:
+        name = c.get("name", "")
+        unit = c.get("unit", "")
+        if not name or not unit or is_untracked_ingredient(name):
+            continue
+        key = (name.lower(), unit)
+        if key not in derived:
+            derived[key] = {"name": name, "unit": unit}
+
+    # Now aggregate the actual raw materials inventory by (name_lower, unit)
+    materials = _load_json(ORGANIC_RAW_PATH, [])
+    aggregates = {}  # key -> {total_received, total_remaining, lot_count, active_lot_count, has_baseline}
+    for mat in materials:
+        item = (mat.get("item") or "").strip()
+        unit = (mat.get("unit") or "").strip()
+        if not item or not unit:
+            continue
+        key = (item.lower(), unit)
+        if key not in aggregates:
+            aggregates[key] = {
+                "total_received": 0.0,
+                "total_remaining": 0.0,
+                "lot_count": 0,
+                "active_lot_count": 0,
+                "has_baseline": False,
+                "name": item,  # use whatever casing was actually stored
+                "unit": unit,
+            }
+        try:
+            aggregates[key]["total_received"] += float(mat.get("quantity") or 0)
+        except (ValueError, TypeError):
+            pass
+        try:
+            aggregates[key]["total_remaining"] += float(mat.get("remaining") or 0)
+        except (ValueError, TypeError):
+            pass
+        aggregates[key]["lot_count"] += 1
+        if (float(mat.get("remaining") or 0) > 0):
+            aggregates[key]["active_lot_count"] += 1
+        if mat.get("migration_baseline"):
+            aggregates[key]["has_baseline"] = True
+        # If aggregate doesn't yet exist in derived (orphan — recipe was renamed
+        # or ingredient was deleted from custom), surface it anyway so user can
+        # see and reconcile.
+        if key not in derived:
+            derived[key] = {"name": item, "unit": unit}
+
+    # Merge: every catalog item gets a row (even with no receipts)
+    rows = []
+    for key, ing in derived.items():
+        agg = aggregates.get(key, {})
+        # Round to 2 decimals for display; keep as float for sums
+        total_received = round(agg.get("total_received", 0.0), 3)
+        total_remaining = round(agg.get("total_remaining", 0.0), 3)
+        # Trim trailing zeros — show 50 not 50.000, but keep 2.5 as 2.5
+        if total_received == int(total_received):
+            total_received = int(total_received)
+        if total_remaining == int(total_remaining):
+            total_remaining = int(total_remaining)
+
+        rows.append({
+            "name": ing["name"],
+            "unit": ing["unit"],
+            "category": _categorize_ingredient(ing["name"]),
+            "total_received": total_received,
+            "total_remaining": total_remaining,
+            "lot_count": agg.get("lot_count", 0),
+            "active_lot_count": agg.get("active_lot_count", 0),
+            "has_baseline": agg.get("has_baseline", False),
+            "catalog_only": (agg.get("lot_count", 0) == 0),
+        })
+
+    # Sort: by category index first, then alphabetically by name within each
+    cat_index = {c: i for i, c in enumerate(RAW_CATEGORIES)}
+    rows.sort(key=lambda r: (cat_index.get(r["category"], 99), r["name"].lower(), r["unit"]))
+    return jsonify(rows)
+
+
+@app.route("/api/organic/raw-materials/by-ingredient/<path:item>/<unit>", methods=["GET"])
+@login_required
+def get_raw_material_lots(item, unit):
+    """Return all LOT entries for a specific ingredient name + unit.
+    Sorted oldest-first (FIFO order). Used when expanding a row in the
+    inventory list to see LOT-level detail."""
+    materials = _load_json(ORGANIC_RAW_PATH, [])
+    item_lc = item.lower()
+    matching = [m for m in materials
+                if (m.get("item") or "").strip().lower() == item_lc
+                and (m.get("unit") or "").strip() == unit]
+    matching.sort(key=lambda m: (m.get("date_received") or "", m.get("created_at") or ""))
+    return jsonify(matching)
+
+
 @app.route("/api/organic/ingredients", methods=["POST"])
 @login_required
 def add_organic_ingredient():
@@ -2434,6 +2612,155 @@ def add_raw_material():
     if supplier:
         _add_contact("supplier", supplier)
     return jsonify({"success": True, "entry": entry})
+
+
+@app.route("/api/organic/raw-materials/bulk", methods=["POST"])
+@login_required
+def add_raw_materials_bulk():
+    """Bulk-create raw material LOT entries in a single request. JSON body:
+      {
+        entries: [{item, unit, quantity, supplier?, supplier_lot?, date_received?, notes?}, ...],
+        baseline: bool   # true for day-zero physical-count entry, false for real receipts
+      }
+
+    Used by:
+      - Day-Zero baseline bulk grid (baseline=true): all entries share BL-DDMMYY
+        lot, supplier defaults to '(physical count)'
+      - Future camera-scan multi-row receipt entry (baseline=false): each entry
+        keeps its own supplier_lot from the parsed invoice
+
+    Behavior:
+    - All entries are validated upfront against the canonical ingredient list
+      (recipes + custom items). Atomic: either all valid entries save, or none.
+    - Skips rows with quantity <= 0 silently (so users can leave blanks)
+    - Returns count of created entries and the LOT(s) used
+    """
+    data = request.json or {}
+    entries_in = data.get("entries") or []
+    is_baseline = bool(data.get("baseline"))
+    if not isinstance(entries_in, list):
+        return jsonify({"error": "entries must be a list"}), 400
+
+    # Build the canonical ingredient set: {(name_lower, unit): canonical_name}
+    # This is the same set the picker populates from — recipes + custom items.
+    canonical = {}
+    recipes = load_recipes()
+    for rname, rdata in recipes.items():
+        if rdata.get("archived"):
+            continue
+        for section in INGREDIENT_SECTIONS:
+            for it in rdata.get(section, []):
+                if not is_structured_ingredient(it):
+                    continue
+                if it.get("needs_review"):
+                    continue
+                ing_name = (it.get("name") or "").strip()
+                unit = (it.get("unit") or "").strip()
+                if is_untracked_ingredient(ing_name):
+                    continue
+                if not ing_name or not unit:
+                    continue
+                key = (ing_name.lower(), unit)
+                if key not in canonical:
+                    canonical[key] = ing_name
+    custom = _load_json(ORGANIC_CUSTOM_ITEMS_PATH, [])
+    for c in custom:
+        nm = (c.get("name") or "").strip()
+        un = (c.get("unit") or "").strip()
+        if not nm or not un or is_untracked_ingredient(nm):
+            continue
+        key = (nm.lower(), un)
+        if key not in canonical:
+            canonical[key] = nm
+
+    # Validate every entry first — atomic semantics
+    to_create = []
+    errors = []
+    for idx, e in enumerate(entries_in):
+        if not isinstance(e, dict):
+            errors.append(f"row {idx}: not an object")
+            continue
+        item = (e.get("item") or "").strip()
+        unit = (e.get("unit") or "").strip()
+        if not item or not unit:
+            continue  # silently skip blank rows
+        try:
+            qty = float(e.get("quantity") or 0)
+        except (ValueError, TypeError):
+            qty = 0
+        if qty <= 0:
+            continue  # skip blank/zero rows
+        key = (item.lower(), unit)
+        if key not in canonical:
+            errors.append(f"row {idx}: ingredient '{item}' ({unit}) not in catalog")
+            continue
+        # Use the canonical casing so storage stays consistent
+        to_create.append({
+            "item": canonical[key],
+            "unit": unit,
+            "quantity": qty,
+            "supplier": (e.get("supplier") or "").strip(),
+            "supplier_lot": (e.get("supplier_lot") or "").strip(),
+            "date_received": (e.get("date_received") or "").strip(),
+            "notes": (e.get("notes") or "").strip(),
+        })
+
+    if errors:
+        return jsonify({"error": "Validation failed", "details": errors}), 400
+
+    if not to_create:
+        return jsonify({"success": True, "created": 0, "entries": []})
+
+    materials = _load_json(ORGANIC_RAW_PATH, [])
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    base_ts = datetime.now()
+    shared_baseline_lot = "BL-" + base_ts.strftime("%d%m%y") if is_baseline else None
+    suppliers_seen = set()
+    created = []
+
+    for i, item in enumerate(to_create):
+        # Resolve per-entry fields based on mode
+        if is_baseline:
+            supplier = item["supplier"] or "(physical count)"
+            supplier_lot = shared_baseline_lot
+            date_received = item["date_received"] or today_str
+        else:
+            # Receipt mode (future scan): each entry uses its own supplier + lot
+            supplier = item["supplier"]
+            supplier_lot = item["supplier_lot"] or ("MAN-" + base_ts.strftime("%d%m%y"))
+            date_received = item["date_received"] or today_str
+
+        entry = {
+            "id": "rm_bulk_" + base_ts.strftime("%Y%m%d%H%M%S") + f"_{i:03d}",
+            "item": item["item"],
+            "supplier": supplier,
+            "supplier_lot": supplier_lot,
+            "date_received": date_received,
+            "quantity": item["quantity"],
+            "remaining": item["quantity"],
+            "unit": item["unit"],
+            "created_at": base_ts.isoformat(),
+        }
+        if is_baseline:
+            entry["migration_baseline"] = True
+        if item["notes"]:
+            entry["notes"] = item["notes"]
+        materials.append(entry)
+        created.append(entry)
+        if supplier and supplier != "(physical count)":
+            suppliers_seen.add(supplier)
+
+    _save_json(ORGANIC_RAW_PATH, materials)
+    # Record any new suppliers in the contacts file (skips duplicates internally)
+    for s in suppliers_seen:
+        _add_contact("supplier", s)
+
+    return jsonify({
+        "success": True,
+        "created": len(created),
+        "lot": shared_baseline_lot,  # only set when baseline=true
+        "entries": created,
+    })
 
 
 def _runs_using_raw_material(entry_id):

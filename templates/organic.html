@@ -255,6 +255,46 @@ body.inv-page .fg-info .lot-tag { font-size: 11px; background: var(--dark); colo
 body.inv-page .fg-qty { font-size: 16px; font-weight: 700; color: var(--accent); white-space: nowrap; }
 body.inv-page .fg-qty.negative { color: #dc3545; }
 
+/* Raw Materials catalog rows + category sections */
+body.inv-page .rm-cat-section {
+    margin-bottom: 18px;
+}
+body.inv-page .rm-cat-header {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+body.inv-page .rm-cat-count {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-light);
+    background: var(--row-alt);
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+body.inv-page .rm-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 4px; border-bottom: 1px solid var(--border);
+    flex-wrap: wrap; gap: 12px; transition: background 0.1s;
+}
+body.inv-page .rm-row:hover { background: var(--row-alt); }
+body.inv-page .rm-row:last-child { border-bottom: none; }
+body.inv-page .rm-info { font-size: 14px; flex: 1; min-width: 200px; }
+body.inv-page .rm-qty {
+    font-size: 16px; font-weight: 700; color: var(--accent);
+    white-space: nowrap; min-width: 110px; text-align: right;
+}
+body.inv-page .rm-qty.negative { color: #999; }
+body.inv-page .rm-detail { margin-bottom: 8px; }
+
 /* Modal action footer */
 body.inv-page .modal-actions {
     display: flex; justify-content: flex-end; gap: 10px;
@@ -362,7 +402,8 @@ body.inv-page .modal-actions {
             <div id="rm-info" style="font-size:11px;color:var(--text-light);margin-bottom:14px;"></div>
             <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
                 <button class="btn btn-primary" onclick="addRawMaterial()">Add to Inventory</button>
-                <button class="btn-baseline" onclick="addBaselineRawMaterial()">Baseline Lot</button>
+                <button class="btn-baseline" onclick="openBaselineRMBulkGrid()">Baseline Bulk</button>
+                <button class="btn-outline" onclick="openBaselineRMSingle()" title="Add a single ingredient to baseline (use after bulk pass for missed items)" style="font-size:13px;padding:10px 14px;">+ Single Ingredient</button>
                 <button class="btn-outline" onclick="addCustomIngredient()">+ New Ingredient</button>
             </div>
             <div id="rm-status" class="status"></div>
@@ -576,6 +617,50 @@ body.inv-page .modal-actions {
         </div>
     </div>
 
+    <!-- Raw Material Baseline Bulk Grid modal -->
+    <div class="modal-overlay" id="baseline-rm-bulk-modal">
+        <div class="modal" style="max-width:780px;">
+            <button class="modal-close" onclick="closeBaselineRMBulkGrid()">&times;</button>
+            <h2 style="color:#8a6900;">📋 Baseline Raw Materials — Bulk Entry</h2>
+            <p style="font-size:12px;color:var(--text-light);margin-bottom:14px;line-height:1.5;">
+                Enter your physical count for each ingredient. Leave blank or enter <strong>0</strong> for items with no stock. Submit all rows at once. This is a one-time day-zero record — all entries share the same <code style="background:#f5f5f0;padding:1px 5px;border-radius:3px;">BL-DDMMYY</code> LOT.
+            </p>
+            <div id="baseline-rm-bulk-summary" style="background:#fff8e1;padding:10px 14px;border-radius:6px;margin-bottom:12px;font-size:13px;font-weight:600;color:#8a6900;border-left:3px solid #b38b00;">0 ingredients filled in</div>
+            <div id="baseline-rm-bulk-body" style="max-height:55vh;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:#fff;"></div>
+            <div id="baseline-rm-bulk-msg" class="status" style="margin:10px 0;"></div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeBaselineRMBulkGrid()">Cancel</button>
+                <button class="btn btn-primary" id="baseline-rm-bulk-submit" onclick="submitBaselineRMBulkGrid()" style="background:#b38b00;border-color:#8a6900;">Submit All</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Raw Material Baseline Single modal -->
+    <div class="modal-overlay" id="baseline-rm-single-modal">
+        <div class="modal">
+            <button class="modal-close" onclick="closeBaselineRMSingle()">&times;</button>
+            <h2 style="color:#8a6900;">📋 Baseline Raw Materials — Single Ingredient</h2>
+            <p style="font-size:12px;color:var(--text-light);margin-bottom:14px;">Add a single ingredient to the day-zero baseline. Use this if you missed an item during the bulk entry pass.</p>
+            <div class="form-row">
+                <div class="form-field" style="grid-column: 1 / -1;">
+                    <label>Ingredient</label>
+                    <select id="baseline-rm-single-ingredient"></select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-field" style="grid-column: 1 / -1;">
+                    <label>Quantity on hand</label>
+                    <input type="number" id="baseline-rm-single-qty" inputmode="decimal" step="any" min="0" placeholder="0">
+                </div>
+            </div>
+            <div id="baseline-rm-single-msg" class="status" style="margin:10px 0;"></div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeBaselineRMSingle()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitBaselineRMSingle()" style="background:#b38b00;border-color:#8a6900;">Add Baseline</button>
+            </div>
+        </div>
+    </div>
+
     <!-- TAB 4: Search & Trace -->
     <div class="tab-content" id="tab-trace">
         <div class="card">
@@ -652,34 +737,124 @@ async function loadContacts(){
     }catch(e){}
 }
 
+// Track which ingredient row is currently expanded showing LOT-level detail.
+// Key format: "name|unit" so two units of the same ingredient (rare) don't collide.
+var expandedRMKey=null;
+
 async function loadRawMaterials(){
-    var res=await fetch('/api/organic/raw-materials');
-    var data=await res.json();
+    var res=await fetch('/api/organic/raw-materials/grouped');
+    var rows=await res.json();
     var container=document.getElementById('rm-table-container');
     var countEl=document.getElementById('rm-count');
-    var activeCount=data.filter(function(m){return(m.remaining||0)>0;}).length;
-    if(countEl)countEl.textContent=activeCount+' active'+(data.length>activeCount?' / '+data.length+' total':'');
-    if(!data.length){container.innerHTML='<div class="empty-state">No raw materials in inventory.<br>Add items using the form above, or click <strong>Baseline Lot</strong> to enter day-zero physical counts.</div>';return;}
-    var html='<table class="inv-table"><tr><th>Item</th><th>Supplier</th><th>Received</th><th>LOT#</th><th>Qty</th><th>Remaining</th><th>Unit</th><th></th></tr>';
-    data.forEach(function(m){
-        var remClass=m.remaining<0?'negative':m.remaining===0?'low':'';
-        var baselineBadge=m.migration_baseline?'<span class="baseline-badge">BASELINE</span>':'';
+    if(countEl){
+        var stocked=rows.filter(function(r){return(r.total_remaining||0)>0;}).length;
+        var totalLots=rows.reduce(function(a,r){return a+(r.lot_count||0);},0);
+        countEl.textContent=stocked+' stocked / '+rows.length+' ingredients • '+totalLots+' lot'+(totalLots===1?'':'s');
+    }
+    if(!rows.length){
+        container.innerHTML='<div class="empty-state">No ingredients found.<br>Recipes must define ingredients before they appear here. Use <strong>+ New Ingredient</strong> to add custom items.</div>';
+        return;
+    }
+
+    // Group by category
+    var byCat={};
+    var catOrder=[];
+    rows.forEach(function(r){
+        var c=r.category||'9. Other';
+        if(!(c in byCat)){byCat[c]=[];catOrder.push(c);}
+        byCat[c].push(r);
+    });
+
+    var html='';
+    catOrder.forEach(function(cat){
+        var items=byCat[cat];
+        // Strip the leading "1. " from category for display
+        var catLabel=cat.replace(/^\d+\.\s*/, '');
+        html+='<div class="rm-cat-section">';
+        html+='<div class="rm-cat-header">'+escSku(catLabel)+' <span class="rm-cat-count">'+items.length+'</span></div>';
+
+        items.forEach(function(r){
+            var key=r.name+'|'+r.unit;
+            var keyEnc=encodeURIComponent(key);
+            var isExpanded=(expandedRMKey===key);
+            var outOfStock=(r.total_remaining||0)<=0;
+            var rowOpacity=outOfStock?'opacity:0.55;':'';
+            var baselineBadge=r.has_baseline?'<span class="baseline-badge">BASELINE</span>':'';
+            var stockBadge='';
+            if(outOfStock && r.lot_count>0){
+                stockBadge='<span style="display:inline-block;font-size:10px;font-weight:700;background:#f5f5f0;color:#999;border:1px solid #d0d0c8;padding:2px 8px;border-radius:10px;letter-spacing:0.4px;margin-left:8px;vertical-align:middle;">DEPLETED</span>';
+            } else if(r.catalog_only){
+                stockBadge='<span style="display:inline-block;font-size:10px;font-weight:700;background:#f5f5f0;color:#999;border:1px solid #d0d0c8;padding:2px 8px;border-radius:10px;letter-spacing:0.4px;margin-left:8px;vertical-align:middle;">NEVER RECEIVED</span>';
+            }
+
+            var lotNote='';
+            if(r.active_lot_count>0){
+                lotNote=r.active_lot_count+' active lot'+(r.active_lot_count===1?'':'s');
+                if(r.lot_count>r.active_lot_count){lotNote+=' • '+(r.lot_count-r.active_lot_count)+' depleted';}
+            } else if(r.lot_count>0){
+                lotNote=r.lot_count+' lot'+(r.lot_count===1?'':'s')+' (all depleted)';
+            } else {
+                lotNote='No receipt history yet';
+            }
+
+            html+='<div class="rm-row" data-rm-key="'+keyEnc+'" style="'+rowOpacity+'">';
+            html+='<div class="rm-info">';
+            html+='<strong>'+escSku(r.name)+'</strong>'+baselineBadge+stockBadge;
+            html+='<br><span style="font-size:11px;color:var(--text-light);margin-top:2px;display:inline-block;">'+lotNote+'</span>';
+            html+='</div>';
+            html+='<div class="rm-qty'+(outOfStock?' negative':'')+'">'+r.total_remaining+' <span style="font-size:11px;color:var(--text-light);font-weight:500;">'+escSku(r.unit)+'</span></div>';
+            html+='<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+            html+='<button class="btn-sm" data-rm-action="receive" data-rm-name="'+escSku(r.name)+'" data-rm-unit="'+escSku(r.unit)+'" title="Pre-fill the form above with this ingredient" style="padding:8px 12px;min-height:38px;color:#2e7d32;border-color:#a5d6a7;background:#fff;">+ Receive</button>';
+            var expandDisabled=(r.lot_count===0);
+            var expandAttrs=expandDisabled
+                ? 'disabled title="No lots to show" style="padding:8px 12px;min-height:38px;opacity:0.4;cursor:not-allowed;"'
+                : 'data-rm-action="toggle" data-rm-key="'+keyEnc+'" title="Show LOT-level detail" style="padding:8px 12px;min-height:38px;"';
+            html+='<button class="btn-sm" '+expandAttrs+'>'+(isExpanded?'▲':'▼')+'</button>';
+            html+='</div>';
+            html+='</div>';
+
+            if(isExpanded && r.lot_count>0){
+                html+='<div id="rm-detail-'+keyEnc+'" class="rm-detail" style="background:#fafaf5;padding:10px 16px;border-left:3px solid var(--accent);margin-bottom:8px;">Loading…</div>';
+            }
+        });
+
+        html+='</div>';
+    });
+
+    container.innerHTML=html;
+    attachRMClickDelegationOnce();
+    if(expandedRMKey){
+        renderRMDetail(expandedRMKey);
+    }
+}
+
+async function renderRMDetail(key){
+    var keyEnc=encodeURIComponent(key);
+    var el=document.getElementById('rm-detail-'+keyEnc);
+    if(!el)return;
+    var parts=key.split('|');
+    var name=parts[0], unit=parts[1]||'';
+    var url='/api/organic/raw-materials/by-ingredient/'+encodeURIComponent(name)+'/'+encodeURIComponent(unit);
+    var res=await fetch(url);
+    var lots=await res.json();
+    if(!lots.length){el.innerHTML='<em style="font-size:12px;color:var(--text-light);">No lots.</em>';return;}
+    var html='<table class="inv-table" style="margin:0;font-size:12px;"><tr><th>Supplier</th><th>Received</th><th>LOT#</th><th>Qty</th><th>Remaining</th><th></th></tr>';
+    lots.forEach(function(m){
+        var remClass=(m.remaining||0)<0?'negative':(m.remaining||0)===0?'low':'';
+        var baselineBadge=m.migration_baseline?'<span class="baseline-badge" style="margin-left:4px;">BASELINE</span>':'';
         html+='<tr>'+
-              '<td>'+escSku(m.item)+baselineBadge+'</td>'+
-              '<td>'+escSku(m.supplier)+'</td>'+
-              '<td>'+escSku(m.date_received)+'</td>'+
-              '<td>'+escSku(m.supplier_lot)+'</td>'+
+              '<td>'+escSku(m.supplier||'')+'</td>'+
+              '<td>'+escSku(m.date_received||'')+'</td>'+
+              '<td>'+escSku(m.supplier_lot||'')+baselineBadge+'</td>'+
               '<td>'+m.quantity+'</td>'+
               '<td class="'+remClass+'">'+m.remaining+'</td>'+
-              '<td>'+escSku(m.unit||'')+'</td>'+
               '<td style="white-space:nowrap;">'+
                 '<button class="btn-sm" data-rm-action="edit" data-rm-id="'+escSku(m.id)+'" data-rm-remaining="'+m.remaining+'" data-rm-item="'+escSku(m.item)+'" data-rm-unit="'+escSku(m.unit||'')+'" style="margin-right:4px;">Edit Qty</button>'+
                 '<button class="btn-danger" data-rm-action="delete" data-rm-id="'+escSku(m.id)+'">Del</button>'+
               '</td></tr>';
     });
     html+='</table>';
-    container.innerHTML=html;
-    attachRMClickDelegationOnce();
+    el.innerHTML=html;
 }
 
 function attachRMClickDelegationOnce(){
@@ -690,16 +865,40 @@ function attachRMClickDelegationOnce(){
         var btn=e.target.closest('[data-rm-action]');
         if(!btn)return;
         var action=btn.getAttribute('data-rm-action');
-        var id=btn.getAttribute('data-rm-id');
         if(action==='edit'){
+            var id=btn.getAttribute('data-rm-id');
             var current=btn.getAttribute('data-rm-remaining');
             var item=btn.getAttribute('data-rm-item');
             var unit=btn.getAttribute('data-rm-unit');
             editRMRemaining(id,item,unit,current);
         } else if(action==='delete'){
-            deleteRM(id);
+            deleteRM(btn.getAttribute('data-rm-id'));
+        } else if(action==='toggle'){
+            var key=decodeURIComponent(btn.getAttribute('data-rm-key'));
+            expandedRMKey=(expandedRMKey===key)?null:key;
+            loadRawMaterials();
+        } else if(action==='receive'){
+            prefillReceiveForm(btn.getAttribute('data-rm-name'), btn.getAttribute('data-rm-unit'));
         }
     });
+}
+
+// "+ Receive" pre-fills the existing top form for that ingredient and
+// scrolls back to it. User then fills in supplier / lot / qty and submits.
+function prefillReceiveForm(name, unit){
+    var sel=document.getElementById('rm-item');
+    // Find option by ingredient name + unit
+    for(var i=0;i<sel.options.length;i++){
+        var idx=parseInt(sel.options[i].value);
+        if(!isNaN(idx) && ingredientData[idx] && ingredientData[idx].name===name && (ingredientData[idx].unit||'')===unit){
+            sel.value=sel.options[i].value;
+            onIngredientSelect();
+            break;
+        }
+    }
+    // Focus the first empty field
+    var supplier=document.getElementById('rm-supplier');
+    if(supplier){supplier.scrollIntoView({behavior:'smooth',block:'center'}); supplier.focus();}
 }
 
 async function editRMRemaining(id,item,unit,current){
@@ -868,38 +1067,169 @@ async function addCustomIngredient(){
     alert('Added: '+name.trim()+' — '+unit.trim());
 }
 
-async function addBaselineRawMaterial(){
-    // Quick day-zero entry: pick existing ingredient + qty.
-    // Auto-stamps BL-DDMMYY lot and migration_baseline:true.
-    var sel=document.getElementById('rm-item');
-    var idx=parseInt(sel.value);
-    if(isNaN(idx)||!ingredientData[idx]){
-        alert('Pick an ingredient from the dropdown first, then click "+ Baseline Lot".');
+// ── Baseline Raw Materials entry ─────────────────────────────────────
+// Two flows:
+//   1. Bulk grid (default): list every ingredient with a qty input, submit
+//      all non-zero rows in one API call. Used for day-zero entry.
+//   2. Single-ingredient modal (fallback): for one missed item later.
+
+async function openBaselineRMBulkGrid(){
+    // Refresh the canonical ingredient catalog first
+    await loadIngredients();
+    if(!ingredientData || !ingredientData.length){
+        alert('No ingredients found. Recipes must define ingredients before baseline entry.');
         return;
     }
-    var item=ingredientData[idx];
-    var qty=prompt('Baseline quantity for '+item.name+' ('+(item.unit||'')+'):');
-    if(qty===null)return;
-    qty=parseFloat(qty);
-    if(isNaN(qty)||qty<=0){alert('Enter a positive number.');return;}
-    var body={
-        item:item.name,
-        supplier:'(physical count)',
-        quantity:qty,
-        unit:item.unit||'',
-        baseline:true,
-    };
-    var res=await fetch('/api/organic/raw-materials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    var data=await res.json();
-    var st=document.getElementById('rm-status');
-    if(data.success){
-        st.className='status success';
-        st.textContent='Baseline added: '+qty+' '+(item.unit||'')+' of '+item.name+' (LOT '+data.entry.supplier_lot+')';
-        loadRawMaterials();
-    }else{
-        st.className='status error';
-        st.textContent=data.error||'Failed';
+
+    // Group ingredients by category for the grid (same categorization as the list)
+    // We don't have category info on the picker dropdown items, so call the
+    // grouped endpoint to get them (it's the same data, with category attached).
+    var rows;
+    try{
+        var res=await fetch('/api/organic/raw-materials/grouped');
+        rows=await res.json();
+    }catch(e){alert('Could not load ingredient catalog.');return;}
+
+    var byCat={};
+    var catOrder=[];
+    rows.forEach(function(r){
+        var c=r.category||'9. Other';
+        if(!(c in byCat)){byCat[c]=[];catOrder.push(c);}
+        byCat[c].push(r);
+    });
+
+    var body=document.getElementById('baseline-rm-bulk-body');
+    var html='';
+    catOrder.forEach(function(cat){
+        var items=byCat[cat];
+        var catLabel=cat.replace(/^\d+\.\s*/, '');
+        html+='<div class="baseline-bulk-brand">';
+        html+='<div class="baseline-bulk-brand-header">'+escSku(catLabel)+'</div>';
+        items.forEach(function(r){
+            var nameSafe=escSku(r.name);
+            var unitSafe=escSku(r.unit);
+            html+='<div class="baseline-bulk-row">';
+            html+='<div class="baseline-bulk-name">'+nameSafe+' <span class="baseline-bulk-fmt">'+unitSafe+'</span></div>';
+            html+='<input type="number" inputmode="decimal" step="any" class="baseline-rm-bulk-qty" data-item="'+nameSafe+'" data-unit="'+unitSafe+'" min="0" placeholder="0">';
+            html+='</div>';
+        });
+        html+='</div>';
+    });
+    body.innerHTML=html;
+    document.getElementById('baseline-rm-bulk-summary').textContent='0 ingredients filled in';
+    document.getElementById('baseline-rm-bulk-msg').textContent='';
+    document.getElementById('baseline-rm-bulk-msg').className='status';
+    body.addEventListener('input', updateBaselineRMBulkSummary);
+    document.getElementById('baseline-rm-bulk-modal').classList.add('active');
+}
+
+function updateBaselineRMBulkSummary(){
+    var inputs=document.querySelectorAll('.baseline-rm-bulk-qty');
+    var filled=0;
+    inputs.forEach(function(inp){
+        var v=parseFloat(inp.value);
+        if(!isNaN(v) && v>0)filled++;
+    });
+    var summary=document.getElementById('baseline-rm-bulk-summary');
+    if(summary){
+        summary.textContent=filled+' ingredient'+(filled===1?'':'s')+' filled in';
     }
+}
+
+function closeBaselineRMBulkGrid(){
+    document.getElementById('baseline-rm-bulk-modal').classList.remove('active');
+}
+
+async function submitBaselineRMBulkGrid(){
+    var msg=document.getElementById('baseline-rm-bulk-msg');
+    var inputs=document.querySelectorAll('.baseline-rm-bulk-qty');
+    var entries=[];
+    inputs.forEach(function(inp){
+        var v=parseFloat(inp.value);
+        if(!isNaN(v) && v>0){
+            entries.push({
+                item: inp.getAttribute('data-item'),
+                unit: inp.getAttribute('data-unit'),
+                quantity: v,
+            });
+        }
+    });
+    if(!entries.length){
+        msg.className='status error';
+        msg.textContent='Fill in at least one quantity, or click Cancel.';
+        return;
+    }
+    if(!confirm('Submit baseline raw material counts for '+entries.length+' ingredients? This creates a one-time day-zero record.')) return;
+
+    var btn=document.getElementById('baseline-rm-bulk-submit');
+    btn.disabled=true; btn.textContent='Saving...';
+    try{
+        var res=await fetch('/api/organic/raw-materials/bulk',{
+            method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({entries:entries, baseline:true}),
+        });
+        var data=await res.json();
+        if(!data.success){
+            msg.className='status error';
+            msg.textContent=data.error||'Failed';
+            if(data.details && data.details.length){
+                msg.textContent+=': '+data.details.join('; ');
+            }
+            btn.disabled=false; btn.textContent='Submit All';
+            return;
+        }
+        closeBaselineRMBulkGrid();
+        loadRawMaterials();
+        alert('Baseline created: '+data.created+' ingredients added (LOT '+data.lot+')');
+    }catch(e){
+        msg.className='status error';
+        msg.textContent='Error: '+e.message;
+        btn.disabled=false; btn.textContent='Submit All';
+    }
+}
+
+// Single-ingredient baseline (fallback for missed items)
+async function openBaselineRMSingle(){
+    await loadIngredients();
+    var sel=document.getElementById('baseline-rm-single-ingredient');
+    sel.innerHTML='<option value="">— Pick an ingredient —</option>';
+    ingredientData.forEach(function(item, idx){
+        var opt=document.createElement('option');
+        opt.value=idx;
+        opt.textContent=item.name+' ('+(item.unit||'')+')';
+        sel.appendChild(opt);
+    });
+    document.getElementById('baseline-rm-single-qty').value='';
+    document.getElementById('baseline-rm-single-msg').textContent='';
+    document.getElementById('baseline-rm-single-msg').className='status';
+    document.getElementById('baseline-rm-single-modal').classList.add('active');
+}
+
+function closeBaselineRMSingle(){
+    document.getElementById('baseline-rm-single-modal').classList.remove('active');
+}
+
+async function submitBaselineRMSingle(){
+    var msg=document.getElementById('baseline-rm-single-msg');
+    var idx=parseInt(document.getElementById('baseline-rm-single-ingredient').value);
+    if(isNaN(idx) || !ingredientData[idx]){msg.className='status error';msg.textContent='Pick an ingredient.';return;}
+    var item=ingredientData[idx];
+    var qty=parseFloat(document.getElementById('baseline-rm-single-qty').value);
+    if(isNaN(qty) || qty<=0){msg.className='status error';msg.textContent='Enter a quantity greater than 0.';return;}
+    var body={item:item.name, unit:item.unit||'', quantity:qty, supplier:'(physical count)', baseline:true};
+    var res=await fetch('/api/organic/raw-materials',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body),
+    });
+    var data=await res.json();
+    if(!data.success){msg.className='status error';msg.textContent=data.error||'Failed';return;}
+    closeBaselineRMSingle();
+    loadRawMaterials();
+}
+
+// Legacy entry point — opens the bulk grid by default
+async function addBaselineRawMaterial(){
+    return openBaselineRMBulkGrid();
 }
 
 // ── Baseline finished goods entry ─────────────────────────────────────
