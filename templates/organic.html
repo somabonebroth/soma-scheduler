@@ -18,50 +18,252 @@
 <title>Soma - Inventory</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
-.tab-bar { display: flex; gap: 0; margin-bottom: 20px; overflow-x: auto; }
-.tab-btn { padding: 10px 18px; border: 1px solid var(--border); font-size: 13px; font-weight: 600; cursor: pointer; background: var(--card-bg); color: var(--text); white-space: nowrap; }
+/* ── Inventory page UI polish ──────────────────────────────────────
+   Scoped to this page only via .inv-page wrapper class on the body.
+   Other pages are untouched.
+   ──────────────────────────────────────────────────────────────── */
+body.inv-page { background: var(--bg); }
+
+/* Cards: more breathing room, subtle title underline */
+body.inv-page .card { padding: 28px; margin-bottom: 20px; }
+body.inv-page .card h2 {
+    font-size: 18px; font-weight: 600; color: var(--dark);
+    padding-bottom: 12px; margin-bottom: 16px;
+    border-bottom: 2px solid var(--border);
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+body.inv-page .card h2 .count-badge {
+    font-size: 12px; font-weight: 500; color: var(--text-light);
+    background: var(--row-alt); padding: 3px 10px; border-radius: 10px;
+}
+body.inv-page .card > p { font-size: 12px; line-height: 1.5; color: var(--text-light); margin-bottom: 14px; }
+
+/* Tabs */
+.tab-bar { display: flex; gap: 0; margin-bottom: 24px; overflow-x: auto; }
+.tab-btn {
+    padding: 12px 20px; border: 1px solid var(--border);
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    background: var(--card-bg); color: var(--text); white-space: nowrap;
+    min-height: 44px;
+}
 .tab-btn:first-child { border-radius: 6px 0 0 6px; }
 .tab-btn:last-child { border-radius: 0 6px 6px 0; }
 .tab-btn.active { background: #2e7d32; color: #fff; border-color: #2e7d32; }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
-.organic-badge { background: #e8f5e9; color: #2e7d32; font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 700; }
-.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 12px; }
-.form-field label { display: block; font-size: 11px; font-weight: 600; color: var(--text-light); margin-bottom: 3px; }
-.form-field input, .form-field select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
-.inv-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.inv-table th { background: var(--dark); color: #fff; padding: 8px 10px; text-align: left; font-size: 11px; font-weight: 600; }
-.inv-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); }
-.inv-table tr:nth-child(even) { background: var(--row-alt); }
-.inv-table .negative { color: #dc3545; font-weight: 700; }
-.inv-table .low { color: #e67e22; font-weight: 600; }
-.run-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
-.run-header { padding: 10px 14px; font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+
+/* Form fields */
+body.inv-page .form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+}
+body.inv-page .form-field label {
+    display: block; font-size: 11px; font-weight: 600;
+    color: var(--text-light); margin-bottom: 6px;
+    text-transform: uppercase; letter-spacing: 0.3px;
+}
+body.inv-page .form-field input,
+body.inv-page .form-field select {
+    width: 100%; padding: 11px 12px;
+    border: 1px solid var(--border); border-radius: 6px;
+    font-size: 14px; min-height: 44px;
+    background: #fff;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+body.inv-page .form-field input:focus,
+body.inv-page .form-field select:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(74,103,65,0.1);
+}
+
+/* Buttons — bigger tap targets, clearer hierarchy */
+body.inv-page .btn {
+    padding: 12px 22px; font-size: 14px;
+    min-height: 44px; min-width: 44px;
+    transition: all 0.15s;
+}
+body.inv-page .btn-primary {
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+body.inv-page .btn-primary:hover {
+    box-shadow: 0 2px 6px rgba(74,103,65,0.25);
+    transform: translateY(-1px);
+}
+
+/* Baseline buttons — distinct orange treatment so they're easy to find */
+body.inv-page .btn-baseline {
+    background: #fff;
+    border: 2px solid #b38b00;
+    color: #8a6900;
+    font-weight: 600;
+    padding: 10px 18px;
+    font-size: 13px;
+    min-height: 44px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+body.inv-page .btn-baseline:hover {
+    background: #fff8e1;
+    border-color: #8a6900;
+}
+body.inv-page .btn-baseline::before {
+    content: "📋 "; opacity: 0.85;
+}
+
+/* Outline buttons */
+body.inv-page .btn-outline {
+    background: #fff;
+    border: 1px solid var(--border);
+    padding: 10px 18px;
+    min-height: 44px;
+    font-size: 13px;
+    border-radius: 6px;
+    color: var(--text);
+    cursor: pointer;
+    font-weight: 500;
+}
+body.inv-page .btn-outline:hover {
+    background: #f5f5f0;
+    border-color: #c0c0b8;
+}
+
+/* Action button row spacing */
+body.inv-page .btn + .btn,
+body.inv-page .btn + .btn-baseline,
+body.inv-page .btn + .btn-outline,
+body.inv-page .btn-baseline + .btn-outline,
+body.inv-page .btn-outline + .btn-baseline {
+    margin-left: 10px;
+}
+
+/* Filter bar with proper breathing room */
+body.inv-page .filter-bar {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin: 0 0 16px 0;
+}
+body.inv-page .filter-btn {
+    padding: 8px 16px; min-height: 38px;
+    border: 1px solid var(--border); border-radius: 20px;
+    background: #fff; color: var(--text-light);
+    font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+}
+body.inv-page .filter-btn:hover { background: var(--row-alt); color: var(--text); }
+body.inv-page .filter-btn.active {
+    background: var(--dark); color: #fff; border-color: var(--dark);
+}
+
+/* Tables — more vertical room per row */
+body.inv-page .inv-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
+body.inv-page .inv-table th {
+    background: var(--dark); color: #fff;
+    padding: 12px 14px; text-align: left;
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.3px;
+}
+body.inv-page .inv-table th:first-child { border-radius: 6px 0 0 0; }
+body.inv-page .inv-table th:last-child { border-radius: 0 6px 0 0; }
+body.inv-page .inv-table td {
+    padding: 13px 14px; border-bottom: 1px solid var(--border); vertical-align: middle;
+}
+body.inv-page .inv-table tr:nth-child(even) { background: var(--row-alt); }
+body.inv-page .inv-table tr:hover { background: #f5f7f0; }
+body.inv-page .inv-table .negative { color: #dc3545; font-weight: 700; }
+body.inv-page .inv-table .low { color: #e67e22; font-weight: 600; }
+
+/* In-table action buttons — clearer visual differences */
+body.inv-page .btn-sm {
+    background: #fff; border: 1px solid var(--border);
+    padding: 7px 12px; font-size: 12px;
+    min-height: 36px; border-radius: 5px;
+    color: var(--text); cursor: pointer;
+    font-weight: 500; transition: all 0.15s;
+}
+body.inv-page .btn-sm:hover { background: var(--row-alt); border-color: #b8b8a8; }
+body.inv-page .btn-danger {
+    background: #fff; border: 1px solid #f5c2c7; color: var(--danger);
+    padding: 7px 12px; font-size: 12px;
+    min-height: 36px; border-radius: 5px;
+    cursor: pointer; font-weight: 500; transition: all 0.15s;
+}
+body.inv-page .btn-danger:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+/* Badges */
+.organic-badge { background: #e8f5e9; color: #2e7d32; font-size: 10px; padding: 3px 9px; border-radius: 10px; font-weight: 700; }
+body.inv-page .baseline-badge {
+    display: inline-block;
+    font-size: 10px; font-weight: 700;
+    background: #fff8e1; color: #8a6900;
+    border: 1px solid #d4a72c;
+    padding: 2px 8px; border-radius: 10px;
+    letter-spacing: 0.4px; margin-left: 8px;
+    vertical-align: middle;
+}
+body.inv-page .cert-badge {
+    display: inline-block;
+    font-size: 10px; font-weight: 700;
+    padding: 3px 9px; border-radius: 10px;
+    letter-spacing: 0.3px; margin-left: 8px;
+    vertical-align: middle;
+}
+
+/* Status messages */
+.status { padding: 12px 16px; border-radius: 6px; margin-top: 14px; font-size: 13px; display: none; }
+.status.success { display: block; background: var(--success); color: #155724; border-left: 4px solid #2e7d32; }
+.status.error { display: block; background: var(--error); color: #721c24; border-left: 4px solid var(--danger); }
+.status.loading { display: block; background: var(--warning); color: #856404; border-left: 4px solid #d4a72c; }
+
+/* Production runs */
+.run-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+.run-header { padding: 14px 18px; font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; cursor: pointer; min-height: 50px; }
 .run-header.scheduled { background: #fff3cd; }
 .run-header.completed { background: #d4edda; }
-.run-body { padding: 10px 14px; border-top: 1px solid var(--border); display: none; font-size: 12px; }
+.run-body { padding: 14px 18px; border-top: 1px solid var(--border); display: none; font-size: 12px; }
 .run-body.open { display: block; }
-.run-detail { margin-bottom: 6px; }
+.run-detail { margin-bottom: 8px; }
 .run-detail strong { color: var(--dark); }
-.ing-list { margin: 6px 0; padding-left: 16px; }
-.ing-list li { margin-bottom: 3px; }
+.ing-list { margin: 8px 0; padding-left: 18px; }
+.ing-list li { margin-bottom: 5px; }
 .ing-list .flag { color: #dc3545; font-weight: 700; }
-.sale-form { background: #f9f9f6; border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 12px; }
-.search-bar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: flex-end; }
-.search-bar select, .search-bar input { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+
+/* Sale modal-form */
+.sale-form { background: #f9f9f6; border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 14px; }
+
+/* Search bar */
+.search-bar { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; align-items: flex-end; }
+.search-bar select, .search-bar input { padding: 11px 13px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; min-height: 44px; }
 .search-bar input { flex: 1; min-width: 180px; }
-.trace-section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 12px; }
-.trace-section h3 { font-size: 14px; margin-bottom: 8px; color: var(--dark); }
-.empty-state { text-align: center; padding: 40px 20px; color: var(--text-light); font-size: 13px; }
-.fg-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 8px; }
-.fg-row:last-child { border-bottom: none; }
-.fg-info { font-size: 13px; }
-.fg-info .lot-tag { font-size: 11px; background: var(--dark); color: #fff; padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
-.fg-qty { font-size: 14px; font-weight: 700; color: var(--accent); }
-.fg-qty.negative { color: #dc3545; }
+.trace-section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 14px; }
+.trace-section h3 { font-size: 14px; margin-bottom: 10px; color: var(--dark); }
+
+/* Empty states — more breathing room */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-light); font-size: 14px; line-height: 1.6; }
+
+/* FG SKU rows */
+body.inv-page .fg-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 4px; border-bottom: 1px solid var(--border);
+    flex-wrap: wrap; gap: 12px; transition: background 0.1s;
+}
+body.inv-page .fg-row:hover { background: var(--row-alt); }
+body.inv-page .fg-row:last-child { border-bottom: none; }
+body.inv-page .fg-info { font-size: 14px; flex: 1; min-width: 200px; }
+body.inv-page .fg-info .lot-tag { font-size: 11px; background: var(--dark); color: #fff; padding: 2px 7px; border-radius: 4px; margin-left: 4px; }
+body.inv-page .fg-qty { font-size: 16px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+body.inv-page .fg-qty.negative { color: #dc3545; }
+
+/* Mobile/tablet adjustments */
+@media (max-width: 768px) {
+    body.inv-page .card { padding: 18px; }
+    body.inv-page .card h2 { font-size: 16px; }
+    body.inv-page .form-row { gap: 12px; }
+}
 </style>
 </head>
-<body>
+<body class="inv-page">
 <div class="header">
     <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
     <div class="header-text"><h1>Inventory</h1><p>Raw materials, finished goods & traceability</p></div>
@@ -79,6 +281,7 @@
     <div class="tab-content active" id="tab-raw">
         <div class="card">
             <h2>Add Raw Material</h2>
+            <p>Record receipt of a supplier delivery. The item must already exist in the recipe ingredient list — use <strong>+ New Ingredient</strong> if it doesn't.</p>
             <div class="form-row">
                 <div class="form-field"><label>Item</label><select id="rm-item" onchange="onIngredientSelect()"><option value="">Loading...</option></select></div>
                 <div class="form-field"><label>Supplier</label><input id="rm-supplier" list="supplier-list" placeholder="Company name"><datalist id="supplier-list"></datalist></div>
@@ -86,17 +289,19 @@
             </div>
             <div class="form-row">
                 <div class="form-field"><label>Supplier LOT#</label><input id="rm-lot" placeholder="Supplier lot number"></div>
-                <div class="form-field"><label>Quantity</label><input type="number" id="rm-qty" placeholder="0" step="any"></div>
+                <div class="form-field"><label>Quantity</label><input type="number" id="rm-qty" inputmode="decimal" placeholder="0" step="any"></div>
                 <div class="form-field"><label>Unit</label><input id="rm-unit" readonly style="background:#f5f5f0;"></div>
             </div>
-            <div id="rm-info" style="font-size:11px;color:var(--text-light);margin-bottom:8px;"></div>
-            <button class="btn btn-primary" onclick="addRawMaterial()">Add to Inventory</button>
-            <button class="btn btn-outline" style="margin-left:8px;" onclick="addBaselineRawMaterial()">+ Baseline Lot</button>
-            <button class="btn btn-outline" style="margin-left:8px;" onclick="addCustomIngredient()">+ New Ingredient</button>
-            <div id="rm-status" class="status" style="margin-top:10px;"></div>
+            <div id="rm-info" style="font-size:11px;color:var(--text-light);margin-bottom:14px;"></div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+                <button class="btn btn-primary" onclick="addRawMaterial()">Add to Inventory</button>
+                <button class="btn-baseline" onclick="addBaselineRawMaterial()">Baseline Lot</button>
+                <button class="btn-outline" onclick="addCustomIngredient()">+ New Ingredient</button>
+            </div>
+            <div id="rm-status" class="status"></div>
         </div>
         <div class="card">
-            <h2>Current Inventory</h2>
+            <h2>Current Inventory <span class="count-badge" id="rm-count">—</span></h2>
             <div id="rm-table-container"><div class="empty-state">Loading...</div></div>
         </div>
         <div class="card">
@@ -135,7 +340,7 @@
     <!-- TAB 2: Production Runs -->
     <div class="tab-content" id="tab-runs">
         <div class="card">
-            <h2>Production Runs</h2>
+            <h2>Production Runs <span class="count-badge" id="runs-count">—</span></h2>
             <p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Auto-populated when organic recipes are scheduled. Raw materials deducted when daily production is completed.</p>
             <div id="runs-container"><div class="empty-state">Loading...</div></div>
         </div>
@@ -144,20 +349,22 @@
     <!-- TAB 3: Finished Goods -->
     <div class="tab-content" id="tab-fg">
         <div class="card">
-            <h2>Finished Goods Inventory</h2>
-            <p style="font-size:11px;color:var(--text-light);margin-bottom:10px;">One row per SKU (brand + recipe + format). Click a row to see LOT-level FIFO detail. Use the Sell button to deduct from inventory — sales draw from the oldest LOT first.</p>
-            <div class="filter-bar" style="margin-bottom:10px;">
-                <button class="filter-btn active" data-fg-filter="all" onclick="setFgFilter('all',this)">All</button>
-                <button class="filter-btn" data-fg-filter="Organic" onclick="setFgFilter('Organic',this)">Organic</button>
-                <button class="filter-btn" data-fg-filter="Pasture Raised" onclick="setFgFilter('Pasture Raised',this)">Pasture Raised</button>
-                <button class="filter-btn" data-fg-filter="Conventional" onclick="setFgFilter('Conventional',this)">Conventional</button>
+            <h2>Finished Goods Inventory <span class="count-badge" id="fg-count">—</span></h2>
+            <p>One row per SKU (brand + recipe + format). Click a row for LOT-level detail. Sales draw from the oldest LOT first (FIFO).</p>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                <div class="filter-bar" style="margin:0;">
+                    <button class="filter-btn active" data-fg-filter="all" onclick="setFgFilter('all',this)">All</button>
+                    <button class="filter-btn" data-fg-filter="Organic" onclick="setFgFilter('Organic',this)">Organic</button>
+                    <button class="filter-btn" data-fg-filter="Pasture Raised" onclick="setFgFilter('Pasture Raised',this)">Pasture Raised</button>
+                    <button class="filter-btn" data-fg-filter="Conventional" onclick="setFgFilter('Conventional',this)">Conventional</button>
+                </div>
+                <button class="btn-baseline" onclick="addBaselineFinishedGood()">Baseline Inventory</button>
             </div>
-            <button class="btn btn-outline" style="margin-bottom:10px;font-size:12px;" onclick="addBaselineFinishedGood()">+ Baseline Inventory</button>
             <div id="fg-container"><div class="empty-state">Loading...</div></div>
         </div>
         <div class="card">
-            <h2>Sales History</h2>
-            <div class="filter-bar" style="margin-bottom:10px;">
+            <h2>Sales History <span class="count-badge" id="sales-count">—</span></h2>
+            <div class="filter-bar">
                 <button class="filter-btn active" data-sales-filter="all" onclick="setSalesFilter('all',this)">All</button>
                 <button class="filter-btn" data-sales-filter="Organic" onclick="setSalesFilter('Organic',this)">Organic</button>
                 <button class="filter-btn" data-sales-filter="Pasture Raised" onclick="setSalesFilter('Pasture Raised',this)">Pasture Raised</button>
@@ -270,11 +477,14 @@ async function loadRawMaterials(){
     var res=await fetch('/api/organic/raw-materials');
     var data=await res.json();
     var container=document.getElementById('rm-table-container');
-    if(!data.length){container.innerHTML='<div class="empty-state">No raw materials in inventory. Add items above.</div>';return;}
+    var countEl=document.getElementById('rm-count');
+    var activeCount=data.filter(function(m){return(m.remaining||0)>0;}).length;
+    if(countEl)countEl.textContent=activeCount+' active'+(data.length>activeCount?' / '+data.length+' total':'');
+    if(!data.length){container.innerHTML='<div class="empty-state">No raw materials in inventory.<br>Add items using the form above, or click <strong>Baseline Lot</strong> to enter day-zero physical counts.</div>';return;}
     var html='<table class="inv-table"><tr><th>Item</th><th>Supplier</th><th>Received</th><th>LOT#</th><th>Qty</th><th>Remaining</th><th>Unit</th><th></th></tr>';
     data.forEach(function(m){
         var remClass=m.remaining<0?'negative':m.remaining===0?'low':'';
-        var baselineBadge=m.migration_baseline?'<span style="font-size:9px;background:#b38b00;color:#fff;padding:1px 5px;border-radius:6px;font-weight:600;margin-left:6px;vertical-align:middle;">BASELINE</span>':'';
+        var baselineBadge=m.migration_baseline?'<span class="baseline-badge">BASELINE</span>':'';
         html+='<tr>'+
               '<td>'+escSku(m.item)+baselineBadge+'</td>'+
               '<td>'+escSku(m.supplier)+'</td>'+
@@ -552,7 +762,13 @@ async function loadRuns(){
     var res=await fetch('/api/organic/production-runs');
     var data=await res.json();
     var container=document.getElementById('runs-container');
-    if(!data.length){container.innerHTML='<div class="empty-state">No organic production runs yet. Schedule an organic recipe to see runs here.</div>';return;}
+    var countEl=document.getElementById('runs-count');
+    if(countEl){
+        var sched=data.filter(function(r){return r.status==='scheduled';}).length;
+        var done=data.filter(function(r){return r.status==='completed';}).length;
+        countEl.textContent=sched+' scheduled • '+done+' completed';
+    }
+    if(!data.length){container.innerHTML='<div class="empty-state">No production runs yet.<br>Schedule a recipe and runs will appear here.</div>';return;}
     // Sort newest first
     data.sort(function(a,b){return(b.created_at||'').localeCompare(a.created_at||'');});
     var html='';
@@ -609,7 +825,7 @@ function certBadge(cert){
     if(lc==='organic')bg='#2e7d32';
     else if(lc==='pasture raised')bg='#0288d1';
     else if(lc==='conventional')bg='#757575';
-    return '<span style="font-size:10px;background:'+bg+';color:#fff;padding:2px 6px;border-radius:8px;font-weight:600;margin-left:6px;">'+cert+'</span>';
+    return '<span class="cert-badge" style="background:'+bg+';color:#fff;">'+cert+'</span>';
 }
 
 async function loadFinishedGoods(){
@@ -620,9 +836,14 @@ async function loadFinishedGoods(){
     var res=await fetch(url);
     fgSkus=await res.json();
     var container=document.getElementById('fg-container');
+    var countEl=document.getElementById('fg-count');
+    if(countEl){
+        var totalUnits=fgSkus.reduce(function(a,s){return a+(s.total_remaining||0);},0);
+        countEl.textContent=fgSkus.length+' SKU'+(fgSkus.length===1?'':'s')+' • '+totalUnits+' units';
+    }
     if(!fgSkus.length){
         var msg=currentFgFilter==='all'
-            ? 'No finished goods yet. Complete daily production to generate inventory, or click "+ Baseline Inventory" to enter day-zero counts.'
+            ? 'No finished goods yet.<br>Complete daily production to generate inventory, or click <strong>Baseline Inventory</strong> to enter day-zero counts.'
             : 'No '+currentFgFilter+' finished goods.';
         container.innerHTML='<div class="empty-state">'+msg+'</div>';
         return;
@@ -640,15 +861,15 @@ async function loadFinishedGoods(){
         var keyAttr=encodeURIComponent(s.sku_key);
         var displaySafe=escSku(s.display);
         var isExpanded=(expandedSku===s.sku_key);
-        var baselineBadge=s.has_baseline?'<span style="font-size:10px;background:#b38b00;color:#fff;padding:2px 6px;border-radius:8px;font-weight:600;margin-left:6px;">BASELINE</span>':'';
+        var baselineBadge=s.has_baseline?'<span class="baseline-badge">BASELINE</span>':'';
         html+='<div class="fg-row sku-row" data-sku="'+keyAttr+'" style="cursor:pointer;">'+
               '<div class="fg-info" data-action="toggle" data-sku-key="'+keyAttr+'">'+
                 '<strong>'+displaySafe+'</strong>'+certBadge(s.certification)+baselineBadge+
-                '<br><span style="font-size:11px;color:var(--text-light);">'+lotNote+' • '+s.total_produced+' produced lifetime</span>'+
+                '<br><span style="font-size:11px;color:var(--text-light);margin-top:4px;display:inline-block;">'+lotNote+' • '+s.total_produced+' produced lifetime</span>'+
               '</div>'+
               '<div class="'+qtyClass+'">'+s.total_remaining+' remaining</div>'+
-              '<div style="margin-left:12px;">'+
-                '<button class="btn btn-primary" style="font-size:12px;padding:4px 10px;" data-action="sell" data-sku-key="'+keyAttr+'">Sell</button>'+
+              '<div>'+
+                '<button class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;padding:8px 16px;min-height:38px;" data-action="sell" data-sku-key="'+keyAttr+'">Sell</button>'+
               '</div>'+
               '</div>';
         if(isExpanded){
@@ -816,6 +1037,11 @@ async function loadSales(){
     var res=await fetch(url);
     var data=await res.json();
     var container=document.getElementById('sales-container');
+    var countEl=document.getElementById('sales-count');
+    if(countEl){
+        var totalUnits=data.reduce(function(a,s){return a+(s.quantity||0);},0);
+        countEl.textContent=data.length+' sale'+(data.length===1?'':'s')+' • '+totalUnits+' units';
+    }
     if(!data.length){
         var msg=currentSalesFilter==='all'
             ? 'No sales recorded yet.'
