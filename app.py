@@ -120,14 +120,23 @@ def require_valid_day(f):
 # ── Data helpers ───────────────────────────────────────────────────────
 def _load_tracking_modes():
     """Read tracking_modes.json directly (used during recipe migration).
-    Returns {} if missing."""
-    path = os.path.join(DATA_DIR, "organic", "tracking_modes.json")
-    if os.path.exists(path):
-        try:
-            with open(path, "r") as f:
-                return json.load(f)
-        except Exception:
-            return {}
+    Returns {} if missing.
+
+    Path note: this file moved from data/organic/ to data/inventory/ as part
+    of the universal-inventory merge. After the one-time directory rename
+    on startup, the file lives under INVENTORY_DIR. INVENTORY_DIR is defined
+    later in the module — fall back to the legacy path if not yet bound."""
+    inv_dir = globals().get("INVENTORY_DIR") or os.path.join(DATA_DIR, "inventory")
+    path = os.path.join(inv_dir, "tracking_modes.json")
+    # Legacy fallback for the brief window before the rename runs
+    legacy_path = os.path.join(DATA_DIR, "organic", "tracking_modes.json")
+    for p in (path, legacy_path):
+        if os.path.exists(p):
+            try:
+                with open(p, "r") as f:
+                    return json.load(f)
+            except Exception:
+                return {}
     return {}
 
 
@@ -405,22 +414,32 @@ def halve_ingredient(ing):
 
 
 def ingredients_match(raw_item_name, recipe_ing_name):
-    """Check if a raw material matches a recipe ingredient by name."""
+    """Strict-equivalence ingredient matcher.
+
+    Returns True if the raw material name exactly matches the recipe
+    ingredient name after normalizing case and collapsing internal whitespace.
+
+    Distinct ingredients with similar names ARE NOT matched. Examples:
+      "Organic Chicken Bones" vs "Chicken Bones"     → False
+      "Organic Chicken Bones" vs "Chicken Bones, Organic" → False
+      "Beef Bones" vs "Pasture-Raised Beef Bones"    → False
+
+    Tolerated variations (treated as equivalent):
+      "Organic Chicken Bones" vs "organic chicken bones"  → True
+      "Organic Chicken Bones" vs "ORGANIC CHICKEN BONES"  → True
+      "Organic  Chicken  Bones" vs "Organic Chicken Bones" → True (extra spaces)
+      " Organic Chicken Bones " vs "Organic Chicken Bones" → True (trim)
+
+    This strictness is intentional: each certification tier ("Organic",
+    "Pasture Raised", "Conventional") gets its own ingredient name, and we
+    never want a recipe calling for the organic version to silently pull
+    from a non-organic lot just because the names overlap word-wise.
+    """
     if not raw_item_name or not recipe_ing_name:
         return False
-    a = raw_item_name.lower().strip()
-    b = recipe_ing_name.lower().strip()
-    if a == b or a in b or b in a:
-        return True
-    # Word overlap fallback
-    filler = {"of", "the", "a", "an", "and", "or", "to", "in", "with", "fresh", "raw"}
-    a_words = set(a.split()) - filler
-    b_words = set(b.split()) - filler
-    if a_words and b_words:
-        overlap = a_words & b_words
-        if len(overlap) >= min(len(a_words), len(b_words)):
-            return True
-    return False
+    a = " ".join(raw_item_name.lower().split())
+    b = " ".join(recipe_ing_name.lower().split())
+    return a == b
 
 
 def is_untracked_ingredient(name):
@@ -1051,13 +1070,19 @@ def migrate_all_recipes():
 
     save_recipes(raw_recipes)
 
-    # Archive tracking_modes.json so it isn't reapplied on subsequent migrations
-    tm_path = os.path.join(DATA_DIR, "organic", "tracking_modes.json")
-    if os.path.exists(tm_path) and tracking_modes:
-        try:
-            os.rename(tm_path, tm_path + ".archived")
-        except OSError:
-            pass
+    # Archive tracking_modes.json so it isn't reapplied on subsequent migrations.
+    # File location: see _load_tracking_modes; supports both new and legacy paths.
+    inv_dir = globals().get("INVENTORY_DIR") or os.path.join(DATA_DIR, "inventory")
+    candidates = [
+        os.path.join(inv_dir, "tracking_modes.json"),
+        os.path.join(DATA_DIR, "organic", "tracking_modes.json"),
+    ]
+    for tm_path in candidates:
+        if os.path.exists(tm_path) and tracking_modes:
+            try:
+                os.rename(tm_path, tm_path + ".archived")
+            except OSError:
+                pass
 
     return jsonify({
         "success": True,
@@ -2108,14 +2133,87 @@ def get_production_tracker_year(year):
 
 # ── Init ──────────────────────────────────────────────────────────────
 
-# Organic data paths
-ORGANIC_DIR = os.path.join(DATA_DIR, "organic")
-ORGANIC_RAW_PATH = os.path.join(ORGANIC_DIR, "raw_materials.json")
-ORGANIC_RUNS_PATH = os.path.join(ORGANIC_DIR, "production_runs.json")
-ORGANIC_FG_PATH = os.path.join(ORGANIC_DIR, "finished_goods.json")
-ORGANIC_SALES_PATH = os.path.join(ORGANIC_DIR, "sales.json")
-ORGANIC_CONTACTS_PATH = os.path.join(ORGANIC_DIR, "contacts.json")
-os.makedirs(ORGANIC_DIR, exist_ok=True)
+# Inventory data paths.
+#
+# Historical context: prior to the universal-inventory merge (May 2026), the
+# system tracked inventory only for organic-tagged production. Files lived
+# under data/organic/. After the merge, all production tracks inventory
+# regardless of certification, and files live under data/inventory/.
+#
+# The constants below still use the ORGANIC_ prefix because they are
+# referenced in dozens of places throughout app.py; renaming them inline
+# would make this diff massive. They now point at the inventory/ paths.
+# A startup migration moves data/organic/ → data/inventory/ if needed.
+INVENTORY_DIR = os.path.join(DATA_DIR, "inventory")
+ORGANIC_DIR = INVENTORY_DIR  # legacy alias — see comment above
+ORGANIC_RAW_PATH = os.path.join(INVENTORY_DIR, "raw_materials.json")
+ORGANIC_RUNS_PATH = os.path.join(INVENTORY_DIR, "production_runs.json")
+ORGANIC_FG_PATH = os.path.join(INVENTORY_DIR, "finished_goods.json")
+ORGANIC_SALES_PATH = os.path.join(INVENTORY_DIR, "sales.json")
+ORGANIC_CONTACTS_PATH = os.path.join(INVENTORY_DIR, "contacts.json")
+
+
+def _migrate_organic_to_inventory():
+    """One-time migration: rename data/organic/ → data/inventory/ if applicable.
+
+    Idempotent: safe to call on every startup. Three states handled:
+      1. Only data/organic/ exists → rename it to data/inventory/
+      2. Only data/inventory/ exists → no action (already migrated)
+      3. Both exist → don't touch; assume manual intervention required (rare)
+      4. Neither exists → no action (fresh install)
+    """
+    legacy_path = os.path.join(DATA_DIR, "organic")
+    new_path = INVENTORY_DIR
+    legacy_exists = os.path.isdir(legacy_path)
+    new_exists = os.path.isdir(new_path)
+
+    if legacy_exists and not new_exists:
+        try:
+            os.rename(legacy_path, new_path)
+            print(f"[migration] Renamed {legacy_path} → {new_path}")
+        except Exception as e:
+            print(f"[migration] Failed to rename: {e}")
+    elif legacy_exists and new_exists:
+        # Both exist — leave alone, log a warning so admin can investigate
+        print(f"[migration] WARNING: both {legacy_path} and {new_path} exist. "
+              f"Manual review needed. Using new path.")
+
+
+_migrate_organic_to_inventory()
+os.makedirs(INVENTORY_DIR, exist_ok=True)
+
+
+def _autotag_existing_organic_data():
+    """One-time data tag: stamp existing pre-merge entries with
+    certification: 'Organic'.
+
+    Before the merge, the system only tracked organic production, so any
+    existing record without a certification field is by definition organic.
+    Idempotent — only touches records that lack the certification field.
+    Runs once per file at startup.
+    """
+    files_to_check = [
+        ORGANIC_RAW_PATH, ORGANIC_RUNS_PATH, ORGANIC_FG_PATH, ORGANIC_SALES_PATH
+    ]
+    for path in files_to_check:
+        if not os.path.exists(path):
+            continue
+        try:
+            data = _load_json(path, [])
+            if not isinstance(data, list):
+                continue
+            changed = 0
+            for entry in data:
+                if not isinstance(entry, dict):
+                    continue
+                if "certification" not in entry:
+                    entry["certification"] = "Organic"
+                    changed += 1
+            if changed:
+                _save_json(path, data)
+                print(f"[autotag] Stamped 'Organic' on {changed} entries in {path}")
+        except Exception as e:
+            print(f"[autotag] Failed for {path}: {e}")
 
 
 def _load_json(path, default=None):
@@ -2202,7 +2300,9 @@ def organic_ingredients():
     derived = {}  # key: (name_lower, unit) -> entry
 
     for rname, rdata in recipes.items():
-        if (rdata.get("certification") or "").lower() != "organic":
+        # Universal inventory: pull ingredients from every recipe regardless of
+        # certification status. Each recipe contributes its tracked ingredients.
+        if rdata.get("archived"):
             continue
         for section in INGREDIENT_SECTIONS:
             for item in rdata.get(section, []):
@@ -2286,7 +2386,13 @@ def get_raw_materials():
 @app.route("/api/organic/raw-materials", methods=["POST"])
 @login_required
 def add_raw_material():
-    """Add a raw material lot. JSON body: {item, unit, quantity, supplier, date_received, supplier_lot}"""
+    """Add a raw material lot. JSON body:
+      {item, unit, quantity, supplier, date_received, supplier_lot, baseline (optional)}
+
+    If baseline is true, the supplier_lot is auto-prefixed with 'BL-' and date,
+    and migration_baseline=true is set on the entry. These represent physical
+    counts at the moment of inventory migration, not real production receipts.
+    """
     data = request.json or {}
     materials = _load_json(ORGANIC_RAW_PATH, [])
     item = (data.get("item") or "").strip()
@@ -2298,17 +2404,26 @@ def add_raw_material():
         qty = 0
     if qty <= 0:
         return jsonify({"error": "Quantity must be greater than 0"}), 400
+
+    is_baseline = bool(data.get("baseline"))
+    supplier_lot = (data.get("supplier_lot") or "").strip()
+    if is_baseline and not supplier_lot:
+        # Auto-generate BL-DDMMYY
+        supplier_lot = "BL-" + datetime.now().strftime("%d%m%y")
+
     entry = {
         "id": datetime.now().strftime("%Y%m%d%H%M%S") + str(len(materials)),
         "item": item,
         "supplier": data.get("supplier", ""),
-        "date_received": data.get("date_received", ""),
-        "supplier_lot": data.get("supplier_lot", ""),
+        "date_received": data.get("date_received", "") or datetime.now().strftime("%Y-%m-%d"),
+        "supplier_lot": supplier_lot,
         "quantity": qty,
         "unit": data.get("unit", ""),
         "remaining": qty,
         "created_at": datetime.now().isoformat(),
     }
+    if is_baseline:
+        entry["migration_baseline"] = True
     materials.append(entry)
     _save_json(ORGANIC_RAW_PATH, materials)
     supplier = data.get("supplier", "").strip()
@@ -2675,12 +2790,12 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
     for run in runs:
         if run.get("week_id") != start_week_id or run.get("day_idx") != start_day_idx:
             continue
-        # Only process organic runs (defensive — runs are only created for organic recipes)
+        # Universal inventory: process every scheduled run, regardless of
+        # the recipe's certification status. The recipe is our source of truth
+        # for the certification tag that travels onto FG entries.
         recipe_name = run.get("recipe", "")
         recipe_data = recipes.get(recipe_name, {})
         if not recipe_data:
-            continue
-        if (recipe_data.get("certification") or "").lower() != "organic":
             continue
 
         vessel = run["vessel"]
@@ -2873,6 +2988,7 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
                 "recipe": recipe_name,
                 "brand": recipe_data.get("brand", ""),
                 "format": recipe_data.get("format", ""),
+                "certification": (recipe_data.get("certification") or "").strip(),
                 "lot": expiry_lot,
                 "quantity_produced": amount,
                 "quantity_remaining": new_remaining,
@@ -2918,21 +3034,32 @@ def _sku_display(brand, recipe, fmt):
 
 def _group_fg_by_sku(fg):
     """Aggregate FG entries into one dict per (brand, recipe, format).
-    Returns list of dicts sorted by display name."""
+    Returns list of dicts sorted by display name. Includes certification
+    inherited from any of the underlying entries (consistent within a SKU)."""
     groups = {}
+    recipes_cache = None
     for entry in fg:
         key = _sku_key(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", ""))
         if key not in groups:
+            # Pull certification from the entry itself, or look up the recipe
+            cert = (entry.get("certification") or "").strip()
+            if not cert:
+                if recipes_cache is None:
+                    recipes_cache = load_recipes()
+                rec = recipes_cache.get(entry.get("recipe") or "", {})
+                cert = (rec.get("certification") or "").strip()
             groups[key] = {
                 "sku_key": key,
                 "brand": entry.get("brand", ""),
                 "recipe": entry.get("recipe", ""),
                 "format": entry.get("format", ""),
+                "certification": cert,
                 "display": _sku_display(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", "")),
                 "total_produced": 0,
                 "total_remaining": 0,
                 "lot_count": 0,
                 "active_lot_count": 0,
+                "has_baseline": False,
             }
         g = groups[key]
         try:
@@ -2940,6 +3067,8 @@ def _group_fg_by_sku(fg):
             g["total_remaining"] += int(entry.get("quantity_remaining") or 0)
         except (ValueError, TypeError):
             pass
+        if entry.get("migration_baseline"):
+            g["has_baseline"] = True
 
     # Compute lot counts per group (distinct LOT#s)
     lots_per_group = {}
@@ -3140,14 +3269,71 @@ def adjust_lot_remaining():
                     "new_total": new_remaining, "warnings": warnings})
 
 
+@app.route("/api/organic/finished-goods/baseline", methods=["POST"])
+@login_required
+def add_baseline_finished_good():
+    """Add a baseline (day-zero migration) FG entry. JSON body:
+      {recipe, quantity, lot (optional, defaults to BL-DDMMYY)}
+
+    The recipe must exist in the recipes file — we look it up to populate
+    brand, format, and certification automatically. The entry is flagged
+    with migration_baseline=true and uses a sentinel vessel='Pre-migration'.
+    """
+    data = request.json or {}
+    recipe_name = (data.get("recipe") or "").strip()
+    if not recipe_name:
+        return jsonify({"error": "recipe required"}), 400
+    try:
+        qty = int(data.get("quantity") or 0)
+    except (ValueError, TypeError):
+        qty = 0
+    if qty <= 0:
+        return jsonify({"error": "Quantity must be greater than 0"}), 400
+
+    recipes = load_recipes()
+    recipe = recipes.get(recipe_name)
+    if not recipe:
+        return jsonify({"error": f"Recipe '{recipe_name}' not found"}), 404
+
+    lot = (data.get("lot") or "").strip() or ("BL-" + datetime.now().strftime("%d%m%y"))
+
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    entry = {
+        "id": "fg_baseline_" + datetime.now().strftime("%Y%m%d%H%M%S") + str(len(fg)),
+        "recipe": recipe_name,
+        "brand": (recipe.get("brand") or "").strip(),
+        "format": (recipe.get("format") or "").strip(),
+        "certification": (recipe.get("certification") or "").strip(),
+        "lot": lot,
+        "quantity_produced": qty,
+        "quantity_remaining": qty,
+        "vessel": "Pre-migration",
+        "week_id": None,
+        "day_idx": None,
+        "created_at": datetime.now().isoformat(),
+        "migration_baseline": True,
+    }
+    fg.append(entry)
+    _save_json(ORGANIC_FG_PATH, fg)
+    return jsonify({"success": True, "entry": entry})
+
+
 @app.route("/api/organic/finished-goods/grouped", methods=["GET"])
 @login_required
 def get_finished_goods_grouped():
     """Returns one row per SKU (brand+recipe+format). Each row aggregates total
     produced and remaining across all kettles + LOTs. Use this for the inventory
-    list view; click a row and call /sku/<key> for LOT-level detail."""
+    list view; click a row and call /sku/<key> for LOT-level detail.
+
+    Optional query parameter: ?certification=Organic|Pasture Raised|Conventional
+    filters to one tier. Default is no filter (all certifications)."""
     fg = _load_json(ORGANIC_FG_PATH, [])
-    return jsonify(_group_fg_by_sku(fg))
+    grouped = _group_fg_by_sku(fg)
+    cert_filter = (request.args.get("certification") or "").strip()
+    if cert_filter:
+        grouped = [g for g in grouped
+                   if (g.get("certification") or "").lower() == cert_filter.lower()]
+    return jsonify(grouped)
 
 
 @app.route("/api/organic/finished-goods/sku/<path:sku_key>", methods=["GET"])
@@ -3184,7 +3370,15 @@ def get_finished_goods_sku_detail(sku_key):
 @app.route("/api/organic/sales", methods=["GET"])
 @login_required
 def get_organic_sales():
-    return jsonify(_load_json(ORGANIC_SALES_PATH, []))
+    """Return sales records. Optional query param ?certification=X filters
+    to that tier. Sale records carry the certification of the SKU sold,
+    derived from the recipe at creation time."""
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    cert_filter = (request.args.get("certification") or "").strip()
+    if cert_filter:
+        sales = [s for s in sales
+                 if (s.get("certification") or "").lower() == cert_filter.lower()]
+    return jsonify(sales)
 
 
 @app.route("/api/organic/sales", methods=["POST"])
@@ -3296,12 +3490,25 @@ def add_organic_sale():
             "breakdown": [{"fg_id": fg_entry.get("id"), "quantity": quantity}],
         }]
 
+    # Determine certification from the FG entry(ies) we deducted from
+    # (consistent within a SKU, so we can pull from the first one).
+    sale_cert = ""
+    for lot_entry in sale_lots:
+        for b in (lot_entry.get("breakdown") or []):
+            target = next((f for f in fg if f.get("id") == b.get("fg_id")), None)
+            if target and target.get("certification"):
+                sale_cert = target["certification"]
+                break
+        if sale_cert:
+            break
+
     sale = {
         "id": datetime.now().strftime("%Y%m%d%H%M%S") + str(len(sales)),
         "sku_key": sku_key or _sku_key(brand, recipe, fmt),
         "brand": brand,
         "recipe": recipe,
         "format": fmt,
+        "certification": sale_cert,
         "quantity": quantity,
         "lots": sale_lots,
         # Convenience fields for legacy display
@@ -3400,6 +3607,7 @@ def _migrate_legacy_sales():
 
 
 _migrate_legacy_sales()
+_autotag_existing_organic_data()
 
 
 # ── Organic: Search / Trace ──────────────────────────────────────────
@@ -3485,7 +3693,11 @@ def _check_organic_schedule(week_id, schedule):
             if not recipe_name:
                 continue
             recipe_data = recipes.get(recipe_name) or {}
-            if (recipe_data.get("certification") or "").lower() != "organic":
+            # Universal inventory: every scheduled recipe gets a production run
+            # tracked, regardless of certification (Organic, Pasture Raised,
+            # Conventional, or untagged). The certification flows from the
+            # recipe to the FG entry at completion time.
+            if not recipe_data:
                 continue
             desired[(day_idx, vessel)] = recipe_name
 

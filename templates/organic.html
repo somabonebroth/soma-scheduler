@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" sizes="192x192" href="/static/logo-192.png">
 <link rel="apple-touch-icon" sizes="512x512" href="/static/logo-512.png">
 <!-- /PWA tags -->
-<title>Soma - Organic Certification</title>
+<title>Soma - Inventory</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
 .tab-bar { display: flex; gap: 0; margin-bottom: 20px; overflow-x: auto; }
@@ -64,7 +64,7 @@
 <body>
 <div class="header">
     <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-    <div class="header-text"><h1>Organic Certification</h1><p>Chain of custody tracking</p></div>
+    <div class="header-text"><h1>Inventory</h1><p>Raw materials, finished goods & traceability</p></div>
     <div class="header-right"><a href="/" class="header-btn">Back to Dashboard</a></div>
 </div>
 <div class="main">
@@ -91,15 +91,16 @@
             </div>
             <div id="rm-info" style="font-size:11px;color:var(--text-light);margin-bottom:8px;"></div>
             <button class="btn btn-primary" onclick="addRawMaterial()">Add to Inventory</button>
+            <button class="btn btn-outline" style="margin-left:8px;" onclick="addBaselineRawMaterial()">+ Baseline Lot</button>
             <button class="btn btn-outline" style="margin-left:8px;" onclick="addCustomIngredient()">+ New Ingredient</button>
             <div id="rm-status" class="status" style="margin-top:10px;"></div>
         </div>
         <div class="card">
-            <h2>Current Inventory <span class="organic-badge">Organic</span></h2>
+            <h2>Current Inventory</h2>
             <div id="rm-table-container"><div class="empty-state">Loading...</div></div>
         </div>
         <div class="card">
-            <h2>Invoices <span class="organic-badge">Organic</span></h2>
+            <h2>Invoices</h2>
             <p style="font-size:11px;color:var(--text-light);margin-bottom:10px;">Upload supplier invoices and link them to one or more LOT#s for traceability.</p>
             <div class="form-row">
                 <div class="form-field"><label>Supplier</label><input id="inv-supplier" list="supplier-list" placeholder="Supplier name"></div>
@@ -134,7 +135,7 @@
     <!-- TAB 2: Production Runs -->
     <div class="tab-content" id="tab-runs">
         <div class="card">
-            <h2>Organic Production Runs</h2>
+            <h2>Production Runs</h2>
             <p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Auto-populated when organic recipes are scheduled. Raw materials deducted when daily production is completed.</p>
             <div id="runs-container"><div class="empty-state">Loading...</div></div>
         </div>
@@ -143,12 +144,25 @@
     <!-- TAB 3: Finished Goods -->
     <div class="tab-content" id="tab-fg">
         <div class="card">
-            <h2>Finished Goods Inventory <span class="organic-badge">Organic</span></h2>
+            <h2>Finished Goods Inventory</h2>
             <p style="font-size:11px;color:var(--text-light);margin-bottom:10px;">One row per SKU (brand + recipe + format). Click a row to see LOT-level FIFO detail. Use the Sell button to deduct from inventory — sales draw from the oldest LOT first.</p>
+            <div class="filter-bar" style="margin-bottom:10px;">
+                <button class="filter-btn active" data-fg-filter="all" onclick="setFgFilter('all',this)">All</button>
+                <button class="filter-btn" data-fg-filter="Organic" onclick="setFgFilter('Organic',this)">Organic</button>
+                <button class="filter-btn" data-fg-filter="Pasture Raised" onclick="setFgFilter('Pasture Raised',this)">Pasture Raised</button>
+                <button class="filter-btn" data-fg-filter="Conventional" onclick="setFgFilter('Conventional',this)">Conventional</button>
+            </div>
+            <button class="btn btn-outline" style="margin-bottom:10px;font-size:12px;" onclick="addBaselineFinishedGood()">+ Baseline Inventory</button>
             <div id="fg-container"><div class="empty-state">Loading...</div></div>
         </div>
         <div class="card">
             <h2>Sales History</h2>
+            <div class="filter-bar" style="margin-bottom:10px;">
+                <button class="filter-btn active" data-sales-filter="all" onclick="setSalesFilter('all',this)">All</button>
+                <button class="filter-btn" data-sales-filter="Organic" onclick="setSalesFilter('Organic',this)">Organic</button>
+                <button class="filter-btn" data-sales-filter="Pasture Raised" onclick="setSalesFilter('Pasture Raised',this)">Pasture Raised</button>
+                <button class="filter-btn" data-sales-filter="Conventional" onclick="setSalesFilter('Conventional',this)">Conventional</button>
+            </div>
             <div id="sales-container"><div class="empty-state">Loading...</div></div>
         </div>
     </div>
@@ -260,8 +274,9 @@ async function loadRawMaterials(){
     var html='<table class="inv-table"><tr><th>Item</th><th>Supplier</th><th>Received</th><th>LOT#</th><th>Qty</th><th>Remaining</th><th>Unit</th><th></th></tr>';
     data.forEach(function(m){
         var remClass=m.remaining<0?'negative':m.remaining===0?'low':'';
+        var baselineBadge=m.migration_baseline?'<span style="font-size:9px;background:#b38b00;color:#fff;padding:1px 5px;border-radius:6px;font-weight:600;margin-left:6px;vertical-align:middle;">BASELINE</span>':'';
         html+='<tr>'+
-              '<td>'+escSku(m.item)+'</td>'+
+              '<td>'+escSku(m.item)+baselineBadge+'</td>'+
               '<td>'+escSku(m.supplier)+'</td>'+
               '<td>'+escSku(m.date_received)+'</td>'+
               '<td>'+escSku(m.supplier_lot)+'</td>'+
@@ -464,6 +479,74 @@ async function addCustomIngredient(){
     alert('Added: '+name.trim()+' — '+unit.trim());
 }
 
+async function addBaselineRawMaterial(){
+    // Quick day-zero entry: pick existing ingredient + qty.
+    // Auto-stamps BL-DDMMYY lot and migration_baseline:true.
+    var sel=document.getElementById('rm-item');
+    var idx=parseInt(sel.value);
+    if(isNaN(idx)||!ingredientData[idx]){
+        alert('Pick an ingredient from the dropdown first, then click "+ Baseline Lot".');
+        return;
+    }
+    var item=ingredientData[idx];
+    var qty=prompt('Baseline quantity for '+item.name+' ('+(item.unit||'')+'):');
+    if(qty===null)return;
+    qty=parseFloat(qty);
+    if(isNaN(qty)||qty<=0){alert('Enter a positive number.');return;}
+    var body={
+        item:item.name,
+        supplier:'(physical count)',
+        quantity:qty,
+        unit:item.unit||'',
+        baseline:true,
+    };
+    var res=await fetch('/api/organic/raw-materials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    var data=await res.json();
+    var st=document.getElementById('rm-status');
+    if(data.success){
+        st.className='status success';
+        st.textContent='Baseline added: '+qty+' '+(item.unit||'')+' of '+item.name+' (LOT '+data.entry.supplier_lot+')';
+        loadRawMaterials();
+    }else{
+        st.className='status error';
+        st.textContent=data.error||'Failed';
+    }
+}
+
+var allRecipesForBaseline=null;
+async function addBaselineFinishedGood(){
+    if(!allRecipesForBaseline){
+        try{
+            allRecipesForBaseline=await(await fetch('/api/recipes')).json();
+        }catch(e){alert('Could not load recipes.');return;}
+    }
+    var names=Object.keys(allRecipesForBaseline).filter(function(n){return !allRecipesForBaseline[n].archived;}).sort();
+    if(!names.length){alert('No recipes found.');return;}
+
+    // Build a numbered prompt — simpler than building a modal for one-time use
+    var listText=names.map(function(n,i){return (i+1)+'. '+n;}).join('\n');
+    var pick=prompt('Pick a recipe by number:\n\n'+listText+'\n\nEnter number:');
+    if(pick===null)return;
+    var n=parseInt(pick);
+    if(isNaN(n)||n<1||n>names.length){alert('Invalid selection.');return;}
+    var recipeName=names[n-1];
+
+    var qty=prompt('Baseline units of '+recipeName+' on hand:');
+    if(qty===null)return;
+    qty=parseInt(qty);
+    if(isNaN(qty)||qty<=0){alert('Enter a positive integer.');return;}
+
+    var body={recipe:recipeName,quantity:qty};
+    var res=await fetch('/api/organic/finished-goods/baseline',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    var data=await res.json();
+    if(data.success){
+        alert('Baseline added: '+qty+' units of '+recipeName+' (LOT '+data.entry.lot+')');
+        loadFinishedGoods();
+    }else{
+        alert(data.error||'Failed');
+    }
+}
+
 // ── Production Runs ──
 async function loadRuns(){
     var res=await fetch('/api/organic/production-runs');
@@ -503,11 +586,47 @@ var expandedSku=null;
 
 function escSku(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
+var currentFgFilter='all';
+var currentSalesFilter='all';
+
+function setFgFilter(f,btn){
+    currentFgFilter=f;
+    document.querySelectorAll('[data-fg-filter]').forEach(function(b){b.classList.remove('active');});
+    if(btn)btn.classList.add('active');
+    loadFinishedGoods();
+}
+
+function setSalesFilter(f,btn){
+    currentSalesFilter=f;
+    document.querySelectorAll('[data-sales-filter]').forEach(function(b){b.classList.remove('active');});
+    if(btn)btn.classList.add('active');
+    loadSales();
+}
+
+function certBadge(cert){
+    if(!cert)return '';
+    var bg='#999',lc=(cert||'').toLowerCase();
+    if(lc==='organic')bg='#2e7d32';
+    else if(lc==='pasture raised')bg='#0288d1';
+    else if(lc==='conventional')bg='#757575';
+    return '<span style="font-size:10px;background:'+bg+';color:#fff;padding:2px 6px;border-radius:8px;font-weight:600;margin-left:6px;">'+cert+'</span>';
+}
+
 async function loadFinishedGoods(){
-    var res=await fetch('/api/organic/finished-goods/grouped');
+    var url='/api/organic/finished-goods/grouped';
+    if(currentFgFilter && currentFgFilter!=='all'){
+        url+='?certification='+encodeURIComponent(currentFgFilter);
+    }
+    var res=await fetch(url);
     fgSkus=await res.json();
     var container=document.getElementById('fg-container');
-    if(!fgSkus.length){container.innerHTML='<div class="empty-state">No finished goods yet. Complete organic daily production to generate inventory.</div>';return;}
+    if(!fgSkus.length){
+        var msg=currentFgFilter==='all'
+            ? 'No finished goods yet. Complete daily production to generate inventory, or click "+ Baseline Inventory" to enter day-zero counts.'
+            : 'No '+currentFgFilter+' finished goods.';
+        container.innerHTML='<div class="empty-state">'+msg+'</div>';
+        return;
+    }
     var html='';
     fgSkus.forEach(function(s){
         var qtyClass=s.total_remaining<=0?'fg-qty':(s.total_remaining<10?'fg-qty':'fg-qty');
@@ -521,9 +640,10 @@ async function loadFinishedGoods(){
         var keyAttr=encodeURIComponent(s.sku_key);
         var displaySafe=escSku(s.display);
         var isExpanded=(expandedSku===s.sku_key);
+        var baselineBadge=s.has_baseline?'<span style="font-size:10px;background:#b38b00;color:#fff;padding:2px 6px;border-radius:8px;font-weight:600;margin-left:6px;">BASELINE</span>':'';
         html+='<div class="fg-row sku-row" data-sku="'+keyAttr+'" style="cursor:pointer;">'+
               '<div class="fg-info" data-action="toggle" data-sku-key="'+keyAttr+'">'+
-                '<strong>'+displaySafe+'</strong>'+
+                '<strong>'+displaySafe+'</strong>'+certBadge(s.certification)+baselineBadge+
                 '<br><span style="font-size:11px;color:var(--text-light);">'+lotNote+' • '+s.total_produced+' produced lifetime</span>'+
               '</div>'+
               '<div class="'+qtyClass+'">'+s.total_remaining+' remaining</div>'+
@@ -689,10 +809,19 @@ async function submitSale(){
 
 // ── Sales ──
 async function loadSales(){
-    var res=await fetch('/api/organic/sales');
+    var url='/api/organic/sales';
+    if(currentSalesFilter && currentSalesFilter!=='all'){
+        url+='?certification='+encodeURIComponent(currentSalesFilter);
+    }
+    var res=await fetch(url);
     var data=await res.json();
     var container=document.getElementById('sales-container');
-    if(!data.length){container.innerHTML='<div class="empty-state">No sales recorded yet.</div>';return;}
+    if(!data.length){
+        var msg=currentSalesFilter==='all'
+            ? 'No sales recorded yet.'
+            : 'No '+currentSalesFilter+' sales recorded.';
+        container.innerHTML='<div class="empty-state">'+msg+'</div>';return;
+    }
     data.sort(function(a,b){return(b.created_at||'').localeCompare(a.created_at||'');});
     var html='<table class="inv-table"><tr><th>Date</th><th>Product</th><th>LOT#(s)</th><th>Qty</th><th>Buyer</th><th>Case LOT#</th><th></th></tr>';
     data.forEach(function(s){
@@ -705,7 +834,8 @@ async function loadSales(){
             lotsDisplay=s.fg_lot||'';
         }
         var product=(s.brand?s.brand+'-':'')+s.recipe;
-        html+='<tr><td>'+(s.sale_date||'')+'</td><td>'+escSku(product)+'</td><td>'+escSku(lotsDisplay)+'</td><td>'+s.quantity+'</td><td>'+escSku(s.buyer||'')+'</td><td>'+escSku(s.case_lot||'—')+'</td><td><button class="btn-danger" onclick="deleteSale(\''+s.id+'\')">Del</button></td></tr>';
+        var productCell=escSku(product)+certBadge(s.certification);
+        html+='<tr><td>'+(s.sale_date||'')+'</td><td>'+productCell+'</td><td>'+escSku(lotsDisplay)+'</td><td>'+s.quantity+'</td><td>'+escSku(s.buyer||'')+'</td><td>'+escSku(s.case_lot||'—')+'</td><td><button class="btn-danger" onclick="deleteSale(\''+s.id+'\')">Del</button></td></tr>';
     });
     html+='</table>';
     container.innerHTML=html;

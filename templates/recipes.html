@@ -89,7 +89,12 @@
     </div>
     <div class="card">
         <h2>All Recipes (<span id="recipe-count">0</span>)</h2>
-        <div class="filter-bar"><button class="filter-btn active" onclick="setFilter('all',this)">All</button><button class="filter-btn" onclick="setFilter('organic',this)">Organic</button></div>
+        <div class="filter-bar">
+            <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+            <button class="filter-btn" onclick="setFilter('Organic',this)">Organic</button>
+            <button class="filter-btn" onclick="setFilter('Pasture Raised',this)">Pasture Raised</button>
+            <button class="filter-btn" onclick="setFilter('Conventional',this)">Conventional</button>
+        </div>
         <p style="font-size:11px;color:var(--text-light);margin-bottom:10px;">Drag to reorder brands and recipes.</p>
         <div id="recipe-list"></div>
     </div>
@@ -105,19 +110,33 @@ function setFilter(f,btn){currentFilter=f;document.querySelectorAll('.filter-btn
 
 function renderList(){
     var container=document.getElementById('recipe-list');var names=Object.keys(recipes);
-    var filtered=names;if(currentFilter==='organic')filtered=names.filter(function(n){return(recipes[n].certification||'').toLowerCase()==='organic';});
+    var filtered=names;
+    if(currentFilter && currentFilter!=='all'){
+        filtered=names.filter(function(n){
+            return(recipes[n].certification||'').toLowerCase()===currentFilter.toLowerCase();
+        });
+    }
     // Split active vs archived
     var activeNames=filtered.filter(function(n){return !recipes[n].archived;});
     var archivedNames=filtered.filter(function(n){return !!recipes[n].archived;});
     document.getElementById('recipe-count').textContent=activeNames.length;
-    if(!activeNames.length && !archivedNames.length){container.innerHTML='<p style="color:var(--text-light)">No recipes'+(currentFilter==='organic'?' with Organic certification':'')+'</p>';return;}
+    if(!activeNames.length && !archivedNames.length){container.innerHTML='<p style="color:var(--text-light)">No recipes'+(currentFilter!=='all'?' with '+currentFilter+' certification':'')+'</p>';return;}
 
     function renderBrandGroup(brand,items,archived){
         var brandSafe=brand.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
         var html='<div class="brand-group" data-brand="'+brandSafe+'"><div class="brand-header"'+(archived?'':' draggable="true"')+' data-brand-drag="'+brandSafe+'"><span class="brand-label">'+brand+'</span></div>';
         items.forEach(function(name){
             var r=recipes[name];var nameSafe=name.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-            var cert=r.certification&&r.certification.toLowerCase()==='organic'?'<span class="organic-badge">Organic</span>':'';
+            var certVal=(r.certification||'').trim();
+            var cert='';
+            if(certVal){
+                var bg='#999',fg='#fff';
+                var lc=certVal.toLowerCase();
+                if(lc==='organic'){bg='#2e7d32';fg='#fff';}
+                else if(lc==='pasture raised'){bg='#0288d1';fg='#fff';}
+                else if(lc==='conventional'){bg='#757575';fg='#fff';}
+                cert='<span class="cert-badge" style="font-size:10px;background:'+bg+';color:'+fg+';padding:2px 6px;border-radius:8px;font-weight:600;margin-left:6px;">'+certVal+'</span>';
+            }
             var archBadge=archived?'<span style="font-size:10px;background:#999;color:#fff;padding:2px 6px;border-radius:8px;margin-left:6px;">Archived</span>':'';
             html+='<div class="recipe-list-item"'+(archived?' style="opacity:0.7;"':' draggable="true"')+' data-recipe-name="'+nameSafe+'" data-recipe-brand="'+brandSafe+'">';
             html+='<div class="recipe-info"><div class="recipe-name">'+(archived?'':'<span class="drag-handle">&#9776;</span>')+name+cert+archBadge+'</div><div class="recipe-meta">'+(r.format||'')+' | Target: '+(r.yield||'--')+' units</div></div>';
@@ -372,7 +391,15 @@ function buildEditForm(name,r){
     html+='<div class="edit-field"><label>Recipe Name</label><input id="e-name" value="'+esc(name||'')+'" placeholder="e.g. Liquid Gold"></div>';
     html+='<div class="edit-field"><label>Format</label><input id="e-format" value="'+esc((r&&r.format)||'')+'" placeholder="SS-876ML, FZ-750ML, SS-750ML"></div>';
     html+='<div class="edit-field"><label>Target Yield</label><input type="number" id="e-yield" value="'+((r&&r.yield)||'')+'" placeholder="150"></div>';
-    html+='<div class="edit-field"><label>Certification</label><select id="e-cert"><option value=""'+(!(r&&r.certification)?' selected':'')+'>None</option><option value="Organic"'+((r&&r.certification&&r.certification.toLowerCase()==='organic')?' selected':'')+'>Organic</option></select></div>';
+    html+='<div class="edit-field"><label>Certification</label><select id="e-cert">';
+    var certCurrent=(r&&r.certification)||'';
+    var certOpts=['','Organic','Pasture Raised','Conventional'];
+    certOpts.forEach(function(opt){
+        var label=opt||'None';
+        var selected=(certCurrent.toLowerCase()===opt.toLowerCase())?' selected':'';
+        html+='<option value="'+esc(opt)+'"'+selected+'>'+esc(label)+'</option>';
+    });
+    html+='</select></div>';
     html+='<div class="edit-field"><label>Special Instructions (one per line)</label><textarea id="e-special">'+esc(((r&&r.special_instructions)||[]).join('\n'))+'</textarea></div>';
     html+=ingSectionHTML('overnight','Kettle Overnight',(r&&r.kettle_overnight)||[]);
     html+=ingSectionHTML('skim','After Skim',(r&&r.after_skim)||[]);
