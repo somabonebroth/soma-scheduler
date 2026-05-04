@@ -2151,6 +2151,10 @@ ORGANIC_RUNS_PATH = os.path.join(INVENTORY_DIR, "production_runs.json")
 ORGANIC_FG_PATH = os.path.join(INVENTORY_DIR, "finished_goods.json")
 ORGANIC_SALES_PATH = os.path.join(INVENTORY_DIR, "sales.json")
 ORGANIC_CONTACTS_PATH = os.path.join(INVENTORY_DIR, "contacts.json")
+# Manual inventory adjustments log (additions and subtractions outside of
+# production runs and sales). Each entry records what changed, why, and
+# which LOT(s) were drained or created. Used for audit traceability.
+ADJUSTMENTS_PATH = os.path.join(INVENTORY_DIR, "adjustments.json")
 
 
 def _migrate_organic_to_inventory():
@@ -3035,7 +3039,12 @@ def _sku_display(brand, recipe, fmt):
 def _group_fg_by_sku(fg):
     """Aggregate FG entries into one dict per (brand, recipe, format).
     Returns list of dicts sorted by display name. Includes certification
-    inherited from any of the underlying entries (consistent within a SKU)."""
+    inherited from any of the underlying entries (consistent within a SKU).
+
+    NOTE: this only includes SKUs that have at least one FG entry. For the
+    inventory list view (where we want to show every active recipe even with
+    zero stock), use `_group_fg_with_catalog` instead.
+    """
     groups = {}
     recipes_cache = None
     for entry in fg:
@@ -3088,6 +3097,53 @@ def _group_fg_by_sku(fg):
 
     out = list(groups.values())
     out.sort(key=lambda r: (r["brand"], r["recipe"], r["format"]))
+    return out
+
+
+def _group_fg_with_catalog(fg, recipes):
+    """Like _group_fg_by_sku, but joins against the recipe catalog so EVERY
+    active (non-archived) recipe appears as a SKU, even ones with zero stock
+    or no production history. SKUs with no FG entries get total_produced=0,
+    total_remaining=0, and certification pulled from the recipe definition.
+
+    This is the source for the inventory list view: a complete product
+    catalog with current stock levels next to each row.
+    """
+    base = {g["sku_key"]: g for g in _group_fg_by_sku(fg)}
+
+    # Add catalog entries for any active recipe NOT already in base
+    for recipe_name, recipe in (recipes or {}).items():
+        if recipe.get("archived"):
+            continue
+        brand = (recipe.get("brand") or "").strip()
+        fmt = (recipe.get("format") or "").strip()
+        cert = (recipe.get("certification") or "").strip()
+        key = _sku_key(brand, recipe_name, fmt)
+        if key in base:
+            # Existing FG group — just ensure cert is set if it was missing
+            if not base[key].get("certification") and cert:
+                base[key]["certification"] = cert
+            continue
+        # No FG entries for this recipe — synthesize a zero-stock catalog row
+        base[key] = {
+            "sku_key": key,
+            "brand": brand,
+            "recipe": recipe_name,
+            "format": fmt,
+            "certification": cert,
+            "display": _sku_display(brand, recipe_name, fmt),
+            "total_produced": 0,
+            "total_remaining": 0,
+            "lot_count": 0,
+            "active_lot_count": 0,
+            "has_baseline": False,
+            "catalog_only": True,  # signal: never produced or all entries deleted
+        }
+
+    out = list(base.values())
+    out.sort(key=lambda r: ((r.get("brand") or "").lower(),
+                            (r.get("recipe") or "").lower(),
+                            r.get("format") or ""))
     return out
 
 
@@ -3318,17 +3374,188 @@ def add_baseline_finished_good():
     return jsonify({"success": True, "entry": entry})
 
 
+# ── Manual inventory adjustments ────────────────────────────────────
+# These cover everyday cases AFTER day-zero migration: returns, found stock,
+# breakage, spillage, theft, sampling, donations, recount discrepancies.
+# Distinct from baseline (one-time) and from production runs (auto).
+
+VALID_ADD_REASONS = ["Found stock", "Distributor return", "Recount", "Other"]
+VALID_SUBTRACT_REASONS = [
+    "Spillage", "Waste", "Theft", "Sample", "Donation", "Recount", "Other"
+]
+
+
+def _record_adjustment(record):
+    """Append an adjustment record to the audit log."""
+    log = _load_json(ADJUSTMENTS_PATH, [])
+    log.append(record)
+    _save_json(ADJUSTMENTS_PATH, log)
+
+
+@app.route("/api/organic/finished-goods/manual-add", methods=["POST"])
+@login_required
+def manual_add_finished_good():
+    """Add inventory to a SKU outside of production. Body:
+      {recipe, quantity, lot (optional), reason, notes (optional)}
+
+    Use cases: distributor return, found stock, recount-up correction.
+    Auto-generates LOT 'MAN-DDMMYY' if not supplied. Records full audit
+    entry in adjustments.json. Stamps manual_addition=true on the FG entry."""
+    data = request.json or {}
+    recipe_name = (data.get("recipe") or "").strip()
+    if not recipe_name:
+        return jsonify({"error": "recipe required"}), 400
+    try:
+        qty = int(data.get("quantity") or 0)
+    except (ValueError, TypeError):
+        qty = 0
+    if qty <= 0:
+        return jsonify({"error": "Quantity must be greater than 0"}), 400
+
+    recipes = load_recipes()
+    recipe = recipes.get(recipe_name)
+    if not recipe:
+        return jsonify({"error": f"Recipe '{recipe_name}' not found"}), 404
+
+    reason = (data.get("reason") or "Other").strip()
+    notes = (data.get("notes") or "").strip()
+    lot = (data.get("lot") or "").strip() or ("MAN-" + datetime.now().strftime("%d%m%y"))
+
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    entry_id = "fg_manual_" + datetime.now().strftime("%Y%m%d%H%M%S") + str(len(fg))
+    entry = {
+        "id": entry_id,
+        "recipe": recipe_name,
+        "brand": (recipe.get("brand") or "").strip(),
+        "format": (recipe.get("format") or "").strip(),
+        "certification": (recipe.get("certification") or "").strip(),
+        "lot": lot,
+        "quantity_produced": qty,
+        "quantity_remaining": qty,
+        "vessel": "Manual entry",
+        "week_id": None,
+        "day_idx": None,
+        "created_at": datetime.now().isoformat(),
+        "manual_addition": True,
+    }
+    fg.append(entry)
+    _save_json(ORGANIC_FG_PATH, fg)
+
+    _record_adjustment({
+        "id": "adj_" + datetime.now().strftime("%Y%m%d%H%M%S") + str(qty),
+        "kind": "add",
+        "recipe": recipe_name,
+        "brand": entry["brand"],
+        "format": entry["format"],
+        "quantity": qty,
+        "lot": lot,
+        "fg_id": entry_id,
+        "reason": reason,
+        "notes": notes,
+        "created_at": datetime.now().isoformat(),
+    })
+
+    return jsonify({"success": True, "entry": entry, "lot": lot})
+
+
+@app.route("/api/organic/finished-goods/manual-subtract", methods=["POST"])
+@login_required
+def manual_subtract_finished_good():
+    """Drain inventory from a SKU via FIFO across its LOTs. Body:
+      {recipe, quantity, reason, notes (optional)}
+
+    Use cases: spillage, breakage, theft, samples, donations.
+    Drains oldest LOTs first (matching the sales FIFO logic). Records
+    full audit entry in adjustments.json including which LOTs were drained.
+    Returns 400 if requested quantity exceeds available stock."""
+    data = request.json or {}
+    recipe_name = (data.get("recipe") or "").strip()
+    if not recipe_name:
+        return jsonify({"error": "recipe required"}), 400
+    try:
+        qty = int(data.get("quantity") or 0)
+    except (ValueError, TypeError):
+        qty = 0
+    if qty <= 0:
+        return jsonify({"error": "Quantity must be greater than 0"}), 400
+
+    reason = (data.get("reason") or "").strip()
+    if not reason:
+        return jsonify({"error": "reason required"}), 400
+    notes = (data.get("notes") or "").strip()
+
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    # Find all entries for this recipe, sorted oldest-first for FIFO
+    matching = [f for f in fg if (f.get("recipe") or "") == recipe_name and int(f.get("quantity_remaining") or 0) > 0]
+    matching.sort(key=lambda f: (f.get("created_at") or ""))
+
+    available = sum(int(f.get("quantity_remaining") or 0) for f in matching)
+    if qty > available:
+        return jsonify({
+            "error": f"Insufficient stock: requested {qty}, available {available}",
+            "available": available,
+        }), 400
+
+    drained = []
+    remaining_to_drain = qty
+    for entry in matching:
+        if remaining_to_drain <= 0:
+            break
+        avail = int(entry.get("quantity_remaining") or 0)
+        take = min(avail, remaining_to_drain)
+        entry["quantity_remaining"] = avail - take
+        drained.append({
+            "fg_id": entry.get("id"),
+            "lot": entry.get("lot"),
+            "quantity": take,
+        })
+        remaining_to_drain -= take
+
+    _save_json(ORGANIC_FG_PATH, fg)
+
+    _record_adjustment({
+        "id": "adj_" + datetime.now().strftime("%Y%m%d%H%M%S") + str(qty),
+        "kind": "subtract",
+        "recipe": recipe_name,
+        "quantity": qty,
+        "drained": drained,
+        "reason": reason,
+        "notes": notes,
+        "created_at": datetime.now().isoformat(),
+    })
+
+    return jsonify({
+        "success": True,
+        "quantity_removed": qty,
+        "drained": drained,
+        "remaining_total": available - qty,
+    })
+
+
+@app.route("/api/organic/adjustments", methods=["GET"])
+@login_required
+def get_adjustments():
+    """Return the full audit log of manual adjustments (additions + subtractions)."""
+    return jsonify(_load_json(ADJUSTMENTS_PATH, []))
+
+
 @app.route("/api/organic/finished-goods/grouped", methods=["GET"])
 @login_required
 def get_finished_goods_grouped():
-    """Returns one row per SKU (brand+recipe+format). Each row aggregates total
-    produced and remaining across all kettles + LOTs. Use this for the inventory
-    list view; click a row and call /sku/<key> for LOT-level detail.
+    """Returns one row per SKU (brand+recipe+format), joined against the recipe
+    catalog so EVERY active recipe shows up — even ones with zero stock or no
+    production history. Each existing-stock row aggregates total produced and
+    remaining across all kettles + LOTs. Catalog-only rows have catalog_only=true
+    and total_remaining=0.
+
+    Use this for the inventory list view; click a row and call /sku/<key> for
+    LOT-level detail.
 
     Optional query parameter: ?certification=Organic|Pasture Raised|Conventional
     filters to one tier. Default is no filter (all certifications)."""
     fg = _load_json(ORGANIC_FG_PATH, [])
-    grouped = _group_fg_by_sku(fg)
+    recipes = load_recipes()
+    grouped = _group_fg_with_catalog(fg, recipes)
     cert_filter = (request.args.get("certification") or "").strip()
     if cert_filter:
         grouped = [g for g in grouped

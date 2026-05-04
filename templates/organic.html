@@ -255,6 +255,13 @@ body.inv-page .fg-info .lot-tag { font-size: 11px; background: var(--dark); colo
 body.inv-page .fg-qty { font-size: 16px; font-weight: 700; color: var(--accent); white-space: nowrap; }
 body.inv-page .fg-qty.negative { color: #dc3545; }
 
+/* Modal action footer */
+body.inv-page .modal-actions {
+    display: flex; justify-content: flex-end; gap: 10px;
+    margin-top: 8px; padding-top: 14px;
+    border-top: 1px solid var(--border);
+}
+
 /* Mobile/tablet adjustments */
 @media (max-width: 768px) {
     body.inv-page .card { padding: 18px; }
@@ -382,7 +389,7 @@ body.inv-page .fg-qty.negative { color: #dc3545; }
             <input type="hidden" id="sale-sku-key">
             <div id="sale-sku-display" style="background:#fafaf5;padding:10px;border-radius:4px;margin-bottom:14px;font-size:13px;"></div>
             <div class="form-row">
-                <div class="form-field"><label>Quantity (units)</label><input type="number" id="sale-qty-modal" placeholder="0" min="1"></div>
+                <div class="form-field"><label>Quantity (units)</label><input type="number" id="sale-qty-modal" inputmode="numeric" placeholder="0" min="1"></div>
                 <div class="form-field"><label>Sale Date</label><input type="date" id="sale-date-modal"></div>
             </div>
             <div class="form-row">
@@ -393,6 +400,73 @@ body.inv-page .fg-qty.negative { color: #dc3545; }
             <div class="modal-actions">
                 <button class="btn btn-outline" onclick="closeSellForm()">Cancel</button>
                 <button class="btn btn-primary" onclick="submitSale()">Record Sale</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manual Add modal -->
+    <div class="modal-overlay" id="manual-add-modal">
+        <div class="modal">
+            <button class="modal-close" onclick="closeManualAdd()">&times;</button>
+            <h2 style="color:#2e7d32;">+ Add Inventory</h2>
+            <p style="font-size:12px;color:var(--text-light);margin-bottom:14px;">Add units to a SKU outside of production. Use for distributor returns, found stock, or recount-up corrections.</p>
+            <div style="background:#f0f7f0;padding:12px 14px;border-radius:6px;margin-bottom:16px;font-size:13px;border-left:3px solid #2e7d32;">
+                <strong id="manual-add-display"></strong>
+                <input type="hidden" id="manual-add-recipe">
+            </div>
+            <div class="form-row">
+                <div class="form-field"><label>Quantity (units)</label><input type="number" id="manual-add-qty" inputmode="numeric" placeholder="0" min="1"></div>
+                <div class="form-field"><label>Reason</label><select id="manual-add-reason">
+                    <option value="Found stock">Found stock</option>
+                    <option value="Distributor return">Distributor return</option>
+                    <option value="Recount" selected>Recount</option>
+                    <option value="Other">Other</option>
+                </select></div>
+            </div>
+            <div class="form-row">
+                <div class="form-field"><label>LOT# (optional — auto-generates MAN-DDMMYY)</label><input id="manual-add-lot" placeholder="Leave blank for MAN-DDMMYY"></div>
+            </div>
+            <div class="form-row">
+                <div class="form-field" style="grid-column: 1 / -1;"><label>Notes (optional)</label><input id="manual-add-notes" placeholder="Additional context"></div>
+            </div>
+            <div id="manual-add-msg" class="status" style="margin:10px 0;"></div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeManualAdd()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitManualAdd()" style="background:#2e7d32;">Add to Inventory</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manual Subtract modal -->
+    <div class="modal-overlay" id="manual-sub-modal">
+        <div class="modal">
+            <button class="modal-close" onclick="closeManualSubtract()">&times;</button>
+            <h2 style="color:#c62828;">− Remove Inventory</h2>
+            <p style="font-size:12px;color:var(--text-light);margin-bottom:14px;">Remove units via FIFO (oldest LOTs first). Use for spillage, waste, theft, samples, donations, or recount-down corrections. Sales are recorded separately.</p>
+            <div style="background:#fff5f5;padding:12px 14px;border-radius:6px;margin-bottom:16px;font-size:13px;border-left:3px solid #c62828;">
+                <strong id="manual-sub-display"></strong>
+                <div style="font-size:11px;color:var(--text-light);margin-top:4px;">Available: <strong id="manual-sub-available">0</strong> units</div>
+                <input type="hidden" id="manual-sub-recipe">
+            </div>
+            <div class="form-row">
+                <div class="form-field"><label>Quantity to remove</label><input type="number" id="manual-sub-qty" inputmode="numeric" placeholder="0" min="1"></div>
+                <div class="form-field"><label>Reason</label><select id="manual-sub-reason">
+                    <option value="Spillage" selected>Spillage</option>
+                    <option value="Waste">Waste</option>
+                    <option value="Theft">Theft</option>
+                    <option value="Sample">Sample</option>
+                    <option value="Donation">Donation</option>
+                    <option value="Recount">Recount</option>
+                    <option value="Other">Other</option>
+                </select></div>
+            </div>
+            <div class="form-row">
+                <div class="form-field" style="grid-column: 1 / -1;"><label>Notes (optional)</label><input id="manual-sub-notes" placeholder="Additional context (e.g., dropped on floor, donated to staff)"></div>
+            </div>
+            <div id="manual-sub-msg" class="status" style="margin:10px 0;"></div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeManualSubtract()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitManualSubtract()" style="background:#c62828;">Remove from Inventory</button>
             </div>
         </div>
     </div>
@@ -838,43 +912,92 @@ async function loadFinishedGoods(){
     var container=document.getElementById('fg-container');
     var countEl=document.getElementById('fg-count');
     if(countEl){
+        var inStock=fgSkus.filter(function(s){return(s.total_remaining||0)>0;}).length;
         var totalUnits=fgSkus.reduce(function(a,s){return a+(s.total_remaining||0);},0);
-        countEl.textContent=fgSkus.length+' SKU'+(fgSkus.length===1?'':'s')+' • '+totalUnits+' units';
+        countEl.textContent=inStock+' in stock / '+fgSkus.length+' SKUs • '+totalUnits+' units';
     }
     if(!fgSkus.length){
         var msg=currentFgFilter==='all'
-            ? 'No finished goods yet.<br>Complete daily production to generate inventory, or click <strong>Baseline Inventory</strong> to enter day-zero counts.'
-            : 'No '+currentFgFilter+' finished goods.';
+            ? 'No active recipes found. Add recipes to populate the inventory list.'
+            : 'No '+currentFgFilter+' SKUs.';
         container.innerHTML='<div class="empty-state">'+msg+'</div>';
         return;
     }
-    var html='';
+
+    // Group by brand for the brand-section layout
+    var byBrand={};
+    var brandOrder=[];
     fgSkus.forEach(function(s){
-        var qtyClass=s.total_remaining<=0?'fg-qty':(s.total_remaining<10?'fg-qty':'fg-qty');
-        var lotNote='';
-        if(s.active_lot_count>0){
-            lotNote=s.active_lot_count+' active LOT'+(s.active_lot_count===1?'':'s');
-            if(s.lot_count>s.active_lot_count){lotNote+=' • '+(s.lot_count-s.active_lot_count)+' depleted';}
-        } else if(s.lot_count>0){
-            lotNote=s.lot_count+' LOT'+(s.lot_count===1?'':'s')+' (all depleted)';
-        }
-        var keyAttr=encodeURIComponent(s.sku_key);
-        var displaySafe=escSku(s.display);
-        var isExpanded=(expandedSku===s.sku_key);
-        var baselineBadge=s.has_baseline?'<span class="baseline-badge">BASELINE</span>':'';
-        html+='<div class="fg-row sku-row" data-sku="'+keyAttr+'" style="cursor:pointer;">'+
-              '<div class="fg-info" data-action="toggle" data-sku-key="'+keyAttr+'">'+
-                '<strong>'+displaySafe+'</strong>'+certBadge(s.certification)+baselineBadge+
-                '<br><span style="font-size:11px;color:var(--text-light);margin-top:4px;display:inline-block;">'+lotNote+' • '+s.total_produced+' produced lifetime</span>'+
-              '</div>'+
-              '<div class="'+qtyClass+'">'+s.total_remaining+' remaining</div>'+
-              '<div>'+
-                '<button class="btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;padding:8px 16px;min-height:38px;" data-action="sell" data-sku-key="'+keyAttr+'">Sell</button>'+
-              '</div>'+
-              '</div>';
-        if(isExpanded){
-            html+='<div id="sku-detail-'+keyAttr+'" class="sku-detail" style="background:#fafaf5;padding:10px 18px;border-left:3px solid var(--accent);margin-bottom:8px;">Loading…</div>';
-        }
+        var b=s.brand||'(no brand)';
+        if(!(b in byBrand)){byBrand[b]=[];brandOrder.push(b);}
+        byBrand[b].push(s);
+    });
+
+    var html='';
+    brandOrder.forEach(function(brand){
+        var brandSafe=escSku(brand);
+        var skus=byBrand[brand];
+        var brandUnits=skus.reduce(function(a,s){return a+(s.total_remaining||0);},0);
+        html+='<div class="brand-section" style="margin-bottom:18px;">';
+        html+='<div class="brand-section-header" style="font-size:12px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:0.6px;padding:8px 0;border-bottom:1px solid var(--border);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">';
+        html+='<span>'+brandSafe+'</span>';
+        html+='<span style="font-weight:500;color:var(--text-light);font-size:11px;">'+brandUnits+' units</span>';
+        html+='</div>';
+
+        skus.forEach(function(s){
+            var keyAttr=encodeURIComponent(s.sku_key);
+            var displaySafe=escSku(s.display);
+            var isExpanded=(expandedSku===s.sku_key);
+            var outOfStock=(s.total_remaining||0)<=0;
+            var hasHistory=(s.lot_count||0)>0;
+            var baselineBadge=s.has_baseline?'<span class="baseline-badge">BASELINE</span>':'';
+            var stockBadge='';
+            if(outOfStock){
+                stockBadge='<span style="display:inline-block;font-size:10px;font-weight:700;background:#f5f5f0;color:#999;border:1px solid #d0d0c8;padding:2px 8px;border-radius:10px;letter-spacing:0.4px;margin-left:8px;vertical-align:middle;">OUT</span>';
+            }
+
+            var lotNote='';
+            if(s.active_lot_count>0){
+                lotNote=s.active_lot_count+' active LOT'+(s.active_lot_count===1?'':'s');
+                if(s.lot_count>s.active_lot_count){lotNote+=' • '+(s.lot_count-s.active_lot_count)+' depleted';}
+            } else if(hasHistory){
+                lotNote=s.lot_count+' LOT'+(s.lot_count===1?'':'s')+' (all depleted)';
+            } else if(s.catalog_only){
+                lotNote='No production history yet';
+            }
+
+            var rowOpacity=outOfStock?'opacity:0.55;':'';
+            var sellBtnAttrs=outOfStock
+                ? 'disabled title="Out of stock — nothing to sell" style="background:#ccc;color:#888;border-color:#ccc;font-weight:600;padding:8px 16px;min-height:38px;cursor:not-allowed;"'
+                : 'data-action="sell" data-sku-key="'+keyAttr+'" style="background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;padding:8px 16px;min-height:38px;"';
+            // Detail expand only meaningful when there's history
+            var expandBtn=hasHistory
+                ? '<button class="btn-sm" data-action="toggle" data-sku-key="'+keyAttr+'" title="Show LOT-level detail" style="padding:8px 12px;min-height:38px;">'+(isExpanded?'▲':'▼')+'</button>'
+                : '<button class="btn-sm" disabled title="No LOTs to show" style="padding:8px 12px;min-height:38px;opacity:0.4;cursor:not-allowed;">▼</button>';
+
+            html+='<div class="fg-row sku-row" data-sku="'+keyAttr+'" style="'+rowOpacity+'padding:14px 4px;">';
+            html+='<div class="fg-info" style="flex:1;min-width:200px;">';
+            html+='<strong>'+displaySafe+'</strong>'+certBadge(s.certification)+baselineBadge+stockBadge;
+            html+='<br><span style="font-size:11px;color:var(--text-light);margin-top:4px;display:inline-block;">'+lotNote+(s.total_produced?' • '+s.total_produced+' produced lifetime':'')+'</span>';
+            html+='</div>';
+            html+='<div class="fg-qty'+(outOfStock?' negative':'')+'" style="min-width:110px;text-align:right;">'+s.total_remaining+' units</div>';
+            html+='<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+            html+='<button class="btn-sm" '+sellBtnAttrs+'>Sell</button>';
+            html+='<button class="btn-sm" data-action="manual-add" data-sku-key="'+keyAttr+'" data-recipe="'+escSku(s.recipe)+'" data-display="'+displaySafe+'" title="Add inventory (returns, found stock, recount)" style="padding:8px 12px;min-height:38px;color:#2e7d32;border-color:#a5d6a7;background:#fff;">+ Add</button>';
+            var removeAttrs=outOfStock
+                ? 'disabled title="Nothing to remove" style="padding:8px 12px;min-height:38px;opacity:0.4;cursor:not-allowed;"'
+                : 'data-action="manual-subtract" data-sku-key="'+keyAttr+'" data-recipe="'+escSku(s.recipe)+'" data-display="'+displaySafe+'" data-available="'+s.total_remaining+'" title="Remove inventory (spillage, waste, theft, etc.)" style="padding:8px 12px;min-height:38px;color:#c62828;border-color:#ffcdd2;background:#fff;"';
+            html+='<button class="btn-sm" '+removeAttrs+'>− Remove</button>';
+            html+=expandBtn;
+            html+='</div>';
+            html+='</div>';
+
+            if(isExpanded && hasHistory){
+                html+='<div id="sku-detail-'+keyAttr+'" class="sku-detail" style="background:#fafaf5;padding:10px 18px;border-left:3px solid var(--accent);margin-bottom:8px;">Loading…</div>';
+            }
+        });
+
+        html+='</div>';
     });
     container.innerHTML=html;
     attachFgClickDelegationOnce();
@@ -896,12 +1019,93 @@ function attachFgClickDelegationOnce(){
         var action=el.getAttribute('data-action');
         var skuKey=el.getAttribute('data-sku-key');
         if(action==='toggle'){
+            e.stopPropagation();
             toggleSku(skuKey);
         } else if(action==='sell'){
             e.stopPropagation();
             openSellForm(skuKey);
+        } else if(action==='manual-add'){
+            e.stopPropagation();
+            openManualAdd(el.getAttribute('data-recipe'), el.getAttribute('data-display'));
+        } else if(action==='manual-subtract'){
+            e.stopPropagation();
+            var avail=parseInt(el.getAttribute('data-available'))||0;
+            openManualSubtract(el.getAttribute('data-recipe'), el.getAttribute('data-display'), avail);
         }
     });
+}
+
+// ── Manual add / subtract modals ─────────────────────────────────────
+function openManualAdd(recipe, display){
+    document.getElementById('manual-add-recipe').value=recipe;
+    document.getElementById('manual-add-display').textContent=display;
+    document.getElementById('manual-add-qty').value='';
+    document.getElementById('manual-add-lot').value='';
+    document.getElementById('manual-add-reason').value='Recount';
+    document.getElementById('manual-add-notes').value='';
+    document.getElementById('manual-add-msg').textContent='';
+    document.getElementById('manual-add-msg').className='status';
+    document.getElementById('manual-add-modal').classList.add('active');
+}
+
+function closeManualAdd(){
+    document.getElementById('manual-add-modal').classList.remove('active');
+}
+
+async function submitManualAdd(){
+    var msg=document.getElementById('manual-add-msg');
+    var recipe=document.getElementById('manual-add-recipe').value;
+    var qty=parseInt(document.getElementById('manual-add-qty').value);
+    var lot=document.getElementById('manual-add-lot').value.trim();
+    var reason=document.getElementById('manual-add-reason').value;
+    var notes=document.getElementById('manual-add-notes').value.trim();
+    if(!qty || qty<=0){msg.className='status error';msg.textContent='Enter a quantity greater than 0.';return;}
+    var body={recipe:recipe, quantity:qty, reason:reason, notes:notes};
+    if(lot)body.lot=lot;
+    var res=await fetch('/api/organic/finished-goods/manual-add',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body),
+    });
+    var data=await res.json();
+    if(!data.success){msg.className='status error';msg.textContent=data.error||'Failed';return;}
+    closeManualAdd();
+    loadFinishedGoods();
+}
+
+function openManualSubtract(recipe, display, available){
+    document.getElementById('manual-sub-recipe').value=recipe;
+    document.getElementById('manual-sub-display').textContent=display;
+    document.getElementById('manual-sub-available').textContent=available;
+    document.getElementById('manual-sub-qty').value='';
+    document.getElementById('manual-sub-qty').setAttribute('max', available);
+    document.getElementById('manual-sub-reason').value='Spillage';
+    document.getElementById('manual-sub-notes').value='';
+    document.getElementById('manual-sub-msg').textContent='';
+    document.getElementById('manual-sub-msg').className='status';
+    document.getElementById('manual-sub-modal').classList.add('active');
+}
+
+function closeManualSubtract(){
+    document.getElementById('manual-sub-modal').classList.remove('active');
+}
+
+async function submitManualSubtract(){
+    var msg=document.getElementById('manual-sub-msg');
+    var recipe=document.getElementById('manual-sub-recipe').value;
+    var qty=parseInt(document.getElementById('manual-sub-qty').value);
+    var reason=document.getElementById('manual-sub-reason').value;
+    var notes=document.getElementById('manual-sub-notes').value.trim();
+    if(!qty || qty<=0){msg.className='status error';msg.textContent='Enter a quantity greater than 0.';return;}
+    if(!reason){msg.className='status error';msg.textContent='Pick a reason.';return;}
+    var body={recipe:recipe, quantity:qty, reason:reason, notes:notes};
+    var res=await fetch('/api/organic/finished-goods/manual-subtract',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body),
+    });
+    var data=await res.json();
+    if(!data.success){msg.className='status error';msg.textContent=data.error||'Failed';return;}
+    closeManualSubtract();
+    loadFinishedGoods();
 }
 
 async function toggleSku(skuKeyEnc){
