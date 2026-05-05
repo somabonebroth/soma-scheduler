@@ -66,6 +66,39 @@
         <button class="btn btn-primary btn-block" onclick="generateSchedule()">Generate Schedule + Checklists</button>
     </div>
 </div>
+<div class="modal-overlay" id="confirm-modal">
+    <div class="modal" style="max-width:440px;">
+        <h2 id="confirm-title" style="margin-bottom:10px;">Confirm</h2>
+        <p id="confirm-message" style="font-size:14px;color:var(--text);line-height:1.5;margin-bottom:18px;"></p>
+        <div class="modal-actions" style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px;padding-top:14px;border-top:1px solid var(--border);">
+            <button class="btn btn-outline" id="confirm-cancel-btn">Cancel</button>
+            <button class="btn btn-primary" id="confirm-ok-btn">Confirm</button>
+        </div>
+    </div>
+</div>
+<script>
+function mobileConfirm(message, opts){
+    opts = opts || {};
+    return new Promise(function(resolve){
+        var modal = document.getElementById('confirm-modal');
+        document.getElementById('confirm-title').textContent = opts.title || 'Confirm';
+        document.getElementById('confirm-message').textContent = message;
+        var okBtn = document.getElementById('confirm-ok-btn');
+        var cancelBtn = document.getElementById('confirm-cancel-btn');
+        okBtn.textContent = opts.okLabel || 'Confirm';
+        cancelBtn.textContent = opts.cancelLabel || 'Cancel';
+        function cleanup(result){
+            modal.classList.remove('active');
+            okBtn.onclick = null; cancelBtn.onclick = null; modal.onclick = null;
+            resolve(result);
+        }
+        okBtn.onclick = function(){ cleanup(true); };
+        cancelBtn.onclick = function(){ cleanup(false); };
+        modal.onclick = function(e){ if(e.target === modal) cleanup(false); };
+        modal.classList.add('active');
+    });
+}
+</script>
 <script>
 var recipes = {};
 var groupedRecipes = {};
@@ -188,8 +221,9 @@ function updateYield(dayIdx, vessel) {
     }
 }
 
-function resetSchedule() {
-    if (!confirm('Reset? All selections will be cleared.')) return;
+async function resetSchedule() {
+    var ok = await mobileConfirm('All selections will be cleared.', {title:'Reset schedule?', okLabel:'Reset'});
+    if (!ok) return;
     document.getElementById('week-date').value = formatDate(getCurrentMonday());
     document.getElementById('schedule-notes').value = '';
     currentWeekId = formatDate(getCurrentMonday());
@@ -231,7 +265,11 @@ async function loadExisting(weekId) {
 
 async function generateSchedule() {
     if (existingSchedule) {
-        if (!confirm('This will overwrite the existing schedule for the week of ' + currentWeekId + '. Continue?')) return;
+        var ok = await mobileConfirm(
+            'This will overwrite the existing schedule for the week of ' + currentWeekId + '. Continue?',
+            {title:'Overwrite schedule?', okLabel:'Overwrite'}
+        );
+        if (!ok) return;
     }
     var btn = document.getElementById('generate-btn');
     btn.disabled = true; btn.textContent = 'Generating...';

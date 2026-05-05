@@ -101,6 +101,56 @@
 </div>
 <div class="modal-overlay" id="view-modal"><div class="modal"><button class="modal-close" onclick="closeModal('view-modal')">&times;</button><h2 id="view-name"></h2><div class="modal-meta" id="view-meta"></div><div id="view-photo"></div><div id="view-body"></div><div class="photo-upload-area" id="photo-area" style="display:none;"><p style="font-size:12px;color:var(--text-light);">Tap to upload product photo</p><input type="file" id="photo-input" accept="image/*"></div></div></div>
 <div class="modal-overlay" id="edit-modal"><div class="modal"><button class="modal-close" onclick="closeModal('edit-modal')">&times;</button><h2 id="edit-title">Edit Recipe</h2><div id="edit-form"></div><div class="modal-actions"><button class="btn btn-outline" onclick="closeModal('edit-modal')">Cancel</button><button class="btn btn-primary" id="edit-save-btn" onclick="saveEdit()">Save Changes</button></div></div></div>
+<div class="modal-overlay" id="dup-modal">
+    <div class="modal" style="max-width:440px;">
+        <h2 style="margin-bottom:8px;">Duplicate Recipe</h2>
+        <p style="font-size:13px;color:var(--text-light);margin-bottom:14px;">Creating a copy of <strong id="dup-source"></strong></p>
+        <div class="edit-field">
+            <label>Name for the duplicate</label>
+            <input type="text" id="dup-input" autocomplete="off" style="font-size:16px;padding:12px;">
+        </div>
+        <div id="dup-err" style="font-size:12px;color:var(--danger);margin-top:8px;display:none;"></div>
+        <div class="modal-actions">
+            <button class="btn btn-outline" id="dup-cancel">Cancel</button>
+            <button class="btn btn-primary" id="dup-ok">Create Copy</button>
+        </div>
+    </div>
+</div>
+<div class="modal-overlay" id="confirm-modal">
+    <div class="modal" style="max-width:440px;">
+        <h2 id="confirm-title" style="margin-bottom:10px;">Confirm</h2>
+        <p id="confirm-message" style="font-size:14px;color:var(--text);line-height:1.5;margin-bottom:18px;"></p>
+        <div class="modal-actions">
+            <button class="btn btn-outline" id="confirm-cancel-btn">Cancel</button>
+            <button class="btn btn-primary" id="confirm-ok-btn">Confirm</button>
+        </div>
+    </div>
+</div>
+<script>
+function mobileConfirm(message, opts){
+    opts = opts || {};
+    return new Promise(function(resolve){
+        var modal = document.getElementById('confirm-modal');
+        document.getElementById('confirm-title').textContent = opts.title || 'Confirm';
+        document.getElementById('confirm-message').textContent = message;
+        var okBtn = document.getElementById('confirm-ok-btn');
+        var cancelBtn = document.getElementById('confirm-cancel-btn');
+        okBtn.textContent = opts.okLabel || 'Confirm';
+        cancelBtn.textContent = opts.cancelLabel || 'Cancel';
+        if(opts.danger){ okBtn.style.background='#c62828'; okBtn.style.borderColor='#c62828'; }
+        else { okBtn.style.background=''; okBtn.style.borderColor=''; }
+        function cleanup(result){
+            modal.classList.remove('active');
+            okBtn.onclick = null; cancelBtn.onclick = null; modal.onclick = null;
+            resolve(result);
+        }
+        okBtn.onclick = function(){ cleanup(true); };
+        cancelBtn.onclick = function(){ cleanup(false); };
+        modal.onclick = function(e){ if(e.target === modal) cleanup(false); };
+        modal.classList.add('active');
+    });
+}
+</script>
 <script>
 var recipes={};var editingName='';var isAdding=false;var currentFilter='all';var brandOrder=[];var recipeOrder={};var viewingName='';
 function closeModal(id){document.getElementById(id).classList.remove('active');}
@@ -340,7 +390,7 @@ function ingRowHTML(sectionId,idx,item){
     var unitOpts='<option value=""></option>';
     UNITS.forEach(function(u){unitOpts+='<option value="'+u+'"'+(u===unit?' selected':'')+'>'+u+'</option>';});
     return '<div class="ing-row'+review+'" data-section="'+sectionId+'" data-idx="'+idx+'">'+
-        '<input type="number" step="any" class="ing-amount" value="'+esc(amt)+'" placeholder="Qty">'+
+        '<input type="number" inputmode="decimal" step="any" class="ing-amount" value="'+esc(amt)+'" placeholder="Qty">'+
         '<select class="ing-unit">'+unitOpts+'</select>'+
         '<input type="text" class="ing-name" value="'+esc(name)+'" placeholder="Ingredient name">'+
         '<input type="text" class="ing-process" value="'+esc(proc)+'" placeholder="Process (optional)">'+
@@ -390,7 +440,7 @@ function buildEditForm(name,r){
     html+='<div class="edit-field"><label>Brand Name</label><input id="e-brand" value="'+esc((r&&r.brand)||'')+'" placeholder="e.g. Ripe, SOMA"></div>';
     html+='<div class="edit-field"><label>Recipe Name</label><input id="e-name" value="'+esc(name||'')+'" placeholder="e.g. Liquid Gold"></div>';
     html+='<div class="edit-field"><label>Format</label><input id="e-format" value="'+esc((r&&r.format)||'')+'" placeholder="SS-876ML, FZ-750ML, SS-750ML"></div>';
-    html+='<div class="edit-field"><label>Target Yield</label><input type="number" id="e-yield" value="'+((r&&r.yield)||'')+'" placeholder="150"></div>';
+    html+='<div class="edit-field"><label>Target Yield</label><input type="number" id="e-yield" inputmode="numeric" value="'+((r&&r.yield)||'')+'" placeholder="150"></div>';
     html+='<div class="edit-field"><label>Certification</label><select id="e-cert">';
     var certCurrent=(r&&r.certification)||'';
     var certOpts=['','Organic','Pasture Raised','Conventional'];
@@ -471,7 +521,9 @@ async function runMigration(){
     }
 }
 async function deleteRecipe(name){
-    if(!confirm('Delete "'+name+'"?'))return;
+    var ok = await mobileConfirm('Delete "'+name+'"? This cannot be undone.',
+        {title:'Delete recipe?', okLabel:'Delete', danger:true});
+    if(!ok) return;
     var res=await fetch('/api/recipes/'+encodeURIComponent(name),{method:'DELETE'});
     if(!res.ok){
         var data;try{data=await res.json();}catch(e){data={error:'Delete failed'};}
@@ -484,14 +536,29 @@ async function deleteRecipe(name){
 
 async function duplicateRecipe(name){
     var defaultName='(copy) '+name;
-    var newName=prompt('Name for the duplicate:', defaultName);
-    if(newName===null)return;  // user cancelled
-    newName=newName.trim();
-    if(!newName){alert('Name cannot be empty');return;}
-    if(newName===name){alert('Pick a different name from the original');return;}
-    // The backend re-checks for collisions authoritatively; we still pre-check
-    // against the current snapshot to give faster feedback.
-    if(recipes[newName]){alert('A recipe named "'+newName+'" already exists');return;}
+    var newName = await new Promise(function(resolve){
+        var modal = document.getElementById('dup-modal');
+        var inp = document.getElementById('dup-input');
+        var labelEl = document.getElementById('dup-source');
+        labelEl.textContent = name;
+        inp.value = defaultName;
+        var errEl = document.getElementById('dup-err');
+        errEl.style.display = 'none';
+        function cleanup(v){ modal.classList.remove('active'); resolve(v); }
+        document.getElementById('dup-ok').onclick = function(){
+            var v = (inp.value||'').trim();
+            if(!v){ errEl.textContent='Name cannot be empty'; errEl.style.display='block'; return; }
+            if(v===name){ errEl.textContent='Pick a different name from the original'; errEl.style.display='block'; return; }
+            if(recipes[v]){ errEl.textContent='A recipe named "'+v+'" already exists'; errEl.style.display='block'; return; }
+            cleanup(v);
+        };
+        document.getElementById('dup-cancel').onclick = function(){ cleanup(null); };
+        modal.onclick = function(e){ if(e.target===modal) cleanup(null); };
+        inp.onkeydown = function(e){ if(e.key==='Enter'){ e.preventDefault(); document.getElementById('dup-ok').click(); } };
+        modal.classList.add('active');
+        setTimeout(function(){ inp.focus(); inp.select(); }, 50);
+    });
+    if(newName===null)return;  // cancelled
     var res=await fetch('/api/recipes/'+encodeURIComponent(name)+'/duplicate',{
         method:'POST',
         headers:{'Content-Type':'application/json'},

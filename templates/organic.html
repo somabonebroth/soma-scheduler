@@ -157,6 +157,21 @@ body.inv-page .filter-btn.active {
 }
 
 /* Tables — more vertical room per row */
+/* Tables — more vertical room per row */
+body.inv-page .inv-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    /* Hint that there's content to the right on narrow viewports */
+    background:
+        linear-gradient(to right, white 30%, rgba(255,255,255,0)) left center,
+        linear-gradient(to right, rgba(255,255,255,0), white 70%) right center,
+        linear-gradient(to right, rgba(0,0,0,0.08), rgba(0,0,0,0)) left center,
+        linear-gradient(to left, rgba(0,0,0,0.08), rgba(0,0,0,0)) right center;
+    background-repeat: no-repeat;
+    background-size: 24px 100%, 24px 100%, 12px 100%, 12px 100%;
+    background-attachment: local, local, scroll, scroll;
+}
 body.inv-page .inv-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
 body.inv-page .inv-table th {
     background: var(--dark); color: #fff;
@@ -679,6 +694,37 @@ body.inv-page .modal-actions {
         </div>
     </div>
 
+    <!-- Generic confirm dialog — replaces native confirm() for mobile-friendly UX -->
+    <div class="modal-overlay" id="confirm-modal">
+        <div class="modal" style="max-width:440px;">
+            <h2 id="confirm-title" style="margin-bottom:10px;">Confirm</h2>
+            <p id="confirm-message" style="font-size:14px;color:var(--text);line-height:1.5;margin-bottom:18px;"></p>
+            <div class="modal-actions">
+                <button class="btn btn-outline" id="confirm-cancel-btn">Cancel</button>
+                <button class="btn btn-primary" id="confirm-ok-btn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generic single-input dialog — replaces native prompt() for mobile-friendly UX -->
+    <div class="modal-overlay" id="prompt-modal">
+        <div class="modal" style="max-width:440px;">
+            <h2 id="prompt-title" style="margin-bottom:6px;">Enter value</h2>
+            <p id="prompt-message" style="font-size:13px;color:var(--text-light);line-height:1.5;margin-bottom:14px;white-space:pre-line;"></p>
+            <div class="form-row" style="margin-bottom:0;">
+                <div class="form-field" style="grid-column: 1 / -1;">
+                    <label id="prompt-label" style="display:none;"></label>
+                    <input id="prompt-input" type="text" inputmode="text" autocomplete="off">
+                </div>
+            </div>
+            <div id="prompt-error" style="font-size:12px;color:var(--danger);margin-top:8px;display:none;"></div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" id="prompt-cancel-btn">Cancel</button>
+                <button class="btn btn-primary" id="prompt-ok-btn">OK</button>
+            </div>
+        </div>
+    </div>
+
     <!-- TAB 4: Records — Sales History, Search & Trace, Invoices -->
     <div class="tab-content" id="tab-records">
         <div class="card">
@@ -741,6 +787,94 @@ body.inv-page .modal-actions {
     </div>
 </div>
 <script>
+// ── Mobile-friendly replacements for native confirm() / prompt() ──
+// Native dialogs are jarring on iOS Safari and small Android keyboards.
+// These promise-based helpers reuse our styled modals so the experience
+// matches the rest of the app on mobile.
+
+function mobileConfirm(message, opts){
+    opts = opts || {};
+    return new Promise(function(resolve){
+        var modal = document.getElementById('confirm-modal');
+        document.getElementById('confirm-title').textContent = opts.title || 'Confirm';
+        document.getElementById('confirm-message').textContent = message;
+        var okBtn = document.getElementById('confirm-ok-btn');
+        var cancelBtn = document.getElementById('confirm-cancel-btn');
+        okBtn.textContent = opts.okLabel || 'Confirm';
+        cancelBtn.textContent = opts.cancelLabel || 'Cancel';
+        // Danger styling: orange/red OK button
+        if(opts.danger){
+            okBtn.style.background = '#c62828';
+            okBtn.style.borderColor = '#c62828';
+        } else {
+            okBtn.style.background = '';
+            okBtn.style.borderColor = '';
+        }
+        function cleanup(result){
+            modal.classList.remove('active');
+            okBtn.onclick = null;
+            cancelBtn.onclick = null;
+            modal.onclick = null;
+            resolve(result);
+        }
+        okBtn.onclick = function(){ cleanup(true); };
+        cancelBtn.onclick = function(){ cleanup(false); };
+        // Click outside the modal also cancels
+        modal.onclick = function(e){ if(e.target === modal) cleanup(false); };
+        modal.classList.add('active');
+    });
+}
+
+// mobilePrompt(message, opts) — opts: {title, defaultValue, inputmode, label, validate}
+// `validate` is an optional function(value) -> string|null. Return a string to
+// show as an error; return null/undefined to accept the value.
+// Resolves to the trimmed string, or null if cancelled.
+function mobilePrompt(message, opts){
+    opts = opts || {};
+    return new Promise(function(resolve){
+        var modal = document.getElementById('prompt-modal');
+        document.getElementById('prompt-title').textContent = opts.title || 'Enter value';
+        document.getElementById('prompt-message').textContent = message || '';
+        var labelEl = document.getElementById('prompt-label');
+        if(opts.label){ labelEl.textContent = opts.label; labelEl.style.display = 'block'; }
+        else { labelEl.style.display = 'none'; }
+        var input = document.getElementById('prompt-input');
+        input.value = opts.defaultValue || '';
+        input.setAttribute('inputmode', opts.inputmode || 'text');
+        input.setAttribute('type', opts.type || 'text');
+        if(opts.step) input.setAttribute('step', opts.step); else input.removeAttribute('step');
+        if(opts.min !== undefined) input.setAttribute('min', opts.min); else input.removeAttribute('min');
+        var errorEl = document.getElementById('prompt-error');
+        errorEl.style.display = 'none';
+        errorEl.textContent = '';
+        var okBtn = document.getElementById('prompt-ok-btn');
+        var cancelBtn = document.getElementById('prompt-cancel-btn');
+        function cleanup(result){
+            modal.classList.remove('active');
+            okBtn.onclick = null;
+            cancelBtn.onclick = null;
+            input.onkeydown = null;
+            modal.onclick = null;
+            resolve(result);
+        }
+        function onOk(){
+            var value = (input.value || '').trim();
+            if(opts.validate){
+                var err = opts.validate(value);
+                if(err){ errorEl.textContent = err; errorEl.style.display = 'block'; return; }
+            }
+            cleanup(value);
+        }
+        okBtn.onclick = onOk;
+        cancelBtn.onclick = function(){ cleanup(null); };
+        input.onkeydown = function(e){ if(e.key === 'Enter'){ e.preventDefault(); onOk(); } };
+        modal.onclick = function(e){ if(e.target === modal) cleanup(null); };
+        modal.classList.add('active');
+        // Focus and select for quick replacement on mobile
+        setTimeout(function(){ input.focus(); input.select(); }, 50);
+    });
+}
+
 function showTab(tab){
     document.querySelectorAll('.tab-btn').forEach(function(b,i){b.classList.remove('active');});
     document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active');});
@@ -902,7 +1036,7 @@ async function renderRMDetail(key){
     var res=await fetch(url);
     var lots=await res.json();
     if(!lots.length){el.innerHTML='<em style="font-size:12px;color:var(--text-light);">No lots.</em>';return;}
-    var html='<table class="inv-table" style="margin:0;font-size:12px;"><tr><th>Supplier</th><th>Received</th><th>LOT#</th><th>Qty</th><th>Remaining</th><th></th></tr>';
+    var html='<div class="inv-table-wrap"><table class="inv-table" style="margin:0;font-size:12px;"><tr><th>Supplier</th><th>Received</th><th>LOT#</th><th>Qty</th><th>Remaining</th><th></th></tr>';
     lots.forEach(function(m){
         var remClass=(m.remaining||0)<0?'negative':(m.remaining||0)===0?'low':'';
         var baselineBadge=m.migration_baseline?'<span class="baseline-badge" style="margin-left:4px;">BASELINE</span>':'';
@@ -917,7 +1051,7 @@ async function renderRMDetail(key){
                 '<button class="btn-danger" data-rm-action="delete" data-rm-id="'+escSku(m.id)+'">Del</button>'+
               '</td></tr>';
     });
-    html+='</table>';
+    html+='</table></div>';
     el.innerHTML=html;
 }
 
@@ -966,13 +1100,26 @@ function prefillReceiveForm(name, unit){
 }
 
 async function editRMRemaining(id,item,unit,current){
-    var input=prompt('Adjust remaining quantity for:\n  '+item+(unit?' ('+unit+')':'')+
-                     '\n\nCurrent: '+current+'\n\nNew remaining quantity:',current);
-    if(input===null)return;
-    input=input.trim();
-    if(input==='')return;
+    var input = await mobilePrompt(
+        'Current: '+current+(unit?' '+unit:''),
+        {
+            title: 'Adjust remaining',
+            label: item+(unit?' ('+unit+')':''),
+            defaultValue: String(current),
+            type: 'number',
+            inputmode: 'decimal',
+            step: 'any',
+            validate: function(v){
+                if(v==='') return 'Enter a number.';
+                var n = parseFloat(v);
+                if(isNaN(n)) return 'Enter a valid number.';
+                if(n < 0) return 'Cannot be negative.';
+                return null;
+            },
+        }
+    );
+    if(input===null) return;
     var n=parseFloat(input);
-    if(isNaN(n)){alert('Enter a number');return;}
     var res=await fetch('/api/organic/raw-materials/'+encodeURIComponent(id),{
         method:'PUT',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({remaining:n}),
@@ -990,10 +1137,11 @@ async function deleteRM(id){
         var udata=await ur.json();
         var used=(udata.used_in)||[];
         if(used.length){
-            msg='WARNING: This entry has been used in '+used.length+' completed production run'+(used.length===1?'':'s')+'. Deleting it will not affect those runs (the deduction history is preserved on the run record itself), but the raw-material entry will be gone from inventory.\n\nContinue with deletion?';
+            msg='This entry was used in '+used.length+' completed production run'+(used.length===1?'':'s')+'. Deleting won\'t affect those runs — the deduction history is preserved on each run. The inventory entry will be gone.\n\nContinue?';
         }
     }catch(e){}
-    if(!confirm(msg))return;
+    var ok = await mobileConfirm(msg, {title:'Delete inventory entry', okLabel:'Delete', danger:true});
+    if(!ok) return;
     await fetch('/api/organic/raw-materials/'+encodeURIComponent(id),{method:'DELETE'});
     loadRawMaterials();
 }
@@ -1065,7 +1213,7 @@ async function loadInvoices(){
         container.innerHTML='<div class="empty-state">'+(q?'No invoices match that LOT#.':'No invoices uploaded yet.')+'</div>';
         return;
     }
-    var html='<table class="inv-table"><tr><th>Invoice Date</th><th>Supplier</th><th>LOT#s</th><th>File</th><th></th></tr>';
+    var html='<div class="inv-table-wrap"><table class="inv-table"><tr><th>Invoice Date</th><th>Supplier</th><th>LOT#s</th><th>File</th><th></th></tr>';
     data.forEach(function(r){
         var origName=(r.original_name||r.filename||'').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
         var sizeKB=r.size_bytes?' ('+Math.round(r.size_bytes/1024)+' KB)':'';
@@ -1078,12 +1226,14 @@ async function loadInvoices(){
               '<td><button class="btn-danger" onclick="deleteInvoice(\''+r.id+'\')">Del</button></td>'+
               '</tr>';
     });
-    html+='</table>';
+    html+='</table></div>';
     container.innerHTML=html;
 }
 
 async function deleteInvoice(id){
-    if(!confirm('Delete this invoice? The file will be removed.'))return;
+    var ok = await mobileConfirm('Delete this invoice? The file will be removed.',
+        {title:'Delete invoice', okLabel:'Delete', danger:true});
+    if(!ok) return;
     var res=await fetch('/api/organic/invoices/'+encodeURIComponent(id),{method:'DELETE'});
     var data=await res.json();
     if(data.success){loadInvoices();}
@@ -1118,17 +1268,41 @@ async function addRawMaterial(){
 }
 
 async function addCustomIngredient(){
-    var name=prompt('Ingredient name (e.g. Rosemary):');
-    if(!name||!name.trim())return;
-    var units='kg, g, L, ml, lbs, Bunch, Pack, Adjunct, per L';
-    var unit=prompt('Unit — one of: '+units,'g');
-    if(!unit||!unit.trim()){alert('Unit required');return;}
-    var body={name:name.trim(),unit:unit.trim()};
+    var name = await mobilePrompt('e.g. Rosemary, Apple Cider Vinegar', {
+        title: 'New Ingredient — Name',
+        label: 'Ingredient name',
+        validate: function(v){ if(!v) return 'Name required.'; return null; },
+    });
+    if(!name) return;
+
+    var validUnits = ['kg','g','L','ml','lbs','Bunch','Pack','Adjunct','per L'];
+    var unit = await mobilePrompt(
+        'Allowed units: '+validUnits.join(', '),
+        {
+            title: 'New Ingredient — Unit',
+            label: 'Unit (must match exactly)',
+            defaultValue: 'g',
+            validate: function(v){
+                if(!v) return 'Unit required.';
+                if(validUnits.indexOf(v) === -1) return 'Unit must be one of: '+validUnits.join(', ');
+                return null;
+            },
+        }
+    );
+    if(!unit) return;
+
+    var body={name:name, unit:unit};
     var res=await fetch('/api/organic/ingredients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     var data=await res.json();
     if(!data.success){alert(data.error||'Failed to add');return;}
     loadIngredients();
-    alert('Added: '+name.trim()+' — '+unit.trim());
+    // Success feedback: brief toast via the rm-status banner instead of alert
+    var st = document.getElementById('rm-status');
+    if(st){
+        st.className = 'status success';
+        st.textContent = 'Added ingredient: '+name+' — '+unit;
+        setTimeout(function(){ st.className='status'; st.textContent=''; }, 4000);
+    }
 }
 
 // ── Baseline Raw Materials entry ─────────────────────────────────────
@@ -1223,7 +1397,11 @@ async function submitBaselineRMBulkGrid(){
         msg.textContent='Fill in at least one quantity, or click Cancel.';
         return;
     }
-    if(!confirm('Submit baseline raw material counts for '+entries.length+' ingredients? This creates a one-time day-zero record.')) return;
+    var ok = await mobileConfirm(
+        'Submit baseline raw material counts for '+entries.length+' ingredient'+(entries.length===1?'':'s')+'? This creates a one-time day-zero record.',
+        {title:'Submit Baseline', okLabel:'Submit'}
+    );
+    if(!ok) return;
 
     var btn=document.getElementById('baseline-rm-bulk-submit');
     btn.disabled=true; btn.textContent='Saving...';
@@ -1396,7 +1574,11 @@ async function submitBaselineBulkGrid(){
         return;
     }
 
-    if(!confirm('Submit baseline inventory for '+entries.length+' SKUs? This creates a one-time day-zero record.')) return;
+    var ok = await mobileConfirm(
+        'Submit baseline inventory for '+entries.length+' SKU'+(entries.length===1?'':'s')+'? This creates a one-time day-zero record.',
+        {title:'Submit Baseline', okLabel:'Submit'}
+    );
+    if(!ok) return;
 
     var btn=document.getElementById('baseline-bulk-submit');
     btn.disabled=true; btn.textContent='Saving...';
@@ -1881,7 +2063,7 @@ async function renderSkuDetail(skuKey){
         return;
     }
     var skuKeyEnc=encodeURIComponent(skuKey);
-    var html='<table class="inv-table" style="margin:0;font-size:12px;"><tr>'+
+    var html='<div class="inv-table-wrap"><table class="inv-table" style="margin:0;font-size:12px;"><tr>'+
              '<th>LOT#</th><th>Production Date</th><th>Best Before</th>'+
              '<th>Vessels</th><th>Produced</th><th>Remaining</th><th></th>'+
              '</tr>';
@@ -1900,7 +2082,7 @@ async function renderSkuDetail(skuKey){
               '<td><button class="btn-sm" data-fg-action="edit-lot" data-sku-key="'+skuKeyEnc+'" data-lot="'+escSku(l.lot)+'" data-current="'+l.remaining+'" style="font-size:11px;padding:3px 8px;">Edit Qty</button></td>'+
               '</tr>';
     });
-    html+='</table>';
+    html+='</table></div>';
     el.innerHTML=html;
     attachLotClickDelegationOnce(el);
 }
@@ -1922,13 +2104,26 @@ function attachLotClickDelegationOnce(container){
 }
 
 async function editLotRemaining(skuKey,lot,current){
-    var input=prompt('Adjust remaining units for LOT '+lot+'\n\nCurrent total remaining: '+current+
-                     '\n\nNew remaining quantity:',current);
-    if(input===null)return;
-    input=input.trim();
-    if(input==='')return;
+    var input = await mobilePrompt(
+        'Current: '+current+' units',
+        {
+            title: 'Adjust remaining',
+            label: 'LOT '+lot,
+            defaultValue: String(current),
+            type: 'number',
+            inputmode: 'numeric',
+            min: 0,
+            validate: function(v){
+                if(v==='') return 'Enter a number.';
+                var n = parseInt(v);
+                if(isNaN(n)) return 'Enter a whole number.';
+                if(n<0) return 'Cannot be negative.';
+                return null;
+            },
+        }
+    );
+    if(input===null) return;
     var n=parseInt(input);
-    if(isNaN(n)||n<0){alert('Enter a non-negative integer');return;}
     var res=await fetch('/api/organic/finished-goods/lot-adjust',{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({sku_key:skuKey,lot:lot,new_remaining:n}),
@@ -2005,7 +2200,7 @@ async function loadSales(){
         container.innerHTML='<div class="empty-state">'+msg+'</div>';return;
     }
     data.sort(function(a,b){return(b.created_at||'').localeCompare(a.created_at||'');});
-    var html='<table class="inv-table"><tr><th>Date</th><th>Product</th><th>LOT#(s)</th><th>Qty</th><th>Buyer</th><th>Case LOT#</th><th></th></tr>';
+    var html='<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Product</th><th>LOT#(s)</th><th>Qty</th><th>Buyer</th><th>Case LOT#</th><th></th></tr>';
     data.forEach(function(s){
         var lotsDisplay='';
         if(s.lots&&s.lots.length){
@@ -2019,12 +2214,14 @@ async function loadSales(){
         var productCell=escSku(product)+certBadge(s.certification);
         html+='<tr><td>'+(s.sale_date||'')+'</td><td>'+productCell+'</td><td>'+escSku(lotsDisplay)+'</td><td>'+s.quantity+'</td><td>'+escSku(s.buyer||'')+'</td><td>'+escSku(s.case_lot||'—')+'</td><td><button class="btn-danger" onclick="deleteSale(\''+s.id+'\')">Del</button></td></tr>';
     });
-    html+='</table>';
+    html+='</table></div>';
     container.innerHTML=html;
 }
 
 async function deleteSale(id){
-    if(!confirm('Delete this sale? Quantity will be restored to finished goods.'))return;
+    var ok = await mobileConfirm('Delete this sale? Quantity will be restored to finished goods.',
+        {title:'Delete sale', okLabel:'Delete', danger:true});
+    if(!ok) return;
     await fetch('/api/organic/sales/'+id,{method:'DELETE'});
     loadFinishedGoods();loadSales();
 }
