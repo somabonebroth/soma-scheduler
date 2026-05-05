@@ -229,6 +229,65 @@ body.inv-page .cert-badge {
 .ing-list li { margin-bottom: 5px; }
 .ing-list .flag { color: #dc3545; font-weight: 700; }
 
+/* Week-grouped runs layout */
+.run-week-section {
+    margin-bottom: 28px;
+    padding-bottom: 8px;
+}
+.run-week-section:not(:last-child) {
+    border-bottom: 1px dashed var(--border);
+}
+.run-week-header {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 14px; font-weight: 700;
+    color: var(--dark);
+    padding: 10px 14px;
+    margin: 4px 0 12px 0;
+    background: var(--row-alt);
+    border-radius: 6px;
+    border-left: 3px solid var(--text-light);
+}
+.run-week-header.current {
+    background: #e8f5e9;
+    border-left-color: #2e7d32;
+    color: #1b5e20;
+}
+.run-week-header .run-week-meta {
+    font-size: 11px; font-weight: 500;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+.run-week-header.current .run-week-meta {
+    color: #2e7d32;
+}
+.run-completed-toggle {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 10px 14px;
+    margin: 6px 0 10px 0;
+    background: #fafaf5;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-light);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    min-height: 40px;
+}
+.run-completed-toggle:hover {
+    background: #f0f0eb;
+    border-color: #c0c0b8;
+    color: var(--text);
+}
+.run-completed-list {
+    padding-top: 4px;
+    border-top: 1px dashed var(--border);
+    margin-bottom: 8px;
+}
+
 /* Sale modal-form */
 .sale-form { background: #f9f9f6; border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 14px; }
 
@@ -381,7 +440,7 @@ body.inv-page .modal-actions {
         <button class="tab-btn active" onclick="showTab('raw')">Raw Materials</button>
         <button class="tab-btn" onclick="showTab('runs')">Production Runs</button>
         <button class="tab-btn" onclick="showTab('fg')">Finished Goods</button>
-        <button class="tab-btn" onclick="showTab('trace')">Search &amp; Trace</button>
+        <button class="tab-btn" onclick="showTab('records')">Records</button>
     </div>
 
     <!-- TAB 1: Raw Materials -->
@@ -412,44 +471,13 @@ body.inv-page .modal-actions {
             <h2>Current Inventory <span class="count-badge" id="rm-count">—</span></h2>
             <div id="rm-table-container"><div class="empty-state">Loading...</div></div>
         </div>
-        <div class="card">
-            <h2>Invoices</h2>
-            <p style="font-size:11px;color:var(--text-light);margin-bottom:10px;">Upload supplier invoices and link them to one or more LOT#s for traceability.</p>
-            <div class="form-row">
-                <div class="form-field"><label>Supplier</label><input id="inv-supplier" list="supplier-list" placeholder="Supplier name"></div>
-                <div class="form-field"><label>Invoice Date</label><input type="date" id="inv-date"></div>
-            </div>
-            <div class="form-field" style="margin-bottom:8px;">
-                <label>LOT#s (add one or more)</label>
-                <div id="inv-lots-container">
-                    <div class="inv-lot-row" style="display:flex;gap:6px;margin-bottom:4px;">
-                        <input class="inv-lot" placeholder="LOT#" style="flex:1;">
-                    </div>
-                </div>
-                <button class="btn btn-outline" type="button" onclick="addLotRow()" style="font-size:11px;padding:4px 10px;">+ Add another LOT#</button>
-            </div>
-            <div class="form-field">
-                <label>Invoice file <span style="color:var(--text-light);font-weight:400;font-size:11px;">— PDF/JPG/PNG/WebP/HEIC, max 10 MB</span></label>
-                <input type="file" id="inv-file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif">
-            </div>
-            <button class="btn btn-primary" onclick="uploadInvoice()">Upload Invoice</button>
-            <div id="inv-status" class="status" style="margin-top:10px;"></div>
-            <div style="margin-top:20px;">
-                <label style="font-size:12px;font-weight:600;">Search by LOT#</label>
-                <div style="display:flex;gap:6px;margin-top:4px;">
-                    <input id="inv-search" placeholder="Type LOT# to filter..." style="flex:1;" oninput="loadInvoices()">
-                    <button class="btn btn-outline" onclick="document.getElementById('inv-search').value='';loadInvoices()" style="font-size:11px;">Clear</button>
-                </div>
-            </div>
-            <div id="invoice-list-container" style="margin-top:12px;"><div class="empty-state">Loading...</div></div>
-        </div>
     </div>
 
     <!-- TAB 2: Production Runs -->
     <div class="tab-content" id="tab-runs">
         <div class="card">
             <h2>Production Runs <span class="count-badge" id="runs-count">—</span></h2>
-            <p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Auto-populated when organic recipes are scheduled. Raw materials deducted when daily production is completed.</p>
+            <p>Every recipe scheduled in any week appears here as a tracked production run. Raw materials are deducted when daily production is marked complete. Runs are grouped by week (most recent first) — completed runs collapse into a dropdown by default.</p>
             <div id="runs-container"><div class="empty-state">Loading...</div></div>
         </div>
     </div>
@@ -470,16 +498,6 @@ body.inv-page .modal-actions {
                 <button class="btn-outline" onclick="openBaselineSingle()" title="Add a single SKU to baseline (use after bulk pass for missed items)" style="font-size:13px;padding:10px 14px;">+ Single SKU</button>
             </div>
             <div id="fg-container"><div class="empty-state">Loading...</div></div>
-        </div>
-        <div class="card">
-            <h2>Sales History <span class="count-badge" id="sales-count">—</span></h2>
-            <div class="filter-bar">
-                <button class="filter-btn active" data-sales-filter="all" onclick="setSalesFilter('all',this)">All</button>
-                <button class="filter-btn" data-sales-filter="Organic" onclick="setSalesFilter('Organic',this)">Organic</button>
-                <button class="filter-btn" data-sales-filter="Pasture Raised" onclick="setSalesFilter('Pasture Raised',this)">Pasture Raised</button>
-                <button class="filter-btn" data-sales-filter="Conventional" onclick="setSalesFilter('Conventional',this)">Conventional</button>
-            </div>
-            <div id="sales-container"><div class="empty-state">Loading...</div></div>
         </div>
     </div>
 
@@ -661,10 +679,23 @@ body.inv-page .modal-actions {
         </div>
     </div>
 
-    <!-- TAB 4: Search & Trace -->
-    <div class="tab-content" id="tab-trace">
+    <!-- TAB 4: Records — Sales History, Search & Trace, Invoices -->
+    <div class="tab-content" id="tab-records">
+        <div class="card">
+            <h2>Sales History <span class="count-badge" id="sales-count">—</span></h2>
+            <p>FIFO sales drawn from finished goods inventory. Use the filter to narrow by certification tier.</p>
+            <div class="filter-bar">
+                <button class="filter-btn active" data-sales-filter="all" onclick="setSalesFilter('all',this)">All</button>
+                <button class="filter-btn" data-sales-filter="Organic" onclick="setSalesFilter('Organic',this)">Organic</button>
+                <button class="filter-btn" data-sales-filter="Pasture Raised" onclick="setSalesFilter('Pasture Raised',this)">Pasture Raised</button>
+                <button class="filter-btn" data-sales-filter="Conventional" onclick="setSalesFilter('Conventional',this)">Conventional</button>
+            </div>
+            <div id="sales-container"><div class="empty-state">Loading...</div></div>
+        </div>
+
         <div class="card">
             <h2>Search &amp; Trace</h2>
+            <p>Look up a raw material LOT# or finished good LOT# to see its full traceability chain — from supplier delivery through production to sale.</p>
             <div class="search-bar">
                 <select id="trace-type">
                     <option value="raw_lot">Raw Material LOT#</option>
@@ -675,6 +706,38 @@ body.inv-page .modal-actions {
             </div>
             <div id="trace-results"></div>
         </div>
+
+        <div class="card">
+            <h2>Invoices</h2>
+            <p>Upload supplier invoices and link them to one or more LOT#s for traceability. Searchable by LOT#.</p>
+            <div class="form-row">
+                <div class="form-field"><label>Supplier</label><input id="inv-supplier" list="supplier-list" placeholder="Supplier name"></div>
+                <div class="form-field"><label>Invoice Date</label><input type="date" id="inv-date"></div>
+            </div>
+            <div class="form-field" style="margin-bottom:12px;">
+                <label>LOT#s (add one or more)</label>
+                <div id="inv-lots-container">
+                    <div class="inv-lot-row" style="display:flex;gap:6px;margin-bottom:6px;">
+                        <input class="inv-lot" placeholder="LOT#" style="flex:1;">
+                    </div>
+                </div>
+                <button class="btn btn-outline" type="button" onclick="addLotRow()" style="font-size:12px;padding:6px 12px;margin-top:4px;">+ Add another LOT#</button>
+            </div>
+            <div class="form-field" style="margin-bottom:12px;">
+                <label>Invoice file <span style="color:var(--text-light);font-weight:400;font-size:11px;">— PDF/JPG/PNG/WebP/HEIC, max 10 MB</span></label>
+                <input type="file" id="inv-file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif">
+            </div>
+            <button class="btn btn-primary" onclick="uploadInvoice()">Upload Invoice</button>
+            <div id="inv-status" class="status" style="margin-top:12px;"></div>
+            <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);">
+                <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:var(--text-light);">Search by LOT#</label>
+                <div style="display:flex;gap:8px;margin-top:6px;">
+                    <input id="inv-search" placeholder="Type LOT# to filter..." style="flex:1;" oninput="loadInvoices()">
+                    <button class="btn btn-outline" onclick="document.getElementById('inv-search').value='';loadInvoices()" style="font-size:12px;">Clear</button>
+                </div>
+            </div>
+            <div id="invoice-list-container" style="margin-top:14px;"><div class="empty-state">Loading...</div></div>
+        </div>
     </div>
 </div>
 <script>
@@ -682,11 +745,12 @@ function showTab(tab){
     document.querySelectorAll('.tab-btn').forEach(function(b,i){b.classList.remove('active');});
     document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active');});
     document.getElementById('tab-'+tab).classList.add('active');
-    var tabs=['raw','runs','fg','trace'];
+    var tabs=['raw','runs','fg','records'];
     document.querySelectorAll('.tab-btn')[tabs.indexOf(tab)].classList.add('active');
-    if(tab==='raw'){loadRawMaterials();loadInvoices();}
+    if(tab==='raw')loadRawMaterials();
     if(tab==='runs')loadRuns();
-    if(tab==='fg'){loadFinishedGoods();loadSales();}
+    if(tab==='fg')loadFinishedGoods();
+    if(tab==='records'){loadSales();loadInvoices();}
 }
 
 // ── Raw Materials ──
@@ -1413,6 +1477,78 @@ async function addBaselineFinishedGood(){
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 // ── Production Runs ──
+// Tracks which weeks have their "completed runs" dropdown expanded.
+// Persists across reloads of the runs list within a session.
+var expandedCompletedWeeks={};
+// Tracks which individual run cards are expanded (showing full detail).
+var expandedRuns={};
+
+function toggleCompletedWeek(weekId){
+    // The button passes a URL-encoded week_id; decode for safety though
+    // current week_ids only contain digits and dashes.
+    try{weekId=decodeURIComponent(weekId);}catch(e){}
+    expandedCompletedWeeks[weekId]=!expandedCompletedWeeks[weekId];
+    loadRuns();
+}
+
+function toggleRun(runId){
+    expandedRuns[runId]=!expandedRuns[runId];
+    loadRuns();
+}
+
+// Format a week_id (YYYY-MM-DD = Monday) into "MMM D – MMM D, YYYY"
+function formatWeekRange(weekId){
+    if(!weekId)return weekId||'';
+    try{
+        var parts=weekId.split('-');
+        var y=parseInt(parts[0]), m=parseInt(parts[1])-1, d=parseInt(parts[2]);
+        var mon=new Date(Date.UTC(y,m,d));
+        var sun=new Date(Date.UTC(y,m,d+6));
+        var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        var monStr=months[mon.getUTCMonth()]+' '+mon.getUTCDate();
+        var sunStr=months[sun.getUTCMonth()]+' '+sun.getUTCDate();
+        return monStr+' – '+sunStr+', '+sun.getUTCFullYear();
+    }catch(e){return weekId;}
+}
+
+// Returns the week_id (YYYY-MM-DD Monday) for the current week in local time.
+function getCurrentWeekId(){
+    var now=new Date();
+    var dow=now.getDay();           // 0 Sun … 6 Sat
+    var offset=(dow===0?6:dow-1);   // days since Monday
+    var monday=new Date(now);
+    monday.setDate(now.getDate()-offset);
+    var y=monday.getFullYear();
+    var m=String(monday.getMonth()+1).padStart(2,'0');
+    var d=String(monday.getDate()).padStart(2,'0');
+    return y+'-'+m+'-'+d;
+}
+
+function renderRunCard(run){
+    var keyId=run.id||(run.week_id+'_'+run.day_idx+'_'+run.vessel);
+    var isOpen=!!expandedRuns[keyId];
+    var hdrClass=run.status==='completed'?'run-header completed':'run-header scheduled';
+    var statusLabel=run.status==='completed'?'Completed':'Scheduled';
+    var html='<div class="run-card"><div class="'+hdrClass+'" onclick="toggleRun(\''+escSku(keyId)+'\')">';
+    html+='<span>'+escSku(run.day_name||'')+' — '+escSku(run.vessel||'')+' — '+(run.brand?escSku(run.brand)+' - ':'')+escSku(run.recipe||'')+'</span>';
+    html+='<span><span class="organic-badge">'+statusLabel+'</span> LOT# '+escSku(run.lot||'')+'</span>';
+    html+='</div><div class="run-body'+(isOpen?' open':'')+'">';
+    html+='<div class="run-detail"><strong>Week:</strong> '+escSku(run.week_id||'')+'</div>';
+    if(run.amount_produced)html+='<div class="run-detail"><strong>Amount Produced:</strong> '+run.amount_produced+' units</div>';
+    if(run.ingredients_used&&run.ingredients_used.length){
+        html+='<div class="run-detail"><strong>Raw Materials Used:</strong></div><ul class="ing-list">';
+        run.ingredients_used.forEach(function(ing){
+            var flag=ing.negative?'<span class="flag"> ⚠ INSUFFICIENT STOCK</span>':'';
+            var unitPart=ing.unit?(' '+ing.unit):'';
+            html+='<li>'+ing.quantity_used+unitPart+' × '+escSku(ing.item||'')+' (LOT: '+escSku(ing.supplier_lot||'')+')'+flag+'</li>';
+        });
+        html+='</ul>';
+    }
+    if(run.completed_at)html+='<div class="run-detail"><strong>Completed:</strong> '+run.completed_at.substring(0,16).replace('T',' ')+'</div>';
+    html+='</div></div>';
+    return html;
+}
+
 async function loadRuns(){
     var res=await fetch('/api/organic/production-runs');
     var data=await res.json();
@@ -1424,30 +1560,65 @@ async function loadRuns(){
         countEl.textContent=sched+' scheduled • '+done+' completed';
     }
     if(!data.length){container.innerHTML='<div class="empty-state">No production runs yet.<br>Schedule a recipe and runs will appear here.</div>';return;}
-    // Sort newest first
-    data.sort(function(a,b){return(b.created_at||'').localeCompare(a.created_at||'');});
-    var html='';
+
+    // Group by week_id
+    var byWeek={};
     data.forEach(function(run){
-        var hdrClass=run.status==='completed'?'run-header completed':'run-header scheduled';
-        var statusLabel=run.status==='completed'?'Completed':'Scheduled';
-        html+='<div class="run-card"><div class="'+hdrClass+'" onclick="this.nextElementSibling.classList.toggle(\'open\')">';
-        html+='<span>'+run.day_name+' — '+run.vessel+' — '+(run.brand?run.brand+' - ':'')+run.recipe+'</span>';
-        html+='<span><span class="organic-badge">'+statusLabel+'</span> LOT# '+run.lot+'</span>';
-        html+='</div><div class="run-body">';
-        html+='<div class="run-detail"><strong>Week:</strong> '+run.week_id+'</div>';
-        if(run.amount_produced)html+='<div class="run-detail"><strong>Amount Produced:</strong> '+run.amount_produced+' units</div>';
-        if(run.ingredients_used&&run.ingredients_used.length){
-            html+='<div class="run-detail"><strong>Raw Materials Used:</strong></div><ul class="ing-list">';
-            run.ingredients_used.forEach(function(ing){
-                var flag=ing.negative?'<span class="flag"> ⚠ INSUFFICIENT STOCK</span>':'';
-                var unitPart=ing.unit?(' '+ing.unit):'';
-                html+='<li>'+ing.quantity_used+unitPart+' × '+ing.item+' (LOT: '+ing.supplier_lot+')'+flag+'</li>';
-            });
-            html+='</ul>';
-        }
-        if(run.completed_at)html+='<div class="run-detail"><strong>Completed:</strong> '+run.completed_at.substring(0,16).replace('T',' ')+'</div>';
-        html+='</div></div>';
+        var w=run.week_id||'(no week)';
+        if(!(w in byWeek))byWeek[w]={scheduled:[], completed:[]};
+        if(run.status==='completed')byWeek[w].completed.push(run);
+        else byWeek[w].scheduled.push(run);
     });
+
+    // Sort weeks: most recent first
+    var weeks=Object.keys(byWeek).sort(function(a,b){return b.localeCompare(a);});
+    var currentWeek=getCurrentWeekId();
+
+    // Day order for sorting runs within a week (Mon=0 ... Sun=6)
+    function dayKey(r){return (r.day_idx==null?99:r.day_idx)+(r.vessel||'');}
+
+    var html='';
+    weeks.forEach(function(weekId){
+        var w=byWeek[weekId];
+        w.scheduled.sort(function(a,b){return dayKey(a).localeCompare(dayKey(b));});
+        w.completed.sort(function(a,b){return dayKey(a).localeCompare(dayKey(b));});
+        var isCurrentWeek=(weekId===currentWeek);
+        var rangeLabel=formatWeekRange(weekId);
+        var totalRuns=w.scheduled.length+w.completed.length;
+
+        html+='<div class="run-week-section">';
+        var weekHdrClass=isCurrentWeek?'run-week-header current':'run-week-header';
+        html+='<div class="'+weekHdrClass+'">';
+        html+='<span>'+(isCurrentWeek?'📅 Current Week — ':'')+escSku(rangeLabel)+'</span>';
+        html+='<span class="run-week-meta">'+totalRuns+' run'+(totalRuns===1?'':'s')+'</span>';
+        html+='</div>';
+
+        // Scheduled runs first (visible by default)
+        w.scheduled.forEach(function(run){
+            html+=renderRunCard(run);
+        });
+
+        // Completed runs collapsed under a dropdown
+        if(w.completed.length){
+            var weekKey=encodeURIComponent(weekId);
+            var openDone=!!expandedCompletedWeeks[weekId];
+            html+='<button class="run-completed-toggle" onclick="toggleCompletedWeek(\''+weekKey+'\')">';
+            html+=(openDone?'▼ Hide':'▶ Show')+' '+w.completed.length+' completed run'+(w.completed.length===1?'':'s');
+            html+='</button>';
+            if(openDone){
+                html+='<div class="run-completed-list">';
+                w.completed.forEach(function(run){
+                    html+=renderRunCard(run);
+                });
+                html+='</div>';
+            }
+        } else if(!w.scheduled.length){
+            html+='<p style="font-size:12px;color:var(--text-light);font-style:italic;padding:8px 0;">No runs in this week.</p>';
+        }
+
+        html+='</div>';
+    });
+
     container.innerHTML=html;
 }
 

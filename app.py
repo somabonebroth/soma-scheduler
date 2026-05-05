@@ -2361,48 +2361,43 @@ def organic_ingredients():
 
 # ── Raw material category buckets for the inventory list view ──
 # Each ingredient is bucketed into one of these labels for grouping.
-# Order matters: this is the display order. Items not matching any rule
-# fall through to "9. Other".
+# Order matters: this is the display order AND the rule-evaluation order
+# (first match wins). Items not matching any specific bucket fall through
+# to "4. Everything Else".
 RAW_CATEGORIES = [
     "1. Bones & Proteins",
-    "2. Fresh Vegetables",
-    "3. Fresh Herbs & Aromatics",
-    "4. Mushrooms",
-    "5. Adjuncts & Specialty",
-    "6. Dried Herbs & Powders",
-    "7. Spices",
-    "8. Salts, Liquids & Finishers",
-    "9. Other",
+    "2. Adjuncts",
+    "3. Mushrooms & Mushroom Powders",
+    "4. Everything Else",
 ]
 
 
 def _categorize_ingredient(name):
     """Return the display category bucket for a raw material name.
-    Lowercase substring matching — order of rules matters (first match wins)."""
+    Lowercase substring matching — order of rules matters (first match wins).
+
+    Buckets, in evaluation order:
+      1. Bones & Proteins — bones, feet, neck, lamb meat, turkey
+      2. Adjuncts — anything with 'adjunct' in the name (wins over mushroom)
+      3. Mushrooms & Mushroom Powders — anything with 'mushroom'
+      4. Everything Else — vegetables, herbs, spices, salts, liquids, etc.
+    """
     if not name:
-        return "9. Other"
+        return "4. Everything Else"
     n = name.lower()
 
-    # Bones & proteins (the big-ticket items, listed first)
-    if "bone" in n or "feet" in n or "neck" in n or "turkey" in n or ("lamb" in n and "meat" in n):
+    # 1. Bones & proteins
+    if ("bone" in n or "feet" in n or "neck" in n or "turkey" in n
+            or ("lamb" in n and "meat" in n)):
         return "1. Bones & Proteins"
-    # Whole turkey / lamb meat caught by "lamb meat" above
-    if name in ("Onion", "Carrot", "Celery", "Green Onion", "Garlic", "Raw Garlic"):
-        return "2. Fresh Vegetables"
-    if "fresh " in n or "turmeric root" in n or "ginger root" in n or "lemon" in n or "lemongrass" in n or "red chili" in n or "chili pepper" in n:
-        return "3. Fresh Herbs & Aromatics"
+    # 2. Adjuncts — checked BEFORE mushrooms so 'Mushroom Adjunct' lands here
+    if "adjunct" in n:
+        return "2. Adjuncts"
+    # 3. Mushrooms (whole, dried, powders)
     if "mushroom" in n:
-        return "4. Mushrooms"
-    if "adjunct" in n or "goji" in n:
-        return "5. Adjuncts & Specialty"
-    if "dried" in n or "powder" in n or "chunks" in n or "rose petals" in n or "kaffir" in n:
-        return "6. Dried Herbs & Powders"
-    if name in ("Black Peppercorn", "Black Pepper", "Bay Leaf", "Star Anise", "Clove",
-                "Fennel Seed", "Coriander Seed", "Dried Chili Flakes", "Cumin Powder"):
-        return "7. Spices"
-    if "salt" in n or "honey" in n or "juice" in n or "vinegar" in n or "paste" in n or "milk" in n:
-        return "8. Salts, Liquids & Finishers"
-    return "9. Other"
+        return "3. Mushrooms & Mushroom Powders"
+    # 4. Catch-all
+    return "4. Everything Else"
 
 
 @app.route("/api/organic/raw-materials/grouped", methods=["GET"])
