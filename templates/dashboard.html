@@ -50,6 +50,19 @@
             <div class="dash-btn highlight" onclick="goToDay(0)"><span class="icon">&#9654;</span><span class="label">Today's Production</span><span class="sublabel" id="today-label">Loading...</span></div>
             <div class="dash-btn" onclick="goToDay(1)"><span class="icon">&#9654;&#9654;</span><span class="label">Tomorrow's Production</span><span class="sublabel" id="tomorrow-label">Loading...</span></div>
         </div>
+        <div class="section-label">Quick Actions</div>
+        <div class="dash-row">
+            <div class="dash-btn highlight" onclick="window.location='/organic?action=receive'" style="border-color:#2e7d32;cursor:pointer;">
+                <span class="icon">&#128247;</span>
+                <span class="label">Receive Inventory</span>
+                <span class="sublabel">Scan an invoice or enter manually</span>
+            </div>
+            <div class="dash-btn highlight" onclick="window.location='/organic?action=sell'" style="border-color:#0288d1;cursor:pointer;">
+                <span class="icon">&#128176;</span>
+                <span class="label">Record Sale</span>
+                <span class="sublabel">Scan a packing slip / PO</span>
+            </div>
+        </div>
         <div class="section-label">Resources</div>
         <div class="dash-row">
             <a href="/recipes" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Recipe Cards</span><span class="sublabel">View and manage recipes</span></a>

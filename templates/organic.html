@@ -476,6 +476,7 @@ body.inv-page .modal-actions {
             <div id="rm-info" style="font-size:11px;color:var(--text-light);margin-bottom:14px;"></div>
             <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
                 <button class="btn btn-primary" onclick="addRawMaterial()">Add to Inventory</button>
+                <button class="btn btn-primary" onclick="openScanInvoice()" style="background:#2e7d32;border-color:#2e7d32;">📷 Scan Invoice</button>
                 <button class="btn-baseline" onclick="openBaselineRMBulkGrid()">Baseline Bulk</button>
                 <button class="btn-outline" onclick="openBaselineRMSingle()" title="Add a single ingredient to baseline (use after bulk pass for missed items)" style="font-size:13px;padding:10px 14px;">+ Single Ingredient</button>
                 <button class="btn-outline" onclick="addCustomIngredient()">+ New Ingredient</button>
@@ -509,8 +510,11 @@ body.inv-page .modal-actions {
                     <button class="filter-btn" data-fg-filter="Pasture Raised" onclick="setFgFilter('Pasture Raised',this)">Pasture Raised</button>
                     <button class="filter-btn" data-fg-filter="Conventional" onclick="setFgFilter('Conventional',this)">Conventional</button>
                 </div>
-                <button class="btn-baseline" onclick="openBaselineBulkGrid()">Baseline Inventory</button>
-                <button class="btn-outline" onclick="openBaselineSingle()" title="Add a single SKU to baseline (use after bulk pass for missed items)" style="font-size:13px;padding:10px 14px;">+ Single SKU</button>
+                <div style="display:flex;flex-wrap:wrap;gap:10px;">
+                    <button class="btn btn-primary" onclick="openScanSale()" style="background:#0288d1;border-color:#0288d1;">📷 Scan Packing Slip</button>
+                    <button class="btn-baseline" onclick="openBaselineBulkGrid()">Baseline Inventory</button>
+                    <button class="btn-outline" onclick="openBaselineSingle()" title="Add a single SKU to baseline (use after bulk pass for missed items)" style="font-size:13px;padding:10px 14px;">+ Single SKU</button>
+                </div>
             </div>
             <div id="fg-container"><div class="empty-state">Loading...</div></div>
         </div>
@@ -721,6 +725,102 @@ body.inv-page .modal-actions {
             <div class="modal-actions">
                 <button class="btn btn-outline" id="prompt-cancel-btn">Cancel</button>
                 <button class="btn btn-primary" id="prompt-ok-btn">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scan Invoice modal — Receive Inventory via camera -->
+    <div class="modal-overlay" id="scan-invoice-modal">
+        <div class="modal" style="max-width:780px;">
+            <button class="modal-close" onclick="closeScanInvoice()">&times;</button>
+            <h2 style="color:#2e7d32;">📷 Receive Inventory</h2>
+            <p style="font-size:12px;color:var(--text-light);margin-bottom:14px;line-height:1.5;">
+                Take a photo of the supplier invoice. We'll extract line items and let you review before saving. <span id="scan-invoice-usage" style="color:var(--text-light);font-weight:600;"></span>
+            </p>
+
+            <!-- Step 1: Camera capture / file picker -->
+            <div id="scan-invoice-capture-step">
+                <div style="background:#f0f7f0;border:2px dashed #a5d6a7;border-radius:10px;padding:32px 16px;text-align:center;margin-bottom:16px;">
+                    <div style="font-size:48px;margin-bottom:8px;">📷</div>
+                    <input type="file" id="scan-invoice-file" accept="image/*" capture="environment" style="display:block;margin:0 auto;font-size:14px;">
+                    <p style="font-size:11px;color:var(--text-light);margin-top:10px;">JPG, PNG, WebP, or HEIC. Max 10 MB.</p>
+                </div>
+                <div id="scan-invoice-msg" class="status" style="margin:8px 0;"></div>
+                <div class="modal-actions">
+                    <button class="btn btn-outline" onclick="closeScanInvoice()">Cancel</button>
+                    <button class="btn btn-primary" id="scan-invoice-go" onclick="runScanInvoice()" style="background:#2e7d32;">Extract Line Items</button>
+                </div>
+                <div style="margin-top:14px;text-align:center;">
+                    <button onclick="closeScanInvoice();document.getElementById('rm-supplier').focus();" style="background:none;border:none;color:var(--accent);text-decoration:underline;font-size:13px;cursor:pointer;">Or enter manually using the form below</button>
+                </div>
+            </div>
+
+            <!-- Step 2: Review parsed lines -->
+            <div id="scan-invoice-review-step" style="display:none;">
+                <div style="background:#fff8e1;border-left:3px solid #b38b00;padding:12px 14px;border-radius:6px;margin-bottom:14px;font-size:13px;">
+                    <strong>Review extraction:</strong> verify each line, fix any mistakes, then submit. Items in <span style="color:#c62828;">red</span> need an ingredient match — pick from the dropdown.
+                </div>
+                <div class="form-row">
+                    <div class="form-field"><label>Supplier</label><input id="scan-invoice-supplier" placeholder="Supplier name"></div>
+                    <div class="form-field"><label>Invoice Date</label><input type="date" id="scan-invoice-date"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-field" style="grid-column: 1 / -1;"><label>Invoice # (optional)</label><input id="scan-invoice-num" placeholder="Invoice number"></div>
+                </div>
+                <div id="scan-invoice-rows" style="margin-top:12px;max-height:50vh;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:#fff;"></div>
+                <div id="scan-invoice-submit-msg" class="status" style="margin:10px 0;"></div>
+                <div class="modal-actions">
+                    <button class="btn btn-outline" onclick="resetScanInvoice()">← Re-scan</button>
+                    <button class="btn btn-primary" id="scan-invoice-submit" onclick="submitScanInvoice()" style="background:#2e7d32;">Save All Items</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scan Packing Slip modal — Record Sale via camera -->
+    <div class="modal-overlay" id="scan-sale-modal">
+        <div class="modal" style="max-width:780px;">
+            <button class="modal-close" onclick="closeScanSale()">&times;</button>
+            <h2 style="color:#0288d1;">📷 Record Sale</h2>
+            <p style="font-size:12px;color:var(--text-light);margin-bottom:14px;line-height:1.5;">
+                Take a photo of the packing slip or PO. We'll extract product lines and FIFO-drain inventory after you review. <span id="scan-sale-usage" style="color:var(--text-light);font-weight:600;"></span>
+            </p>
+
+            <!-- Step 1: Camera capture -->
+            <div id="scan-sale-capture-step">
+                <div style="background:#e3f2fd;border:2px dashed #81d4fa;border-radius:10px;padding:32px 16px;text-align:center;margin-bottom:16px;">
+                    <div style="font-size:48px;margin-bottom:8px;">📷</div>
+                    <input type="file" id="scan-sale-file" accept="image/*" capture="environment" style="display:block;margin:0 auto;font-size:14px;">
+                    <p style="font-size:11px;color:var(--text-light);margin-top:10px;">JPG, PNG, WebP, or HEIC. Max 10 MB.</p>
+                </div>
+                <div id="scan-sale-msg" class="status" style="margin:8px 0;"></div>
+                <div class="modal-actions">
+                    <button class="btn btn-outline" onclick="closeScanSale()">Cancel</button>
+                    <button class="btn btn-primary" id="scan-sale-go" onclick="runScanSale()" style="background:#0288d1;">Extract Line Items</button>
+                </div>
+                <div style="margin-top:14px;text-align:center;">
+                    <button onclick="closeScanSale();showTab('fg');" style="background:none;border:none;color:var(--accent);text-decoration:underline;font-size:13px;cursor:pointer;">Or use the per-SKU Sell buttons</button>
+                </div>
+            </div>
+
+            <!-- Step 2: Review -->
+            <div id="scan-sale-review-step" style="display:none;">
+                <div style="background:#e3f2fd;border-left:3px solid #0288d1;padding:12px 14px;border-radius:6px;margin-bottom:14px;font-size:13px;">
+                    <strong>Review extraction:</strong> verify each product matches a SKU. Sales draw from oldest LOT first (FIFO).
+                </div>
+                <div class="form-row">
+                    <div class="form-field"><label>Buyer</label><input id="scan-sale-buyer" placeholder="Buyer / distributor"></div>
+                    <div class="form-field"><label>Sale Date</label><input type="date" id="scan-sale-date"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-field" style="grid-column: 1 / -1;"><label>PO # / Case LOT (optional)</label><input id="scan-sale-po" placeholder="PO number or case LOT"></div>
+                </div>
+                <div id="scan-sale-rows" style="margin-top:12px;max-height:50vh;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:#fff;"></div>
+                <div id="scan-sale-submit-msg" class="status" style="margin:10px 0;"></div>
+                <div class="modal-actions">
+                    <button class="btn btn-outline" onclick="resetScanSale()">← Re-scan</button>
+                    <button class="btn btn-primary" id="scan-sale-submit" onclick="submitScanSale()" style="background:#0288d1;">Save All Sales</button>
+                </div>
             </div>
         </div>
     </div>
@@ -1472,6 +1572,429 @@ async function submitBaselineRMSingle(){
 // Legacy entry point — opens the bulk grid by default
 async function addBaselineRawMaterial(){
     return openBaselineRMBulkGrid();
+}
+
+// ── Camera-scan: Receive Inventory ───────────────────────────────────────
+// Captures invoice photo, sends to Claude Vision via /api/scan/invoice,
+// renders an editable review grid, and submits via /api/organic/raw-materials/bulk.
+var scanInvoiceData = null;  // parsed response from /api/scan/invoice
+var scanInvoiceCatalog = []; // canonical {name, unit} list for dropdowns
+
+async function openScanInvoice(){
+    document.getElementById('scan-invoice-modal').classList.add('active');
+    resetScanInvoice();
+    await refreshScanUsage('invoice');
+}
+
+function closeScanInvoice(){
+    document.getElementById('scan-invoice-modal').classList.remove('active');
+}
+
+function resetScanInvoice(){
+    document.getElementById('scan-invoice-capture-step').style.display = 'block';
+    document.getElementById('scan-invoice-review-step').style.display = 'none';
+    document.getElementById('scan-invoice-file').value = '';
+    document.getElementById('scan-invoice-msg').textContent = '';
+    document.getElementById('scan-invoice-msg').className = 'status';
+    document.getElementById('scan-invoice-go').disabled = false;
+    document.getElementById('scan-invoice-go').textContent = 'Extract Line Items';
+}
+
+async function refreshScanUsage(which){
+    try{
+        var res = await fetch('/api/scan/usage');
+        var d = await res.json();
+        var text = '('+d.remaining+' of '+d.daily_limit+' scans left today)';
+        document.getElementById('scan-'+which+'-usage').textContent = text;
+    }catch(e){}
+}
+
+async function runScanInvoice(){
+    var fileInput = document.getElementById('scan-invoice-file');
+    var msg = document.getElementById('scan-invoice-msg');
+    var btn = document.getElementById('scan-invoice-go');
+    if(!fileInput.files || !fileInput.files[0]){
+        msg.className='status error';
+        msg.textContent='Pick or capture an image first.';
+        return;
+    }
+    btn.disabled = true; btn.textContent = 'Extracting…';
+    msg.className='status loading';
+    msg.textContent='Calling Claude Vision API. This usually takes 5–15 seconds.';
+
+    var fd = new FormData();
+    fd.append('file', fileInput.files[0]);
+    try{
+        var res = await fetch('/api/scan/invoice', {method:'POST', body: fd});
+        var data = await res.json();
+        if(!res.ok || !data.success){
+            msg.className='status error';
+            msg.textContent = data.error || 'Scan failed.';
+            btn.disabled = false; btn.textContent = 'Extract Line Items';
+            return;
+        }
+        scanInvoiceData = data;
+        scanInvoiceCatalog = data.catalog || [];
+        renderScanInvoiceReview(data);
+        document.getElementById('scan-invoice-capture-step').style.display = 'none';
+        document.getElementById('scan-invoice-review-step').style.display = 'block';
+    }catch(e){
+        msg.className='status error';
+        msg.textContent='Network error: '+e.message;
+        btn.disabled = false; btn.textContent = 'Extract Line Items';
+    }
+}
+
+function renderScanInvoiceReview(data){
+    document.getElementById('scan-invoice-supplier').value = data.supplier || '';
+    document.getElementById('scan-invoice-date').value = data.invoice_date || '';
+    document.getElementById('scan-invoice-num').value = data.invoice_number || '';
+
+    var rowsContainer = document.getElementById('scan-invoice-rows');
+    if(!data.line_items || !data.line_items.length){
+        rowsContainer.innerHTML='<div class="empty-state" style="padding:30px;">No line items extracted. Try a clearer photo, or use manual entry.</div>';
+        document.getElementById('scan-invoice-submit').disabled = true;
+        return;
+    }
+    document.getElementById('scan-invoice-submit').disabled = false;
+
+    // Build dropdown options once (catalog is the same for all rows)
+    var catalogOptions = '<option value="">— Pick from catalog —</option>';
+    scanInvoiceCatalog.forEach(function(c, i){
+        catalogOptions += '<option value="'+i+'">'+escSku(c.name)+' ('+escSku(c.unit)+')</option>';
+    });
+
+    var html = '';
+    data.line_items.forEach(function(line, idx){
+        var rawName = escSku(line.raw_name || '');
+        var matched = line.match;
+        var conf = line.confidence || 'none';
+        var confColor = conf==='high'?'#2e7d32':conf==='medium'?'#b38b00':'#c62828';
+        var confLabel = conf.toUpperCase();
+
+        var selectedIdx = -1;
+        if(matched){
+            for(var j=0;j<scanInvoiceCatalog.length;j++){
+                if(scanInvoiceCatalog[j].name===matched.name && scanInvoiceCatalog[j].unit===matched.unit){
+                    selectedIdx = j; break;
+                }
+            }
+        }
+
+        // Each row gets its own qty/unit/lot/best_before inputs and a catalog dropdown
+        var unitVal = line.unit_normalized || line.unit || '';
+        html += '<div class="scan-row" data-row-idx="'+idx+'" style="border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:8px;background:'+(conf==='none'||conf==='low'?'#fff5f5':'#fff')+';">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+        html += '<span style="font-size:11px;color:var(--text-light);">Extracted: <em>'+rawName+'</em></span>';
+        html += '<span style="font-size:10px;font-weight:700;background:'+confColor+';color:#fff;padding:2px 8px;border-radius:8px;">'+confLabel+'</span>';
+        html += '</div>';
+        html += '<div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:8px;">';
+        html += '<select class="scan-row-item" data-idx="'+idx+'">';
+        html += catalogOptions.replace('value="'+selectedIdx+'"', 'value="'+selectedIdx+'" selected');
+        html += '</select>';
+        html += '</div>';
+        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
+        html += '<input type="number" inputmode="decimal" step="any" class="scan-row-qty" data-idx="'+idx+'" value="'+line.quantity+'" placeholder="Qty">';
+        html += '<input type="text" class="scan-row-lot" data-idx="'+idx+'" value="'+escSku(line.supplier_lot||'')+'" placeholder="Supplier LOT#">';
+        html += '</div>';
+        html += '<button class="btn-sm" onclick="removeScanRow(this)" data-action="remove" style="margin-top:6px;color:var(--text-light);font-size:11px;">Remove this row</button>';
+        html += '</div>';
+    });
+    rowsContainer.innerHTML = html;
+}
+
+function removeScanRow(btn){
+    btn.closest('.scan-row').remove();
+}
+
+async function submitScanInvoice(){
+    var msg = document.getElementById('scan-invoice-submit-msg');
+    var btn = document.getElementById('scan-invoice-submit');
+
+    var supplier = document.getElementById('scan-invoice-supplier').value.trim();
+    var date = document.getElementById('scan-invoice-date').value.trim();
+    var invNum = document.getElementById('scan-invoice-num').value.trim();
+
+    var rows = document.querySelectorAll('#scan-invoice-rows .scan-row');
+    if(!rows.length){
+        msg.className='status error';
+        msg.textContent='No items to save. Re-scan or close.';
+        return;
+    }
+
+    var entries = [];
+    var unmatched = [];
+    rows.forEach(function(rowEl){
+        var idx = parseInt(rowEl.getAttribute('data-row-idx'));
+        var sel = rowEl.querySelector('.scan-row-item');
+        var qty = parseFloat(rowEl.querySelector('.scan-row-qty').value);
+        var lot = rowEl.querySelector('.scan-row-lot').value.trim();
+        var catIdx = parseInt(sel.value);
+        if(isNaN(catIdx) || !scanInvoiceCatalog[catIdx]){
+            unmatched.push(idx+1);
+            return;
+        }
+        if(isNaN(qty) || qty<=0) return;  // skip invalid qty
+        var item = scanInvoiceCatalog[catIdx];
+        entries.push({
+            item: item.name,
+            unit: item.unit,
+            quantity: qty,
+            supplier: supplier,
+            supplier_lot: lot,
+            date_received: date || undefined,
+        });
+    });
+
+    if(unmatched.length){
+        msg.className='status error';
+        msg.textContent='Pick a catalog ingredient for row(s): '+unmatched.join(', ')+'. Or click "Remove this row" to skip them.';
+        return;
+    }
+    if(!entries.length){
+        msg.className='status error';
+        msg.textContent='No valid entries. Make sure quantities are > 0.';
+        return;
+    }
+    if(!supplier){
+        msg.className='status error';
+        msg.textContent='Supplier name required.';
+        return;
+    }
+
+    var ok = await mobileConfirm(
+        'Save '+entries.length+' raw material receipt'+(entries.length===1?'':'s')+' from '+supplier+'?',
+        {title:'Confirm receipt', okLabel:'Save'}
+    );
+    if(!ok) return;
+
+    btn.disabled = true; btn.textContent='Saving…';
+    try{
+        var res = await fetch('/api/organic/raw-materials/bulk', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({entries: entries, baseline: false}),
+        });
+        var data = await res.json();
+        if(!data.success){
+            msg.className='status error';
+            msg.textContent = data.error || 'Save failed.';
+            if(data.details){ msg.textContent += ': '+data.details.join('; '); }
+            btn.disabled = false; btn.textContent='Save All Items';
+            return;
+        }
+        closeScanInvoice();
+        loadRawMaterials();
+        alert('Receipt saved: '+data.created+' line item'+(data.created===1?'':'s')+' added.');
+    }catch(e){
+        msg.className='status error';
+        msg.textContent='Network error: '+e.message;
+        btn.disabled = false; btn.textContent='Save All Items';
+    }
+}
+
+
+// ── Camera-scan: Record Sale ─────────────────────────────────────────────
+var scanSaleData = null;
+var scanSaleCatalog = [];
+
+async function openScanSale(){
+    document.getElementById('scan-sale-modal').classList.add('active');
+    resetScanSale();
+    await refreshScanUsage('sale');
+}
+
+function closeScanSale(){
+    document.getElementById('scan-sale-modal').classList.remove('active');
+}
+
+function resetScanSale(){
+    document.getElementById('scan-sale-capture-step').style.display = 'block';
+    document.getElementById('scan-sale-review-step').style.display = 'none';
+    document.getElementById('scan-sale-file').value = '';
+    document.getElementById('scan-sale-msg').textContent = '';
+    document.getElementById('scan-sale-msg').className = 'status';
+    document.getElementById('scan-sale-go').disabled = false;
+    document.getElementById('scan-sale-go').textContent = 'Extract Line Items';
+}
+
+async function runScanSale(){
+    var fileInput = document.getElementById('scan-sale-file');
+    var msg = document.getElementById('scan-sale-msg');
+    var btn = document.getElementById('scan-sale-go');
+    if(!fileInput.files || !fileInput.files[0]){
+        msg.className='status error';
+        msg.textContent='Pick or capture an image first.';
+        return;
+    }
+    btn.disabled = true; btn.textContent='Extracting…';
+    msg.className='status loading';
+    msg.textContent='Calling Claude Vision API. Usually 5–15 seconds.';
+
+    var fd = new FormData();
+    fd.append('file', fileInput.files[0]);
+    try{
+        var res = await fetch('/api/scan/packing-slip', {method:'POST', body: fd});
+        var data = await res.json();
+        if(!res.ok || !data.success){
+            msg.className='status error';
+            msg.textContent = data.error || 'Scan failed.';
+            btn.disabled = false; btn.textContent='Extract Line Items';
+            return;
+        }
+        scanSaleData = data;
+        scanSaleCatalog = data.catalog || [];
+        renderScanSaleReview(data);
+        document.getElementById('scan-sale-capture-step').style.display = 'none';
+        document.getElementById('scan-sale-review-step').style.display = 'block';
+    }catch(e){
+        msg.className='status error';
+        msg.textContent='Network error: '+e.message;
+        btn.disabled = false; btn.textContent='Extract Line Items';
+    }
+}
+
+function renderScanSaleReview(data){
+    document.getElementById('scan-sale-buyer').value = data.buyer || '';
+    document.getElementById('scan-sale-date').value = data.ship_date || '';
+    document.getElementById('scan-sale-po').value = data.po_number || '';
+
+    var rowsContainer = document.getElementById('scan-sale-rows');
+    if(!data.line_items || !data.line_items.length){
+        rowsContainer.innerHTML='<div class="empty-state" style="padding:30px;">No products extracted. Try a clearer photo, or use the per-SKU Sell buttons on the Finished Goods tab.</div>';
+        document.getElementById('scan-sale-submit').disabled = true;
+        return;
+    }
+    document.getElementById('scan-sale-submit').disabled = false;
+
+    var catalogOptions = '<option value="">— Pick a SKU —</option>';
+    scanSaleCatalog.forEach(function(s, i){
+        catalogOptions += '<option value="'+i+'">'+escSku(s.display)+'</option>';
+    });
+
+    var html = '';
+    data.line_items.forEach(function(line, idx){
+        var rawName = escSku(line.raw_name || '');
+        var conf = line.confidence || 'none';
+        var confColor = conf==='high'?'#2e7d32':conf==='medium'?'#b38b00':'#c62828';
+        var confLabel = conf.toUpperCase();
+
+        var selectedIdx = -1;
+        if(line.match){
+            for(var j=0;j<scanSaleCatalog.length;j++){
+                if(scanSaleCatalog[j].sku_key===line.match.sku_key){selectedIdx=j;break;}
+            }
+        }
+
+        html += '<div class="scan-row" data-row-idx="'+idx+'" style="border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:8px;background:'+(conf==='none'||conf==='low'?'#fff5f5':'#fff')+';">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+        html += '<span style="font-size:11px;color:var(--text-light);">Extracted: <em>'+rawName+'</em></span>';
+        html += '<span style="font-size:10px;font-weight:700;background:'+confColor+';color:#fff;padding:2px 8px;border-radius:8px;">'+confLabel+'</span>';
+        html += '</div>';
+        html += '<div style="margin-bottom:8px;">';
+        html += '<select class="scan-sale-sku" data-idx="'+idx+'">';
+        html += catalogOptions.replace('value="'+selectedIdx+'"', 'value="'+selectedIdx+'" selected');
+        html += '</select>';
+        html += '</div>';
+        html += '<input type="number" inputmode="numeric" min="1" class="scan-sale-qty" data-idx="'+idx+'" value="'+line.quantity+'" placeholder="Quantity (units)">';
+        html += '<button class="btn-sm" onclick="removeScanRow(this)" style="margin-top:6px;color:var(--text-light);font-size:11px;">Remove this row</button>';
+        html += '</div>';
+    });
+    rowsContainer.innerHTML = html;
+}
+
+async function submitScanSale(){
+    var msg = document.getElementById('scan-sale-submit-msg');
+    var btn = document.getElementById('scan-sale-submit');
+
+    var buyer = document.getElementById('scan-sale-buyer').value.trim();
+    var date = document.getElementById('scan-sale-date').value.trim();
+    var po = document.getElementById('scan-sale-po').value.trim();
+
+    if(!buyer){
+        msg.className='status error';
+        msg.textContent='Buyer name required.';
+        return;
+    }
+
+    var rows = document.querySelectorAll('#scan-sale-rows .scan-row');
+    if(!rows.length){
+        msg.className='status error';
+        msg.textContent='No items to save. Re-scan or close.';
+        return;
+    }
+
+    var sales = [];
+    var unmatched = [];
+    rows.forEach(function(rowEl){
+        var idx = parseInt(rowEl.getAttribute('data-row-idx'));
+        var sel = rowEl.querySelector('.scan-sale-sku');
+        var qty = parseInt(rowEl.querySelector('.scan-sale-qty').value);
+        var catIdx = parseInt(sel.value);
+        if(isNaN(catIdx) || !scanSaleCatalog[catIdx]){
+            unmatched.push(idx+1);
+            return;
+        }
+        if(isNaN(qty) || qty<=0) return;
+        sales.push({
+            sku_key: scanSaleCatalog[catIdx].sku_key,
+            quantity: qty,
+            buyer: buyer,
+            sale_date: date || undefined,
+            case_lot: po || undefined,
+        });
+    });
+
+    if(unmatched.length){
+        msg.className='status error';
+        msg.textContent='Pick a SKU for row(s): '+unmatched.join(', ')+'. Or remove them.';
+        return;
+    }
+    if(!sales.length){
+        msg.className='status error';
+        msg.textContent='No valid sales. Make sure quantities are > 0.';
+        return;
+    }
+
+    var totalUnits = sales.reduce(function(a,s){return a+s.quantity;},0);
+    var ok = await mobileConfirm(
+        'Record '+sales.length+' sale'+(sales.length===1?'':'s')+' totaling '+totalUnits+' unit'+(totalUnits===1?'':'s')+' to '+buyer+'? FIFO will draw from oldest LOTs.',
+        {title:'Confirm sale', okLabel:'Save'}
+    );
+    if(!ok) return;
+
+    btn.disabled = true; btn.textContent='Saving…';
+    var saved = 0;
+    var errors = [];
+    for(var i=0; i<sales.length; i++){
+        try{
+            var res = await fetch('/api/organic/sales', {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify(sales[i]),
+            });
+            var data = await res.json();
+            if(data.success) saved++;
+            else errors.push('Line '+(i+1)+': '+(data.error || 'failed'));
+        }catch(e){
+            errors.push('Line '+(i+1)+': '+e.message);
+        }
+    }
+
+    if(errors.length){
+        msg.className='status error';
+        msg.textContent = 'Saved '+saved+' of '+sales.length+'. Errors: '+errors.join('; ');
+        btn.disabled = false; btn.textContent='Save All Sales';
+        // Reload regardless so user can see what made it through
+        loadFinishedGoods();
+        loadSales();
+        return;
+    }
+
+    closeScanSale();
+    loadFinishedGoods();
+    loadSales();
+    alert('Recorded '+saved+' sale'+(saved===1?'':'s')+' to '+buyer+'.');
 }
 
 // ── Baseline finished goods entry ─────────────────────────────────────
@@ -2288,6 +2811,19 @@ document.addEventListener('DOMContentLoaded',function(){
     document.getElementById('rm-date').value=today;
     document.getElementById('inv-date').value=today;
     document.getElementById('sale-date-modal').value=today;
+
+    // Honor ?action=receive|sell from dashboard quick-action buttons
+    var params = new URLSearchParams(window.location.search);
+    var action = params.get('action');
+    if(action === 'receive'){
+        // Slight delay so the page is settled before the modal opens
+        setTimeout(openScanInvoice, 200);
+    } else if(action === 'sell'){
+        setTimeout(function(){
+            showTab('fg');
+            openScanSale();
+        }, 200);
+    }
 });
 </script>
 </body>
