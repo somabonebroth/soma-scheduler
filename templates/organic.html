@@ -4444,7 +4444,7 @@ async function loadSales(){
 
     if(countEl){
         var settledUnits = settled.reduce(function(a,s){return a+(s.quantity||0);},0);
-        countEl.textContent = settled.length+' sale'+(settled.length===1?'':'s')+' \u2022 '+settledUnits+' units';
+        countEl.textContent = settled.length+' sale'+(settled.length===1?'':'s')+' • '+settledUnits+' units';
     }
 
     function fmtProduct(s){
@@ -4477,7 +4477,7 @@ async function loadSales(){
     function renderPendingTable(rows){
         if(!rows.length) return '';
         var h='<div style="background:#e8eaf6;border:1px solid #9fa8da;border-radius:8px;padding:14px;margin-bottom:12px;">'
-            +'<div style="font-size:11px;font-weight:700;color:#3949ab;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">\u23f3 Pending Payment (Net 14)</div>'
+            +'<div style="font-size:11px;font-weight:700;color:#3949ab;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">⏳ Pending Payment (Net 14)</div>'
             +'<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Product</th><th>Buyer</th><th>LOT#(s)</th><th>Qty</th><th>Order</th><th></th></tr>';
         rows.forEach(function(s){
             h+='<tr>'
@@ -4487,7 +4487,7 @@ async function loadSales(){
               +'<td>'+fmtLots(s)+'</td>'
               +'<td>'+s.quantity+'</td>'
               +'<td style="font-size:11px;color:var(--text-light);">'+escSku(s.ripe_order_id||s.po_number||'')+'</td>'
-              +'<td><button class="btn-sm" style="font-size:11px;color:#3949ab;border-color:#9fa8da;" onclick="manualSettle(''+escHtml(s.id)+'')">Mark Paid</button></td>'
+              +'<td><button class="btn-sm" style="font-size:11px;color:#3949ab;border-color:#9fa8da;" data-settle-id="'+escHtml(s.id)+'">Mark Paid</button></td>'
               +'</tr>';
         });
         h+='</table></div></div>';
@@ -4540,6 +4540,9 @@ async function loadSales(){
     container.innerHTML = html;
     container.querySelectorAll('[data-del-sale]').forEach(function(btn){
         btn.addEventListener('click', function(){ deleteSale(this.getAttribute('data-del-sale')); });
+    });
+    container.querySelectorAll('[data-settle-id]').forEach(function(btn){
+        btn.addEventListener('click', function(){ manualSettle(this.getAttribute('data-settle-id')); });
     });
 }
 
