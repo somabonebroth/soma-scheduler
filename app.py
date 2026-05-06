@@ -2155,10 +2155,17 @@ ORGANIC_CONTACTS_PATH = os.path.join(INVENTORY_DIR, "contacts.json")
 # production runs and sales). Each entry records what changed, why, and
 # which LOT(s) were drained or created. Used for audit traceability.
 ADJUSTMENTS_PATH = os.path.join(INVENTORY_DIR, "adjustments.json")
+# User-defined sections for Raw Materials grouping (replaces hardcoded categorizer).
+# Each ingredient (name + unit) maps to a section_id explicitly. Unassigned
+# items show in a fallback "Unassigned" group.
+SECTIONS_PATH = os.path.join(INVENTORY_DIR, "sections.json")
 # Camera-scan request log: per-day rolling counter for daily-limit enforcement
 # plus an audit trail of every scan (success or failure).
 SCAN_LOG_PATH = os.path.join(INVENTORY_DIR, "scan_log.json")
 SCAN_DAILY_LIMIT = int(os.environ.get("SCAN_DAILY_LIMIT", "50"))
+# Raw material section organization. User-defined sections + per-ingredient
+# assignment. Pre-seeded with the 6-section structure on first load.
+RM_SECTIONS_PATH = os.path.join(INVENTORY_DIR, "rm_sections.json")
 
 
 def _migrate_organic_to_inventory():
@@ -2363,45 +2370,163 @@ def organic_ingredients():
     return jsonify(all_items)
 
 
-# ── Raw material category buckets for the inventory list view ──
-# Each ingredient is bucketed into one of these labels for grouping.
-# Order matters: this is the display order AND the rule-evaluation order
-# (first match wins). Items not matching any specific bucket fall through
-# to "4. Everything Else".
-RAW_CATEGORIES = [
-    "1. Bones & Proteins",
-    "2. Adjuncts",
-    "3. Mushrooms & Mushroom Powders",
-    "4. Everything Else",
+# ── Raw material section organization ─────────────────────────────────
+# User-defined sections (created via /api/organic/raw-materials/sections)
+# replace the previous hardcoded heuristic. Each ingredient is explicitly
+# assigned to a section by name+unit key. Unassigned ingredients land in
+# a special "Unassigned" section that's always shown last.
+
+# Default section list seeded on first load. User can rename/reorder/add/
+# delete after that — these are just a starting point.
+DEFAULT_RM_SECTIONS = [
+    {"id": "bones", "name": "Bones"},
+    {"id": "mirepoix", "name": "Mirepoix"},
+    {"id": "herbs", "name": "Herbs"},
+    {"id": "adjuncts", "name": "Adjuncts & Pre-Packs"},
+    {"id": "mushrooms", "name": "Mushrooms"},
+    {"id": "spices_other", "name": "Spices & Other"},
 ]
 
+# Special "Unassigned" section. Not stored in user list; surfaced
+# separately so users can see what still needs classifying.
+UNASSIGNED_SECTION_ID = "_unassigned"
+UNASSIGNED_SECTION_NAME = "Unassigned"
 
-def _categorize_ingredient(name):
-    """Return the display category bucket for a raw material name.
-    Lowercase substring matching — order of rules matters (first match wins).
 
-    Buckets, in evaluation order:
-      1. Bones & Proteins — bones, feet, neck, lamb meat, turkey
-      2. Adjuncts — anything with 'adjunct' in the name (wins over mushroom)
-      3. Mushrooms & Mushroom Powders — anything with 'mushroom'
-      4. Everything Else — vegetables, herbs, spices, salts, liquids, etc.
-    """
-    if not name:
-        return "4. Everything Else"
-    n = name.lower()
+def _ingredient_section_key(name, unit):
+    """Storage key for ingredient assignment lookups."""
+    return f"{(name or '').strip()}|{(unit or '').strip()}"
 
-    # 1. Bones & proteins
-    if ("bone" in n or "feet" in n or "neck" in n or "turkey" in n
-            or ("lamb" in n and "meat" in n)):
-        return "1. Bones & Proteins"
-    # 2. Adjuncts — checked BEFORE mushrooms so 'Mushroom Adjunct' lands here
-    if "adjunct" in n:
-        return "2. Adjuncts"
-    # 3. Mushrooms (whole, dried, powders)
-    if "mushroom" in n:
-        return "3. Mushrooms & Mushroom Powders"
-    # 4. Catch-all
-    return "4. Everything Else"
+
+def _load_rm_sections():
+    """Load the sections+assignments file, seeding defaults on first access."""
+    if not os.path.exists(RM_SECTIONS_PATH):
+        seed = {
+            "sections": [
+                {"id": s["id"], "name": s["name"], "order": i}
+                for i, s in enumerate(DEFAULT_RM_SECTIONS)
+            ],
+            "assignments": {},
+        }
+        _save_json(RM_SECTIONS_PATH, seed)
+        return seed
+
+    data = _load_json(RM_SECTIONS_PATH, None)
+    if not isinstance(data, dict):
+        # Corrupt or unexpected — re-seed
+        seed = {
+            "sections": [
+                {"id": s["id"], "name": s["name"], "order": i}
+                for i, s in enumerate(DEFAULT_RM_SECTIONS)
+            ],
+            "assignments": {},
+        }
+        _save_json(RM_SECTIONS_PATH, seed)
+        return seed
+
+    # Defensive normalization
+    sections = data.get("sections")
+    if not isinstance(sections, list):
+        sections = []
+    assignments = data.get("assignments")
+    if not isinstance(assignments, dict):
+        assignments = {}
+    return {"sections": sections, "assignments": assignments}
+
+
+def _section_for_ingredient(name, unit, sections_data):
+    """Return the section id this ingredient is assigned to, or None."""
+    key = _ingredient_section_key(name, unit)
+    section_id = sections_data.get("assignments", {}).get(key)
+    if not section_id:
+        return None
+    # Verify the section still exists; if it was deleted, treat as unassigned
+    if not any(s.get("id") == section_id for s in sections_data.get("sections", [])):
+        return None
+    return section_id
+
+
+@app.route("/api/organic/raw-materials/sections", methods=["GET"])
+@login_required
+def get_rm_sections():
+    """Return the section list + per-ingredient assignments."""
+    return jsonify(_load_rm_sections())
+
+
+@app.route("/api/organic/raw-materials/sections", methods=["PUT"])
+@login_required
+def update_rm_sections():
+    """Replace the entire section list. Body: {sections: [{id, name, order}]}.
+
+    The id of each section must be a non-empty string. If a new section is
+    added, the caller may use any unique id (we don't enforce a format).
+    Sections that are removed will result in their assignments being cleared
+    (orphan cleanup) on save."""
+    data = request.json or {}
+    sections_in = data.get("sections")
+    if not isinstance(sections_in, list):
+        return jsonify({"error": "sections must be a list"}), 400
+
+    # Validate + deduplicate ids
+    seen_ids = set()
+    cleaned = []
+    for i, s in enumerate(sections_in):
+        if not isinstance(s, dict):
+            return jsonify({"error": f"section {i}: must be an object"}), 400
+        sid = (s.get("id") or "").strip()
+        sname = (s.get("name") or "").strip()
+        if not sid:
+            return jsonify({"error": f"section {i}: id required"}), 400
+        if not sname:
+            return jsonify({"error": f"section {i}: name required"}), 400
+        if sid == UNASSIGNED_SECTION_ID:
+            return jsonify({"error": f"section id '{UNASSIGNED_SECTION_ID}' is reserved"}), 400
+        if sid in seen_ids:
+            return jsonify({"error": f"duplicate section id: {sid}"}), 400
+        seen_ids.add(sid)
+        cleaned.append({"id": sid, "name": sname, "order": i})
+
+    existing = _load_rm_sections()
+    # Drop assignments pointing at sections that no longer exist
+    new_assignments = {
+        k: v for k, v in existing["assignments"].items() if v in seen_ids
+    }
+    saved = {"sections": cleaned, "assignments": new_assignments}
+    _save_json(RM_SECTIONS_PATH, saved)
+    return jsonify({"success": True, **saved})
+
+
+@app.route("/api/organic/raw-materials/assignments", methods=["PUT"])
+@login_required
+def update_rm_assignments():
+    """Update ingredient-to-section assignments. Body: {assignments: {...}}.
+
+    Each value must be either a valid section id or empty string (meaning
+    'unassigned'). Empty assignments are removed entirely so the file
+    doesn't grow unbounded."""
+    data = request.json or {}
+    incoming = data.get("assignments")
+    if not isinstance(incoming, dict):
+        return jsonify({"error": "assignments must be an object"}), 400
+
+    existing = _load_rm_sections()
+    valid_ids = {s["id"] for s in existing["sections"]}
+
+    merged = dict(existing.get("assignments") or {})
+    for key, value in incoming.items():
+        if not isinstance(key, str) or not key:
+            continue  # skip malformed entries
+        v = (value or "").strip()
+        if not v:
+            merged.pop(key, None)
+            continue
+        if v not in valid_ids:
+            return jsonify({"error": f"unknown section id: {v}"}), 400
+        merged[key] = v
+
+    existing["assignments"] = merged
+    _save_json(RM_SECTIONS_PATH, existing)
+    return jsonify({"success": True, "assignments": merged})
 
 
 @app.route("/api/organic/raw-materials/grouped", methods=["GET"])
@@ -2491,6 +2616,11 @@ def get_raw_materials_grouped():
             derived[key] = {"name": item, "unit": unit}
 
     # Merge: every catalog item gets a row (even with no receipts)
+    sections_data = _load_rm_sections()
+    sections_list = sections_data.get("sections", [])
+    section_order = {s["id"]: i for i, s in enumerate(sections_list)}
+    section_names = {s["id"]: s["name"] for s in sections_list}
+
     rows = []
     for key, ing in derived.items():
         agg = aggregates.get(key, {})
@@ -2503,10 +2633,21 @@ def get_raw_materials_grouped():
         if total_remaining == int(total_remaining):
             total_remaining = int(total_remaining)
 
+        sec_id = _section_for_ingredient(ing["name"], ing["unit"], sections_data)
+        if sec_id:
+            sec_name = section_names.get(sec_id, UNASSIGNED_SECTION_NAME)
+            sort_idx = section_order.get(sec_id, 999)
+        else:
+            sec_id = UNASSIGNED_SECTION_ID
+            sec_name = UNASSIGNED_SECTION_NAME
+            sort_idx = 1000  # always last
+
         rows.append({
             "name": ing["name"],
             "unit": ing["unit"],
-            "category": _categorize_ingredient(ing["name"]),
+            "section_id": sec_id,
+            "section_name": sec_name,
+            "_sort_idx": sort_idx,
             "total_received": total_received,
             "total_remaining": total_remaining,
             "lot_count": agg.get("lot_count", 0),
@@ -2515,9 +2656,11 @@ def get_raw_materials_grouped():
             "catalog_only": (agg.get("lot_count", 0) == 0),
         })
 
-    # Sort: by category index first, then alphabetically by name within each
-    cat_index = {c: i for i, c in enumerate(RAW_CATEGORIES)}
-    rows.sort(key=lambda r: (cat_index.get(r["category"], 99), r["name"].lower(), r["unit"]))
+    # Sort: by section order first, then alphabetically by name within each
+    rows.sort(key=lambda r: (r["_sort_idx"], r["name"].lower(), r["unit"]))
+    # Strip internal sort field before returning
+    for r in rows:
+        r.pop("_sort_idx", None)
     return jsonify(rows)
 
 

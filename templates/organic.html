@@ -329,31 +329,60 @@ body.inv-page .fg-info .lot-tag { font-size: 11px; background: var(--dark); colo
 body.inv-page .fg-qty { font-size: 16px; font-weight: 700; color: var(--accent); white-space: nowrap; }
 body.inv-page .fg-qty.negative { color: #dc3545; }
 
-/* Raw Materials catalog rows + category sections */
-body.inv-page .rm-cat-section {
-    margin-bottom: 18px;
+/* Raw Materials catalog rows + collapsible sections */
+body.inv-page .rm-section {
+    margin-bottom: 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
 }
-body.inv-page .rm-cat-header {
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--text-light);
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 6px;
+body.inv-page .rm-section-header {
     display: flex;
     align-items: center;
     gap: 10px;
+    padding: 14px 16px;
+    background: var(--row-alt);
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.1s;
+    min-height: 50px;
 }
-body.inv-page .rm-cat-count {
+body.inv-page .rm-section-header:hover {
+    background: #ececea;
+}
+body.inv-page .rm-section-toggle {
+    font-size: 12px;
+    color: var(--text-light);
+    width: 14px;
+    flex-shrink: 0;
+}
+body.inv-page .rm-section-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--dark);
+    flex: 1;
+}
+body.inv-page .rm-section-count {
     font-size: 11px;
     font-weight: 500;
     color: var(--text-light);
-    background: var(--row-alt);
-    padding: 2px 8px;
+    background: #fff;
+    border: 1px solid var(--border);
+    padding: 2px 9px;
     border-radius: 10px;
 }
+body.inv-page .rm-section-body {
+    padding: 4px 12px 8px 12px;
+}
+body.inv-page .rm-section-empty {
+    padding: 16px 16px;
+    font-size: 12px;
+    color: var(--text-light);
+    font-style: italic;
+    text-align: center;
+}
+
 body.inv-page .rm-row {
     display: flex; justify-content: space-between; align-items: center;
     padding: 12px 4px; border-bottom: 1px solid var(--border);
@@ -368,6 +397,85 @@ body.inv-page .rm-qty {
 }
 body.inv-page .rm-qty.negative { color: #999; }
 body.inv-page .rm-detail { margin-bottom: 8px; }
+
+/* Sections management modal — section list editor */
+body.inv-page .section-edit-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 6px;
+    border-bottom: 1px solid var(--border);
+}
+body.inv-page .section-edit-row:last-child { border-bottom: none; }
+body.inv-page .section-edit-name {
+    flex: 1;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-size: 13px;
+    min-height: 36px;
+    background: #fff;
+}
+body.inv-page .section-edit-arrow {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    min-height: 36px;
+    min-width: 32px;
+}
+body.inv-page .section-edit-arrow:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+body.inv-page .section-edit-del {
+    background: #fff;
+    border: 1px solid #f5c2c7;
+    color: var(--danger);
+    padding: 6px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    cursor: pointer;
+    min-height: 36px;
+}
+body.inv-page .section-edit-del:hover {
+    background: var(--danger);
+    color: #fff;
+}
+
+/* Assignment grid — one row per ingredient with section picker */
+body.inv-page .assign-row {
+    display: grid;
+    grid-template-columns: 1fr 180px;
+    gap: 10px;
+    align-items: center;
+    padding: 7px 8px;
+    border-bottom: 1px solid #f0f0eb;
+}
+body.inv-page .assign-row:last-child { border-bottom: none; }
+body.inv-page .assign-name {
+    font-size: 13px;
+    color: var(--text);
+}
+body.inv-page .assign-name .unit-tag {
+    font-size: 10px;
+    color: var(--text-light);
+    background: var(--row-alt);
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: 4px;
+    font-family: monospace;
+}
+body.inv-page .assign-select {
+    padding: 7px 8px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-size: 12px;
+    min-height: 34px;
+    background: #fff;
+}
 
 /* Modal action footer */
 body.inv-page .modal-actions {
@@ -484,7 +592,10 @@ body.inv-page .modal-actions {
             <div id="rm-status" class="status"></div>
         </div>
         <div class="card">
-            <h2>Current Inventory <span class="count-badge" id="rm-count">—</span></h2>
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
+                <h2 style="border-bottom:none;padding-bottom:0;margin-bottom:0;">Current Inventory <span class="count-badge" id="rm-count">—</span></h2>
+                <button class="btn-outline" onclick="openSectionsModal()" title="Organize ingredients into sections" style="font-size:12px;padding:8px 14px;min-height:38px;">⚙ Edit Sections</button>
+            </div>
             <div id="rm-table-container"><div class="empty-state">Loading...</div></div>
         </div>
     </div>
@@ -825,6 +936,46 @@ body.inv-page .modal-actions {
         </div>
     </div>
 
+    <!-- Sections Management Modal — edit list + assign ingredients -->
+    <div class="modal-overlay" id="sections-modal">
+        <div class="modal" style="max-width:780px;">
+            <button class="modal-close" onclick="closeSectionsModal()">&times;</button>
+            <h2>⚙ Edit Sections</h2>
+            <p style="font-size:12px;color:var(--text-light);margin-bottom:14px;line-height:1.5;">
+                Organize ingredients into custom sections. Use the ▲▼ buttons to reorder. Unassigned ingredients show at the bottom of the list.
+            </p>
+
+            <!-- Section list editor -->
+            <div style="margin-bottom:18px;">
+                <div style="font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Sections</div>
+                <div id="sections-list" style="border:1px solid var(--border);border-radius:6px;padding:8px;background:#fff;"></div>
+                <div style="display:flex;gap:8px;margin-top:8px;">
+                    <input type="text" id="new-section-name" placeholder="New section name" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:14px;min-height:40px;">
+                    <button class="btn btn-outline" onclick="addNewSection()" style="font-size:13px;padding:10px 16px;">+ Add</button>
+                </div>
+            </div>
+
+            <!-- Ingredient assignment grid -->
+            <div>
+                <div style="font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Assign Ingredients</div>
+                <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
+                    <input type="text" id="assignment-search" placeholder="Filter ingredients…" oninput="renderAssignmentGrid()" style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-height:36px;">
+                    <select id="assignment-bulk-section" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-height:36px;">
+                        <option value="">— Bulk assign visible to… —</option>
+                    </select>
+                    <button class="btn-outline" onclick="bulkAssignVisible()" style="font-size:12px;padding:8px 12px;">Apply</button>
+                </div>
+                <div id="assignment-grid" style="max-height:40vh;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:6px;background:#fff;"></div>
+            </div>
+
+            <div id="sections-msg" class="status" style="margin:10px 0;"></div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeSectionsModal()">Cancel</button>
+                <button class="btn btn-primary" id="sections-save-btn" onclick="saveSections()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
     <!-- TAB 4: Records — Sales History, Search & Trace, Invoices -->
     <div class="tab-content" id="tab-records">
         <div class="card">
@@ -1039,91 +1190,138 @@ async function loadContacts(){
 // Key format: "name|unit" so two units of the same ingredient (rare) don't collide.
 var expandedRMKey=null;
 
+// Track which sections are collapsed. Persisted to localStorage so state
+// survives page reloads. Default: all sections open.
+function _getCollapsedSections(){
+    try{
+        var raw = localStorage.getItem('rm_collapsed_sections');
+        return raw ? JSON.parse(raw) : {};
+    }catch(e){ return {}; }
+}
+function _setCollapsedSections(state){
+    try{ localStorage.setItem('rm_collapsed_sections', JSON.stringify(state)); }catch(e){}
+}
+function toggleRMSection(sectionId){
+    var state = _getCollapsedSections();
+    state[sectionId] = !state[sectionId];
+    _setCollapsedSections(state);
+    loadRawMaterials();
+}
+
 async function loadRawMaterials(){
-    var res=await fetch('/api/organic/raw-materials/grouped');
-    var rows=await res.json();
-    var container=document.getElementById('rm-table-container');
-    var countEl=document.getElementById('rm-count');
+    var [rowsRes, sectionsRes] = await Promise.all([
+        fetch('/api/organic/raw-materials/grouped'),
+        fetch('/api/organic/raw-materials/sections'),
+    ]);
+    var rows = await rowsRes.json();
+    var sectionsData = await sectionsRes.json();
+    var container = document.getElementById('rm-table-container');
+    var countEl = document.getElementById('rm-count');
     if(countEl){
-        var stocked=rows.filter(function(r){return(r.total_remaining||0)>0;}).length;
-        var totalLots=rows.reduce(function(a,r){return a+(r.lot_count||0);},0);
-        countEl.textContent=stocked+' stocked / '+rows.length+' ingredients • '+totalLots+' lot'+(totalLots===1?'':'s');
+        var stocked = rows.filter(function(r){return(r.total_remaining||0)>0;}).length;
+        var totalLots = rows.reduce(function(a,r){return a+(r.lot_count||0);},0);
+        countEl.textContent = stocked+' stocked / '+rows.length+' ingredients • '+totalLots+' lot'+(totalLots===1?'':'s');
     }
     if(!rows.length){
-        container.innerHTML='<div class="empty-state">No ingredients found.<br>Recipes must define ingredients before they appear here. Use <strong>+ New Ingredient</strong> to add custom items.</div>';
+        container.innerHTML = '<div class="empty-state">No ingredients found.<br>Recipes must define ingredients before they appear here. Use <strong>+ New Ingredient</strong> to add custom items.</div>';
         return;
     }
 
-    // Group by category
-    var byCat={};
-    var catOrder=[];
+    // Group rows by section_id
+    var bySection = {};
     rows.forEach(function(r){
-        var c=r.category||'9. Other';
-        if(!(c in byCat)){byCat[c]=[];catOrder.push(c);}
-        byCat[c].push(r);
+        var sid = r.section_id || '_unassigned';
+        if(!(sid in bySection)) bySection[sid] = [];
+        bySection[sid].push(r);
     });
 
-    var html='';
-    catOrder.forEach(function(cat){
-        var items=byCat[cat];
-        // Strip the leading "1. " from category for display
-        var catLabel=cat.replace(/^\d+\.\s*/, '');
-        html+='<div class="rm-cat-section">';
-        html+='<div class="rm-cat-header">'+escSku(catLabel)+' <span class="rm-cat-count">'+items.length+'</span></div>';
+    // Build the ordered section list: user-defined sections first (in their
+    // saved order), then Unassigned at the end (always shown but greyed out
+    // when empty).
+    var sectionOrder = (sectionsData.sections || []).map(function(s){
+        return {id: s.id, name: s.name};
+    });
+    sectionOrder.push({id: '_unassigned', name: 'Unassigned'});
 
-        items.forEach(function(r){
-            var key=r.name+'|'+r.unit;
-            var keyEnc=encodeURIComponent(key);
-            var isExpanded=(expandedRMKey===key);
-            var outOfStock=(r.total_remaining||0)<=0;
-            var rowOpacity=outOfStock?'opacity:0.55;':'';
-            var baselineBadge=r.has_baseline?'<span class="baseline-badge">BASELINE</span>':'';
-            var stockBadge='';
-            if(outOfStock && r.lot_count>0){
-                stockBadge='<span style="display:inline-block;font-size:10px;font-weight:700;background:#f5f5f0;color:#999;border:1px solid #d0d0c8;padding:2px 8px;border-radius:10px;letter-spacing:0.4px;margin-left:8px;vertical-align:middle;">DEPLETED</span>';
-            } else if(r.catalog_only){
-                stockBadge='<span style="display:inline-block;font-size:10px;font-weight:700;background:#f5f5f0;color:#999;border:1px solid #d0d0c8;padding:2px 8px;border-radius:10px;letter-spacing:0.4px;margin-left:8px;vertical-align:middle;">NEVER RECEIVED</span>';
-            }
+    var collapsed = _getCollapsedSections();
+    var html = '';
+    sectionOrder.forEach(function(sec){
+        var items = bySection[sec.id] || [];
+        var isEmpty = items.length === 0;
+        var isCollapsed = !!collapsed[sec.id];
+        var greyed = isEmpty ? 'opacity:0.45;' : '';
 
-            var lotNote='';
-            if(r.active_lot_count>0){
-                lotNote=r.active_lot_count+' active lot'+(r.active_lot_count===1?'':'s');
-                if(r.lot_count>r.active_lot_count){lotNote+=' • '+(r.lot_count-r.active_lot_count)+' depleted';}
-            } else if(r.lot_count>0){
-                lotNote=r.lot_count+' lot'+(r.lot_count===1?'':'s')+' (all depleted)';
-            } else {
-                lotNote='No receipt history yet';
-            }
+        html += '<div class="rm-section" style="'+greyed+'">';
+        html += '<div class="rm-section-header" onclick="toggleRMSection(\''+escSku(sec.id)+'\')">';
+        html += '<span class="rm-section-toggle">'+(isCollapsed?'▶':'▼')+'</span>';
+        html += '<span class="rm-section-name">'+escSku(sec.name)+'</span>';
+        html += '<span class="rm-section-count">'+items.length+'</span>';
+        html += '</div>';
 
-            html+='<div class="rm-row" data-rm-key="'+keyEnc+'" style="'+rowOpacity+'">';
-            html+='<div class="rm-info">';
-            html+='<strong>'+escSku(r.name)+'</strong>'+baselineBadge+stockBadge;
-            html+='<br><span style="font-size:11px;color:var(--text-light);margin-top:2px;display:inline-block;">'+lotNote+'</span>';
-            html+='</div>';
-            html+='<div class="rm-qty'+(outOfStock?' negative':'')+'">'+r.total_remaining+' <span style="font-size:11px;color:var(--text-light);font-weight:500;">'+escSku(r.unit)+'</span></div>';
-            html+='<div style="display:flex;gap:6px;flex-wrap:wrap;">';
-            html+='<button class="btn-sm" data-rm-action="receive" data-rm-name="'+escSku(r.name)+'" data-rm-unit="'+escSku(r.unit)+'" title="Pre-fill the form above with this ingredient" style="padding:8px 12px;min-height:38px;color:#2e7d32;border-color:#a5d6a7;background:#fff;">+ Receive</button>';
-            var expandDisabled=(r.lot_count===0);
-            var expandAttrs=expandDisabled
-                ? 'disabled title="No lots to show" style="padding:8px 12px;min-height:38px;opacity:0.4;cursor:not-allowed;"'
-                : 'data-rm-action="toggle" data-rm-key="'+keyEnc+'" title="Show LOT-level detail" style="padding:8px 12px;min-height:38px;"';
-            html+='<button class="btn-sm" '+expandAttrs+'>'+(isExpanded?'▲':'▼')+'</button>';
-            html+='</div>';
-            html+='</div>';
-
-            if(isExpanded && r.lot_count>0){
-                html+='<div id="rm-detail-'+keyEnc+'" class="rm-detail" style="background:#fafaf5;padding:10px 16px;border-left:3px solid var(--accent);margin-bottom:8px;">Loading…</div>';
-            }
-        });
-
-        html+='</div>';
+        if(!isCollapsed && !isEmpty){
+            html += '<div class="rm-section-body">';
+            items.forEach(function(r){
+                html += renderRMRow(r);
+            });
+            html += '</div>';
+        } else if(!isCollapsed && isEmpty){
+            // Show empty placeholder so it's clear there's nothing here
+            html += '<div class="rm-section-empty">No ingredients in this section. Click "⚙ Edit Sections" to assign items.</div>';
+        }
+        html += '</div>';
     });
 
-    container.innerHTML=html;
+    container.innerHTML = html;
     attachRMClickDelegationOnce();
     if(expandedRMKey){
         renderRMDetail(expandedRMKey);
     }
+}
+
+function renderRMRow(r){
+    var key = r.name+'|'+r.unit;
+    var keyEnc = encodeURIComponent(key);
+    var isExpanded = (expandedRMKey === key);
+    var outOfStock = (r.total_remaining||0) <= 0;
+    var rowOpacity = outOfStock ? 'opacity:0.55;' : '';
+    var baselineBadge = r.has_baseline ? '<span class="baseline-badge">BASELINE</span>' : '';
+    var stockBadge = '';
+    if(outOfStock && r.lot_count > 0){
+        stockBadge = '<span style="display:inline-block;font-size:10px;font-weight:700;background:#f5f5f0;color:#999;border:1px solid #d0d0c8;padding:2px 8px;border-radius:10px;letter-spacing:0.4px;margin-left:8px;vertical-align:middle;">DEPLETED</span>';
+    } else if(r.catalog_only){
+        stockBadge = '<span style="display:inline-block;font-size:10px;font-weight:700;background:#f5f5f0;color:#999;border:1px solid #d0d0c8;padding:2px 8px;border-radius:10px;letter-spacing:0.4px;margin-left:8px;vertical-align:middle;">NEVER RECEIVED</span>';
+    }
+
+    var lotNote = '';
+    if(r.active_lot_count > 0){
+        lotNote = r.active_lot_count+' active lot'+(r.active_lot_count===1?'':'s');
+        if(r.lot_count > r.active_lot_count) lotNote += ' • '+(r.lot_count-r.active_lot_count)+' depleted';
+    } else if(r.lot_count > 0){
+        lotNote = r.lot_count+' lot'+(r.lot_count===1?'':'s')+' (all depleted)';
+    } else {
+        lotNote = 'No receipt history yet';
+    }
+
+    var html = '<div class="rm-row" data-rm-key="'+keyEnc+'" style="'+rowOpacity+'">';
+    html += '<div class="rm-info">';
+    html += '<strong>'+escSku(r.name)+'</strong>'+baselineBadge+stockBadge;
+    html += '<br><span style="font-size:11px;color:var(--text-light);margin-top:2px;display:inline-block;">'+lotNote+'</span>';
+    html += '</div>';
+    html += '<div class="rm-qty'+(outOfStock?' negative':'')+'">'+r.total_remaining+' <span style="font-size:11px;color:var(--text-light);font-weight:500;">'+escSku(r.unit)+'</span></div>';
+    html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+    html += '<button class="btn-sm" data-rm-action="receive" data-rm-name="'+escSku(r.name)+'" data-rm-unit="'+escSku(r.unit)+'" title="Pre-fill the form above with this ingredient" style="padding:8px 12px;min-height:38px;color:#2e7d32;border-color:#a5d6a7;background:#fff;">+ Receive</button>';
+    var expandDisabled = (r.lot_count === 0);
+    var expandAttrs = expandDisabled
+        ? 'disabled title="No lots to show" style="padding:8px 12px;min-height:38px;opacity:0.4;cursor:not-allowed;"'
+        : 'data-rm-action="toggle" data-rm-key="'+keyEnc+'" title="Show LOT-level detail" style="padding:8px 12px;min-height:38px;"';
+    html += '<button class="btn-sm" '+expandAttrs+'>'+(isExpanded?'▲':'▼')+'</button>';
+    html += '</div>';
+    html += '</div>';
+
+    if(isExpanded && r.lot_count > 0){
+        html += '<div id="rm-detail-'+keyEnc+'" class="rm-detail" style="background:#fafaf5;padding:10px 16px;border-left:3px solid var(--accent);margin-bottom:8px;">Loading…</div>';
+    }
+    return html;
 }
 
 async function renderRMDetail(key){
@@ -1572,6 +1770,274 @@ async function submitBaselineRMSingle(){
 // Legacy entry point — opens the bulk grid by default
 async function addBaselineRawMaterial(){
     return openBaselineRMBulkGrid();
+}
+
+// ── Sections management — define + assign ingredients ────────────────────
+// State held while modal is open. Saved atomically on "Save Changes":
+//   1) PUT /api/organic/raw-materials/sections   — section list (id/name/order)
+//   2) PUT /api/organic/raw-materials/assignments — per-ingredient mappings
+// Modal stays open on validation errors so the user can fix them.
+var sectionsState = null;     // {sections, assignments}
+var sectionsCatalog = [];     // [{name, unit}] from grouped endpoint
+
+async function openSectionsModal(){
+    document.getElementById('sections-modal').classList.add('active');
+    document.getElementById('sections-msg').textContent = '';
+    document.getElementById('sections-msg').className = 'status';
+    // Fetch fresh state every time
+    var [sectionsRes, rowsRes] = await Promise.all([
+        fetch('/api/organic/raw-materials/sections'),
+        fetch('/api/organic/raw-materials/grouped'),
+    ]);
+    sectionsState = await sectionsRes.json();
+    var rows = await rowsRes.json();
+    // Build a flat catalog of all ingredients for the assignment grid
+    sectionsCatalog = rows.map(function(r){
+        return {name: r.name, unit: r.unit};
+    });
+    renderSectionsList();
+    renderAssignmentGrid();
+}
+
+function closeSectionsModal(){
+    document.getElementById('sections-modal').classList.remove('active');
+}
+
+function renderSectionsList(){
+    var container = document.getElementById('sections-list');
+    var sections = sectionsState.sections || [];
+    if(!sections.length){
+        container.innerHTML = '<p style="font-size:12px;color:var(--text-light);font-style:italic;padding:8px;">No sections yet — add one below.</p>';
+    } else {
+        var html = '';
+        sections.forEach(function(s, idx){
+            var sid = encodeURIComponent(s.id);
+            var nameEsc = (s.name || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+            html += '<div class="section-edit-row" data-sid="'+sid+'">';
+            html += '<button class="section-edit-arrow" onclick="moveSection('+idx+',-1)" '+(idx===0?'disabled':'')+' title="Move up">▲</button>';
+            html += '<button class="section-edit-arrow" onclick="moveSection('+idx+',1)" '+(idx===sections.length-1?'disabled':'')+' title="Move down">▼</button>';
+            html += '<input class="section-edit-name" type="text" value="'+nameEsc+'" onchange="updateSectionName(\''+sid+'\', this.value)">';
+            html += '<button class="section-edit-del" onclick="deleteSection(\''+sid+'\')" title="Delete section (assignments will become Unassigned)">Delete</button>';
+            html += '</div>';
+        });
+        container.innerHTML = html;
+    }
+    // Refresh the bulk-assign dropdown
+    refreshBulkAssignDropdown();
+}
+
+function refreshBulkAssignDropdown(){
+    var sel = document.getElementById('assignment-bulk-section');
+    var sections = sectionsState.sections || [];
+    var current = sel.value;
+    sel.innerHTML = '<option value="">— Bulk assign visible to… —</option>';
+    sections.forEach(function(s){
+        var opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.name;
+        sel.appendChild(opt);
+    });
+    var unOpt = document.createElement('option');
+    unOpt.value = '__unassign__';
+    unOpt.textContent = '(Unassign)';
+    sel.appendChild(unOpt);
+    if(current) sel.value = current;
+}
+
+function moveSection(idx, delta){
+    var sections = sectionsState.sections;
+    var newIdx = idx + delta;
+    if(newIdx < 0 || newIdx >= sections.length) return;
+    var temp = sections[idx];
+    sections[idx] = sections[newIdx];
+    sections[newIdx] = temp;
+    renderSectionsList();
+    renderAssignmentGrid();
+}
+
+function updateSectionName(encId, newName){
+    var id = decodeURIComponent(encId);
+    var sec = (sectionsState.sections || []).find(function(s){return s.id === id;});
+    if(sec) sec.name = (newName || '').trim();
+    refreshBulkAssignDropdown();
+    // No need to re-render assignment grid for a name change
+}
+
+function deleteSection(encId){
+    var id = decodeURIComponent(encId);
+    sectionsState.sections = (sectionsState.sections || []).filter(function(s){return s.id !== id;});
+    // Clear any assignments pointing at the deleted section
+    var assignments = sectionsState.assignments || {};
+    Object.keys(assignments).forEach(function(k){
+        if(assignments[k] === id) delete assignments[k];
+    });
+    renderSectionsList();
+    renderAssignmentGrid();
+}
+
+function addNewSection(){
+    var input = document.getElementById('new-section-name');
+    var name = (input.value || '').trim();
+    if(!name) return;
+    // Generate a stable id: lowercase + alphanum, with timestamp suffix to
+    // avoid collisions even if user types the same name twice
+    var baseId = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    if(!baseId) baseId = 'section';
+    var sections = sectionsState.sections || [];
+    var existingIds = new Set(sections.map(function(s){return s.id;}));
+    var newId = baseId;
+    var n = 2;
+    while(existingIds.has(newId)){
+        newId = baseId + '_' + n;
+        n++;
+    }
+    sections.push({id: newId, name: name, order: sections.length});
+    sectionsState.sections = sections;
+    input.value = '';
+    renderSectionsList();
+    renderAssignmentGrid();
+}
+
+function renderAssignmentGrid(){
+    var search = (document.getElementById('assignment-search').value || '').trim().toLowerCase();
+    var container = document.getElementById('assignment-grid');
+    var sections = sectionsState.sections || [];
+    var assignments = sectionsState.assignments || {};
+
+    // Build option HTML once
+    var optionsHtml = '<option value="">— Unassigned —</option>';
+    sections.forEach(function(s){
+        var nameEsc = (s.name || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        optionsHtml += '<option value="'+s.id+'">'+nameEsc+'</option>';
+    });
+
+    var visible = sectionsCatalog.filter(function(c){
+        if(!search) return true;
+        return c.name.toLowerCase().indexOf(search) !== -1;
+    });
+
+    if(!visible.length){
+        container.innerHTML = '<p style="font-size:12px;color:var(--text-light);font-style:italic;padding:14px;text-align:center;">No ingredients match the filter.</p>';
+        return;
+    }
+
+    var html = '';
+    visible.forEach(function(c){
+        var key = c.name + '|' + c.unit;
+        var keyEsc = key.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        var nameEsc = c.name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        var unitEsc = c.unit.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        var current = assignments[key] || '';
+        // Build the select with the right option pre-selected
+        var selectHtml = optionsHtml.replace(
+            'value="'+current+'"',
+            'value="'+current+'" selected'
+        );
+        html += '<div class="assign-row">';
+        html += '<div class="assign-name">'+nameEsc+' <span class="unit-tag">'+unitEsc+'</span></div>';
+        html += '<select class="assign-select" data-key="'+keyEsc+'" onchange="updateAssignment(this)">'+selectHtml+'</select>';
+        html += '</div>';
+    });
+    container.innerHTML = html;
+}
+
+function updateAssignment(selectEl){
+    var key = selectEl.getAttribute('data-key');
+    var value = selectEl.value;
+    if(!sectionsState.assignments) sectionsState.assignments = {};
+    if(!value) delete sectionsState.assignments[key];
+    else sectionsState.assignments[key] = value;
+}
+
+function bulkAssignVisible(){
+    var sel = document.getElementById('assignment-bulk-section');
+    var target = sel.value;
+    if(!target){
+        document.getElementById('sections-msg').className = 'status error';
+        document.getElementById('sections-msg').textContent = 'Pick a target section first.';
+        return;
+    }
+    var search = (document.getElementById('assignment-search').value || '').trim().toLowerCase();
+    var visible = sectionsCatalog.filter(function(c){
+        if(!search) return true;
+        return c.name.toLowerCase().indexOf(search) !== -1;
+    });
+    if(!sectionsState.assignments) sectionsState.assignments = {};
+    if(target === '__unassign__'){
+        visible.forEach(function(c){
+            var key = c.name + '|' + c.unit;
+            delete sectionsState.assignments[key];
+        });
+    } else {
+        visible.forEach(function(c){
+            var key = c.name + '|' + c.unit;
+            sectionsState.assignments[key] = target;
+        });
+    }
+    document.getElementById('sections-msg').className = 'status success';
+    document.getElementById('sections-msg').textContent = 'Assigned '+visible.length+' visible item'+(visible.length===1?'':'s')+'. Click "Save Changes" to persist.';
+    renderAssignmentGrid();
+}
+
+async function saveSections(){
+    var msg = document.getElementById('sections-msg');
+    var btn = document.getElementById('sections-save-btn');
+
+    // Validate sections — names must be non-empty
+    var sections = (sectionsState.sections || []).map(function(s, i){
+        return {id: s.id, name: (s.name || '').trim(), order: i};
+    });
+    for(var i = 0; i < sections.length; i++){
+        if(!sections[i].name){
+            msg.className = 'status error';
+            msg.textContent = 'Section #'+(i+1)+' has an empty name.';
+            return;
+        }
+    }
+
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+        // 1. Save the section list (this also drops orphan assignments server-side)
+        var r1 = await fetch('/api/organic/raw-materials/sections', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({sections: sections}),
+        });
+        var d1 = await r1.json();
+        if(!d1.success){
+            msg.className = 'status error';
+            msg.textContent = d1.error || 'Failed to save sections.';
+            btn.disabled = false; btn.textContent = 'Save Changes';
+            return;
+        }
+
+        // 2. Save assignments (only for sections that survived)
+        var validIds = new Set(sections.map(function(s){return s.id;}));
+        var assignments = {};
+        Object.keys(sectionsState.assignments || {}).forEach(function(k){
+            var v = sectionsState.assignments[k];
+            if(validIds.has(v)) assignments[k] = v;
+        });
+        var r2 = await fetch('/api/organic/raw-materials/assignments', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({assignments: assignments}),
+        });
+        var d2 = await r2.json();
+        if(!d2.success){
+            msg.className = 'status error';
+            msg.textContent = d2.error || 'Failed to save assignments.';
+            btn.disabled = false; btn.textContent = 'Save Changes';
+            return;
+        }
+
+        closeSectionsModal();
+        loadRawMaterials();
+    } catch(e){
+        msg.className = 'status error';
+        msg.textContent = 'Network error: ' + e.message;
+        btn.disabled = false; btn.textContent = 'Save Changes';
+    }
 }
 
 // ── Camera-scan: Receive Inventory ───────────────────────────────────────
