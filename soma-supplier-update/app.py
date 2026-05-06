@@ -2155,14 +2155,11 @@ ORGANIC_CONTACTS_PATH = os.path.join(INVENTORY_DIR, "contacts.json")
 # production runs and sales). Each entry records what changed, why, and
 # which LOT(s) were drained or created. Used for audit traceability.
 ADJUSTMENTS_PATH = os.path.join(INVENTORY_DIR, "adjustments.json")
-# User-defined sections for Raw Materials grouping (replaces hardcoded categorizer).
-# Each ingredient (name + unit) maps to a section_id explicitly. Unassigned
-# items show in a fallback "Unassigned" group.
-SECTIONS_PATH = os.path.join(INVENTORY_DIR, "sections.json")
 # Camera-scan request log: per-day rolling counter for daily-limit enforcement
 # plus an audit trail of every scan (success or failure).
-SCAN_LOG_PATH = os.path.join(INVENTORY_DIR, "scan_log.json")
-SCAN_DAILY_LIMIT = int(os.environ.get("SCAN_DAILY_LIMIT", "50"))
+SUPPLIERS_PATH = os.path.join(INVENTORY_DIR, "suppliers.json")
+RM_RECEIPT_PHOTOS_DIR = os.path.join(DATA_DIR, "rm_receipt_photos")
+os.makedirs(RM_RECEIPT_PHOTOS_DIR, exist_ok=True)
 # Raw material section organization. User-defined sections + per-ingredient
 # assignment. Pre-seeded with the 6-section structure on first load.
 RM_SECTIONS_PATH = os.path.join(INVENTORY_DIR, "rm_sections.json")
@@ -4095,262 +4092,139 @@ def get_adjustments():
     return jsonify(_load_json(ADJUSTMENTS_PATH, []))
 
 
-# ── Camera-scan endpoints ────────────────────────────────────────────────
-# Two flows for camera-driven data entry:
-#   POST /api/scan/invoice      — receive inventory (raw materials)
-#   POST /api/scan/packing-slip — record sale (finished goods)
-# Both accept a multipart upload, call Claude Vision, and return parsed
-# line items WITH server-side fuzzy matches against the canonical catalogs.
-# The frontend renders an editable review grid; user confirms or corrects;
-# submission happens through the existing bulk endpoints, NOT directly here.
+# ── Supplier catalog ────────────────────────────────────────────────────
+# suppliers.json: list of {id, name, ingredients: [{name, unit}]}
+# rm_receipt_photos/: <entry_id>.<ext> — one photo per add-inventory entry
 
-import vision_scan  # local module
+def _load_suppliers():
+    return _load_json(SUPPLIERS_PATH, [])
 
-# Allowed image extensions for scans (mirrors the invoice module list)
-_SCAN_ALLOWED_EXTS = {"jpg", "jpeg", "png", "webp", "heic", "heif", "gif"}
-_SCAN_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+def _save_suppliers(data):
+    _save_json(SUPPLIERS_PATH, data)
 
 
-def _scan_log_today_count():
-    """Return how many scans have been performed today (UTC)."""
-    log = _load_json(SCAN_LOG_PATH, [])
-    today = datetime.now().strftime("%Y-%m-%d")
-    return sum(1 for entry in log if (entry.get("date") or "") == today)
+@app.route("/api/suppliers", methods=["GET"])
+@login_required
+def get_suppliers():
+    return jsonify(_load_suppliers())
 
 
-def _record_scan(kind, success, error=None, line_count=0):
-    """Append a scan log entry. Used for both daily-limit and audit."""
-    log = _load_json(SCAN_LOG_PATH, [])
-    log.append({
-        "kind": kind,
-        "success": bool(success),
-        "error": error,
-        "line_count": line_count,
-        "date": datetime.now().strftime("%Y-%m-%d"),
-        "created_at": datetime.now().isoformat(),
-    })
-    # Keep log bounded — last 1000 entries should cover months of normal use
-    if len(log) > 1000:
-        log = log[-1000:]
-    _save_json(SCAN_LOG_PATH, log)
+@app.route("/api/suppliers", methods=["POST"])
+@login_required
+def create_supplier():
+    data = request.get_json(force=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Name required"}), 400
+    suppliers = _load_suppliers()
+    if any(s["name"].lower() == name.lower() for s in suppliers):
+        return jsonify({"error": "Supplier already exists"}), 409
+    supplier = {
+        "id": datetime.now().strftime("%Y%m%d%H%M%S%f"),
+        "name": name,
+        "ingredients": [],
+    }
+    suppliers.append(supplier)
+    _save_suppliers(suppliers)
+    return jsonify(supplier), 201
 
 
-def _build_ingredient_catalog_for_match():
-    """Return a flat list of {name, unit} canonical ingredients. Same source
-    of truth as the picker dropdown: active recipes + custom items, water
-    excluded."""
-    catalog = []
-    seen = set()
-    recipes = load_recipes()
-    for rname, rdata in recipes.items():
-        if rdata.get("archived"):
-            continue
-        for section in INGREDIENT_SECTIONS:
-            for it in rdata.get(section, []):
-                if not is_structured_ingredient(it):
-                    continue
-                if it.get("needs_review"):
-                    continue
-                ing_name = (it.get("name") or "").strip()
-                unit = (it.get("unit") or "").strip()
-                if is_untracked_ingredient(ing_name):
-                    continue
-                if not ing_name or not unit:
-                    continue
-                key = (ing_name.lower(), unit)
-                if key in seen:
-                    continue
-                seen.add(key)
-                catalog.append({"name": ing_name, "unit": unit})
-    custom = _load_json(ORGANIC_CUSTOM_ITEMS_PATH, [])
-    for c in custom:
-        nm = (c.get("name") or "").strip()
-        un = (c.get("unit") or "").strip()
-        if not nm or not un or is_untracked_ingredient(nm):
-            continue
-        key = (nm.lower(), un)
-        if key in seen:
-            continue
-        seen.add(key)
-        catalog.append({"name": nm, "unit": un})
-    return catalog
+@app.route("/api/suppliers/<sid>", methods=["PUT"])
+@login_required
+def update_supplier(sid):
+    data = request.get_json(force=True) or {}
+    suppliers = _load_suppliers()
+    idx = next((i for i, s in enumerate(suppliers) if s["id"] == sid), None)
+    if idx is None:
+        return jsonify({"error": "Not found"}), 404
+    if "name" in data:
+        name = data["name"].strip()
+        if not name:
+            return jsonify({"error": "Name required"}), 400
+        if any(s["name"].lower() == name.lower() and s["id"] != sid for s in suppliers):
+            return jsonify({"error": "Name taken"}), 409
+        suppliers[idx]["name"] = name
+    if "ingredients" in data:
+        suppliers[idx]["ingredients"] = data["ingredients"]
+    _save_suppliers(suppliers)
+    return jsonify(suppliers[idx])
 
 
-def _build_sku_catalog_for_match():
-    """Return a flat list of SKUs (active recipes only) for fuzzy matching."""
-    recipes = load_recipes()
-    catalog = []
-    for rname, rdata in recipes.items():
-        if rdata.get("archived"):
-            continue
-        brand = (rdata.get("brand") or "").strip()
-        fmt = (rdata.get("format") or "").strip()
-        sku_key = _sku_key(brand, rname, fmt)
-        catalog.append({
-            "sku_key": sku_key,
-            "brand": brand,
-            "recipe": rname,
-            "format": fmt,
-            "display": _sku_display(brand, rname, fmt),
-        })
-    return catalog
+@app.route("/api/suppliers/<sid>", methods=["DELETE"])
+@login_required
+def delete_supplier(sid):
+    suppliers = _load_suppliers()
+    suppliers = [s for s in suppliers if s["id"] != sid]
+    _save_suppliers(suppliers)
+    return jsonify({"ok": True})
 
 
-def _validate_scan_upload(file):
-    """Common upload validation. Returns (bytes, filename) or raises with a
-    Flask-friendly response tuple."""
+@app.route("/api/suppliers/<sid>/ingredients", methods=["PUT"])
+@login_required
+def update_supplier_ingredients(sid):
+    data = request.get_json(force=True) or {}
+    ingredients = data.get("ingredients", [])
+    suppliers = _load_suppliers()
+    idx = next((i for i, s in enumerate(suppliers) if s["id"] == sid), None)
+    if idx is None:
+        return jsonify({"error": "Not found"}), 404
+    suppliers[idx]["ingredients"] = ingredients
+    _save_suppliers(suppliers)
+    return jsonify(suppliers[idx])
+
+
+# ── RM receipt photo upload ──────────────────────────────────────────────
+_RM_PHOTO_ALLOWED = {"jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "pdf"}
+_RM_PHOTO_MAX_BYTES = 20 * 1024 * 1024  # 20 MB
+
+
+@app.route("/api/organic/raw-materials/receipt-photo/<entry_id>", methods=["POST"])
+@login_required
+def upload_rm_receipt_photo(entry_id):
+    file = request.files.get("photo")
     if not file or not file.filename:
-        return None, ("No file uploaded.", 400)
-    name = file.filename
-    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
-    if ext not in _SCAN_ALLOWED_EXTS:
-        return None, (f"File type '{ext}' not supported. Use JPG/PNG/WEBP/HEIC.", 400)
-    file_bytes = file.read()
-    if len(file_bytes) == 0:
-        return None, ("Uploaded file is empty.", 400)
-    if len(file_bytes) > _SCAN_MAX_BYTES:
-        mb = round(len(file_bytes) / (1024 * 1024), 1)
-        return None, (f"File too large: {mb} MB. Max is 10 MB.", 413)
-    return (file_bytes, name), None
+        return jsonify({"error": "No file"}), 400
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in _RM_PHOTO_ALLOWED:
+        return jsonify({"error": f"File type not supported"}), 400
+    data = file.read()
+    if len(data) > _RM_PHOTO_MAX_BYTES:
+        return jsonify({"error": "File too large (max 20 MB)"}), 413
+    for fn in os.listdir(RM_RECEIPT_PHOTOS_DIR):
+        if fn.startswith(entry_id + "."):
+            os.remove(os.path.join(RM_RECEIPT_PHOTOS_DIR, fn))
+    filename = f"{entry_id}.{ext}"
+    with open(os.path.join(RM_RECEIPT_PHOTOS_DIR, filename), "wb") as fh:
+        fh.write(data)
+    return jsonify({"ok": True, "filename": filename})
 
 
-@app.route("/api/scan/usage", methods=["GET"])
+@app.route("/api/organic/raw-materials/receipt-photo/<entry_id>", methods=["GET"])
 @login_required
-def get_scan_usage():
-    """Return today's scan count and the configured daily limit."""
-    return jsonify({
-        "today_count": _scan_log_today_count(),
-        "daily_limit": SCAN_DAILY_LIMIT,
-        "remaining": max(0, SCAN_DAILY_LIMIT - _scan_log_today_count()),
-    })
+def get_rm_receipt_photo(entry_id):
+    for fn in os.listdir(RM_RECEIPT_PHOTOS_DIR):
+        if fn.startswith(entry_id + "."):
+            return send_from_directory(RM_RECEIPT_PHOTOS_DIR, fn)
+    return jsonify({"error": "Not found"}), 404
 
 
-@app.route("/api/scan/invoice", methods=["POST"])
+@app.route("/api/organic/raw-materials/receipt-photo/<entry_id>", methods=["DELETE"])
 @login_required
-def scan_invoice():
-    """Camera-scan an invoice photo. Returns parsed receive-inventory lines
-    with server-side fuzzy matches. The user reviews/edits in a frontend
-    grid and submits through /api/organic/raw-materials/bulk with baseline=false."""
-    # Daily limit check
-    if _scan_log_today_count() >= SCAN_DAILY_LIMIT:
-        return jsonify({
-            "error": f"Daily scan limit reached ({SCAN_DAILY_LIMIT}/day). "
-                     "Limit resets at midnight. Use manual entry below.",
-            "daily_limit": SCAN_DAILY_LIMIT,
-        }), 429
-
-    file = request.files.get("file")
-    upload, err = _validate_scan_upload(file)
-    if err:
-        msg, code = err
-        return jsonify({"error": msg}), code
-    file_bytes, filename = upload
-
-    try:
-        parsed = vision_scan.extract_invoice_lines(file_bytes, filename)
-    except RuntimeError as e:
-        _record_scan("invoice", success=False, error=str(e))
-        return jsonify({"error": str(e)}), 502
-    except Exception as e:  # noqa: BLE001 — last-resort safeguard
-        _record_scan("invoice", success=False, error=f"Unexpected: {e}")
-        return jsonify({"error": f"Scan failed unexpectedly: {e}"}), 500
-
-    # Match each line against the canonical ingredient catalog
-    catalog = _build_ingredient_catalog_for_match()
-    matched_lines = []
-    for line in parsed.get("line_items", []):
-        result = vision_scan.match_ingredient(
-            line["raw_name"], line["unit"], catalog
-        )
-        matched_lines.append({
-            **line,
-            "unit_normalized": vision_scan.normalize_unit(line["unit"]),
-            "match": result["match"],
-            "confidence": result["confidence"],
-            "score": result["score"],
-        })
-
-    _record_scan("invoice", success=True, line_count=len(matched_lines))
-
-    return jsonify({
-        "success": True,
-        "supplier": parsed.get("supplier", ""),
-        "invoice_date": parsed.get("invoice_date", ""),
-        "invoice_number": parsed.get("invoice_number", ""),
-        "notes": parsed.get("notes", ""),
-        "line_items": matched_lines,
-        "catalog": catalog,  # frontend uses this to populate dropdowns
-        "scan_remaining": max(0, SCAN_DAILY_LIMIT - _scan_log_today_count()),
-    })
+def delete_rm_receipt_photo(entry_id):
+    for fn in os.listdir(RM_RECEIPT_PHOTOS_DIR):
+        if fn.startswith(entry_id + "."):
+            os.remove(os.path.join(RM_RECEIPT_PHOTOS_DIR, fn))
+            return jsonify({"ok": True})
+    return jsonify({"error": "Not found"}), 404
 
 
-@app.route("/api/scan/packing-slip", methods=["POST"])
+@app.route("/api/organic/raw-materials/receipt-photo-exists/<entry_id>", methods=["GET"])
 @login_required
-def scan_packing_slip():
-    """Camera-scan a packing slip / PO photo. Returns parsed sale lines
-    with server-side SKU matches. The user reviews/edits in a frontend
-    grid and submits through /api/organic/sales (one call per line)."""
-    if _scan_log_today_count() >= SCAN_DAILY_LIMIT:
-        return jsonify({
-            "error": f"Daily scan limit reached ({SCAN_DAILY_LIMIT}/day). "
-                     "Limit resets at midnight. Use manual entry below.",
-            "daily_limit": SCAN_DAILY_LIMIT,
-        }), 429
-
-    file = request.files.get("file")
-    upload, err = _validate_scan_upload(file)
-    if err:
-        msg, code = err
-        return jsonify({"error": msg}), code
-    file_bytes, filename = upload
-
-    try:
-        parsed = vision_scan.extract_packing_slip_lines(file_bytes, filename)
-    except RuntimeError as e:
-        _record_scan("packing_slip", success=False, error=str(e))
-        return jsonify({"error": str(e)}), 502
-    except Exception as e:  # noqa: BLE001
-        _record_scan("packing_slip", success=False, error=f"Unexpected: {e}")
-        return jsonify({"error": f"Scan failed unexpectedly: {e}"}), 500
-
-    catalog = _build_sku_catalog_for_match()
-    matched_lines = []
-    for line in parsed.get("line_items", []):
-        result = vision_scan.match_sku(
-            line["raw_name"], line["format_hint"], catalog
-        )
-        matched_lines.append({
-            **line,
-            "match": result["match"],
-            "confidence": result["confidence"],
-            "score": result["score"],
-        })
-
-    _record_scan("packing_slip", success=True, line_count=len(matched_lines))
-
-    return jsonify({
-        "success": True,
-        "buyer": parsed.get("buyer", ""),
-        "ship_date": parsed.get("ship_date", ""),
-        "po_number": parsed.get("po_number", ""),
-        "notes": parsed.get("notes", ""),
-        "line_items": matched_lines,
-        "catalog": catalog,
-        "scan_remaining": max(0, SCAN_DAILY_LIMIT - _scan_log_today_count()),
-    })
-
-
-@app.route("/api/scan/log", methods=["GET"])
-@login_required
-def get_scan_log():
-    """Return the scan audit log (most recent first, capped at 200)."""
-    log = _load_json(SCAN_LOG_PATH, [])
-    log = sorted(log, key=lambda e: e.get("created_at", ""), reverse=True)[:200]
-    return jsonify({
-        "entries": log,
-        "today_count": _scan_log_today_count(),
-        "daily_limit": SCAN_DAILY_LIMIT,
-    })
+def rm_receipt_photo_exists(entry_id):
+    for fn in os.listdir(RM_RECEIPT_PHOTOS_DIR):
+        if fn.startswith(entry_id + "."):
+            return jsonify({"exists": True, "filename": fn})
+    return jsonify({"exists": False})
 
 
 @app.route("/api/organic/finished-goods/grouped", methods=["GET"])
