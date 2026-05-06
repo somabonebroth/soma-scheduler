@@ -825,10 +825,6 @@ body.inv-page .modal-actions {
                         </select>
                     </div>
                 </div>
-                <div class="form-field" style="margin-bottom:14px;">
-                    <label>PO / Case LOT# (optional)</label>
-                    <input type="text" id="sale-po-modal" placeholder="PO number or case LOT">
-                </div>
                 <div id="sale-step1-msg" class="status"></div>
                 <div class="modal-actions">
                     <button class="btn btn-outline" onclick="closeRecordSaleModal()">Cancel</button>
@@ -2656,7 +2652,7 @@ var _rsFgGrouped = [];  // current FG inventory snapshot for stock display
 async function openRecordSaleModal(){
     var today = new Date().toISOString().split('T')[0];
     document.getElementById('sale-date-modal').value = today;
-    document.getElementById('sale-po-modal').value = '';
+    // sale-po removed
     document.getElementById('sale-step1-msg').textContent = '';
     document.getElementById('sale-step2-msg').textContent = '';
     document.getElementById('sale-step1').style.display = '';
@@ -2738,7 +2734,7 @@ function goToSaleStep2(){
 async function submitRecordSale(){
     var date = document.getElementById('sale-date-modal').value;
     var buyerId = document.getElementById('sale-buyer-select').value;
-    var po = document.getElementById('sale-po-modal').value.trim();
+    var po = '';
     var buyer = _rsBuyers.find(function(b){ return b.id === buyerId; });
     var msg = document.getElementById('sale-step2-msg');
     var btn = document.getElementById('sale-submit-btn');
@@ -4015,6 +4011,7 @@ async function loadRuns(){
 var fgSkus=[];
 var expandedSku=null;
 var _fgCollapsedBrands={};
+var _fgDefaultCollapsed=true;
 
 function escSku(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function escHtml(s){return escSku(s);}
@@ -4083,7 +4080,7 @@ async function loadFinishedGoods(){
         var skus=byBrand[brand];
         var brandUnits=skus.reduce(function(a,s){return a+(s.total_remaining||0);},0);
         var inStock=skus.filter(function(s){return(s.total_remaining||0)>0;}).length;
-        var isCollapsed=_fgCollapsedBrands[brand]||false;
+        var isCollapsed=(brand in _fgCollapsedBrands)?_fgCollapsedBrands[brand]:_fgDefaultCollapsed;
         html+='<div class="fg-brand-section">';
         html+='<div class="fg-brand-header" data-fg-brand="'+brandSafe+'">';
         html+='<span class="fg-brand-toggle">'+(isCollapsed?'▶':'▼')+'</span>';
@@ -4437,121 +4434,159 @@ async function loadSales(){
     var container=document.getElementById('sales-container');
     var countEl=document.getElementById('sales-count');
 
-    // Three tiers: scheduled (not yet deducted), pending payment (Net14), settled
-    var scheduled = data.filter(s => s.deducted === false);
-    var pendingPmt = data.filter(s => s.payment_pending === true && s.deducted !== false);
-    var settled    = data.filter(s => s.deducted !== false && !s.payment_pending);
+    var scheduled=data.filter(function(s){return s.deducted===false;});
+    var pendingPmt=data.filter(function(s){return s.payment_pending===true && s.deducted!==false;});
+    var settled=data.filter(function(s){return s.deducted!==false && !s.payment_pending;});
 
     if(countEl){
-        var settledUnits = settled.reduce(function(a,s){return a+(s.quantity||0);},0);
-        countEl.textContent = settled.length+' sale'+(settled.length===1?'':'s')+' • '+settledUnits+' units';
+        var su=settled.reduce(function(a,s){return a+(s.quantity||0);},0);
+        countEl.textContent=settled.length+' sale'+(settled.length===1?'':'s')+' • '+su+' units';
     }
 
-    function fmtProduct(s){
-        return escSku(((s.brand?s.brand+' ':'')+s.recipe+(s.format?' '+s.format:'')).trim());
-    }
-    function fmtLots(s){
-        return escSku((s.lots&&s.lots.length)?s.lots.map(function(l){return l.lot;}).filter(Boolean).join(', '):(s.fg_lot||'\u2014'));
-    }
+    function fmtProd(s){ return escSku(((s.brand?s.brand+' ':'')+s.recipe+(s.format?' '+s.format:'')).trim()); }
+    function fmtLots(s){ return escSku((s.lots&&s.lots.length)?s.lots.map(function(l){return l.lot;}).filter(Boolean).join(', '):(s.fg_lot||'—')); }
 
-    function renderScheduledTable(rows){
-        if(!rows.length) return '';
-        var h='<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:14px;margin-bottom:12px;">'
-            +'<div style="font-size:11px;font-weight:700;color:#f57f17;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">\ud83d\udcc5 Scheduled \u2014 Inventory Reserved</div>'
-            +'<div class="inv-table-wrap"><table class="inv-table"><tr><th>Delivery Date</th><th>Product</th><th>Buyer</th><th>Qty</th><th>Order</th><th>Shortfall</th></tr>';
+    function groupSales(rows){
+        var txMap={},txOrder=[];
         rows.forEach(function(s){
-            var shortfall = s.shortfall ? '<span style="color:#c62828;font-weight:600;">\u2212'+s.shortfall+' units</span>' : '\u2014';
-            h+='<tr>'
-              +'<td><strong>'+escSku(s.deduction_date||s.sale_date||'')+'</strong></td>'
-              +'<td>'+fmtProduct(s)+'</td>'
-              +'<td>'+escSku(s.buyer||'')+'</td>'
-              +'<td>'+s.quantity+'</td>'
-              +'<td style="font-size:11px;color:var(--text-light);">'+escSku(s.ripe_order_id||s.po_number||'')+'</td>'
-              +'<td>'+shortfall+'</td>'
-              +'</tr>';
+            var key=(s.sale_date||'')+'||'+(s.buyer||'')+'||'+(s.ripe_order_id||s.po_number||'');
+            if(!txMap[key]){ txMap[key]={date:s.sale_date||'',buyer:s.buyer||'',order_id:s.ripe_order_id||s.po_number||'',items:[],ids:[]}; txOrder.push(key); }
+            txMap[key].items.push(s); txMap[key].ids.push(s.id);
         });
-        h+='</table></div></div>';
-        return h;
+        return txOrder.map(function(k){return txMap[k];});
     }
 
-    function renderPendingTable(rows){
-        if(!rows.length) return '';
-        var h='<div style="background:#e8eaf6;border:1px solid #9fa8da;border-radius:8px;padding:14px;margin-bottom:12px;">'
-            +'<div style="font-size:11px;font-weight:700;color:#3949ab;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">⏳ Pending Payment (Net 14)</div>'
-            +'<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Product</th><th>Buyer</th><th>LOT#(s)</th><th>Qty</th><th>Order</th><th></th></tr>';
-        rows.forEach(function(s){
-            h+='<tr>'
-              +'<td>'+escSku(s.sale_date||'')+'</td>'
-              +'<td>'+fmtProduct(s)+'</td>'
-              +'<td>'+escSku(s.buyer||'')+'</td>'
-              +'<td>'+fmtLots(s)+'</td>'
-              +'<td>'+s.quantity+'</td>'
-              +'<td style="font-size:11px;color:var(--text-light);">'+escSku(s.ripe_order_id||s.po_number||'')+'</td>'
-              +'<td><button class="btn-sm" style="font-size:11px;color:#3949ab;border-color:#9fa8da;" data-settle-id="'+escHtml(s.id)+'">Mark Paid</button></td>'
-              +'</tr>';
-        });
-        h+='</table></div></div>';
-        return h;
+    function renderScheduled(txs){
+        return txs.map(function(tx){
+            var u=tx.items.reduce(function(a,s){return a+(s.quantity||0);},0);
+            var h='<details style="border:1px solid #ffe082;border-radius:8px;overflow:hidden;margin-bottom:6px;">';
+            h+='<summary style="padding:10px 14px;background:#fffde7;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px;">';
+            h+='<span style="display:flex;align-items:center;gap:8px;flex:1;">';
+            h+='<span style="font-size:13px;font-weight:600;">'+escHtml(tx.buyer)+'</span>';
+            h+='<span style="font-size:11px;color:#f57f17;">▶ deducts '+escHtml(tx.date)+'</span>';
+            if(tx.order_id) h+='<span style="font-size:10px;background:#fff3e0;color:#e65100;padding:1px 6px;border-radius:10px;">'+escHtml(tx.order_id)+'</span>';
+            h+='</span><span style="font-size:11px;color:#f57f17;white-space:nowrap;">'+u+' units</span></summary>';
+            h+='<div style="padding:8px 14px 12px;"><table class="inv-table" style="font-size:12px;"><tr><th>Product</th><th>Qty</th><th>Shortfall</th></tr>';
+            tx.items.forEach(function(s){
+                var sf=s.shortfall?'<span style="color:#c62828;font-weight:600;">−'+s.shortfall+' units</span>':'—';
+                h+='<tr><td>'+fmtProd(s)+'</td><td>'+s.quantity+'</td><td>'+sf+'</td></tr>';
+            });
+            h+='</table></div></details>';
+            return h;
+        }).join('');
     }
 
-    function renderSalesTable(rows){
-        var h='<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Product</th><th>Buyer</th><th>LOT#(s)</th><th>Qty</th><th>PO#</th><th></th></tr>';
-        rows.forEach(function(s){
-            var po = s.po_number || s.case_lot || '';
-            h+='<tr>'
-              +'<td>'+(s.sale_date||'')+'</td>'
-              +'<td>'+fmtProduct(s)+'</td>'
-              +'<td>'+escSku(s.buyer||'')+'</td>'
-              +'<td>'+fmtLots(s)+'</td>'
-              +'<td>'+s.quantity+'</td>'
-              +(po?'<td>'+escSku(po)+'</td>':'<td>\u2014</td>')
-              +'<td><button class="btn-danger" data-del-sale="'+escHtml(s.id)+'">Del</button></td>'
-              +'</tr>';
-        });
-        h+='</table></div>';
-        return h;
+    function renderPending(txs){
+        return txs.map(function(tx){
+            var u=tx.items.reduce(function(a,s){return a+(s.quantity||0);},0);
+            var h='<details style="border:1px solid #9fa8da;border-radius:8px;overflow:hidden;margin-bottom:6px;">';
+            h+='<summary style="padding:10px 14px;background:#e8eaf6;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px;">';
+            h+='<span style="display:flex;align-items:center;gap:8px;flex:1;">';
+            h+='<span style="font-size:13px;font-weight:600;">'+escHtml(tx.buyer)+'</span>';
+            h+='<span style="font-size:11px;color:#3949ab;">'+escHtml(tx.date)+'</span>';
+            if(tx.order_id) h+='<span style="font-size:10px;background:#e8eaf6;color:#3949ab;padding:1px 6px;border-radius:10px;">'+escHtml(tx.order_id)+'</span>';
+            h+='</span>';
+            h+='<span style="display:flex;align-items:center;gap:8px;">';
+            h+='<button class="btn-sm" style="font-size:11px;color:#3949ab;border-color:#9fa8da;" data-settle-ids="'+escHtml(tx.ids.join(','))+'">Mark Paid</button>';
+            h+='<span style="font-size:11px;color:#3949ab;white-space:nowrap;">'+u+' units</span></span></summary>';
+            h+='<div style="padding:8px 14px 12px;"><table class="inv-table" style="font-size:12px;"><tr><th>Product</th><th>LOT#(s)</th><th>Qty</th></tr>';
+            tx.items.forEach(function(s){
+                h+='<tr><td>'+fmtProd(s)+'</td><td>'+fmtLots(s)+'</td><td>'+s.quantity+'</td></tr>';
+            });
+            h+='</table></div></details>';
+            return h;
+        }).join('');
     }
 
-    if(!data.length){
-        container.innerHTML='<div class="empty-state">No sales recorded yet.</div>'; return;
+    function renderSettled(txs){
+        return txs.map(function(tx){
+            var u=tx.items.reduce(function(a,s){return a+(s.quantity||0);},0);
+            var h='<details style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:6px;">';
+            h+='<summary style="padding:10px 14px;background:#f9f9f7;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px;">';
+            h+='<span style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">';
+            h+='<span style="font-size:13px;font-weight:600;">'+escHtml(tx.buyer)+'</span>';
+            h+='<span style="font-size:11px;color:var(--text-light);">'+escHtml(tx.date)+'</span>';
+            if(tx.order_id) h+='<span style="font-size:10px;background:#f0f0ef;color:var(--text-light);padding:1px 6px;border-radius:10px;">'+escHtml(tx.order_id)+'</span>';
+            h+='</span><span style="font-size:11px;color:var(--text-light);white-space:nowrap;">'+u+' units</span></summary>';
+            h+='<div style="padding:8px 14px 12px;"><table class="inv-table" style="font-size:12px;"><tr><th>Product</th><th>LOT#(s)</th><th>Qty</th><th></th></tr>';
+            tx.items.forEach(function(s){
+                h+='<tr><td>'+fmtProd(s)+'</td><td>'+fmtLots(s)+'</td><td>'+s.quantity+'</td>'
+                  +'<td><button class="btn-danger" data-del-sale="'+escHtml(s.id)+'">Del</button></td></tr>';
+            });
+            h+='</table></div></details>';
+            return h;
+        }).join('');
     }
 
-    var html = '';
-    html += renderScheduledTable(scheduled);
-    html += renderPendingTable(pendingPmt);
+    if(!data.length){ container.innerHTML='<div class="empty-state">No sales recorded yet.</div>'; return; }
+
+    var html='';
+
+    if(scheduled.length){
+        html+='<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:14px;margin-bottom:12px;">'
+            +'<div style="font-size:11px;font-weight:700;color:#f57f17;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">'
+            +'📅 Scheduled — Inventory Reserved</div>'
+            +renderScheduled(groupSales(scheduled))+'</div>';
+    }
+
+    if(pendingPmt.length){
+        html+='<div style="background:#e8eaf6;border:1px solid #9fa8da;border-radius:8px;padding:14px;margin-bottom:12px;">'
+            +'<div style="font-size:11px;font-weight:700;color:#3949ab;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">'
+            +'⏳ Pending Payment (Net 14)</div>'
+            +renderPending(groupSales(pendingPmt))+'</div>';
+    }
 
     if(settled.length){
         settled.sort(function(a,b){return(b.sale_date||'').localeCompare(a.sale_date||'');});
-        var grouped = _timelineGroup(settled, 'sale_date');
-        if(grouped.recent.length) html += renderSalesTable(grouped.recent);
-        var monthKeys = Object.keys(grouped.older).sort().reverse();
-        monthKeys.forEach(function(mk){
-            var rows = grouped.older[mk];
-            html += '<details style="margin-top:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">'
-                + '<summary style="padding:10px 14px;background:#f5f5f0;cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;justify-content:space-between;">'
-                + '<span>'+_monthLabel(mk)+'</span><span style="color:var(--text-light);font-weight:400;">'+rows.length+' sale'+(rows.length===1?'':'s')+'</span></summary>'
-                + '<div style="padding:0 2px 2px;">'+renderSalesTable(rows)+'</div>'
-                + '</details>';
+        var settledTxs=groupSales(settled);
+        var byMonth={},monthOrder=[];
+        settledTxs.forEach(function(tx){
+            var mk=(tx.date||'').substring(0,7);
+            if(!byMonth[mk]){byMonth[mk]=[];monthOrder.push(mk);}
+            byMonth[mk].push(tx);
+        });
+        monthOrder.sort().reverse();
+        var recentMk=new Date(Date.now()-45*864e5).toISOString().substring(0,7);
+        monthOrder.forEach(function(mk){
+            var txs=byMonth[mk];
+            var inner=renderSettled(txs);
+            if(mk>=recentMk){
+                html+=inner;
+            } else {
+                html+='<details style="margin-top:6px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">'
+                    +'<summary style="padding:10px 14px;background:#f5f5f0;cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;justify-content:space-between;">'
+                    +'<span>'+_monthLabel(mk)+'</span><span style="color:var(--text-light);font-weight:400;">'+txs.length+' sale'+(txs.length===1?'':'s')+'</span></summary>'
+                    +'<div style="padding:6px 8px;">'+inner+'</div></details>';
+            }
         });
     } else if(!scheduled.length && !pendingPmt.length){
-        html += '<div class="empty-state">No settled sales yet.</div>';
+        html+='<div class="empty-state">No settled sales yet.</div>';
     }
 
-    container.innerHTML = html;
+    container.innerHTML=html;
     container.querySelectorAll('[data-del-sale]').forEach(function(btn){
-        btn.addEventListener('click', function(){ deleteSale(this.getAttribute('data-del-sale')); });
+        btn.addEventListener('click',function(){deleteSale(this.getAttribute('data-del-sale'));});
     });
-    container.querySelectorAll('[data-settle-id]').forEach(function(btn){
-        btn.addEventListener('click', function(){ manualSettle(this.getAttribute('data-settle-id')); });
+    container.querySelectorAll('[data-settle-ids]').forEach(function(btn){
+        btn.addEventListener('click',function(e){
+            e.stopPropagation();
+            manualSettleAll(this.getAttribute('data-settle-ids').split(',').filter(Boolean));
+        });
     });
 }
 
-async function manualSettle(saleId){
-    if(!confirm('Mark this Net 14 sale as paid? This moves it from pending to transactions.')) return;
-    var resp = await fetch('/api/ripe-orders/settle-sale/'+saleId, {method:'POST'});
-    if(resp.ok){ loadSales(); }
-    else { alert('Failed to settle sale.'); }
+async function manualSettleAll(ids){
+    if(!confirm('Mark this Net 14 order as paid? All line items move to settled transactions.')) return;
+    var ok=true;
+    for(var i=0;i<ids.length;i++){
+        var r=await fetch('/api/ripe-orders/settle-sale/'+ids[i],{method:'POST'});
+        if(!r.ok) ok=false;
+    }
+    loadSales();
+    if(!ok) alert('Some items could not be settled.');
 }
+
+
 async function deleteSale(id){
     var ok = await mobileConfirm('Delete this sale? Quantity will be restored to finished goods.',
         {title:'Delete sale', okLabel:'Delete', danger:true});
@@ -4703,48 +4738,71 @@ async function loadReceiving(){
     var data = await res.json();
     var container = document.getElementById('receiving-container');
     var countEl = document.getElementById('receiving-count');
-    // Filter out baseline entries for the transaction list (they're not deliveries)
     var deliveries = data.filter(function(r){ return !r.migration_baseline && !r.adjustment; });
-    // Sort newest first
     deliveries.sort(function(a,b){
         return (b.date_received||b.created_at||'').localeCompare(a.date_received||a.created_at||'');
     });
-    if(countEl) countEl.textContent = deliveries.length + ' entr' + (deliveries.length===1?'y':'ies');
-    if(!deliveries.length){
-        container.innerHTML='<div class="empty-state">No receiving records yet. Use <strong>Add Inventory</strong> to record deliveries.</div>';
-        return;
-    }
-    var grouped = _timelineGroup(deliveries, 'date_received');
 
-    function renderReceivingTable(rows){
-        var h='<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Ingredient</th><th>Supplier</th><th>Supplier LOT#</th><th>Qty</th><th>Remaining</th></tr>';
-        rows.forEach(function(r){
-            h+='<tr>'
-             +'<td>'+(r.date_received||'')+'</td>'
-             +'<td>'+escHtml(r.item||'')+'</td>'
-             +'<td>'+escHtml(r.supplier||'')+'</td>'
-             +'<td>'+escHtml(r.supplier_lot||'—')+'</td>'
-             +'<td>'+(r.quantity||0)+' '+escHtml(r.unit||'')+'</td>'
-             +'<td>'+(r.remaining!==undefined?r.remaining:'—')+' '+escHtml(r.unit||'')+'</td>'
-             +'</tr>';
+    // Group: same date + supplier = one delivery transaction
+    var txMap = {}, txOrder = [];
+    deliveries.forEach(function(r){
+        var key = (r.date_received||'')+'||'+(r.supplier||'(unknown)');
+        if(!txMap[key]){ txMap[key]={date:r.date_received||'',supplier:r.supplier||'(unknown)',items:[]}; txOrder.push(key); }
+        txMap[key].items.push(r);
+    });
+    var transactions = txOrder.map(function(k){ return txMap[k]; });
+
+    if(countEl) countEl.textContent = transactions.length+' delivery'+(transactions.length===1?'':'ies');
+    if(!transactions.length){
+        container.innerHTML='<div class="empty-state">No receiving records yet. Use <strong>Add Inventory</strong> to record deliveries.</div>'; return;
+    }
+
+    function renderDelivery(tx, i){
+        var h='<details style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:6px;">';
+        h+='<summary style="padding:10px 14px;background:#f9f9f7;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px;">';
+        h+='<span style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">';
+        h+='<span style="font-size:13px;font-weight:600;">'+escHtml(tx.supplier)+'</span>';
+        h+='<span style="font-size:11px;color:var(--text-light);">'+escHtml(tx.date)+'</span>';
+        h+='</span>';
+        h+='<span style="font-size:11px;color:var(--text-light);white-space:nowrap;">'+tx.items.length+' item'+(tx.items.length===1?'':'s')+'</span>';
+        h+='</summary>';
+        h+='<div style="padding:8px 14px 12px;">';
+        h+='<table class="inv-table" style="font-size:12px;"><tr><th>Ingredient</th><th>LOT#</th><th>Qty</th><th>Remaining</th></tr>';
+        tx.items.forEach(function(r){
+            h+='<tr><td>'+escHtml(r.item||'')+'</td><td>'+escHtml(r.supplier_lot||'—')+'</td>'
+              +'<td>'+(r.quantity||0)+' '+escHtml(r.unit||'')+'</td>'
+              +'<td>'+(r.remaining!==undefined?r.remaining:'—')+' '+escHtml(r.unit||'')+'</td></tr>';
         });
-        h+='</table></div>';
+        h+='</table></div></details>';
         return h;
     }
 
-    var html = '';
-    if(grouped.recent.length) html += renderReceivingTable(grouped.recent);
-    var monthKeys = Object.keys(grouped.older).sort().reverse();
-    monthKeys.forEach(function(mk){
-        var rows = grouped.older[mk];
-        html += '<details style="margin-top:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">'
-            + '<summary style="padding:10px 14px;background:#f5f5f0;cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;justify-content:space-between;">'
-            + '<span>'+_monthLabel(mk)+'</span><span style="color:var(--text-light);font-weight:400;">'+rows.length+' entr'+(rows.length===1?'y':'ies')+'</span></summary>'
-            + '<div style="padding:0 2px 2px;">'+renderReceivingTable(rows)+'</div>'
-            + '</details>';
+    // Group by month
+    var byMonth={}, monthOrder=[];
+    transactions.forEach(function(tx){
+        var mk=(tx.date||'').substring(0,7);
+        if(!byMonth[mk]){ byMonth[mk]=[]; monthOrder.push(mk); }
+        byMonth[mk].push(tx);
     });
-    container.innerHTML = html;
+    monthOrder.sort().reverse();
+
+    var recentMk = new Date(Date.now()-45*864e5).toISOString().substring(0,7);
+    var html='', idx=0;
+    monthOrder.forEach(function(mk){
+        var txs=byMonth[mk];
+        var inner=txs.map(function(tx){ return renderDelivery(tx,idx++); }).join('');
+        if(mk>=recentMk){
+            html+=inner;
+        } else {
+            html+='<details style="margin-top:6px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">'
+                +'<summary style="padding:10px 14px;background:#f5f5f0;cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;justify-content:space-between;">'
+                +'<span>'+_monthLabel(mk)+'</span><span style="color:var(--text-light);font-weight:400;">'+txs.length+' delivery'+(txs.length===1?'':'ies')+'</span></summary>'
+                +'<div style="padding:6px 8px;">'+inner+'</div></details>';
+        }
+    });
+    container.innerHTML=html;
 }
+
 
 // ── Inventory Adjustment Modal ─────────────────────────────────────────
 async function openAdjustmentModal(){
@@ -4869,7 +4927,7 @@ document.addEventListener('DOMContentLoaded',function(){
             var date = params.get('date');
             var po = params.get('po');
             if(date) document.getElementById('sale-date-modal').value = date;
-            if(po) document.getElementById('sale-po-modal').value = po;
+            // po field removed
             if(buyerId){
                 var sel = document.getElementById('sale-buyer-select');
                 for(var i=0;i<sel.options.length;i++){

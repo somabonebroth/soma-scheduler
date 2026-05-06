@@ -132,7 +132,7 @@
 
           <div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Items</div>
           <ul class="items-list">
-          {% for item in o.items %}
+          {% for item in o['items'] %}
             <li><span>{{ item.name }} <span style="color:var(--text-light);">({{ item.format }})</span></span><span>{{ item.cases }} cases · {{ item.units }} units · ${{ "%.2f"|format(item.line_total) }}</span></li>
           {% endfor %}
           </ul>
