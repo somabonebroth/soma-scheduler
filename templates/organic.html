@@ -3114,12 +3114,14 @@ function renderBuyerOrderList(){
     var html='';
     checked.forEach(function(sku, i){
         var isFirst = i===0, isLast = i===checked.length-1;
-        var skuSafe = escHtml(sku.sku_key);
+        // Store the raw sku_key in data attr — | is safe in data attributes
+        // Do NOT use escHtml here as it breaks the key match in moveBuyerSku
+        var rawKey = sku.sku_key;
         html += '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);background:'+(i%2===0?'#fff':'#fafaf8')+';">'
             +'<div style="display:flex;flex-direction:column;gap:2px;">'
-            +'<button data-move-sku="'+skuSafe+'" data-move-dir="-1" '+(isFirst?'disabled':'')
+            +'<button data-move-sku="'+rawKey+'" data-move-dir="-1" '+(isFirst?'disabled':'')
             +' style="background:none;border:1px solid var(--border);border-radius:4px;width:24px;height:22px;cursor:pointer;font-size:10px;line-height:1;padding:0;'+(isFirst?'opacity:0.3;cursor:not-allowed;':'')+'">▲</button>'
-            +'<button data-move-sku="'+skuSafe+'" data-move-dir="1" '+(isLast?'disabled':'')
+            +'<button data-move-sku="'+rawKey+'" data-move-dir="1" '+(isLast?'disabled':'')
             +' style="background:none;border:1px solid var(--border);border-radius:4px;width:24px;height:22px;cursor:pointer;font-size:10px;line-height:1;padding:0;'+(isLast?'opacity:0.3;cursor:not-allowed;':'')+'">▼</button>'
             +'</div>'
             +'<span style="font-size:13px;flex:1;">'+escHtml(sku.display||sku.recipe)+'</span>'
@@ -4304,53 +4306,60 @@ async function loadFinishedGoods(){
 // ── SKU Meta (PAR + Price) ──────────────────────────────────────────────────
 var _skuMetaSaveTimers = {};
 
+var _skuMetaTimers = {};
+
 function attachSkuMetaListeners(){
     var container = document.getElementById('fg-container');
-    if(!container) return;
+    // Guard — use event delegation on the container instead of per-element
+    // listeners so re-renders don't stack copies.
+    if(!container || container.dataset.metaDelegated) return;
+    container.dataset.metaDelegated = '1';
 
-    // PAR number inputs — debounced save
-    container.querySelectorAll('.sku-par-input').forEach(function(input){
-        input.addEventListener('change', function(){
-            var skuKey = decodeURIComponent(this.getAttribute('data-sku-key'));
-            var val = this.value.trim();
-            saveSkuMeta(skuKey, {par: val === '' ? null : parseInt(val)});
-        });
+    container.addEventListener('input', function(e){
+        var input = e.target;
+        if(input.classList.contains('sku-par-input')){
+            var skuKey = decodeURIComponent(input.getAttribute('data-sku-key'));
+            clearTimeout(_skuMetaTimers[skuKey+'_par']);
+            _skuMetaTimers[skuKey+'_par'] = setTimeout(function(){
+                var val = input.value.trim();
+                saveSkuMeta(skuKey, {par: val === '' ? null : parseInt(val)});
+            }, 600);
+        }
+        if(input.classList.contains('sku-price-input')){
+            var skuKey = decodeURIComponent(input.getAttribute('data-sku-key'));
+            clearTimeout(_skuMetaTimers[skuKey+'_price']);
+            _skuMetaTimers[skuKey+'_price'] = setTimeout(function(){
+                var val = input.value.trim();
+                saveSkuMeta(skuKey, {price: val === '' ? null : parseFloat(val)});
+            }, 600);
+        }
     });
 
-    // "None" PAR checkbox
-    container.querySelectorAll('.sku-nopar-cb').forEach(function(cb){
-        cb.addEventListener('change', function(){
-            var skuKey = decodeURIComponent(this.getAttribute('data-sku-key'));
-            var parInput = document.querySelector('.sku-par-input[data-sku-key="'+this.getAttribute('data-sku-key')+'"]');
-            if(this.checked){
-                if(parInput){ parInput.disabled=true; parInput.value=''; parInput.style.opacity='0.5'; parInput.style.background='#f5f5f0'; }
-                saveSkuMeta(skuKey, {par: null});
-            } else {
-                if(parInput){ parInput.disabled=false; parInput.style.opacity=''; parInput.style.background=''; parInput.focus(); }
-                // Don't save yet — wait for user to enter a value
-            }
-        });
-    });
-
-    // Price inputs — debounced save
-    container.querySelectorAll('.sku-price-input').forEach(function(input){
-        input.addEventListener('change', function(){
-            var skuKey = decodeURIComponent(this.getAttribute('data-sku-key'));
-            var val = this.value.trim();
-            saveSkuMeta(skuKey, {price: val === '' ? null : parseFloat(val)});
-        });
+    container.addEventListener('change', function(e){
+        var cb = e.target;
+        if(!cb.classList.contains('sku-nopar-cb')) return;
+        var rawKey = cb.getAttribute('data-sku-key');
+        var skuKey = decodeURIComponent(rawKey);
+        var parInput = container.querySelector('.sku-par-input[data-sku-key="'+rawKey+'"]');
+        if(cb.checked){
+            if(parInput){ parInput.disabled=true; parInput.value=''; parInput.style.opacity='0.5'; parInput.style.background='#f5f5f0'; }
+            saveSkuMeta(skuKey, {par: null});
+        } else {
+            if(parInput){ parInput.disabled=false; parInput.style.opacity=''; parInput.style.background=''; parInput.focus(); }
+        }
     });
 }
 
 async function saveSkuMeta(skuKey, patch){
     try {
-        await fetch('/api/sku-meta/'+encodeURIComponent(skuKey), {
+        var res = await fetch('/api/sku-meta/'+encodeURIComponent(skuKey), {
             method: 'PATCH',
             headers: {'Content-Type':'application/json'},
             body: JSON.stringify(patch)
         });
+        if(!res.ok) console.error('saveSkuMeta failed', skuKey, res.status);
     } catch(e) {
-        console.error('Failed to save SKU meta', skuKey, e);
+        console.error('saveSkuMeta error', skuKey, e);
     }
 }
 
