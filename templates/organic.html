@@ -1377,17 +1377,32 @@ body.inv-page .modal-actions {
                 <input type="text" id="buyer-name-input" placeholder="e.g. Ripe Nutrition" style="width:100%;box-sizing:border-box;">
             </div>
 
-            <div>
+            <!-- Step A: check which SKUs are assigned -->
+            <div id="buyer-step-assign">
                 <div style="font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Assigned Products</div>
-                <p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Check all SKUs this buyer can purchase.</p>
+                <p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Check all SKUs this buyer can purchase, then click <strong>Set Order →</strong>.</p>
                 <div style="margin-bottom:8px;">
                     <input type="text" id="buyer-sku-search" placeholder="Filter products…" oninput="renderBuyerSkuList()" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
                 </div>
-                <div id="buyer-sku-list" style="max-height:45vh;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px;background:#fff;"></div>
+                <div id="buyer-sku-list" style="max-height:35vh;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px;background:#fff;"></div>
+                <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+                    <button class="btn btn-primary" onclick="goToBuyerOrderStep()" style="background:#0288d1;border-color:#0288d1;font-size:13px;">Set Order →</button>
+                </div>
             </div>
 
+            <!-- Step B: set display order with up/down arrows -->
+            <div id="buyer-step-order" style="display:none;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                    <button onclick="goToBuyerAssignStep()" style="background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;text-decoration:underline;padding:0;">← Back</button>
+                    <div style="font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;">Set Sale Order</div>
+                </div>
+                <p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Use arrows to set the order SKUs appear in the sale grid. Grouped by format automatically.</p>
+                <div id="buyer-order-list" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;"></div>
+            </div>
+
+            <!-- Save actions shown on order step -->
             <div id="buyer-modal-msg" class="status" style="margin:10px 0;"></div>
-            <div class="modal-actions">
+            <div class="modal-actions" id="buyer-modal-actions">
                 <button class="btn btn-outline" onclick="closeBuyerModal()">Cancel</button>
                 <button class="btn btn-primary" id="buyer-save-btn" onclick="saveBuyer()" style="background:#0288d1;border-color:#0288d1;">Save Buyer</button>
             </div>
@@ -2707,24 +2722,55 @@ function goToSaleStep2(){
     document.getElementById('sale-buyer-label').textContent = buyer.name;
     document.getElementById('sale-date-label').textContent = new Date(date+'T12:00:00').toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'});
 
-    // Build SKU grid
+    // Build SKU grid — grouped by format, sorted by position, out-of-stock at bottom
     var grid = document.getElementById('sale-sku-grid');
-    // Build a quick lookup for stock from FG grouped
     var stockMap = {};
     _rsFgGrouped.forEach(function(row){ stockMap[row.sku_key] = row.total_remaining || 0; });
 
+    // Sort skus: by position, then out-of-stock to bottom within each group
+    var sorted = (buyer.skus || []).slice().sort(function(a, b){
+        var posA = a.position !== undefined ? a.position : 999;
+        var posB = b.position !== undefined ? b.position : 999;
+        return posA - posB;
+    });
+
+    // Group by format
+    var formatGroups = {}, formatOrder = [];
+    sorted.forEach(function(sku){
+        var fmt = sku.format || 'Other';
+        if(!formatGroups[fmt]){ formatGroups[fmt]=[]; formatOrder.push(fmt); }
+        formatGroups[fmt].push(sku);
+    });
+
+    // Within each group: in-stock first, out-of-stock last
+    formatOrder.forEach(function(fmt){
+        formatGroups[fmt].sort(function(a, b){
+            var aOut = (stockMap[a.sku_key]||0) <= 0 ? 1 : 0;
+            var bOut = (stockMap[b.sku_key]||0) <= 0 ? 1 : 0;
+            return aOut - bOut;
+        });
+    });
+
     grid.innerHTML = '';
-    buyer.skus.forEach(function(sku, idx){
-        var stock = stockMap[sku.sku_key] || 0;
-        var bg = idx % 2 === 0 ? '#fff' : '#fafaf8';
-        var outOfStock = stock <= 0;
-        var row = document.createElement('div');
-        row.style.cssText = 'display:grid;grid-template-columns:1fr 90px 60px;gap:8px;padding:8px 12px;background:'+bg+';align-items:center;border-bottom:1px solid #f0f0eb;' + (outOfStock ? 'opacity:0.5;' : '');
-        row.innerHTML =
-            '<div style="font-size:13px;font-weight:500;">'+escHtml(sku.display || sku.recipe)+'</div>'
-            + '<div style="font-size:13px;color:'+(outOfStock?'#c62828':'var(--accent)')+';">'+(outOfStock?'Out':''+stock+' u')+'</div>'
-            + '<div><input type="number" data-rs-sku="'+escHtml(sku.sku_key)+'" min="0" step="1" inputmode="numeric" placeholder="0" '+(outOfStock?'disabled':'')+' style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;'+(outOfStock?'background:#f0f0f0;':'')+'"></div>';
-        grid.appendChild(row);
+    formatOrder.forEach(function(fmt){
+        // Format divider
+        var divider = document.createElement('div');
+        divider.style.cssText = 'padding:6px 12px 4px;background:#f0f0eb;font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--border);position:sticky;top:0;';
+        divider.textContent = fmt;
+        grid.appendChild(divider);
+
+        formatGroups[fmt].forEach(function(sku, idx){
+            var stock = stockMap[sku.sku_key] || 0;
+            var outOfStock = stock <= 0;
+            var bg = idx % 2 === 0 ? '#fff' : '#fafaf8';
+            var row = document.createElement('div');
+            row.style.cssText = 'display:grid;grid-template-columns:1fr 90px 60px;gap:8px;padding:8px 12px;background:'+bg+';align-items:center;border-bottom:1px solid #f0f0eb;'+(outOfStock?'opacity:0.45;':'');
+            row.innerHTML =
+                '<div style="font-size:13px;font-weight:500;">'+escHtml(sku.display||sku.recipe)+'</div>'
+                +'<div style="font-size:13px;color:'+(outOfStock?'#c62828':'var(--accent)')+';">'+(outOfStock?'Out':stock+' u')+'</div>'
+                +'<div><input type="number" data-rs-sku="'+escHtml(sku.sku_key)+'" min="0" step="1" inputmode="numeric" placeholder="0" '+(outOfStock?'disabled':'')+' style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;'+(outOfStock?'background:#f0f0f0;':'')+'"></div>';
+            grid.appendChild(row);
+        });
     });
 
     document.getElementById('sale-step1').style.display = 'none';
@@ -2909,6 +2955,7 @@ var _buyerEditId = null;
 var _buyerAllSkus = [];   // [{brand,recipe,format,sku_key,display}]
 var _buyerChecked = {};   // {sku_key: bool}
 var _buyerSkuGroups = []; // [{brand, skus:[]}]
+var _buyerSkuOrder = {};  // {sku_key: position_int} — set in order step
 
 async function loadBuyers(){
     var container = document.getElementById('buyers-list-container');
@@ -2967,6 +3014,10 @@ async function openAddBuyerModal(){
     document.getElementById('buyer-save-btn').textContent='Save Buyer';
     await _fetchSkuCatalog();
     _buyerChecked={};
+    _buyerSkuOrder={};
+    document.getElementById('buyer-step-assign').style.display='';
+    document.getElementById('buyer-step-order').style.display='none';
+    document.getElementById('buyer-modal-actions').style.display='none';
     renderBuyerSkuList();
     document.getElementById('buyer-modal').classList.add('active');
     setTimeout(function(){ document.getElementById('buyer-name-input').focus(); },100);
@@ -2986,7 +3037,13 @@ async function openEditBuyerModal(bid){
     document.getElementById('buyer-save-btn').textContent='Save Changes';
     await _fetchSkuCatalog();
     _buyerChecked={};
-    (b.skus||[]).forEach(function(s){ _buyerChecked[s.sku_key]=true; });
+    (b.skus||[]).forEach(function(s){
+        _buyerChecked[s.sku_key]=true;
+        _buyerSkuOrder[s.sku_key] = (s.position !== undefined) ? s.position : 999;
+    });
+    document.getElementById('buyer-step-assign').style.display='';
+    document.getElementById('buyer-step-order').style.display='none';
+    document.getElementById('buyer-modal-actions').style.display='none';
     renderBuyerSkuList();
     document.getElementById('buyer-modal').classList.add('active');
 }
@@ -3017,13 +3074,83 @@ function renderBuyerSkuList(){
     });
 }
 
+function goToBuyerOrderStep(){
+    // Collect currently checked SKUs, preserving any existing order
+    var checked = _buyerAllSkus.filter(function(s){ return _buyerChecked[s.sku_key]; });
+    // Assign positions to newly checked items (not yet in _buyerSkuOrder)
+    var maxPos = 0;
+    checked.forEach(function(s){
+        if(_buyerSkuOrder[s.sku_key] !== undefined) maxPos = Math.max(maxPos, _buyerSkuOrder[s.sku_key]);
+    });
+    checked.forEach(function(s){
+        if(_buyerSkuOrder[s.sku_key] === undefined){ _buyerSkuOrder[s.sku_key] = ++maxPos; }
+    });
+    // Remove order entries for unchecked items
+    Object.keys(_buyerSkuOrder).forEach(function(k){
+        if(!_buyerChecked[k]) delete _buyerSkuOrder[k];
+    });
+    document.getElementById('buyer-step-assign').style.display='none';
+    document.getElementById('buyer-step-order').style.display='';
+    document.getElementById('buyer-modal-actions').style.display='flex';
+    renderBuyerOrderList();
+}
+
+function goToBuyerAssignStep(){
+    document.getElementById('buyer-step-order').style.display='none';
+    document.getElementById('buyer-step-assign').style.display='';
+    document.getElementById('buyer-modal-actions').style.display='none';
+}
+
+function renderBuyerOrderList(){
+    var checked = _buyerAllSkus.filter(function(s){ return _buyerChecked[s.sku_key]; });
+    // Sort by current position
+    checked.sort(function(a,b){
+        return (_buyerSkuOrder[a.sku_key]||999) - (_buyerSkuOrder[b.sku_key]||999);
+    });
+    var list = document.getElementById('buyer-order-list');
+    if(!checked.length){
+        list.innerHTML='<div style="padding:14px;color:var(--text-light);font-size:13px;">No products assigned.</div>';
+        return;
+    }
+    var html='';
+    checked.forEach(function(sku, i){
+        var isFirst = i===0, isLast = i===checked.length-1;
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);background:'+(i%2===0?'#fff':'#fafaf8')+';">'
+            +'<div style="display:flex;flex-direction:column;gap:2px;">'
+            +'<button onclick="moveBuyerSku(''+escHtml(sku.sku_key)+'', -1)" '+(isFirst?'disabled style="opacity:0.3;cursor:not-allowed;"':'')
+            +' style="background:none;border:1px solid var(--border);border-radius:4px;width:24px;height:22px;cursor:pointer;font-size:10px;line-height:1;padding:0;">▲</button>'
+            +'<button onclick="moveBuyerSku(''+escHtml(sku.sku_key)+'', 1)" '+(isLast?'disabled style="opacity:0.3;cursor:not-allowed;"':'')
+            +' style="background:none;border:1px solid var(--border);border-radius:4px;width:24px;height:22px;cursor:pointer;font-size:10px;line-height:1;padding:0;">▼</button>'
+            +'</div>'
+            +'<span style="font-size:13px;flex:1;">'+escHtml(sku.display||sku.recipe)+'</span>'
+            +'<span style="font-size:11px;color:var(--text-light);background:#f0f0ef;padding:2px 7px;border-radius:10px;white-space:nowrap;">'+escHtml(sku.format||'')+'</span>'
+            +'</div>';
+    });
+    list.innerHTML=html;
+}
+
+function moveBuyerSku(skuKey, dir){
+    var checked = _buyerAllSkus.filter(function(s){ return _buyerChecked[s.sku_key]; });
+    checked.sort(function(a,b){ return (_buyerSkuOrder[a.sku_key]||999)-(_buyerSkuOrder[b.sku_key]||999); });
+    var idx = checked.findIndex(function(s){ return s.sku_key===skuKey; });
+    var swapIdx = idx+dir;
+    if(swapIdx<0||swapIdx>=checked.length) return;
+    // Swap positions
+    var posA = _buyerSkuOrder[checked[idx].sku_key];
+    var posB = _buyerSkuOrder[checked[swapIdx].sku_key];
+    _buyerSkuOrder[checked[idx].sku_key] = posB;
+    _buyerSkuOrder[checked[swapIdx].sku_key] = posA;
+    renderBuyerOrderList();
+}
+
 async function saveBuyer(){
     var name=(document.getElementById('buyer-name-input').value||'').trim();
     var msg=document.getElementById('buyer-modal-msg');
     var btn=document.getElementById('buyer-save-btn');
     msg.textContent=''; msg.className='status';
     if(!name){ msg.className='status error'; msg.textContent='Name required.'; return; }
-    var skus=_buyerAllSkus.filter(function(s){ return _buyerChecked[s.sku_key]; });
+    var skus=_buyerAllSkus.filter(function(s){ return _buyerChecked[s.sku_key]; })
+        .map(function(s){ return Object.assign({}, s, {position: _buyerSkuOrder[s.sku_key] !== undefined ? _buyerSkuOrder[s.sku_key] : 999}); });
     btn.disabled=true; btn.textContent='Saving…';
     try{
         var url=_buyerModalMode==='edit'?'/api/buyers/'+_buyerEditId:'/api/buyers';
@@ -4113,29 +4240,44 @@ async function loadFinishedGoods(){
             }
 
             var rowOpacity=outOfStock?'opacity:0.55;':'';
-            var sellBtnAttrs=outOfStock
-                ? 'disabled title="Out of stock — nothing to sell" style="background:#ccc;color:#888;border-color:#ccc;font-weight:600;padding:8px 16px;min-height:38px;cursor:not-allowed;"'
-                : 'data-action="sell" data-sku-key="'+keyAttr+'" style="background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;padding:8px 16px;min-height:38px;"';
-            // Detail expand only meaningful when there's history
             var expandBtn=hasHistory
                 ? '<button class="btn-sm" data-action="toggle" data-sku-key="'+keyAttr+'" title="Show LOT-level detail" style="padding:8px 12px;min-height:38px;">'+(isExpanded?'▲':'▼')+'</button>'
                 : '<button class="btn-sm" disabled title="No LOTs to show" style="padding:8px 12px;min-height:38px;opacity:0.4;cursor:not-allowed;">▼</button>';
 
-            html+='<div class="fg-row sku-row" data-sku="'+keyAttr+'" style="'+rowOpacity+'padding:14px 4px;">';
-            html+='<div class="fg-info" style="flex:1;min-width:200px;">';
-            html+='<strong>'+displaySafe+'</strong>'+certBadge(s.certification)+baselineBadge+stockBadge;
+            // PAR level
+            var parVal = (s.par !== null && s.par !== undefined) ? s.par : '';
+            var parNoPar = (s.par === null || s.par === undefined);
+            var parBelowPar = (!parNoPar && s.total_remaining < s.par);
+            var parWarningBadge = parBelowPar
+                ? '<span style="font-size:9px;font-weight:700;background:#fff3cd;color:#856404;border:1px solid #ffe082;padding:1px 6px;border-radius:8px;margin-left:6px;vertical-align:middle;">BELOW PAR</span>'
+                : '';
+
+            // Price
+            var priceVal = (s.price !== null && s.price !== undefined) ? s.price.toFixed(2) : '';
+
+            html+='<div class="fg-row sku-row" data-sku="'+keyAttr+'" style="'+rowOpacity+'padding:12px 4px;">';
+            html+='<div class="fg-info" style="flex:1;min-width:180px;">';
+            html+='<strong>'+displaySafe+'</strong>'+certBadge(s.certification)+baselineBadge+stockBadge+parWarningBadge;
             html+='<br><span style="font-size:11px;color:var(--text-light);margin-top:4px;display:inline-block;">'+lotNote+(s.total_produced?' • '+s.total_produced+' produced lifetime':'')+'</span>';
             html+='</div>';
-            html+='<div class="fg-qty'+(outOfStock?' negative':'')+'" style="min-width:110px;text-align:right;">'+s.total_remaining+' units</div>';
-            html+='<div style="display:flex;gap:6px;flex-wrap:wrap;">';
-            html+='<button class="btn-sm" '+sellBtnAttrs+'>Sell</button>';
-            html+='<button class="btn-sm" data-action="manual-add" data-sku-key="'+keyAttr+'" data-recipe="'+escSku(s.recipe)+'" data-display="'+displaySafe+'" title="Add inventory (returns, found stock, recount)" style="padding:8px 12px;min-height:38px;color:#2e7d32;border-color:#a5d6a7;background:#fff;">+ Add</button>';
-            var removeAttrs=outOfStock
-                ? 'disabled title="Nothing to remove" style="padding:8px 12px;min-height:38px;opacity:0.4;cursor:not-allowed;"'
-                : 'data-action="manual-subtract" data-sku-key="'+keyAttr+'" data-recipe="'+escSku(s.recipe)+'" data-display="'+displaySafe+'" data-available="'+s.total_remaining+'" title="Remove inventory (spillage, waste, theft, etc.)" style="padding:8px 12px;min-height:38px;color:#c62828;border-color:#ffcdd2;background:#fff;"';
-            html+='<button class="btn-sm" '+removeAttrs+'>− Remove</button>';
-            html+=expandBtn;
-            html+='</div>';
+            html+='<div class="fg-qty'+(outOfStock?' negative':'')+'" style="min-width:80px;text-align:right;">'+s.total_remaining+' units</div>';
+            // PAR field
+            html+='<div style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:110px;">';
+            html+='<label style="font-size:9px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;">PAR</label>';
+            html+='<div style="display:flex;align-items:center;gap:5px;">';
+            html+='<input type="number" class="sku-par-input" data-sku-key="'+keyAttr+'" min="0" step="1" value="'+escHtml(String(parVal))+'" placeholder="—" '+(parNoPar?'disabled':'')+' style="width:58px;padding:5px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px;'+(parNoPar?'background:#f5f5f0;opacity:0.5;':'')+(parBelowPar?'border-color:#f57f17;background:#fff8e1;':'')+'">';
+            html+='<label style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--text-light);cursor:pointer;" title="No PAR level for this SKU">';
+            html+='<input type="checkbox" class="sku-nopar-cb" data-sku-key="'+keyAttr+'" '+(parNoPar?'checked':'')+' style="width:12px;height:12px;cursor:pointer;">None';
+            html+='</label></div></div>';
+            // Price field
+            html+='<div style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:90px;">';
+            html+='<label style="font-size:9px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;">Price / unit</label>';
+            html+='<div style="display:flex;align-items:center;gap:2px;">';
+            html+='<span style="font-size:12px;color:var(--text-light);">$</span>';
+            html+='<input type="number" class="sku-price-input" data-sku-key="'+keyAttr+'" min="0" step="0.01" value="'+escHtml(String(priceVal))+'" placeholder="0.00" style="width:62px;padding:5px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px;">';
+            html+='</div></div>';
+            // Lots toggle
+            html+='<div>'+expandBtn+'</div>';
             html+='</div>';
 
             if(isExpanded && hasHistory){
@@ -4149,8 +4291,62 @@ async function loadFinishedGoods(){
     });
     container.innerHTML=html;
     attachFgClickDelegationOnce();
+    attachSkuMetaListeners();
     if(expandedSku){
         renderSkuDetail(expandedSku);
+    }
+}
+
+// ── SKU Meta (PAR + Price) ──────────────────────────────────────────────────
+var _skuMetaSaveTimers = {};
+
+function attachSkuMetaListeners(){
+    var container = document.getElementById('fg-container');
+    if(!container) return;
+
+    // PAR number inputs — debounced save
+    container.querySelectorAll('.sku-par-input').forEach(function(input){
+        input.addEventListener('change', function(){
+            var skuKey = decodeURIComponent(this.getAttribute('data-sku-key'));
+            var val = this.value.trim();
+            saveSkuMeta(skuKey, {par: val === '' ? null : parseInt(val)});
+        });
+    });
+
+    // "None" PAR checkbox
+    container.querySelectorAll('.sku-nopar-cb').forEach(function(cb){
+        cb.addEventListener('change', function(){
+            var skuKey = decodeURIComponent(this.getAttribute('data-sku-key'));
+            var parInput = document.querySelector('.sku-par-input[data-sku-key="'+this.getAttribute('data-sku-key')+'"]');
+            if(this.checked){
+                if(parInput){ parInput.disabled=true; parInput.value=''; parInput.style.opacity='0.5'; parInput.style.background='#f5f5f0'; }
+                saveSkuMeta(skuKey, {par: null});
+            } else {
+                if(parInput){ parInput.disabled=false; parInput.style.opacity=''; parInput.style.background=''; parInput.focus(); }
+                // Don't save yet — wait for user to enter a value
+            }
+        });
+    });
+
+    // Price inputs — debounced save
+    container.querySelectorAll('.sku-price-input').forEach(function(input){
+        input.addEventListener('change', function(){
+            var skuKey = decodeURIComponent(this.getAttribute('data-sku-key'));
+            var val = this.value.trim();
+            saveSkuMeta(skuKey, {price: val === '' ? null : parseFloat(val)});
+        });
+    });
+}
+
+async function saveSkuMeta(skuKey, patch){
+    try {
+        await fetch('/api/sku-meta/'+encodeURIComponent(skuKey), {
+            method: 'PATCH',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(patch)
+        });
+    } catch(e) {
+        console.error('Failed to save SKU meta', skuKey, e);
     }
 }
 

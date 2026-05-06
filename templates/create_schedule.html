@@ -60,6 +60,10 @@
     </div>
     <div id="status-msg" class="status"></div>
     <div id="week-exists-notice" class="week-exists-notice"></div>
+    <div id="par-warning-banner" style="display:none;background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:14px 16px;margin-bottom:14px;">
+        <div style="font-size:12px;font-weight:700;color:#f57f17;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">⚠ Below PAR Level</div>
+        <div id="par-warning-list" style="font-size:13px;color:#5d4037;line-height:1.8;"></div>
+    </div>
     <div class="card"><h3>General Notes</h3><textarea id="schedule-notes" class="notes-area" placeholder="General weekly notes..."></textarea></div>
     <div id="schedule-grid"></div>
     <div class="generate-bar">
@@ -134,7 +138,27 @@ document.addEventListener('DOMContentLoaded', async function() {
     groupedRecipes = await (await fetch('/api/recipes/grouped')).json();
     buildGrid();
     loadExisting(currentWeekId);
+    loadParWarnings();
 });
+
+async function loadParWarnings(){
+    try {
+        var res = await fetch('/api/sku-meta');
+        var data = await res.json();
+        var warnings = data.par_warnings || [];
+        var banner = document.getElementById('par-warning-banner');
+        var list = document.getElementById('par-warning-list');
+        if(!warnings.length){ banner.style.display='none'; return; }
+        banner.style.display='';
+        list.innerHTML = warnings.map(function(w){
+            return '<span style="display:inline-block;margin-right:16px;">'
+                + '<strong>' + w.display + '</strong>'
+                + ' &mdash; ' + w.remaining + ' units in stock, PAR is ' + w.par
+                + ' <span style="color:#c62828;">(' + w.shortfall + ' short)</span>'
+                + '</span>';
+        }).join('<br>');
+    } catch(e) {}
+}
 
 function weekChanged() {
     var weekDate = document.getElementById('week-date').value;

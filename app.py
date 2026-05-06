@@ -2153,6 +2153,7 @@ ORGANIC_RUNS_PATH = os.path.join(INVENTORY_DIR, "production_runs.json")
 ORGANIC_FG_PATH = os.path.join(INVENTORY_DIR, "finished_goods.json")
 ORGANIC_SALES_PATH = os.path.join(INVENTORY_DIR, "sales.json")
 ORGANIC_CONTACTS_PATH = os.path.join(INVENTORY_DIR, "contacts.json")
+SKU_META_PATH = os.path.join(INVENTORY_DIR, "sku_meta.json")  # PAR levels + prices
 # Manual inventory adjustments log (additions and subtractions outside of
 # production runs and sales). Each entry records what changed, why, and
 # which LOT(s) were drained or created. Used for audit traceability.
@@ -4243,17 +4244,6 @@ def rm_receipt_photo_exists(entry_id):
 @app.route("/api/organic/finished-goods/grouped", methods=["GET"])
 @login_required
 def get_finished_goods_grouped():
-    """Returns one row per SKU (brand+recipe+format), joined against the recipe
-    catalog so EVERY active recipe shows up — even ones with zero stock or no
-    production history. Each existing-stock row aggregates total produced and
-    remaining across all kettles + LOTs. Catalog-only rows have catalog_only=true
-    and total_remaining=0.
-
-    Use this for the inventory list view; click a row and call /sku/<key> for
-    LOT-level detail.
-
-    Optional query parameter: ?certification=Organic|Pasture Raised|Conventional
-    filters to one tier. Default is no filter (all certifications)."""
     fg = _load_json(ORGANIC_FG_PATH, [])
     recipes = load_recipes()
     grouped = _group_fg_with_catalog(fg, recipes)
@@ -4261,7 +4251,72 @@ def get_finished_goods_grouped():
     if cert_filter:
         grouped = [g for g in grouped
                    if (g.get("certification") or "").lower() == cert_filter.lower()]
+    # Merge PAR levels and prices from sku_meta.json
+    meta = _load_json(SKU_META_PATH, {})
+    for g in grouped:
+        m = meta.get(g["sku_key"], {})
+        g["par"] = m.get("par")          # None = no PAR; int = PAR level
+        g["price"] = m.get("price")      # None = unset; float = price per unit
     return jsonify(grouped)
+
+
+@app.route("/api/sku-meta/<path:sku_key>", methods=["PATCH"])
+@login_required
+def update_sku_meta(sku_key):
+    """Update PAR level and/or price for a SKU.
+    Body: { par: int|null, price: float|null }
+    null = remove the field (no PAR / no price set).
+    """
+    data = request.get_json() or {}
+    meta = _load_json(SKU_META_PATH, {})
+    if sku_key not in meta:
+        meta[sku_key] = {}
+    if "par" in data:
+        if data["par"] is None:
+            meta[sku_key].pop("par", None)
+        else:
+            try:
+                meta[sku_key]["par"] = int(data["par"])
+            except (ValueError, TypeError):
+                return jsonify({"error": "par must be an integer or null"}), 400
+    if "price" in data:
+        if data["price"] is None:
+            meta[sku_key].pop("price", None)
+        else:
+            try:
+                meta[sku_key]["price"] = round(float(data["price"]), 2)
+            except (ValueError, TypeError):
+                return jsonify({"error": "price must be a number or null"}), 400
+    # Clean up empty entries
+    if not meta[sku_key]:
+        del meta[sku_key]
+    _save_json(SKU_META_PATH, meta)
+    return jsonify({"ok": True, "meta": meta.get(sku_key, {})})
+
+
+@app.route("/api/sku-meta", methods=["GET"])
+@login_required
+def get_all_sku_meta():
+    """Return all SKU meta — used by create_schedule page to check PAR warnings."""
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    recipes = load_recipes()
+    grouped = _group_fg_with_catalog(fg, recipes)
+    meta = _load_json(SKU_META_PATH, {})
+    warnings = []
+    for g in grouped:
+        m = meta.get(g["sku_key"], {})
+        par = m.get("par")
+        if par is not None:
+            remaining = g.get("total_remaining", 0)
+            if remaining < par:
+                warnings.append({
+                    "sku_key": g["sku_key"],
+                    "display": g.get("display", ""),
+                    "par": par,
+                    "remaining": remaining,
+                    "shortfall": par - remaining,
+                })
+    return jsonify({"meta": meta, "par_warnings": warnings})
 
 
 @app.route("/api/organic/finished-goods/sku/<path:sku_key>", methods=["GET"])
@@ -5065,6 +5120,35 @@ def _run_scheduled_deductions():
 
 
 _run_scheduled_deductions()  # run once on startup
+
+
+def _seed_sku_meta_defaults():
+    """One-time seed: any SKU without a PAR or price entry gets PAR=100, price=10.00."""
+    meta = _load_json(SKU_META_PATH, {})
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    recipes = load_recipes()
+    try:
+        grouped = _group_fg_with_catalog(fg, recipes)
+    except Exception:
+        return
+    changed = False
+    for g in grouped:
+        key = g["sku_key"]
+        if key not in meta:
+            meta[key] = {"par": 100, "price": 10.00}
+            changed = True
+        else:
+            if "par" not in meta[key]:
+                meta[key]["par"] = 100
+                changed = True
+            if "price" not in meta[key]:
+                meta[key]["price"] = 10.00
+                changed = True
+    if changed:
+        _save_json(SKU_META_PATH, meta)
+
+
+_seed_sku_meta_defaults()
 
 
 @app.route("/api/ripe-orders/run-deductions", methods=["POST"])
