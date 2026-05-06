@@ -569,27 +569,13 @@ body.inv-page .modal-actions {
 
     <!-- TAB 1: Raw Materials -->
     <div class="tab-content active" id="tab-raw">
-        <div class="card">
-            <h2>Add Raw Material</h2>
-            <p>Record receipt of a supplier delivery. The item must already exist in the recipe ingredient list — use <strong>+ New Ingredient</strong> if it doesn't.</p>
-            <div class="form-row">
-                <div class="form-field"><label>Item</label><select id="rm-item" onchange="onIngredientSelect()"><option value="">Loading...</option></select></div>
-                <div class="form-field"><label>Supplier</label><input id="rm-supplier" list="supplier-list" placeholder="Company name"><datalist id="supplier-list"></datalist></div>
-                <div class="form-field"><label>Date Received</label><input type="date" id="rm-date"></div>
-            </div>
-            <div class="form-row">
-                <div class="form-field"><label>Supplier LOT#</label><input id="rm-lot" placeholder="Supplier lot number"></div>
-                <div class="form-field"><label>Quantity</label><input type="number" id="rm-qty" inputmode="decimal" placeholder="0" step="any"></div>
-                <div class="form-field"><label>Unit</label><input id="rm-unit" readonly style="background:#f5f5f0;"></div>
-            </div>
-            <div id="rm-info" style="font-size:11px;color:var(--text-light);margin-bottom:14px;"></div>
+        <div class="card" style="padding-bottom:18px;">
             <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
-                <button class="btn btn-primary" onclick="openAddInventoryModal()">+ Add Inventory</button>
-                <button class="btn-baseline" onclick="openBaselineRMBulkGrid()">Baseline Bulk</button>
-                <button class="btn-outline" onclick="openBaselineRMSingle()" title="Add a single ingredient to baseline (use after bulk pass for missed items)" style="font-size:13px;padding:10px 14px;">+ Single Ingredient</button>
-                <button class="btn-outline" onclick="addCustomIngredient()">+ New Ingredient</button>
+                <button class="btn btn-primary" onclick="openAddInventoryModal()" style="background:#2e7d32;border-color:#2e7d32;">&#128230; Add Inventory</button>
+                <button class="btn-outline" onclick="openAdjustmentModal()" style="font-size:13px;">&#9881; Adjust Inventory</button>
+                <button class="btn-outline" onclick="addCustomIngredient()" style="font-size:13px;">+ New Ingredient</button>
             </div>
-            <div id="rm-status" class="status"></div>
+            <div id="rm-status" class="status" style="margin-top:8px;"></div>
         </div>
         <div class="card">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
@@ -1006,6 +992,52 @@ body.inv-page .modal-actions {
         </div>
     </div>
 
+    <!-- Inventory Adjustment Modal (spillage, theft, audit corrections) -->
+    <div class="modal-overlay" id="adjustment-modal">
+        <div class="modal" style="max-width:680px;">
+            <button class="modal-close" onclick="closeAdjustmentModal()">&times;</button>
+            <h2>&#9881; Adjust Inventory</h2>
+            <p style="font-size:13px;color:var(--text-light);margin-bottom:16px;">Record corrections to inventory counts — spillage, spoilage, theft, or audit adjustments. No supplier required.</p>
+
+            <div class="form-row" style="margin-bottom:14px;">
+                <div class="form-field">
+                    <label>Reason</label>
+                    <select id="adj-reason">
+                        <option value="Spillage">Spillage</option>
+                        <option value="Spoilage">Spoilage</option>
+                        <option value="Theft">Theft</option>
+                        <option value="Audit correction">Audit correction</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label>Date</label>
+                    <input type="date" id="adj-date">
+                </div>
+            </div>
+            <div class="form-field" style="margin-bottom:14px;">
+                <label>Notes (optional)</label>
+                <input type="text" id="adj-notes" placeholder="Additional details…">
+            </div>
+
+            <div style="font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Ingredients</div>
+            <p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Enter a <strong>negative</strong> number to reduce inventory, positive to add. Leave blank to skip.</p>
+
+            <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px;">
+                <div style="display:grid;grid-template-columns:1fr 100px 70px;background:#f5f5f0;padding:8px 12px;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;gap:8px;">
+                    <div>Ingredient</div><div>Adjustment</div><div>Unit</div>
+                </div>
+                <div id="adj-ingredient-grid" style="max-height:50vh;overflow-y:auto;"></div>
+            </div>
+
+            <div id="adj-status" class="status" style="margin-bottom:10px;"></div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeAdjustmentModal()">Cancel</button>
+                <button class="btn btn-primary" id="adj-submit-btn" onclick="submitAdjustment()" style="background:#e65100;border-color:#e65100;">Save Adjustment</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Add/Edit Supplier Modal -->
     <div class="modal-overlay" id="supplier-modal">
         <div class="modal" style="max-width:680px;">
@@ -1034,65 +1066,39 @@ body.inv-page .modal-actions {
         </div>
     </div>
 
-    <!-- TAB 4: Records — Sales History, Search & Trace, Invoices -->
+    <!-- TAB 4: Records -->
     <div class="tab-content" id="tab-records">
+
+        <!-- Search & Trace — top -->
         <div class="card">
-            <h2>Sales History <span class="count-badge" id="sales-count">—</span></h2>
-            <p>FIFO sales drawn from finished goods inventory. Use the filter to narrow by certification tier.</p>
-            <div class="filter-bar">
-                <button class="filter-btn active" data-sales-filter="all" onclick="setSalesFilter('all',this)">All</button>
-                <button class="filter-btn" data-sales-filter="Organic" onclick="setSalesFilter('Organic',this)">Organic</button>
-                <button class="filter-btn" data-sales-filter="Pasture Raised" onclick="setSalesFilter('Pasture Raised',this)">Pasture Raised</button>
-                <button class="filter-btn" data-sales-filter="Conventional" onclick="setSalesFilter('Conventional',this)">Conventional</button>
+            <h2>Search &amp; Trace</h2>
+            <p style="font-size:13px;color:var(--text-light);margin-bottom:14px;">Search by supplier, buyer, product name, LOT#, or date across all receiving and sales transactions.</p>
+            <div class="search-bar" style="margin-bottom:0;">
+                <input id="trace-query" placeholder="Supplier, buyer, product, LOT#, or date…" style="flex:1;" oninput="doTraceDebounced()">
+                <button class="btn btn-primary" onclick="doTrace()">Search</button>
+                <button class="btn btn-outline" onclick="document.getElementById('trace-query').value='';doTrace()" style="font-size:13px;">Clear</button>
             </div>
+            <div id="trace-results" style="margin-top:12px;"></div>
+        </div>
+
+        <!-- Receiving Transactions -->
+        <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:4px;">
+                <h2 style="border-bottom:none;padding-bottom:0;margin-bottom:0;">Receiving <span class="count-badge" id="receiving-count">—</span></h2>
+            </div>
+            <p style="font-size:13px;color:var(--text-light);margin-bottom:14px;">All supplier deliveries recorded via Add Inventory.</p>
+            <div id="receiving-container"><div class="empty-state">Loading...</div></div>
+        </div>
+
+        <!-- Sales Transactions -->
+        <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:4px;">
+                <h2 style="border-bottom:none;padding-bottom:0;margin-bottom:0;">Sales <span class="count-badge" id="sales-count">—</span></h2>
+            </div>
+            <p style="font-size:13px;color:var(--text-light);margin-bottom:14px;">All sales drawn from finished goods inventory.</p>
             <div id="sales-container"><div class="empty-state">Loading...</div></div>
         </div>
 
-        <div class="card">
-            <h2>Search &amp; Trace</h2>
-            <p>Look up a raw material LOT# or finished good LOT# to see its full traceability chain — from supplier delivery through production to sale.</p>
-            <div class="search-bar">
-                <select id="trace-type">
-                    <option value="raw_lot">Raw Material LOT#</option>
-                    <option value="fg_lot">Finished Good LOT#</option>
-                </select>
-                <input id="trace-query" placeholder="Enter LOT# to search...">
-                <button class="btn btn-primary" onclick="doTrace()">Search</button>
-            </div>
-            <div id="trace-results"></div>
-        </div>
-
-        <div class="card">
-            <h2>Invoices</h2>
-            <p>Upload supplier invoices and link them to one or more LOT#s for traceability. Searchable by LOT#.</p>
-            <div class="form-row">
-                <div class="form-field"><label>Supplier</label><input id="inv-supplier" list="supplier-list" placeholder="Supplier name"></div>
-                <div class="form-field"><label>Invoice Date</label><input type="date" id="inv-date"></div>
-            </div>
-            <div class="form-field" style="margin-bottom:12px;">
-                <label>LOT#s (add one or more)</label>
-                <div id="inv-lots-container">
-                    <div class="inv-lot-row" style="display:flex;gap:6px;margin-bottom:6px;">
-                        <input class="inv-lot" placeholder="LOT#" style="flex:1;">
-                    </div>
-                </div>
-                <button class="btn btn-outline" type="button" onclick="addLotRow()" style="font-size:12px;padding:6px 12px;margin-top:4px;">+ Add another LOT#</button>
-            </div>
-            <div class="form-field" style="margin-bottom:12px;">
-                <label>Invoice file <span style="color:var(--text-light);font-weight:400;font-size:11px;">— PDF/JPG/PNG/WebP/HEIC, max 10 MB</span></label>
-                <input type="file" id="inv-file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif">
-            </div>
-            <button class="btn btn-primary" onclick="uploadInvoice()">Upload Invoice</button>
-            <div id="inv-status" class="status" style="margin-top:12px;"></div>
-            <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);">
-                <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;color:var(--text-light);">Search by LOT#</label>
-                <div style="display:flex;gap:8px;margin-top:6px;">
-                    <input id="inv-search" placeholder="Type LOT# to filter..." style="flex:1;" oninput="loadInvoices()">
-                    <button class="btn btn-outline" onclick="document.getElementById('inv-search').value='';loadInvoices()" style="font-size:12px;">Clear</button>
-                </div>
-            </div>
-            <div id="invoice-list-container" style="margin-top:14px;"><div class="empty-state">Loading...</div></div>
-        </div>
     </div>
 </div>
 <script>
@@ -1193,7 +1199,7 @@ function showTab(tab){
     if(tab==='raw')loadRawMaterials();
     if(tab==='runs')loadRuns();
     if(tab==='fg')loadFinishedGoods();
-    if(tab==='records'){loadSales();loadInvoices();}
+    if(tab==='records'){loadSales();loadReceiving();}
     if(tab==='suppliers')loadSuppliers();
 }
 
@@ -3586,12 +3592,34 @@ async function submitSale(){
 }
 
 // ── Sales ──
+// ── Timeline grouping helper ──────────────────────────────────────────
+function _timelineGroup(items, dateKey){
+    // Groups items by: last 2 weeks (daily), then monthly blocks
+    var now = new Date();
+    var twoWeeksAgo = new Date(now - 14 * 24 * 60 * 60 * 1000);
+    var recent = [], older = {};
+    items.forEach(function(item){
+        var d = new Date(item[dateKey] || item.created_at || '1970-01-01');
+        if(d >= twoWeeksAgo){
+            recent.push(item);
+        } else {
+            var monthKey = (item[dateKey]||'').substring(0,7); // YYYY-MM
+            if(!older[monthKey]) older[monthKey] = [];
+            older[monthKey].push(item);
+        }
+    });
+    return {recent: recent, older: older};
+}
+
+function _monthLabel(yyyymm){
+    if(!yyyymm) return 'Earlier';
+    var parts = yyyymm.split('-');
+    var d = new Date(parseInt(parts[0]), parseInt(parts[1])-1, 1);
+    return d.toLocaleDateString('en-CA', {year:'numeric', month:'long'});
+}
+
 async function loadSales(){
-    var url='/api/organic/sales';
-    if(currentSalesFilter && currentSalesFilter!=='all'){
-        url+='?certification='+encodeURIComponent(currentSalesFilter);
-    }
-    var res=await fetch(url);
+    var res=await fetch('/api/organic/sales');
     var data=await res.json();
     var container=document.getElementById('sales-container');
     var countEl=document.getElementById('sales-count');
@@ -3600,28 +3628,46 @@ async function loadSales(){
         countEl.textContent=data.length+' sale'+(data.length===1?'':'s')+' • '+totalUnits+' units';
     }
     if(!data.length){
-        var msg=currentSalesFilter==='all'
-            ? 'No sales recorded yet.'
-            : 'No '+currentSalesFilter+' sales recorded.';
-        container.innerHTML='<div class="empty-state">'+msg+'</div>';return;
+        container.innerHTML='<div class="empty-state">No sales recorded yet.</div>';return;
     }
-    data.sort(function(a,b){return(b.created_at||'').localeCompare(a.created_at||'');});
-    var html='<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Product</th><th>LOT#(s)</th><th>Qty</th><th>Buyer</th><th>Case LOT#</th><th></th></tr>';
-    data.forEach(function(s){
-        var lotsDisplay='';
-        if(s.lots&&s.lots.length){
-            lotsDisplay=s.lots.map(function(l){
-                return s.lots.length>1?(l.lot+' ('+l.quantity+')'):l.lot;
-            }).join(', ');
-        } else {
-            lotsDisplay=s.fg_lot||'';
-        }
-        var product=(s.brand?s.brand+'-':'')+s.recipe;
-        var productCell=escSku(product)+certBadge(s.certification);
-        html+='<tr><td>'+(s.sale_date||'')+'</td><td>'+productCell+'</td><td>'+escSku(lotsDisplay)+'</td><td>'+s.quantity+'</td><td>'+escSku(s.buyer||'')+'</td><td>'+escSku(s.case_lot||'—')+'</td><td><button class="btn-danger" onclick="deleteSale(\''+s.id+'\')">Del</button></td></tr>';
+    data.sort(function(a,b){return(b.sale_date||'').localeCompare(a.sale_date||'');});
+    var grouped = _timelineGroup(data, 'sale_date');
+
+    function renderSalesTable(rows){
+        var h='<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Product</th><th>Buyer</th><th>LOT#(s)</th><th>Qty</th><th></th></tr>';
+        rows.forEach(function(s){
+            var lots=(s.lots&&s.lots.length)?s.lots.map(function(l){return l.lot;}).join(', '):(s.fg_lot||'');
+            var product=(s.brand?s.brand+'-':'')+s.recipe;
+            h+='<tr>'
+              +'<td>'+(s.sale_date||'')+'</td>'
+              +'<td>'+escSku(product)+'</td>'
+              +'<td>'+escSku(s.buyer||'')+'</td>'
+              +'<td>'+escSku(lots)+'</td>'
+              +'<td>'+s.quantity+'</td>'
+              +'<td><button class="btn-danger" data-del-sale="'+escHtml(s.id)+'">Del</button></td>'
+              +'</tr>';
+        });
+        h+='</table></div>';
+        return h;
+    }
+
+    var html = '';
+    if(grouped.recent.length){
+        html += renderSalesTable(grouped.recent);
+    }
+    var monthKeys = Object.keys(grouped.older).sort().reverse();
+    monthKeys.forEach(function(mk){
+        var rows = grouped.older[mk];
+        html += '<details style="margin-top:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">'
+            + '<summary style="padding:10px 14px;background:#f5f5f0;cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;justify-content:space-between;">'
+            + '<span>'+_monthLabel(mk)+'</span><span style="color:var(--text-light);font-weight:400;">'+rows.length+' sale'+(rows.length===1?'':'s')+'</span></summary>'
+            + '<div style="padding:0 2px 2px;">'+renderSalesTable(rows)+'</div>'
+            + '</details>';
     });
-    html+='</table></div>';
-    container.innerHTML=html;
+    container.innerHTML = html;
+    container.querySelectorAll('[data-del-sale]').forEach(function(btn){
+        btn.addEventListener('click', function(){ deleteSale(this.getAttribute('data-del-sale')); });
+    });
 }
 
 async function deleteSale(id){
@@ -3632,12 +3678,96 @@ async function deleteSale(id){
     loadFinishedGoods();loadSales();
 }
 
-// ── Search & Trace ──
+// ── Search & Trace (unified, debounced) ──
+var _traceDebounceTimer = null;
+function doTraceDebounced(){
+    clearTimeout(_traceDebounceTimer);
+    _traceDebounceTimer = setTimeout(doTrace, 350);
+}
+
 async function doTrace(){
-    var type=document.getElementById('trace-type').value;
     var q=document.getElementById('trace-query').value.trim();
     var container=document.getElementById('trace-results');
-    if(!q){container.innerHTML='<div class="empty-state">Enter a LOT# to search.</div>';return;}
+    if(!q){container.innerHTML='';return;}
+    container.innerHTML='<div class="empty-state">Searching…</div>';
+    // Search both raw LOT and FG LOT + text fields
+    var [rawRes, fgRes, rmRes, salesRes] = await Promise.all([
+        fetch('/api/organic/trace?type=raw_lot&q='+encodeURIComponent(q)),
+        fetch('/api/organic/trace?type=fg_lot&q='+encodeURIComponent(q)),
+        fetch('/api/organic/raw-materials'),
+        fetch('/api/organic/sales'),
+    ]);
+    var rawData = await rawRes.json();
+    var fgData = await fgRes.json();
+    var allRM = await rmRes.json();
+    var allSales = await salesRes.json();
+    var ql = q.toLowerCase();
+
+    // Text-match receiving entries (supplier, item, lot#, date)
+    var matchedRM = allRM.filter(function(r){
+        return (r.item||'').toLowerCase().includes(ql)
+            || (r.supplier||'').toLowerCase().includes(ql)
+            || (r.supplier_lot||'').toLowerCase().includes(ql)
+            || (r.date_received||'').includes(ql);
+    });
+    // Text-match sales (buyer, recipe, lot, date)
+    var matchedSales = allSales.filter(function(s){
+        return (s.buyer||'').toLowerCase().includes(ql)
+            || (s.recipe||'').toLowerCase().includes(ql)
+            || (s.brand||'').toLowerCase().includes(ql)
+            || (s.fg_lot||'').toLowerCase().includes(ql)
+            || (s.sale_date||'').includes(ql)
+            || ((s.lots||[]).some(function(l){ return (l.lot||'').toLowerCase().includes(ql); }));
+    });
+
+    var html = '';
+
+    // LOT trace results
+    var hasRawTrace = rawData.runs && rawData.runs.length;
+    var hasFGTrace = fgData.finished_goods && fgData.finished_goods.length;
+    if(hasRawTrace || hasFGTrace){
+        html += '<div style="background:#f0f7f0;border:1px solid #a5d6a7;border-radius:8px;padding:14px 16px;margin-bottom:14px;">';
+        html += '<div style="font-size:12px;font-weight:600;color:#2e7d32;margin-bottom:8px;">&#128270; LOT# Trace Results for &ldquo;'+escHtml(q)+'&rdquo;</div>';
+        if(hasRawTrace){
+            rawData.runs.forEach(function(r){
+                html += '<div style="font-size:13px;padding:4px 0;">Raw: '+escHtml(r.day_name)+' '+escHtml(r.week_id)+' · '+escHtml(r.vessel)+' · '+escHtml((r.brand?r.brand+'-':'')+r.recipe)+' (LOT# '+escHtml(r.lot)+')</div>';
+            });
+        }
+        if(hasFGTrace){
+            fgData.finished_goods.forEach(function(f){
+                html += '<div style="font-size:13px;padding:4px 0;">FG: '+escHtml((f.brand?f.brand+'-':'')+f.recipe+' '+f.format)+' · LOT# '+escHtml(f.lot)+'</div>';
+            });
+        }
+        html += '</div>';
+    }
+
+    // Receiving matches
+    if(matchedRM.length){
+        html += '<div style="margin-bottom:14px;"><div style="font-size:12px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Receiving Matches</div>';
+        html += '<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Ingredient</th><th>Supplier</th><th>LOT#</th><th>Qty</th></tr>';
+        matchedRM.slice(0,20).forEach(function(r){
+            html += '<tr><td>'+(r.date_received||'')+'</td><td>'+escHtml(r.item||'')+'</td><td>'+escHtml(r.supplier||'')+'</td><td>'+escHtml(r.supplier_lot||'')+'</td><td>'+(r.remaining!==undefined?r.remaining:r.quantity)+' '+escHtml(r.unit||'')+'</td></tr>';
+        });
+        html += '</table></div></div>';
+    }
+
+    // Sales matches
+    if(matchedSales.length){
+        html += '<div><div style="font-size:12px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Sales Matches</div>';
+        html += '<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Product</th><th>Buyer</th><th>LOT#</th><th>Qty</th></tr>';
+        matchedSales.slice(0,20).forEach(function(s){
+            var lots=(s.lots||[]).map(function(l){return l.lot;}).join(', ')||s.fg_lot||'';
+            html += '<tr><td>'+(s.sale_date||'')+'</td><td>'+escHtml((s.brand?s.brand+'-':'')+s.recipe)+'</td><td>'+escHtml(s.buyer||'')+'</td><td>'+escHtml(lots)+'</td><td>'+(s.quantity||'')+'</td></tr>';
+        });
+        html += '</table></div></div>';
+    }
+
+    if(!html) html = '<div class="empty-state">No results for &ldquo;'+escHtml(q)+'&rdquo;</div>';
+    container.innerHTML = html;
+}
+
+// ── OLD doTrace stub kept for LOT-only trace used internally ──
+async function _doLotTrace(type, q){
     var res=await fetch('/api/organic/trace?type='+encodeURIComponent(type)+'&q='+encodeURIComponent(q));
     var data=await res.json();
     var html='';
@@ -3684,16 +3814,145 @@ async function doTrace(){
     container.innerHTML=html;
 }
 
+// ── Receiving Transactions ────────────────────────────────────────────
+async function loadReceiving(){
+    var res = await fetch('/api/organic/raw-materials');
+    var data = await res.json();
+    var container = document.getElementById('receiving-container');
+    var countEl = document.getElementById('receiving-count');
+    // Filter out baseline entries for the transaction list (they're not deliveries)
+    var deliveries = data.filter(function(r){ return !r.migration_baseline && !r.adjustment; });
+    // Sort newest first
+    deliveries.sort(function(a,b){
+        return (b.date_received||b.created_at||'').localeCompare(a.date_received||a.created_at||'');
+    });
+    if(countEl) countEl.textContent = deliveries.length + ' entr' + (deliveries.length===1?'y':'ies');
+    if(!deliveries.length){
+        container.innerHTML='<div class="empty-state">No receiving records yet. Use <strong>Add Inventory</strong> to record deliveries.</div>';
+        return;
+    }
+    var grouped = _timelineGroup(deliveries, 'date_received');
+
+    function renderReceivingTable(rows){
+        var h='<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Ingredient</th><th>Supplier</th><th>Supplier LOT#</th><th>Qty</th><th>Remaining</th></tr>';
+        rows.forEach(function(r){
+            h+='<tr>'
+             +'<td>'+(r.date_received||'')+'</td>'
+             +'<td>'+escHtml(r.item||'')+'</td>'
+             +'<td>'+escHtml(r.supplier||'')+'</td>'
+             +'<td>'+escHtml(r.supplier_lot||'—')+'</td>'
+             +'<td>'+(r.quantity||0)+' '+escHtml(r.unit||'')+'</td>'
+             +'<td>'+(r.remaining!==undefined?r.remaining:'—')+' '+escHtml(r.unit||'')+'</td>'
+             +'</tr>';
+        });
+        h+='</table></div>';
+        return h;
+    }
+
+    var html = '';
+    if(grouped.recent.length) html += renderReceivingTable(grouped.recent);
+    var monthKeys = Object.keys(grouped.older).sort().reverse();
+    monthKeys.forEach(function(mk){
+        var rows = grouped.older[mk];
+        html += '<details style="margin-top:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">'
+            + '<summary style="padding:10px 14px;background:#f5f5f0;cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;justify-content:space-between;">'
+            + '<span>'+_monthLabel(mk)+'</span><span style="color:var(--text-light);font-weight:400;">'+rows.length+' entr'+(rows.length===1?'y':'ies')+'</span></summary>'
+            + '<div style="padding:0 2px 2px;">'+renderReceivingTable(rows)+'</div>'
+            + '</details>';
+    });
+    container.innerHTML = html;
+}
+
+// ── Inventory Adjustment Modal ─────────────────────────────────────────
+async function openAdjustmentModal(){
+    var today = new Date().toISOString().split('T')[0];
+    document.getElementById('adj-date').value = today;
+    document.getElementById('adj-notes').value = '';
+    document.getElementById('adj-status').textContent = '';
+    document.getElementById('adj-submit-btn').disabled = false;
+    document.getElementById('adj-submit-btn').textContent = 'Save Adjustment';
+
+    // Load all ingredients
+    var res = await fetch('/api/organic/raw-materials/grouped');
+    var ingredients = await res.json();
+
+    var grid = document.getElementById('adj-ingredient-grid');
+    if(!ingredients.length){
+        grid.innerHTML='<div style="padding:12px;color:var(--text-light);font-size:13px;">No ingredients found. Add recipes or custom ingredients first.</div>';
+    } else {
+        var h = '';
+        ingredients.forEach(function(ing, idx){
+            var bg = idx % 2 === 0 ? '#fff' : '#fafaf8';
+            h += '<div style="display:grid;grid-template-columns:1fr 100px 70px;gap:8px;padding:8px 12px;background:'+bg+';align-items:center;border-bottom:1px solid #f0f0eb;">'
+               + '<div style="font-size:13px;">'+escHtml(ing.name)+'<div style="font-size:11px;color:var(--text-light);">Stock: '+(ing.total_remaining||0)+' '+escHtml(ing.unit)+'</div></div>'
+               + '<input type="number" data-adj-item="'+escHtml(ing.name)+'" data-adj-unit="'+escHtml(ing.unit)+'" placeholder="e.g. -2" step="any" inputmode="decimal" style="padding:7px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;width:100%;box-sizing:border-box;">'
+               + '<div style="font-size:13px;color:var(--text-light);">'+escHtml(ing.unit)+'</div>'
+               + '</div>';
+        });
+        grid.innerHTML = h;
+    }
+    document.getElementById('adjustment-modal').classList.add('active');
+}
+
+function closeAdjustmentModal(){
+    document.getElementById('adjustment-modal').classList.remove('active');
+}
+
+async function submitAdjustment(){
+    var date = document.getElementById('adj-date').value;
+    var reason = document.getElementById('adj-reason').value;
+    var notes = document.getElementById('adj-notes').value.trim();
+    var msg = document.getElementById('adj-status');
+    var btn = document.getElementById('adj-submit-btn');
+    msg.textContent=''; msg.className='status';
+
+    var inputs = document.querySelectorAll('[data-adj-item]');
+    var entries = [];
+    inputs.forEach(function(input){
+        var val = parseFloat(input.value);
+        if(!isNaN(val) && val !== 0){
+            entries.push({
+                item: input.getAttribute('data-adj-item'),
+                unit: input.getAttribute('data-adj-unit'),
+                quantity: val,
+                supplier: reason + (notes ? ': ' + notes : ''),
+                supplier_lot: 'ADJ-' + date.replace(/-/g,'').substring(2),
+                date_received: date,
+                adjustment: true,
+            });
+        }
+    });
+
+    if(!entries.length){
+        msg.className='status error'; msg.textContent='Enter at least one adjustment value.';
+        return;
+    }
+
+    btn.disabled=true; btn.textContent='Saving…';
+    try {
+        var res = await fetch('/api/organic/raw-materials/bulk', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({entries: entries, baseline: false}),
+        });
+        var data = await res.json();
+        if(!res.ok) throw new Error(data.error||'Save failed');
+        closeAdjustmentModal();
+        loadRawMaterials();
+    } catch(e){
+        msg.className='status error'; msg.textContent=e.message;
+        btn.disabled=false; btn.textContent='Save Adjustment';
+    }
+}
+
 // ── Init ──
 document.addEventListener('DOMContentLoaded',function(){
     loadIngredients();
     loadRawMaterials();
-    loadInvoices();
     loadContacts();
     var today=new Date().toISOString().split('T')[0];
-    document.getElementById('rm-date').value=today;
-    document.getElementById('inv-date').value=today;
-    document.getElementById('sale-date-modal').value=today;
+    var saleDateEl=document.getElementById('sale-date-modal');
+    if(saleDateEl) saleDateEl.value=today;
 
     // Honor ?action=receive|sell from dashboard quick-action buttons
     var params = new URLSearchParams(window.location.search);
