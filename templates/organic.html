@@ -2294,14 +2294,12 @@ async function loadSuppliers(){
 async function _fetchIngredientCatalog(){
     try {
         var res = await fetch('/api/organic/raw-materials/grouped');
-        var data = await res.json();
+        var rows = await res.json(); // flat list of {name, unit, ...}
         var catalog = [];
         var seen = {};
-        (data.sections || []).forEach(function(sec){
-            (sec.items || []).forEach(function(item){
-                var key = item.name + '|' + item.unit;
-                if(!seen[key]){ seen[key]=true; catalog.push({name:item.name, unit:item.unit}); }
-            });
+        rows.forEach(function(item){
+            var key = item.name + '|' + item.unit;
+            if(!seen[key]){ seen[key]=true; catalog.push({name:item.name, unit:item.unit}); }
         });
         return catalog.sort(function(a,b){ return a.name.localeCompare(b.name); });
     } catch(e){ return []; }
@@ -2419,6 +2417,136 @@ async function deleteSupplier(sid, name){
         await fetch('/api/suppliers/'+sid, {method:'DELETE'});
         loadSuppliers();
     } catch(e){ alert('Delete failed: '+e.message); }
+}
+
+// ── Scan Packing Slip (Sale) ─────────────────────────────────────────────
+var scanSaleData = null;
+var scanSaleCatalog = [];
+
+async function refreshScanUsage(kind){
+    // Stub — scan usage display removed with invoice scanning
+}
+
+function openScanSale(){
+    resetScanSale();
+    document.getElementById('scan-sale-modal').classList.add('active');
+}
+
+function closeScanSale(){
+    document.getElementById('scan-sale-modal').classList.remove('active');
+}
+
+function resetScanSale(){
+    scanSaleData = null;
+    document.getElementById('scan-sale-capture-step').style.display = '';
+    document.getElementById('scan-sale-review-step').style.display = 'none';
+    document.getElementById('scan-sale-msg').textContent = '';
+    document.getElementById('scan-sale-file').value = '';
+}
+
+async function runScanSale(){
+    var file = document.getElementById('scan-sale-file').files[0];
+    var msg = document.getElementById('scan-sale-msg');
+    var btn = document.getElementById('scan-sale-go');
+    if(!file){ msg.className='status error'; msg.textContent='Please select a file.'; return; }
+    msg.className='status'; msg.textContent='Scanning…';
+    btn.disabled=true; btn.textContent='Scanning…';
+    var fd = new FormData();
+    fd.append('file', file);
+    try {
+        var res = await fetch('/api/scan/packing-slip', {method:'POST', body:fd});
+        var data = await res.json();
+        if(!res.ok){ throw new Error(data.error || 'Scan failed'); }
+        scanSaleData = data;
+        scanSaleCatalog = data.catalog || [];
+        renderScanSaleReview(data);
+        document.getElementById('scan-sale-capture-step').style.display='none';
+        document.getElementById('scan-sale-review-step').style.display='';
+        msg.textContent='';
+    } catch(e){
+        msg.className='status error'; msg.textContent=e.message;
+    }
+    btn.disabled=false; btn.textContent='Extract Line Items';
+}
+
+function renderScanSaleReview(data){
+    document.getElementById('scan-sale-buyer').value = data.buyer || '';
+    document.getElementById('scan-sale-date').value = data.ship_date || '';
+    document.getElementById('scan-sale-po').value = data.po_number || '';
+    var rows = document.getElementById('scan-sale-rows');
+    if(!data.line_items || !data.line_items.length){
+        rows.innerHTML='<div style="padding:12px;color:var(--text-light);">No line items found.</div>';
+        return;
+    }
+    var html='';
+    data.line_items.forEach(function(line, i){
+        var matched = line.match && line.confidence !== 'none';
+        var borderCol = matched ? '#a5d6a7' : '#ef9a9a';
+        html += '<div style="border:1px solid '+borderCol+';border-radius:6px;padding:10px 12px;margin-bottom:8px;background:#fff;">';
+        html += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">';
+        html += '<div style="flex:1;min-width:160px;"><label style="font-size:11px;color:var(--text-light);">SKU</label>';
+        html += '<select data-sale-sku="'+i+'" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:13px;">';
+        var matchKey = line.match ? line.match.sku_key : '';
+        scanSaleCatalog.forEach(function(sku){
+            var sel = sku.sku_key === matchKey ? 'selected' : '';
+            html += '<option value="'+sku.sku_key+'" '+sel+'>'+sku.display+'</option>';
+        });
+        html += '</select></div>';
+        html += '<div style="width:80px;"><label style="font-size:11px;color:var(--text-light);">Qty</label>';
+        html += '<input type="number" data-sale-qty="'+i+'" value="'+(line.quantity||'')+'" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:13px;" inputmode="decimal"></div>';
+        html += '<div style="flex:1;min-width:120px;"><label style="font-size:11px;color:var(--text-light);">Case LOT (opt)</label>';
+        html += '<input type="text" data-sale-lot="'+i+'" value="'+(line.case_lot||'')+'" placeholder="Case LOT" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:13px;"></div>';
+        html += '</div></div>';
+    });
+    rows.innerHTML = html;
+}
+
+async function submitScanSale(){
+    var buyer = document.getElementById('scan-sale-buyer').value.trim();
+    var date = document.getElementById('scan-sale-date').value;
+    var po = document.getElementById('scan-sale-po').value.trim();
+    var msg = document.getElementById('scan-sale-submit-msg');
+    var btn = document.getElementById('scan-sale-submit');
+    msg.textContent=''; msg.className='status';
+
+    var skuEls = document.querySelectorAll('[data-sale-sku]');
+    var sales = [];
+    skuEls.forEach(function(el){
+        var i = el.getAttribute('data-sale-sku');
+        var skuKey = el.value;
+        var qty = parseFloat(document.querySelector('[data-sale-qty="'+i+'"]').value);
+        var lot = (document.querySelector('[data-sale-lot="'+i+'"]').value||'').trim();
+        if(skuKey && !isNaN(qty) && qty > 0){
+            var sku = scanSaleCatalog.find(function(s){ return s.sku_key===skuKey; }) || {};
+            sales.push({
+                brand: sku.brand||'', recipe: sku.recipe||'', format: sku.format||'',
+                quantity: qty, buyer: buyer, sale_date: date, case_lot: lot, po_number: po,
+            });
+        }
+    });
+
+    if(!sales.length){ msg.className='status error'; msg.textContent='No valid lines to save.'; return; }
+    if(!buyer){ msg.className='status error'; msg.textContent='Buyer name required.'; return; }
+    if(!date){ msg.className='status error'; msg.textContent='Sale date required.'; return; }
+
+    btn.disabled=true; btn.textContent='Saving…';
+    var saved=0, errors=[];
+    for(var i=0;i<sales.length;i++){
+        try{
+            var res = await fetch('/api/organic/sales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sales[i])});
+            var data = await res.json();
+            if(data.success) saved++;
+            else errors.push('Line '+(i+1)+': '+(data.error||'failed'));
+        }catch(e){ errors.push('Line '+(i+1)+': '+e.message); }
+    }
+    if(errors.length){
+        msg.className='status error';
+        msg.textContent='Saved '+saved+' of '+sales.length+'. Errors: '+errors.join('; ');
+        btn.disabled=false; btn.textContent='Save All Sales';
+        loadFinishedGoods(); loadSales(); return;
+    }
+    closeScanSale();
+    loadFinishedGoods(); loadSales();
 }
 
 // Lets the user define raw-material sections, reorder them, and assign each
