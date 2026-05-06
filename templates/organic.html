@@ -316,6 +316,21 @@ body.inv-page .cert-badge {
 /* Empty states — more breathing room */
 .empty-state { text-align: center; padding: 60px 20px; color: var(--text-light); font-size: 14px; line-height: 1.6; }
 
+
+/* FG collapsible brand sections */
+body.inv-page .fg-brand-section { margin-bottom: 16px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: #fff; }
+body.inv-page .fg-brand-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; background: var(--row-alt);
+    cursor: pointer; user-select: none; min-height: 48px;
+    transition: background 0.1s;
+}
+body.inv-page .fg-brand-header:hover { background: #ececea; }
+body.inv-page .fg-brand-toggle { font-size: 12px; color: var(--text-light); width: 14px; flex-shrink: 0; }
+body.inv-page .fg-brand-name { font-size: 14px; font-weight: 700; color: var(--dark); flex: 1; margin-left: 8px; }
+body.inv-page .fg-brand-meta { font-size: 11px; color: var(--text-light); font-weight: 500; }
+body.inv-page .fg-brand-body { padding: 0 12px 8px; }
+
 /* FG SKU rows */
 body.inv-page .fg-row {
     display: flex; justify-content: space-between; align-items: center;
@@ -3999,6 +4014,7 @@ async function loadRuns(){
 // ── Finished Goods (SKU-grouped) ──
 var fgSkus=[];
 var expandedSku=null;
+var _fgCollapsedBrands={};
 
 function escSku(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function escHtml(s){return escSku(s);}
@@ -4063,13 +4079,19 @@ async function loadFinishedGoods(){
     var html='';
     brandOrder.forEach(function(brand){
         var brandSafe=escSku(brand);
+        var brandId='fgbrand-'+brand.replace(/[^a-zA-Z0-9]/g,'_');
         var skus=byBrand[brand];
         var brandUnits=skus.reduce(function(a,s){return a+(s.total_remaining||0);},0);
-        html+='<div class="brand-section" style="margin-bottom:18px;">';
-        html+='<div class="brand-section-header" style="font-size:12px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:0.6px;padding:8px 0;border-bottom:1px solid var(--border);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">';
-        html+='<span>'+brandSafe+'</span>';
-        html+='<span style="font-weight:500;color:var(--text-light);font-size:11px;">'+brandUnits+' units</span>';
+        var inStock=skus.filter(function(s){return(s.total_remaining||0)>0;}).length;
+        var isCollapsed=_fgCollapsedBrands[brand]||false;
+        html+='<div class="fg-brand-section">';
+        html+='<div class="fg-brand-header" data-fg-brand="'+brandSafe+'">';
+        html+='<span class="fg-brand-toggle">'+(isCollapsed?'▶':'▼')+'</span>';
+        html+='<span class="fg-brand-name">'+brandSafe+'</span>';
+        html+='<span class="fg-brand-meta">'+inStock+' in stock · '+brandUnits+' units</span>';
         html+='</div>';
+        if(!isCollapsed){
+        html+='<div class="fg-brand-body" id="'+brandId+'">';
 
         skus.forEach(function(s){
             var keyAttr=encodeURIComponent(s.sku_key);
@@ -4124,7 +4146,9 @@ async function loadFinishedGoods(){
             }
         });
 
-        html+='</div>';
+        html+='</div>'; // fg-brand-body
+        } // end !isCollapsed
+        html+='</div>'; // fg-brand-section
     });
     container.innerHTML=html;
     attachFgClickDelegationOnce();
@@ -4141,6 +4165,14 @@ function attachFgClickDelegationOnce(){
     if(!c || c.dataset.delegated)return;
     c.dataset.delegated='1';
     c.addEventListener('click',function(e){
+        // Brand header collapse/expand
+        var brandHdr=e.target.closest('[data-fg-brand]');
+        if(brandHdr && !e.target.closest('[data-action]')){
+            var brand=brandHdr.getAttribute('data-fg-brand');
+            _fgCollapsedBrands[brand]=!_fgCollapsedBrands[brand];
+            loadFinishedGoods();
+            return;
+        }
         var el=e.target.closest('[data-action]');
         if(!el)return;
         var action=el.getAttribute('data-action');
@@ -4745,9 +4777,27 @@ document.addEventListener('DOMContentLoaded',function(){
         // Slight delay so the page is settled before the modal opens
         setTimeout(openAddInventoryModal, 200);
     } else if(action === 'sell'){
-        setTimeout(function(){
+        setTimeout(async function(){
             showTab('fg');
-            openScanSale();
+            await openRecordSaleModal();
+            // Pre-fill from dashboard params
+            var buyerId = params.get('buyer_id');
+            var buyerName = params.get('buyer_name');
+            var date = params.get('date');
+            var po = params.get('po');
+            if(date) document.getElementById('sale-date-modal').value = date;
+            if(po) document.getElementById('sale-po-modal').value = po;
+            if(buyerId){
+                var sel = document.getElementById('sale-buyer-select');
+                for(var i=0;i<sel.options.length;i++){
+                    if(sel.options[i].value === buyerId){
+                        sel.value = buyerId;
+                        break;
+                    }
+                }
+            }
+            // Auto-advance to step 2 if buyer is set
+            if(buyerId && date){ goToSaleStep2(); }
         }, 200);
     }
 });

@@ -50,17 +50,17 @@
             <div class="dash-btn highlight" onclick="goToDay(0)"><span class="icon">&#9654;</span><span class="label">Today's Production</span><span class="sublabel" id="today-label">Loading...</span></div>
             <div class="dash-btn" onclick="goToDay(1)"><span class="icon">&#9654;&#9654;</span><span class="label">Tomorrow's Production</span><span class="sublabel" id="tomorrow-label">Loading...</span></div>
         </div>
-        <div class="section-label">Quick Actions</div>
+        <div class="section-label">Inventory Actions</div>
         <div class="dash-row">
             <div class="dash-btn highlight" onclick="window.location='/organic?action=receive'" style="border-color:#2e7d32;cursor:pointer;">
                 <span class="icon">&#128230;</span>
-                <span class="label">Add Inventory</span>
+                <span class="label">Receive Inventory</span>
                 <span class="sublabel">Record a supplier delivery</span>
             </div>
-            <div class="dash-btn highlight" onclick="window.location='/organic?action=sell'" style="border-color:#0288d1;cursor:pointer;">
+            <div class="dash-btn highlight" onclick="openDashSaleModal()" style="border-color:#0288d1;cursor:pointer;">
                 <span class="icon">&#128176;</span>
                 <span class="label">Record Sale</span>
-                <span class="sublabel">Scan a packing slip / PO</span>
+                <span class="sublabel">Select buyer and date</span>
             </div>
         </div>
         <div class="section-label">Resources</div>
@@ -69,11 +69,9 @@
             <a href="/ccp-master" class="dash-btn"><span class="icon">&#9989;</span><span class="label">CCP Checklist</span><span class="sublabel">Master reference</span></a>
             <a href="/production-tracker" class="dash-btn"><span class="icon">&#128200;</span><span class="label">Production Tracker</span><span class="sublabel">Weekly output charts</span></a>
             <a href="/traceability" class="dash-btn"><span class="icon">&#128451;</span><span class="label">Completed Production</span><span class="sublabel">Review and sign off weekly records</span></a>
-        </div>
-        <div class="section-label">Certification & Compliance</div>
-        <div class="dash-row">
-            <a href="/organic" class="dash-btn highlight" style="border-color:#2e7d32;"><span class="icon">&#128230;</span><span class="label">Inventory</span><span class="sublabel">Raw materials, production runs, finished goods &amp; traceability</span></a>
-            <div class="dash-btn disabled"><span class="icon">&#128295;</span><span class="label">Equipment & Maintenance</span><span class="sublabel">Coming Soon</span></div>
+            <a href="/organic" class="dash-btn highlight" style="border-color:#2e7d32;"><span class="icon">&#128230;</span><span class="label">Inventory</span><span class="sublabel">Raw materials, finished goods &amp; traceability</span></a>
+            <div class="dash-btn disabled"><span class="icon">&#128295;</span><span class="label">Equipment &amp; Maintenance</span><span class="sublabel">Coming soon</span></div>
+            <div class="dash-btn disabled"><span class="icon">&#128196;</span><span class="label">Organic Certification Documents</span><span class="sublabel">Coming soon</span></div>
         </div>
     </div>
 </div>
@@ -85,6 +83,79 @@ function getDayIdx(date){var day=date.getDay();return day===0?6:day-1;}
 async function goToDay(offset){var target=new Date();target.setDate(target.getDate()+offset);var weekId=getWeekId(target);var dayIdx=getDayIdx(target);var res=await fetch('/api/schedule/'+weekId);var data=await res.json();if(!data.schedule){alert('No schedule created for this week.');return;}var dayData=data.schedule[String(dayIdx)]||{};var hasP=Object.values(dayData).some(function(v){return v;});if(!hasP){alert('No production scheduled for '+DAYNAMES[target.getDay()]+'.');return;}window.location.href='/daily-production/'+weekId+'/'+dayIdx;}
 async function loadDayLabels(){for(var offset=-1;offset<=1;offset++){var target=new Date();target.setDate(target.getDate()+offset);var weekId=getWeekId(target);var dayIdx=getDayIdx(target);var labelId=offset===-1?'yesterday-label':offset===0?'today-label':'tomorrow-label';var dayName=DAYNAMES[target.getDay()];try{var res=await fetch('/api/schedule/'+weekId);var data=await res.json();if(data.schedule){var dd=data.schedule[String(dayIdx)]||{};var r=Object.values(dd).filter(function(v){return v;});document.getElementById(labelId).textContent=dayName+' - '+(r.length>0?r.length+' kettle(s)':'No production');}else{document.getElementById(labelId).textContent=dayName+' - No schedule';}}catch(e){document.getElementById(labelId).textContent=dayName;}}}
 document.addEventListener('DOMContentLoaded',loadDayLabels);
+
+// ── Dashboard Record Sale quick modal ──
+async function openDashSaleModal(){
+    var modal = document.getElementById('dash-sale-modal');
+    modal.style.display = 'flex';
+    var today = new Date().toISOString().split('T')[0];
+    document.getElementById('dash-sale-date').value = today;
+    document.getElementById('dash-sale-po').value = '';
+    document.getElementById('dash-sale-msg').style.display = 'none';
+    // Load buyers
+    try {
+        var res = await fetch('/api/buyers');
+        var buyers = await res.json();
+        var sel = document.getElementById('dash-sale-buyer');
+        sel.innerHTML = '<option value="">— Select buyer —</option>';
+        buyers.forEach(function(b){
+            var o = document.createElement('option');
+            o.value = b.id + '|' + encodeURIComponent(b.name);
+            o.textContent = b.name;
+            sel.appendChild(o);
+        });
+    } catch(e) {}
+}
+function closeDashSaleModal(){
+    document.getElementById('dash-sale-modal').style.display = 'none';
+}
+function dashSaleNext(){
+    var date = document.getElementById('dash-sale-date').value;
+    var buyerVal = document.getElementById('dash-sale-buyer').value;
+    var po = document.getElementById('dash-sale-po').value.trim();
+    var msg = document.getElementById('dash-sale-msg');
+    if(!date){ msg.textContent='Please select a date.'; msg.style.display='block'; return; }
+    if(!buyerVal){ msg.textContent='Please select a buyer.'; msg.style.display='block'; return; }
+    msg.style.display='none';
+    closeDashSaleModal();
+    // Pass params to the full organic page modal
+    var parts = buyerVal.split('|');
+    var buyerId = parts[0];
+    var buyerName = decodeURIComponent(parts[1] || '');
+    var params = '?action=sell&date='+encodeURIComponent(date)+'&buyer_id='+encodeURIComponent(buyerId)+'&buyer_name='+encodeURIComponent(buyerName)+(po?'&po='+encodeURIComponent(po):'');
+    window.location.href = '/organic' + params;
+}
+
 </script>
+
+<!-- Record Sale quick modal -->
+<div class="modal-overlay" id="dash-sale-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:200;align-items:flex-end;justify-content:center;">
+    <div style="background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:480px;padding:28px 24px 36px;position:relative;">
+        <button onclick="closeDashSaleModal()" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:#888;">&times;</button>
+        <h2 style="font-size:17px;font-weight:700;color:#1a1a1a;margin-bottom:4px;">&#128176; Record Sale</h2>
+        <p style="font-size:13px;color:#888;margin-bottom:20px;">Select buyer and date to continue.</p>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+            <div>
+                <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.3px;display:block;margin-bottom:6px;">Sale Date</label>
+                <input type="date" id="dash-sale-date" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:15px;">
+            </div>
+            <div>
+                <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.3px;display:block;margin-bottom:6px;">Buyer</label>
+                <select id="dash-sale-buyer" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:15px;background:#fff;">
+                    <option value="">— Select buyer —</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.3px;display:block;margin-bottom:6px;">PO / Case LOT# <span style="font-weight:400;">(optional)</span></label>
+                <input type="text" id="dash-sale-po" placeholder="PO number or case LOT" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:15px;">
+            </div>
+            <div id="dash-sale-msg" style="font-size:13px;color:#c62828;display:none;"></div>
+            <div style="display:flex;gap:10px;margin-top:4px;">
+                <button onclick="closeDashSaleModal()" style="flex:1;padding:13px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:14px;font-weight:600;cursor:pointer;">Cancel</button>
+                <button onclick="dashSaleNext()" style="flex:2;padding:13px;border:none;border-radius:8px;background:#0288d1;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">Next →</button>
+            </div>
+        </div>
+    </div>
+</div>
 </body>
 </html>
