@@ -1,78 +1,54 @@
 """
 ripe_orders.py — Soma × Ripe order integration
-================================================
-Adds to the Soma production app:
-  - /ripe-orders          order management list (Soma view)
-  - /api/ripe-orders      GET list / PATCH status
 
-Status flow:
-  pending → approve → approved
-  approved → approve-for-production → approved-for-production  (+FIFO FG deduction)
-  pending|approved → decline → declined
-  approved|approved-for-production → fulfill → fulfilled
+Status flow pushed to Ripe portal via internal API:
+  pending → approve (+ delivery_date) → approved
+  approved → decline → declined
+  approved → fulfill → fulfilled
 
-On approve-for-production, FIFO FG units are deducted from Soma's
-finished_goods.json for each line item in the order (matched by SKU).
+On approve: _create_ripe_sale_records() writes a scheduled sale record per
+line item (deducted=False, payment_pending per payment method).
+app.py._run_scheduled_deductions() runs on startup and via API to process
+records whose deduction_date has arrived.
 
-Communication with Ripe portal:
-  HTTP PATCH /api/internal/orders/<id>  (X-Internal-Key header)
-  GET        /api/internal/orders        to sync
-
-Environment variables (set on Soma's Render service):
+Env vars on Soma's Render service:
   RIPE_PORTAL_URL   — e.g. https://ripe-portal.onrender.com
-  INTERNAL_API_KEY  — same value set on both services
+  INTERNAL_API_KEY  — same value on both Render services
 """
 
-import os
-import json
-import logging
-from datetime import datetime, timezone, timedelta
+import os, json, logging
+from datetime import datetime, timezone
 from functools import wraps
-
-import urllib.request
-import urllib.error
+import urllib.request, urllib.error
 
 from flask import Blueprint, render_template, request, jsonify, session
 
 logger = logging.getLogger(__name__)
-
 ripe_orders_bp = Blueprint("ripe_orders", __name__)
 
-# ── Config ────────────────────────────────────────────────────────────────────
 RIPE_PORTAL_URL = os.environ.get("RIPE_PORTAL_URL", "").rstrip("/")
 INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY", "")
 
-# Soma FG data path (same as organic.py)
-_INVENTORY_DIR = None
+# Paths set by init_paths() once app.py knows INVENTORY_DIR
 _FG_PATH = None
 _SALES_PATH = None
 
 
 def init_paths(inventory_dir):
-    """Called from app.py after INVENTORY_DIR is known."""
-    global _INVENTORY_DIR, _FG_PATH, _SALES_PATH
-    _INVENTORY_DIR = inventory_dir
+    global _FG_PATH, _SALES_PATH
     _FG_PATH = os.path.join(inventory_dir, "finished_goods.json")
     _SALES_PATH = os.path.join(inventory_dir, "sales.json")
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _configured():
     return bool(RIPE_PORTAL_URL and INTERNAL_API_KEY)
 
 
 def _ripe_request(method, path, body=None):
-    """Make an authenticated request to the Ripe portal internal API.
-    Returns (status_code, dict_or_None).
-    """
     if not _configured():
         return 503, {"error": "Ripe portal not configured. Set RIPE_PORTAL_URL and INTERNAL_API_KEY."}
     url = f"{RIPE_PORTAL_URL}{path}"
-    headers = {
-        "X-Internal-Key": INTERNAL_API_KEY,
-        "Content-Type": "application/json",
-    }
+    headers = {"X-Internal-Key": INTERNAL_API_KEY, "Content-Type": "application/json"}
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
@@ -80,165 +56,89 @@ def _ripe_request(method, path, body=None):
             return resp.status, json.loads(resp.read())
     except urllib.error.HTTPError as e:
         try:
-            body_text = e.read().decode()
-            return e.code, json.loads(body_text)
+            return e.code, json.loads(e.read().decode())
         except Exception:
             return e.code, {"error": str(e)}
     except Exception as e:
-        logger.exception("Ripe API request failed: %s %s", method, url)
+        logger.exception("Ripe API %s %s failed", method, url)
         return 503, {"error": str(e)}
 
 
-def _load_fg():
-    if not _FG_PATH or not os.path.exists(_FG_PATH):
-        return []
-    with open(_FG_PATH) as f:
-        return json.load(f)
+def _load(path, default):
+    if path and os.path.exists(path):
+        with open(path) as f:
+            return json.load(f)
+    return default if default is not None else []
 
 
-def _save_fg(fg):
-    if not _FG_PATH:
+def _save(path, data):
+    if not path:
         return
-    tmp = _FG_PATH + ".tmp"
+    tmp = path + ".tmp"
     with open(tmp, "w") as f:
-        json.dump(fg, f, indent=2)
-    os.replace(tmp, _FG_PATH)
+        json.dump(data, f, indent=2)
+    os.replace(tmp, path)
 
 
-def _load_sales():
-    if not _SALES_PATH or not os.path.exists(_SALES_PATH):
-        return []
-    with open(_SALES_PATH) as f:
-        return json.load(f)
-
-
-def _save_sales(sales):
-    if not _SALES_PATH:
-        return
-    tmp = _SALES_PATH + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(sales, f, indent=2)
-    os.replace(tmp, _SALES_PATH)
-
-
-def _sku_key(brand, recipe, fmt):
-    """Canonical SKU key matching Soma's organic module."""
-    return "|".join([
-        (brand or "").strip().lower(),
-        (recipe or "").strip().lower(),
-        (fmt or "").strip().upper(),
-    ])
-
-
-def _fifo_deduct_order(order):
-    """FIFO-deduct FG inventory for each line item in the order.
-
-    Matches items by SKU (name + format). Records a sale entry per item.
-    Returns (success: bool, errors: list[str]).
+def create_ripe_sale_records(order, delivery_date, payment_key):
+    """Write scheduled sale records for each line item in a Ripe order.
+    Called on approval. FG is NOT deducted here — deduction_date controls when.
+    Returns (ok: bool, error: str|None).
     """
-    fg = _load_fg()
-    sales = _load_sales()
-    errors = []
-    sale_records = []
+    sales = _load(_SALES_PATH, [])
+    fg_all = _load(_FG_PATH, [])
+    payment_pending = (payment_key == "cc_net14")
+    created = []
 
     for item in order.get("items", []):
-        product_name = item.get("name", "")
+        product_name = (item.get("name") or "").strip()
         fmt = (item.get("format") or "").upper()
-        units_to_deduct = int(item.get("units", 0))
-
-        if units_to_deduct <= 0:
+        units = int(item.get("units") or 0)
+        if units <= 0:
             continue
 
-        # Match FG entries: name match (recipe field) + format match
-        # Soma stores recipe names like "Beef Basil Rose FZ-750ML"; try exact then partial
-        candidates = []
-        for entry in fg:
-            entry_recipe = (entry.get("recipe") or "").strip()
-            entry_fmt = (entry.get("format") or "").strip().upper()
-            entry_remaining = int(entry.get("quantity_remaining") or 0)
-            if entry_remaining <= 0:
-                continue
-            # Match: entry recipe contains the product name OR vice versa, and format matches
-            name_match = (
-                product_name.lower() in entry_recipe.lower()
-                or entry_recipe.lower() in product_name.lower()
-            )
-            fmt_match = not fmt or entry_fmt.startswith(fmt.split("-")[0])
-            if name_match and fmt_match:
-                candidates.append(entry)
+        # Match a FG entry to get canonical recipe/brand/format/cert
+        match = next((
+            f for f in fg_all
+            if product_name.lower() in (f.get("recipe") or "").lower()
+            and (f.get("format") or "").upper().startswith(fmt.split("-")[0])
+        ), None)
 
-        if not candidates:
-            errors.append(f"No FG inventory found for: {product_name} ({fmt})")
-            continue
+        recipe_name = match.get("recipe", product_name) if match else product_name
+        brand = match.get("brand", "") if match else ""
+        recipe_fmt = match.get("format", fmt) if match else fmt
+        cert = match.get("certification", "") if match else ""
+        sku = "|".join([brand.strip().lower(), recipe_name.strip().lower(), recipe_fmt.strip().upper()])
 
-        # Sort FIFO: oldest production date first
-        def _prod_date(e):
-            wid = e.get("week_id")
-            d_idx = e.get("day_idx")
-            if wid and d_idx is not None:
-                try:
-                    return (datetime.strptime(wid, "%Y-%m-%d") + timedelta(days=int(d_idx))).strftime("%Y-%m-%d")
-                except Exception:
-                    pass
-            return (e.get("created_at") or "")[:10]
-
-        candidates.sort(key=lambda e: (_prod_date(e), e.get("lot", ""), e.get("id", "")))
-
-        total_available = sum(int(e.get("quantity_remaining") or 0) for e in candidates)
-        if units_to_deduct > total_available:
-            errors.append(
-                f"Insufficient FG stock for {product_name} ({fmt}): "
-                f"need {units_to_deduct} units, have {total_available}"
-            )
-            continue
-
-        # Deduct FIFO
-        remaining_to_take = units_to_deduct
-        lot_summary = {}
-        for entry in candidates:
-            if remaining_to_take <= 0:
-                break
-            avail = int(entry.get("quantity_remaining") or 0)
-            take = min(avail, remaining_to_take)
-            entry["quantity_remaining"] = avail - take
-            remaining_to_take -= take
-            lot = entry.get("lot", "")
-            if lot not in lot_summary:
-                lot_summary[lot] = {"lot": lot, "quantity": 0, "fg_ids": [], "breakdown": []}
-            lot_summary[lot]["quantity"] += take
-            lot_summary[lot]["fg_ids"].append(entry["id"])
-            lot_summary[lot]["breakdown"].append({"fg_id": entry["id"], "quantity": take})
-
-        first = candidates[0]
-        sale_records.append({
-            "id": datetime.now().strftime("%Y%m%d%H%M%S") + str(len(sales) + len(sale_records)),
-            "sku_key": _sku_key(first.get("brand", ""), first.get("recipe", ""), first.get("format", "")),
-            "brand": first.get("brand", ""),
-            "recipe": first.get("recipe", ""),
-            "format": first.get("format", ""),
-            "quantity": units_to_deduct,
-            "lots": list(lot_summary.values()),
-            "fg_lot": list(lot_summary.keys())[0] if len(lot_summary) == 1 else "",
+        sale = {
+            "id": datetime.now().strftime("%Y%m%d%H%M%S%f") + str(len(sales) + len(created)),
+            "sku_key": sku,
+            "brand": brand,
+            "recipe": recipe_name,
+            "format": recipe_fmt,
+            "certification": cert,
+            "quantity": units,
+            "lots": [],
+            "fg_lot": "",
             "fg_id": "",
             "buyer": "Ripe",
-            "sale_date": datetime.now(timezone.utc).date().isoformat(),
-            "case_lot": order.get("id", ""),
-            "po_number": order.get("id", ""),
+            "sale_date": delivery_date,
+            "deduction_date": delivery_date,
+            "deducted": False,
+            "payment_pending": payment_pending,
+            "payment_method": payment_key,
             "ripe_order_id": order.get("id", ""),
+            "delivery_label": order.get("delivery_label", ""),
+            "po_number": order.get("id", ""),
+            "case_lot": "",
             "created_at": datetime.now().isoformat(),
-        })
+        }
+        created.append(sale)
 
-    if errors:
-        return False, errors
+    sales.extend(created)
+    _save(_SALES_PATH, sales)
+    return True, None
 
-    # Persist only if no errors
-    _save_fg(fg)
-    sales.extend(sale_records)
-    _save_sales(sales)
-    return True, []
-
-
-# ── Routes ────────────────────────────────────────────────────────────────────
 
 def _soma_login_required(f):
     @wraps(f)
@@ -249,6 +149,8 @@ def _soma_login_required(f):
     return wrapper
 
 
+# ── Routes ────────────────────────────────────────────────────────────────────
+
 @ripe_orders_bp.route("/ripe-orders")
 @_soma_login_required
 def ripe_orders_page():
@@ -257,14 +159,9 @@ def ripe_orders_page():
     orders.sort(key=lambda o: o.get("created_at", ""), reverse=True)
     pending_count = sum(1 for o in orders if o.get("status") == "pending")
     configured = _configured()
-    error = None if status == 200 else data.get("error") if isinstance(data, dict) else "Unknown error"
-    return render_template(
-        "ripe_orders.html",
-        orders=orders,
-        pending_count=pending_count,
-        configured=configured,
-        error=error,
-    )
+    error = None if status == 200 else (data.get("error") if isinstance(data, dict) else "Unknown error")
+    return render_template("ripe_orders.html", orders=orders,
+        pending_count=pending_count, configured=configured, error=error)
 
 
 @ripe_orders_bp.route("/api/ripe-orders/pending-count")
@@ -282,35 +179,59 @@ def ripe_pending_count():
 @ripe_orders_bp.route("/api/ripe-orders/<order_id>", methods=["PATCH"])
 @_soma_login_required
 def ripe_order_action(order_id):
+    """
+    approve  — requires delivery_date in body. Creates sale records, then
+               pushes approve to Ripe portal (fires Stripe invoice for Net14).
+    decline  — proxies to Ripe, voids invoice if pending.
+    fulfill  — proxies to Ripe, records actual fulfillment date.
+    """
     body = request.get_json() or {}
     action = body.get("action")
 
-    if action == "approve-for-production":
-        # 1. Get the order first to know what to deduct
+    if action == "approve":
+        delivery_date = (body.get("delivery_date") or "").strip()
+        if not delivery_date:
+            return jsonify({"error": "delivery_date is required to approve"}), 400
+
+        # Fetch the order from Ripe
         get_status, order_data = _ripe_request("GET", "/api/internal/orders")
         if get_status != 200 or not isinstance(order_data, list):
             return jsonify({"error": "Could not fetch orders from Ripe portal"}), 502
         order = next((o for o in order_data if o["id"] == order_id), None)
         if not order:
             return jsonify({"error": "Order not found"}), 404
-        if order.get("status") != "approved":
-            return jsonify({"error": f"Order must be approved first (currently {order.get('status')})"}), 409
+        if order.get("status") != "pending":
+            return jsonify({"error": f"Order is already {order.get('status')}"}), 409
 
-        # 2. FIFO FG deduction
-        ok, errors = _fifo_deduct_order(order)
+        payment_key = order.get("payment_key", "etransfer")
+
+        # Write scheduled sale records in Soma
+        ok, err = create_ripe_sale_records(order, delivery_date, payment_key)
         if not ok:
-            return jsonify({"error": "FG deduction failed", "details": errors}), 422
+            return jsonify({"error": err or "Could not create sale records"}), 500
 
-        # 3. Push status to Ripe portal
-        status, resp = _ripe_request("PATCH", f"/api/internal/orders/{order_id}", {"action": "approve-for-production"})
-        if status != 200:
-            # FG already deducted — note this in response but don't fail silently
+        # Run deductions in case delivery date is today or past
+        try:
+            from app import _run_scheduled_deductions
+            _run_scheduled_deductions()
+        except Exception:
+            pass  # non-fatal — will run on next startup
+
+        # Push approve to Ripe (fires Stripe invoice for Net14 there)
+        ripe_status, ripe_resp = _ripe_request(
+            "PATCH", f"/api/internal/orders/{order_id}",
+            {"action": "approve", "fulfillment_date": delivery_date},
+        )
+        if ripe_status != 200:
             return jsonify({
-                "error": "FG deducted but Ripe status update failed",
-                "ripe_error": resp.get("error") if isinstance(resp, dict) else str(resp),
+                "warning": "Sale records created but Ripe status update failed",
+                "ripe_error": ripe_resp.get("error") if isinstance(ripe_resp, dict) else str(ripe_resp),
             }), 502
-        return jsonify({"ok": True, "order": resp.get("order")})
 
-    # All other actions proxy directly to Ripe
-    status, resp = _ripe_request("PATCH", f"/api/internal/orders/{order_id}", body)
-    return jsonify(resp), status
+        return jsonify({"ok": True, "payment_pending": payment_key == "cc_net14"})
+
+    if action in ("decline", "fulfill"):
+        status, resp = _ripe_request("PATCH", f"/api/internal/orders/{order_id}", body)
+        return jsonify(resp), status
+
+    return jsonify({"error": f"Unknown action: {action}"}), 400

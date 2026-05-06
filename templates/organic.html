@@ -4436,29 +4436,75 @@ async function loadSales(){
     var data=await res.json();
     var container=document.getElementById('sales-container');
     var countEl=document.getElementById('sales-count');
+
+    // Three tiers: scheduled (not yet deducted), pending payment (Net14), settled
+    var scheduled = data.filter(s => s.deducted === false);
+    var pendingPmt = data.filter(s => s.payment_pending === true && s.deducted !== false);
+    var settled    = data.filter(s => s.deducted !== false && !s.payment_pending);
+
     if(countEl){
-        var totalUnits=data.reduce(function(a,s){return a+(s.quantity||0);},0);
-        countEl.textContent=data.length+' sale'+(data.length===1?'':'s')+' • '+totalUnits+' units';
+        var settledUnits = settled.reduce(function(a,s){return a+(s.quantity||0);},0);
+        countEl.textContent = settled.length+' sale'+(settled.length===1?'':'s')+' \u2022 '+settledUnits+' units';
     }
-    if(!data.length){
-        container.innerHTML='<div class="empty-state">No sales recorded yet.</div>';return;
+
+    function fmtProduct(s){
+        return escSku(((s.brand?s.brand+' ':'')+s.recipe+(s.format?' '+s.format:'')).trim());
     }
-    data.sort(function(a,b){return(b.sale_date||'').localeCompare(a.sale_date||'');});
-    var grouped = _timelineGroup(data, 'sale_date');
+    function fmtLots(s){
+        return escSku((s.lots&&s.lots.length)?s.lots.map(function(l){return l.lot;}).filter(Boolean).join(', '):(s.fg_lot||'\u2014'));
+    }
+
+    function renderScheduledTable(rows){
+        if(!rows.length) return '';
+        var h='<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:14px;margin-bottom:12px;">'
+            +'<div style="font-size:11px;font-weight:700;color:#f57f17;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">\ud83d\udcc5 Scheduled \u2014 Inventory Reserved</div>'
+            +'<div class="inv-table-wrap"><table class="inv-table"><tr><th>Delivery Date</th><th>Product</th><th>Buyer</th><th>Qty</th><th>Order</th><th>Shortfall</th></tr>';
+        rows.forEach(function(s){
+            var shortfall = s.shortfall ? '<span style="color:#c62828;font-weight:600;">\u2212'+s.shortfall+' units</span>' : '\u2014';
+            h+='<tr>'
+              +'<td><strong>'+escSku(s.deduction_date||s.sale_date||'')+'</strong></td>'
+              +'<td>'+fmtProduct(s)+'</td>'
+              +'<td>'+escSku(s.buyer||'')+'</td>'
+              +'<td>'+s.quantity+'</td>'
+              +'<td style="font-size:11px;color:var(--text-light);">'+escSku(s.ripe_order_id||s.po_number||'')+'</td>'
+              +'<td>'+shortfall+'</td>'
+              +'</tr>';
+        });
+        h+='</table></div></div>';
+        return h;
+    }
+
+    function renderPendingTable(rows){
+        if(!rows.length) return '';
+        var h='<div style="background:#e8eaf6;border:1px solid #9fa8da;border-radius:8px;padding:14px;margin-bottom:12px;">'
+            +'<div style="font-size:11px;font-weight:700;color:#3949ab;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">\u23f3 Pending Payment (Net 14)</div>'
+            +'<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Product</th><th>Buyer</th><th>LOT#(s)</th><th>Qty</th><th>Order</th><th></th></tr>';
+        rows.forEach(function(s){
+            h+='<tr>'
+              +'<td>'+escSku(s.sale_date||'')+'</td>'
+              +'<td>'+fmtProduct(s)+'</td>'
+              +'<td>'+escSku(s.buyer||'')+'</td>'
+              +'<td>'+fmtLots(s)+'</td>'
+              +'<td>'+s.quantity+'</td>'
+              +'<td style="font-size:11px;color:var(--text-light);">'+escSku(s.ripe_order_id||s.po_number||'')+'</td>'
+              +'<td><button class="btn-sm" style="font-size:11px;color:#3949ab;border-color:#9fa8da;" onclick="manualSettle(''+escHtml(s.id)+'')">Mark Paid</button></td>'
+              +'</tr>';
+        });
+        h+='</table></div></div>';
+        return h;
+    }
 
     function renderSalesTable(rows){
         var h='<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Product</th><th>Buyer</th><th>LOT#(s)</th><th>Qty</th><th>PO#</th><th></th></tr>';
         rows.forEach(function(s){
-            var lots=(s.lots&&s.lots.length)?s.lots.map(function(l){return l.lot;}).filter(Boolean).join(', '):(s.fg_lot||'');
-            var product = (s.brand ? s.brand+' ' : '') + (s.recipe||'') + (s.format ? ' '+s.format : '');
             var po = s.po_number || s.case_lot || '';
             h+='<tr>'
               +'<td>'+(s.sale_date||'')+'</td>'
-              +'<td>'+escSku(product.trim())+'</td>'
+              +'<td>'+fmtProduct(s)+'</td>'
               +'<td>'+escSku(s.buyer||'')+'</td>'
-              +'<td>'+escSku(lots)+'</td>'
+              +'<td>'+fmtLots(s)+'</td>'
               +'<td>'+s.quantity+'</td>'
-              +(po?'<td>'+escSku(po)+'</td>':'<td>—</td>')
+              +(po?'<td>'+escSku(po)+'</td>':'<td>\u2014</td>')
               +'<td><button class="btn-danger" data-del-sale="'+escHtml(s.id)+'">Del</button></td>'
               +'</tr>';
         });
@@ -4466,25 +4512,43 @@ async function loadSales(){
         return h;
     }
 
-    var html = '';
-    if(grouped.recent.length){
-        html += renderSalesTable(grouped.recent);
+    if(!data.length){
+        container.innerHTML='<div class="empty-state">No sales recorded yet.</div>'; return;
     }
-    var monthKeys = Object.keys(grouped.older).sort().reverse();
-    monthKeys.forEach(function(mk){
-        var rows = grouped.older[mk];
-        html += '<details style="margin-top:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">'
-            + '<summary style="padding:10px 14px;background:#f5f5f0;cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;justify-content:space-between;">'
-            + '<span>'+_monthLabel(mk)+'</span><span style="color:var(--text-light);font-weight:400;">'+rows.length+' sale'+(rows.length===1?'':'s')+'</span></summary>'
-            + '<div style="padding:0 2px 2px;">'+renderSalesTable(rows)+'</div>'
-            + '</details>';
-    });
+
+    var html = '';
+    html += renderScheduledTable(scheduled);
+    html += renderPendingTable(pendingPmt);
+
+    if(settled.length){
+        settled.sort(function(a,b){return(b.sale_date||'').localeCompare(a.sale_date||'');});
+        var grouped = _timelineGroup(settled, 'sale_date');
+        if(grouped.recent.length) html += renderSalesTable(grouped.recent);
+        var monthKeys = Object.keys(grouped.older).sort().reverse();
+        monthKeys.forEach(function(mk){
+            var rows = grouped.older[mk];
+            html += '<details style="margin-top:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">'
+                + '<summary style="padding:10px 14px;background:#f5f5f0;cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;justify-content:space-between;">'
+                + '<span>'+_monthLabel(mk)+'</span><span style="color:var(--text-light);font-weight:400;">'+rows.length+' sale'+(rows.length===1?'':'s')+'</span></summary>'
+                + '<div style="padding:0 2px 2px;">'+renderSalesTable(rows)+'</div>'
+                + '</details>';
+        });
+    } else if(!scheduled.length && !pendingPmt.length){
+        html += '<div class="empty-state">No settled sales yet.</div>';
+    }
+
     container.innerHTML = html;
     container.querySelectorAll('[data-del-sale]').forEach(function(btn){
         btn.addEventListener('click', function(){ deleteSale(this.getAttribute('data-del-sale')); });
     });
 }
 
+async function manualSettle(saleId){
+    if(!confirm('Mark this Net 14 sale as paid? This moves it from pending to transactions.')) return;
+    var resp = await fetch('/api/ripe-orders/settle-sale/'+saleId, {method:'POST'});
+    if(resp.ok){ loadSales(); }
+    else { alert('Failed to settle sale.'); }
+}
 async function deleteSale(id){
     var ok = await mobileConfirm('Delete this sale? Quantity will be restored to finished goods.',
         {title:'Delete sale', okLabel:'Delete', danger:true});
@@ -4774,8 +4838,24 @@ document.addEventListener('DOMContentLoaded',function(){
     var params = new URLSearchParams(window.location.search);
     var action = params.get('action');
     if(action === 'receive'){
-        // Slight delay so the page is settled before the modal opens
-        setTimeout(openAddInventoryModal, 200);
+        setTimeout(async function(){
+            await openAddInventoryModal();
+            // Pre-fill supplier if passed from dashboard modal
+            var supplierId = params.get('supplier_id');
+            var supplierName = params.get('supplier_name');
+            var date = params.get('date');
+            if(date) document.getElementById('add-inv-date').value = date;
+            if(supplierId){
+                var sel = document.getElementById('add-inv-supplier');
+                for(var i=0;i<sel.options.length;i++){
+                    if(sel.options[i].value === supplierId){
+                        sel.value = supplierId; break;
+                    }
+                }
+            }
+            // Auto-advance to step 2 if supplier is pre-filled
+            if(supplierId && date){ goToAddInvStep2(); }
+        }, 200);
     } else if(action === 'sell'){
         setTimeout(async function(){
             showTab('fg');

@@ -2195,7 +2195,7 @@ def _migrate_organic_to_inventory():
 
 _migrate_organic_to_inventory()
 os.makedirs(INVENTORY_DIR, exist_ok=True)
-_ripe_init_paths(INVENTORY_DIR)  # wire Ripe orders FG deduction to Soma's inventory
+_ripe_init_paths(INVENTORY_DIR)  # wire Ripe orders sale logic to Soma's inventory
 
 
 def _autotag_existing_organic_data():
@@ -4985,6 +4985,210 @@ def _backfill_organic_finished_goods():
 
 
 _backfill_organic_finished_goods()
+
+
+# ── Ripe order scheduled sale deduction ───────────────────────────────────────
+# Sale records from Ripe orders carry:
+#   deduction_date  — date inventory should be deducted (delivery/pickup date)
+#   deducted        — False until FIFO deduction runs
+#   payment_pending — True for Net14 until Stripe confirms payment
+#
+# This function runs on startup and is callable via API. It processes any
+# sale records whose deduction_date has arrived but deduction hasn't run yet.
+
+def _run_scheduled_deductions():
+    """FIFO-deduct any Ripe sale records whose deduction_date <= today."""
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    today = datetime.now().date().isoformat()
+    changed = False
+
+    for sale in sales:
+        if sale.get("deducted", True):
+            continue  # already done or legacy (legacy has no deducted field → default True)
+        deduction_date = sale.get("deduction_date", "")
+        if not deduction_date or deduction_date > today:
+            continue  # not yet due
+
+        # Run FIFO deduction for this sale
+        units_needed = int(sale.get("quantity", 0))
+        recipe = sale.get("recipe", "")
+        fmt = (sale.get("format") or "").upper()
+
+        candidates = [
+            f for f in fg
+            if (f.get("recipe") or "") == recipe
+            and (f.get("format") or "").upper() == fmt
+            and int(f.get("quantity_remaining") or 0) > 0
+        ]
+
+        # Sort FIFO
+        def _prod_date(e):
+            wid = e.get("week_id")
+            d_idx = e.get("day_idx")
+            if wid and d_idx is not None:
+                try:
+                    return (datetime.strptime(wid, "%Y-%m-%d") + timedelta(days=int(d_idx))).strftime("%Y-%m-%d")
+                except Exception:
+                    pass
+            return (e.get("created_at") or "")[:10]
+
+        candidates.sort(key=lambda e: (_prod_date(e), e.get("lot", ""), e.get("id", "")))
+
+        remaining = units_needed
+        lot_summary = {}
+        for entry in candidates:
+            if remaining <= 0:
+                break
+            avail = int(entry.get("quantity_remaining") or 0)
+            take = min(avail, remaining)
+            entry["quantity_remaining"] = avail - take
+            remaining -= take
+            lot = entry.get("lot", "")
+            if lot not in lot_summary:
+                lot_summary[lot] = {"lot": lot, "quantity": 0, "fg_ids": [], "breakdown": []}
+            lot_summary[lot]["quantity"] += take
+            lot_summary[lot]["fg_ids"].append(entry["id"])
+            lot_summary[lot]["breakdown"].append({"fg_id": entry["id"], "quantity": take})
+
+        sale["lots"] = list(lot_summary.values())
+        sale["fg_lot"] = list(lot_summary.keys())[0] if len(lot_summary) == 1 else ""
+        sale["deducted"] = True
+        sale["deducted_at"] = datetime.now().isoformat()
+        if remaining > 0:
+            sale["shortfall"] = remaining  # partial deduction — visible in UI
+        changed = True
+
+    if changed:
+        _save_json(ORGANIC_SALES_PATH, sales)
+        _save_json(ORGANIC_FG_PATH, fg)
+
+
+_run_scheduled_deductions()  # run once on startup
+
+
+@app.route("/api/ripe-orders/run-deductions", methods=["POST"])
+@login_required
+def api_run_deductions():
+    """Manually trigger scheduled deductions (also runs on startup)."""
+    _run_scheduled_deductions()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/ripe-orders/settle-sale/<sale_id>", methods=["POST"])
+@login_required
+def api_settle_ripe_sale(sale_id):
+    """Mark a specific pending-payment Ripe sale as settled."""
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    idx = next((i for i, s in enumerate(sales) if s.get("id") == sale_id), None)
+    if idx is None:
+        return jsonify({"error": "Sale not found"}), 404
+    sales[idx]["payment_pending"] = False
+    sales[idx]["settled_at"] = datetime.now().isoformat()
+    _save_json(ORGANIC_SALES_PATH, sales)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/ripe-orders/settle-by-order/<order_id>", methods=["POST"])
+def api_settle_by_order(order_id):
+    """Settle all pending-payment sale records for a given Ripe order.
+    Called by Ripe portal webhook relay when Stripe confirms payment.
+    Authenticated via X-Internal-Key header (no session required).
+    """
+    internal_key = os.environ.get("INTERNAL_API_KEY", "")
+    provided = request.headers.get("X-Internal-Key", "")
+    import hmac as _hmac
+    if not internal_key or not _hmac.compare_digest(provided.encode(), internal_key.encode()):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    settled = 0
+    for s in sales:
+        if s.get("ripe_order_id") == order_id and s.get("payment_pending"):
+            s["payment_pending"] = False
+            s["settled_at"] = datetime.now().isoformat()
+            settled += 1
+    _save_json(ORGANIC_SALES_PATH, sales)
+    return jsonify({"ok": True, "settled": settled})
+
+
+@app.route("/api/ripe-orders/create-sale", methods=["POST"])
+@login_required
+def api_create_ripe_sale():
+    """Create a scheduled Ripe sale record without immediately deducting FG.
+    Called from the Soma Ripe Orders approval modal.
+
+    Body: {
+      order_id, items: [{name, format, units, sku_key}],
+      buyer, sale_date (deduction_date), payment_method (etransfer|cc_net14),
+      delivery_label
+    }
+    """
+    data = request.get_json() or {}
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    recipes = load_recipes()
+    today = datetime.now().date().isoformat()
+
+    order_id = data.get("order_id", "")
+    sale_date = data.get("sale_date", today)
+    payment_method = data.get("payment_method", "etransfer")
+    payment_pending = (payment_method == "cc_net14")
+    buyer = data.get("buyer", "Ripe")
+    delivery_label = data.get("delivery_label", "")
+
+    created = []
+    for item in data.get("items", []):
+        product_name = item.get("name", "")
+        fmt = (item.get("format") or "").upper()
+        units = int(item.get("units") or 0)
+        if units <= 0:
+            continue
+
+        # Match recipe name from FG inventory
+        fg = _load_json(ORGANIC_FG_PATH, [])
+        match = next((
+            f for f in fg
+            if product_name.lower() in (f.get("recipe") or "").lower()
+            and (f.get("format") or "").upper().startswith(fmt.split("-")[0])
+        ), None)
+
+        recipe_name = match.get("recipe", product_name) if match else product_name
+        brand = match.get("brand", "") if match else ""
+        recipe_fmt = match.get("format", fmt) if match else fmt
+        cert = match.get("certification", "") if match else ""
+
+        sale = {
+            "id": datetime.now().strftime("%Y%m%d%H%M%S%f") + str(len(sales) + len(created)),
+            "sku_key": _sku_key(brand, recipe_name, recipe_fmt),
+            "brand": brand,
+            "recipe": recipe_name,
+            "format": recipe_fmt,
+            "certification": cert,
+            "quantity": units,
+            "lots": [],
+            "fg_lot": "",
+            "fg_id": "",
+            "buyer": buyer,
+            "sale_date": sale_date,
+            "deduction_date": sale_date,
+            "deducted": False,
+            "payment_pending": payment_pending,
+            "payment_method": payment_method,
+            "ripe_order_id": order_id,
+            "delivery_label": delivery_label,
+            "po_number": order_id,
+            "case_lot": "",
+            "created_at": datetime.now().isoformat(),
+        }
+        created.append(sale)
+
+    sales.extend(created)
+    _save_json(ORGANIC_SALES_PATH, sales)
+
+    # If deduction date is today or past, run immediately
+    _run_scheduled_deductions()
+
+    return jsonify({"ok": True, "created": len(created), "sale_ids": [s["id"] for s in created]})
 
 
 if __name__ == "__main__":

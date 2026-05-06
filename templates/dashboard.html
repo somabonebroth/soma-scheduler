@@ -60,7 +60,7 @@
         </div>
         <div class="section-label">Inventory Actions</div>
         <div class="dash-row">
-            <div class="dash-btn highlight" onclick="window.location='/organic?action=receive'" style="border-color:#2e7d32;cursor:pointer;">
+            <div class="dash-btn highlight" onclick="openReceiveModal()" style="border-color:#2e7d32;cursor:pointer;">
                 <span class="icon">&#128230;</span>
                 <span class="label">Receive Inventory</span>
                 <span class="sublabel">Record a supplier delivery</span>
@@ -104,15 +104,13 @@ async function goToDay(offset){var target=new Date();target.setDate(target.getDa
 async function loadDayLabels(){for(var offset=-1;offset<=1;offset++){var target=new Date();target.setDate(target.getDate()+offset);var weekId=getWeekId(target);var dayIdx=getDayIdx(target);var labelId=offset===-1?'yesterday-label':offset===0?'today-label':'tomorrow-label';var dayName=DAYNAMES[target.getDay()];try{var res=await fetch('/api/schedule/'+weekId);var data=await res.json();if(data.schedule){var dd=data.schedule[String(dayIdx)]||{};var r=Object.values(dd).filter(function(v){return v;});document.getElementById(labelId).textContent=dayName+' - '+(r.length>0?r.length+' kettle(s)':'No production');}else{document.getElementById(labelId).textContent=dayName+' - No schedule';}}catch(e){document.getElementById(labelId).textContent=dayName;}}}
 document.addEventListener('DOMContentLoaded',loadDayLabels);
 
-// ── Dashboard Record Sale quick modal ──
+// ── Dashboard Record Sale modal ──
 async function openDashSaleModal(){
-    var modal = document.getElementById('dash-sale-modal');
-    modal.style.display = 'flex';
+    document.getElementById('dash-sale-form').style.display = 'block';
+    document.getElementById('dash-sale-success').style.display = 'none';
     var today = new Date().toISOString().split('T')[0];
     document.getElementById('dash-sale-date').value = today;
-    document.getElementById('dash-sale-po').value = '';
     document.getElementById('dash-sale-msg').style.display = 'none';
-    // Load buyers
     try {
         var res = await fetch('/api/buyers');
         var buyers = await res.json();
@@ -125,9 +123,10 @@ async function openDashSaleModal(){
             sel.appendChild(o);
         });
     } catch(e) {}
+    document.getElementById('dash-sale-modal').classList.add('open');
 }
 function closeDashSaleModal(){
-    document.getElementById('dash-sale-modal').style.display = 'none';
+    document.getElementById('dash-sale-modal').classList.remove('open');
 }
 function dashSaleNext(){
     var date = document.getElementById('dash-sale-date').value;
@@ -146,30 +145,132 @@ function dashSaleNext(){
 
 </script>
 
-<!-- Record Sale quick modal -->
-<div class="modal-overlay" id="dash-sale-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:200;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:16px;width:100%;max-width:400px;margin:16px;padding:28px 24px;position:relative;">
-        <button onclick="closeDashSaleModal()" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:#888;">&times;</button>
-        <h2 style="font-size:17px;font-weight:700;color:#1a1a1a;margin-bottom:4px;">&#128176; Record Sale</h2>
-        <p style="font-size:13px;color:#888;margin-bottom:20px;">Select buyer and date. LOT numbers are assigned automatically by FIFO on the next screen.</p>
-        <div style="display:flex;flex-direction:column;gap:14px;">
-            <div>
-                <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.3px;display:block;margin-bottom:6px;">Sale Date</label>
-                <input type="date" id="dash-sale-date" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:15px;">
-            </div>
-            <div>
-                <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.3px;display:block;margin-bottom:6px;">Buyer</label>
-                <select id="dash-sale-buyer" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:15px;background:#fff;">
-                    <option value="">— Select buyer —</option>
-                </select>
-            </div>
-            <div id="dash-sale-msg" style="font-size:13px;color:#c62828;display:none;"></div>
-            <div style="display:flex;gap:10px;margin-top:4px;">
-                <button onclick="closeDashSaleModal()" style="flex:1;padding:13px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:14px;font-weight:600;cursor:pointer;">Cancel</button>
-                <button onclick="dashSaleNext()" style="flex:2;padding:13px;border:none;border-radius:8px;background:#0288d1;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">Next →</button>
-            </div>
-        </div>
+<style>
+.dash-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center;}
+.dash-modal-overlay.open{display:flex;}
+.dash-modal{background:#fff;border-radius:16px;width:100%;max-width:400px;margin:16px;padding:28px 24px;position:relative;}
+.dash-modal h2{font-size:17px;font-weight:700;color:#1a1a1a;margin:0 0 4px;}
+.dash-modal p{font-size:13px;color:#888;margin:0 0 20px;}
+.dash-modal-field{margin-bottom:14px;}
+.dash-modal-field label{font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:6px;}
+.dash-modal-field input,.dash-modal-field select{width:100%;box-sizing:border-box;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:15px;background:#fff;}
+.dash-modal-err{font-size:13px;color:#c62828;display:none;margin-bottom:8px;}
+.dash-modal-success{background:#e8f5e9;border:1px solid #a5d6a7;border-radius:10px;padding:16px;text-align:center;display:none;}
+.dash-modal-success .check{font-size:36px;margin-bottom:6px;}
+.dash-modal-success p{font-size:14px;color:#2e7d32;font-weight:600;margin:0;}
+.dash-modal-success small{font-size:12px;color:#388e3c;}
+.dash-modal-actions{display:flex;gap:10px;margin-top:4px;}
+.dash-modal-actions button{flex:1;padding:13px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
+.dm-cancel{background:#fff;border:1px solid #ddd;color:#333;}
+.dm-primary-green{background:#2e7d32;border:none;color:#fff;}
+.dm-primary-blue{background:#0288d1;border:none;color:#fff;}
+</style>
+
+<!-- Record Sale modal -->
+<div class="dash-modal-overlay" id="dash-sale-modal">
+  <div class="dash-modal">
+    <button onclick="closeDashSaleModal()" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:#888;">&times;</button>
+    <div id="dash-sale-form">
+      <h2>&#128176; Record Sale</h2>
+      <p>Select buyer and date. LOT numbers are assigned automatically by FIFO on the next screen.</p>
+      <div class="dash-modal-field">
+        <label>Sale Date</label>
+        <input type="date" id="dash-sale-date">
+      </div>
+      <div class="dash-modal-field">
+        <label>Buyer</label>
+        <select id="dash-sale-buyer">
+          <option value="">— Select buyer —</option>
+        </select>
+      </div>
+      <div class="dash-modal-err" id="dash-sale-msg"></div>
+      <div class="dash-modal-actions">
+        <button class="dm-cancel" onclick="closeDashSaleModal()">Cancel</button>
+        <button class="dm-primary-blue" onclick="dashSaleNext()">Next →</button>
+      </div>
     </div>
+    <div class="dash-modal-success" id="dash-sale-success" style="display:none;">
+      <div class="check">&#10003;</div>
+      <p>Sale recorded</p>
+      <small>Inventory updated. Check the Inventory page for LOT details.</small>
+      <div style="margin-top:14px;">
+        <button class="dm-primary-blue" style="width:100%;padding:12px;" onclick="closeDashSaleModal()">Done</button>
+      </div>
+    </div>
+  </div>
 </div>
+
+<!-- Receive Inventory modal -->
+<div class="dash-modal-overlay" id="dash-receive-modal">
+  <div class="dash-modal">
+    <button onclick="closeDashReceiveModal()" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:#888;">&times;</button>
+    <div id="dash-receive-form">
+      <h2>&#128230; Receive Inventory</h2>
+      <p>Select supplier and delivery date to continue entering received items.</p>
+      <div class="dash-modal-field">
+        <label>Date Received</label>
+        <input type="date" id="dash-receive-date">
+      </div>
+      <div class="dash-modal-field">
+        <label>Supplier</label>
+        <select id="dash-receive-supplier">
+          <option value="">— Select supplier —</option>
+        </select>
+      </div>
+      <div class="dash-modal-err" id="dash-receive-msg"></div>
+      <div class="dash-modal-actions">
+        <button class="dm-cancel" onclick="closeDashReceiveModal()">Cancel</button>
+        <button class="dm-primary-green" onclick="dashReceiveNext()">Next →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Receive Inventory modal
+async function openReceiveModal(){
+  var today = new Date().toISOString().split('T')[0];
+  document.getElementById('dash-receive-date').value = today;
+  document.getElementById('dash-receive-msg').style.display = 'none';
+  try {
+    var res = await fetch('/api/suppliers');
+    var suppliers = await res.json();
+    var sel = document.getElementById('dash-receive-supplier');
+    sel.innerHTML = '<option value="">— Select supplier —</option>';
+    suppliers.forEach(function(s){
+      var o = document.createElement('option');
+      o.value = s.id + '|' + encodeURIComponent(s.name);
+      o.textContent = s.name;
+      sel.appendChild(o);
+    });
+  } catch(e){}
+  document.getElementById('dash-receive-modal').classList.add('open');
+}
+function closeDashReceiveModal(){
+  document.getElementById('dash-receive-modal').classList.remove('open');
+}
+function dashReceiveNext(){
+  var date = document.getElementById('dash-receive-date').value;
+  var supplierVal = document.getElementById('dash-receive-supplier').value;
+  var msg = document.getElementById('dash-receive-msg');
+  if(!date){ msg.textContent='Please select a date.'; msg.style.display='block'; return; }
+  if(!supplierVal){ msg.textContent='Please select a supplier.'; msg.style.display='block'; return; }
+  msg.style.display='none';
+  closeDashReceiveModal();
+  var parts = supplierVal.split('|');
+  var supplierId = parts[0];
+  var supplierName = decodeURIComponent(parts[1] || '');
+  var params = '?action=receive&date='+encodeURIComponent(date)+'&supplier_id='+encodeURIComponent(supplierId)+'&supplier_name='+encodeURIComponent(supplierName);
+  window.location.href = '/organic' + params;
+}
+
+// Close modals on backdrop click
+document.getElementById('dash-receive-modal').addEventListener('click', function(e){
+  if(e.target === this) closeDashReceiveModal();
+});
+document.getElementById('dash-sale-modal').addEventListener('click', function(e){
+  if(e.target === this) closeDashSaleModal();
+});
+</script>
 </body>
 </html>

@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<!-- PWA tags (managed) -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Soma">
@@ -12,47 +11,58 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
 <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
 <link rel="apple-touch-icon" sizes="180x180" href="/static/logo-180.png">
-<link rel="apple-touch-icon" sizes="192x192" href="/static/logo-192.png">
-<!-- /PWA tags -->
 <title>Soma – Ripe Orders</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
-.orders-table { width:100%; border-collapse:collapse; font-size:13px; }
-.orders-table th { background:var(--bg); color:var(--text-light); font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; padding:8px 10px; border-bottom:2px solid var(--border); text-align:left; }
-.orders-table td { padding:10px; border-bottom:1px solid var(--border); vertical-align:middle; }
-.orders-table tr:hover td { background:var(--bg); }
-.tag { display:inline-block; padding:2px 7px; border-radius:20px; font-size:10px; font-weight:600; white-space:nowrap; }
-.tag-pending  { background:#fff3cd; color:#856404; }
-.tag-approved { background:#cfe2ff; color:#0a4081; }
-.tag-afp      { background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7; }
-.tag-fulfilled{ background:#d4edda; color:#155724; }
-.tag-declined { background:#f8d7da; color:#721c24; }
-.order-row { cursor:pointer; }
-.order-row.expanded td { border-bottom:none; }
-.order-detail { display:none; background:var(--bg); }
-.order-detail.open { display:table-row; }
-.order-detail td { padding:16px; }
-.detail-box { background:var(--card-bg); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:10px; }
-.detail-label { font-size:10px; font-weight:600; color:var(--text-light); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px; }
-.items-grid { display:grid; grid-template-columns:1fr auto auto; gap:4px 12px; font-size:12px; }
-.items-grid .hdr { font-weight:600; color:var(--text-light); font-size:10px; text-transform:uppercase; letter-spacing:.05em; border-bottom:1px solid var(--border); padding-bottom:4px; margin-bottom:4px; }
-.action-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
-.btn-approve   { background:#2e7d32; color:#fff; border:none; border-radius:6px; padding:8px 14px; font-size:12px; font-weight:600; cursor:pointer; }
-.btn-approve:hover { background:#1b5e20; }
-.btn-afp       { background:#1565c0; color:#fff; border:none; border-radius:6px; padding:8px 14px; font-size:12px; font-weight:600; cursor:pointer; }
-.btn-afp:hover { background:#0d47a1; }
-.btn-decline   { background:#c62828; color:#fff; border:none; border-radius:6px; padding:8px 14px; font-size:12px; font-weight:600; cursor:pointer; }
-.btn-decline:hover { background:#b71c1c; }
-.btn-fulfill   { background:#4caf50; color:#fff; border:none; border-radius:6px; padding:8px 14px; font-size:12px; font-weight:600; cursor:pointer; }
-.btn-fulfill:hover { background:#388e3c; }
-.badge { display:inline-flex; align-items:center; justify-content:center; background:#c62828; color:#fff; border-radius:50%; width:18px; height:18px; font-size:10px; font-weight:700; margin-left:6px; }
-.filter-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
-.filter-btn { background:var(--card-bg); border:1px solid var(--border); border-radius:20px; padding:5px 12px; font-size:12px; cursor:pointer; }
-.filter-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
-.info-msg { background:#e3f2fd; border:1px solid #90caf9; border-radius:8px; padding:14px; font-size:13px; color:#1565c0; }
-.err-msg { background:#ffebee; border:1px solid #ef9a9a; border-radius:8px; padding:14px; font-size:13px; color:#c62828; }
-.toast { position:fixed; bottom:20px; right:20px; background:#333; color:#fff; padding:10px 16px; border-radius:8px; font-size:13px; z-index:9999; opacity:0; transition:opacity .3s; pointer-events:none; }
-.toast.show { opacity:1; }
+.orders-table{width:100%;border-collapse:collapse;font-size:13px;}
+.orders-table th{background:var(--bg);color:var(--text-light);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:8px 10px;border-bottom:2px solid var(--border);text-align:left;}
+.orders-table td{padding:10px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.orders-table tr:last-child td{border-bottom:none;}
+.order-row{cursor:pointer;transition:background .15s;}
+.order-row:hover td{background:var(--bg);}
+.order-detail{display:none;}
+.order-detail.open{display:table-row;}
+.order-detail-inner{background:var(--bg);border-radius:8px;padding:16px;margin:4px 0 8px;}
+.tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;white-space:nowrap;}
+.tag-pending{background:#fff3cd;color:#856404;}
+.tag-approved{background:#cfe2ff;color:#0a4081;}
+.tag-fulfilled{background:#d4edda;color:#155724;}
+.tag-declined{background:#f8d7da;color:#721c24;}
+.tag-net14{background:#e8eaf6;color:#3949ab;}
+.items-list{font-size:12px;color:var(--text-light);margin:6px 0 0;}
+.items-list li{padding:3px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;}
+.items-list li:last-child{border-bottom:none;}
+.action-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+.btn-approve{background:#2e7d32;color:#fff;border:none;border-radius:6px;padding:9px 16px;font-size:12px;font-weight:600;cursor:pointer;}
+.btn-approve:hover{background:#1b5e20;}
+.btn-decline{background:#fff;color:#c62828;border:1px solid #ef9a9a;border-radius:6px;padding:9px 16px;font-size:12px;font-weight:600;cursor:pointer;}
+.btn-decline:hover{background:#ffebee;}
+.btn-fulfill{background:#0288d1;color:#fff;border:none;border-radius:6px;padding:9px 16px;font-size:12px;font-weight:600;cursor:pointer;}
+.btn-fulfill:hover{background:#0277bd;}
+.filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+.filter-btn{background:var(--card-bg);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;cursor:pointer;transition:all .15s;}
+.filter-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.info-msg{background:#e3f2fd;border:1px solid #90caf9;border-radius:8px;padding:14px;font-size:13px;color:#1565c0;margin-bottom:16px;}
+.err-msg{background:#ffebee;border:1px solid #ef9a9a;border-radius:8px;padding:14px;font-size:13px;color:#c62828;margin-bottom:16px;}
+
+/* Approve modal */
+.modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;align-items:center;justify-content:center;}
+.modal-backdrop.open{display:flex;}
+.modal-card{background:#fff;border-radius:14px;width:100%;max-width:420px;margin:16px;padding:26px 22px;position:relative;}
+.modal-card h3{margin:0 0 4px;font-size:16px;}
+.modal-card p{margin:0 0 18px;font-size:13px;color:var(--text-light);}
+.modal-field{margin-bottom:14px;}
+.modal-field label{display:block;font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;}
+.modal-field input,.modal-field select{width:100%;box-sizing:border-box;padding:11px;border:1px solid #ddd;border-radius:8px;font-size:14px;}
+.modal-actions{display:flex;gap:10px;margin-top:18px;}
+.modal-actions button{flex:1;padding:12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;}
+.modal-cancel{background:#fff;border:1px solid #ddd;color:#333;}
+.modal-confirm{background:#2e7d32;border:none;color:#fff;}
+.modal-confirm:disabled{background:#aaa;}
+.success-banner{background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:14px;font-size:13px;color:#2e7d32;margin-top:12px;display:none;}
+
+.toast{position:fixed;bottom:20px;right:20px;background:#333;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;}
+.toast.show{opacity:1;}
 </style>
 </head>
 <body>
@@ -64,107 +74,89 @@
 <div class="main">
 
   {% if not configured %}
-  <div class="info-msg" style="margin-bottom:16px;">
-    <strong>Ripe portal not connected.</strong> Set <code>RIPE_PORTAL_URL</code> and <code>INTERNAL_API_KEY</code> in Render environment variables to enable live order management.
-  </div>
+  <div class="info-msg"><strong>Ripe portal not connected.</strong> Set <code>RIPE_PORTAL_URL</code> and <code>INTERNAL_API_KEY</code> in Render env vars.</div>
   {% elif error %}
-  <div class="err-msg" style="margin-bottom:16px;">
-    <strong>Could not reach Ripe portal:</strong> {{ error }}
-  </div>
+  <div class="err-msg"><strong>Could not reach Ripe portal:</strong> {{ error }}</div>
   {% endif %}
 
-  <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap;">
-    <h2 style="margin:0; font-size:18px;">Ripe Orders</h2>
-    {% if pending_count > 0 %}
-    <span class="tag tag-pending">{{ pending_count }} pending</span>
-    {% endif %}
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+    <h2 style="margin:0;font-size:18px;">Ripe Orders</h2>
+    {% if pending_count > 0 %}<span class="tag tag-pending">{{ pending_count }} pending</span>{% endif %}
   </div>
 
   <div class="filter-bar">
-    <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
-    <button class="filter-btn" onclick="setFilter('pending', this)">Pending</button>
-    <button class="filter-btn" onclick="setFilter('approved', this)">Approved</button>
-    <button class="filter-btn" onclick="setFilter('approved-for-production', this)">In Production</button>
-    <button class="filter-btn" onclick="setFilter('fulfilled', this)">Fulfilled</button>
-    <button class="filter-btn" onclick="setFilter('declined', this)">Declined</button>
+    <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+    <button class="filter-btn" onclick="setFilter('pending',this)">Pending</button>
+    <button class="filter-btn" onclick="setFilter('approved',this)">Approved</button>
+    <button class="filter-btn" onclick="setFilter('fulfilled',this)">Fulfilled</button>
+    <button class="filter-btn" onclick="setFilter('declined',this)">Declined</button>
   </div>
 
   {% if orders %}
-  <div class="card" style="padding:0; overflow:hidden;">
+  <div class="card" style="padding:0;overflow:hidden;">
   <table class="orders-table">
     <thead>
-      <tr>
-        <th>Order</th>
-        <th>Date</th>
-        <th>Delivery</th>
-        <th>Cases</th>
-        <th>Total</th>
-        <th>Status</th>
-      </tr>
+      <tr><th>Order</th><th>Date</th><th>Delivery</th><th>Cases</th><th>Total</th><th>Payment</th><th>Status</th></tr>
     </thead>
-    <tbody id="orders-body">
+    <tbody>
     {% for o in orders %}
     <tr class="order-row" data-id="{{ o.id }}" data-status="{{ o.status }}" onclick="toggleDetail('{{ o.id }}')">
       <td><strong>{{ o.id }}</strong></td>
       <td>{{ o.created_at[:10] }}</td>
-      <td>{{ o.delivery_label }}</td>
+      <td style="font-size:12px;">{{ o.delivery_label }}</td>
       <td>{{ o.total_cases }}</td>
       <td>${{ "%.2f"|format(o.total) }}</td>
       <td>
+        {% if o.payment_key == 'etransfer' %}<span style="font-size:11px;color:var(--text-light);">E-Transfer</span>
+        {% else %}<span class="tag tag-net14">Net 14</span>{% endif %}
+      </td>
+      <td>
         {% if o.status == 'pending' %}<span class="tag tag-pending">pending</span>
-        {% elif o.status == 'approved' %}<span class="tag tag-approved">approved</span>
-        {% elif o.status == 'approved-for-production' %}<span class="tag tag-afp">in production</span>
+        {% elif o.status == 'approved' %}
+          <span class="tag tag-approved">approved</span>
+          {% if o.fulfillment_date %}<br><span style="font-size:10px;color:var(--text-light);">{{ o.fulfillment_date }}</span>{% endif %}
         {% elif o.status == 'fulfilled' %}<span class="tag tag-fulfilled">fulfilled</span>
         {% elif o.status == 'declined' %}<span class="tag tag-declined">declined</span>
         {% else %}<span class="tag">{{ o.status }}</span>{% endif %}
       </td>
     </tr>
-    <tr class="order-detail" id="detail-{{ o.id }}">
-      <td colspan="6">
-        <div class="detail-box">
-          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:14px;">
-            <div><div class="detail-label">Delivery</div><div>{{ o.delivery_label }}<br><span style="font-size:11px;color:var(--text-light);">{{ o.delivery_address }}</span></div></div>
-            <div><div class="detail-label">Requested</div><div>{{ o.requested_date or '—' }}{% if o.requested_time %} {{ o.requested_time }}{% endif %}</div></div>
-            <div><div class="detail-label">Payment</div><div>{{ o.payment_label }}</div></div>
-            <div><div class="detail-label">Units</div><div>{{ o.total_units }} units ({{ o.total_cases }} cases)</div></div>
-            {% if o.notes %}<div style="grid-column:1/-1"><div class="detail-label">Notes</div><div>{{ o.notes }}</div></div>{% endif %}
+    <tr id="detail-{{ o.id }}" class="order-detail">
+      <td colspan="7" style="padding:0 10px 10px;">
+        <div class="order-detail-inner">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px;font-size:13px;">
+            <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Delivery</div>{{ o.delivery_label }}<br><span style="font-size:11px;color:var(--text-light);">{{ o.delivery_address }}</span></div>
+            <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Requested</div>{{ o.requested_date or '—' }}{% if o.requested_time %} · {{ o.requested_time }}{% endif %}</div>
+            <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Payment</div>{{ o.payment_label }}</div>
+            {% if o.fulfillment_date %}<div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Set Date</div><strong>{{ o.fulfillment_date }}</strong></div>{% endif %}
           </div>
 
-          <div class="detail-label" style="margin-bottom:6px;">Line Items</div>
-          <div class="items-grid">
-            <div class="hdr">Product</div><div class="hdr" style="text-align:right;">Cases</div><div class="hdr" style="text-align:right;">Units</div>
-            {% for item in o.items %}
-            <div>{{ item.name }} <span style="font-size:10px;color:var(--text-light);">({{ item.format }})</span></div>
-            <div style="text-align:right;">{{ item.cases }}</div>
-            <div style="text-align:right;">{{ item.units }}</div>
-            {% endfor %}
-          </div>
-
-          <div style="border-top:1px solid var(--border); margin-top:10px; padding-top:10px; display:flex; justify-content:flex-end; gap:16px; font-size:13px;">
+          <div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Items</div>
+          <ul class="items-list">
+          {% for item in o.items %}
+            <li><span>{{ item.name }} <span style="color:var(--text-light);">({{ item.format }})</span></span><span>{{ item.cases }} cases · {{ item.units }} units · ${{ "%.2f"|format(item.line_total) }}</span></li>
+          {% endfor %}
+          </ul>
+          <div style="display:flex;justify-content:flex-end;gap:16px;font-size:12px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
             <span>Subtotal: <strong>${{ "%.2f"|format(o.subtotal) }}</strong></span>
-            {% if o.surcharge %}<span>Surcharge ({{ o.surcharge_pct }}%): <strong>${{ "%.2f"|format(o.surcharge) }}</strong></span>{% endif %}
+            {% if o.surcharge %}<span>Surcharge: <strong>${{ "%.2f"|format(o.surcharge) }}</strong></span>{% endif %}
             <span>Total: <strong>${{ "%.2f"|format(o.total) }}</strong></span>
           </div>
 
+          {% if o.notes %}<div style="font-size:12px;margin-top:10px;color:var(--text-light);">Note: {{ o.notes }}</div>{% endif %}
+
           <div class="action-row">
             {% if o.status == 'pending' %}
-            <button class="btn-approve" onclick="doAction('{{ o.id }}','approve',event)">✓ Approve</button>
-            <button class="btn-decline" onclick="doAction('{{ o.id }}','decline',event)">✗ Decline</button>
+            <button class="btn-approve" onclick="openApproveModal('{{ o.id }}','{{ o.payment_key }}',event)">✓ Approve &amp; Set Date</button>
+            <button class="btn-decline" onclick="doDecline('{{ o.id }}',event)">✗ Decline</button>
             {% endif %}
             {% if o.status == 'approved' %}
-            <button class="btn-afp" onclick="doAction('{{ o.id }}','approve-for-production',event)">🏭 Approve for Production</button>
-            <button class="btn-decline" onclick="doAction('{{ o.id }}','decline',event)">✗ Decline</button>
-            {% endif %}
-            {% if o.status in ['approved','approved-for-production'] %}
-            <button class="btn-fulfill" onclick="doAction('{{ o.id }}','fulfill',event)">📦 Mark Fulfilled</button>
+            <button class="btn-fulfill" onclick="doFulfill('{{ o.id }}',event)">📦 Mark Fulfilled</button>
             {% endif %}
           </div>
-
-          {% if o.status == 'approved-for-production' %}
-          <div style="font-size:11px; color:var(--text-light); margin-top:6px;">FG inventory deducted on approve-for-production.</div>
-          {% endif %}
-          {% if o.status == 'declined' and o.decline_reason %}
-          <div style="font-size:12px; color:#c62828; margin-top:8px;">Decline reason: {{ o.decline_reason }}</div>
+          {% if o.status == 'approved' and o.payment_key == 'cc_net14' %}
+          <div style="font-size:11px;color:#3949ab;margin-top:8px;">⏳ Net 14 invoice sent. Inventory deducts on {{ o.fulfillment_date or 'delivery date' }}. Sale pending Stripe payment.</div>
+          {% elif o.status == 'approved' and o.payment_key == 'etransfer' %}
+          <div style="font-size:11px;color:#2e7d32;margin-top:8px;">✓ E-transfer confirmed. Inventory deducts on {{ o.fulfillment_date or 'delivery date' }}.</div>
           {% endif %}
         </div>
       </td>
@@ -174,30 +166,52 @@
   </table>
   </div>
   {% elif configured and not error %}
-  <div class="card" style="text-align:center; color:var(--text-light); padding:40px;">No orders yet.</div>
+  <div class="card" style="text-align:center;color:var(--text-light);padding:40px;">No orders yet.</div>
   {% endif %}
 
 </div>
+
+<!-- Approve Modal -->
+<div class="modal-backdrop" id="approve-modal">
+  <div class="modal-card">
+    <h3>✓ Approve Order</h3>
+    <p id="approve-modal-sub">Confirm payment and set a delivery or pickup date. Inventory will be reserved on this date.</p>
+    <div class="modal-field">
+      <label>Delivery / Pickup Date</label>
+      <input type="date" id="approve-date">
+    </div>
+    <div id="approve-error" style="font-size:12px;color:#c62828;margin-top:-8px;margin-bottom:8px;display:none;"></div>
+    <div class="success-banner" id="approve-success">
+      ✓ Order approved. Sale record created — inventory deducts on the set date.
+    </div>
+    <div class="modal-actions" id="approve-modal-actions">
+      <button class="modal-cancel" onclick="closeApproveModal()">Cancel</button>
+      <button class="modal-confirm" id="approve-confirm-btn" onclick="submitApprove()">Confirm Approval</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 <script>
 var _filter = 'all';
+var _approveOrderId = null;
+var _approvePaymentKey = null;
 
 function setFilter(f, btn) {
   _filter = f;
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   document.querySelectorAll('.order-row').forEach(row => {
-    var st = row.dataset.status;
-    row.style.display = (f === 'all' || st === f) ? '' : 'none';
+    var show = f === 'all' || row.dataset.status === f;
+    row.style.display = show ? '' : 'none';
     var det = document.getElementById('detail-' + row.dataset.id);
-    if (det) det.style.display = (f === 'all' || st === f) ? '' : 'none';
+    if (det) det.style.display = show ? '' : 'none';
   });
 }
 
 function toggleDetail(id) {
   var det = document.getElementById('detail-' + id);
-  if (!det) return;
-  det.classList.toggle('open');
+  if (det) det.classList.toggle('open');
 }
 
 function showToast(msg, ok) {
@@ -205,40 +219,94 @@ function showToast(msg, ok) {
   t.textContent = msg;
   t.style.background = ok ? '#2e7d32' : '#c62828';
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 3000);
+  setTimeout(() => t.classList.remove('show'), 3500);
 }
 
-async function doAction(orderId, action, e) {
+function openApproveModal(orderId, paymentKey, e) {
   e.stopPropagation();
-  var reason = '';
-  if (action === 'decline') {
-    reason = prompt('Decline reason (optional):') || '';
-    if (reason === null) return; // cancelled
+  _approveOrderId = orderId;
+  _approvePaymentKey = paymentKey;
+  var sub = document.getElementById('approve-modal-sub');
+  if (paymentKey === 'cc_net14') {
+    sub.textContent = 'A Stripe Net 14 invoice will be sent to Ripe. Set the delivery or pickup date — inventory deducts on that date.';
+  } else {
+    sub.textContent = 'E-transfer confirmed. Set the delivery or pickup date — inventory will be reserved for that date.';
   }
-  if (action === 'approve-for-production') {
-    if (!confirm('Approve for production?\n\nThis will deduct FG inventory from Soma\'s finished goods (FIFO).')) return;
-  }
-  var body = { action };
-  if (reason) body.reason = reason;
+  // Default to tomorrow
+  var d = new Date(); d.setDate(d.getDate() + 1);
+  document.getElementById('approve-date').value = d.toISOString().split('T')[0];
+  document.getElementById('approve-error').style.display = 'none';
+  document.getElementById('approve-success').style.display = 'none';
+  document.getElementById('approve-modal-actions').style.display = 'flex';
+  document.getElementById('approve-confirm-btn').disabled = false;
+  document.getElementById('approve-modal').classList.add('open');
+}
+
+function closeApproveModal() {
+  document.getElementById('approve-modal').classList.remove('open');
+}
+
+async function submitApprove() {
+  var date = document.getElementById('approve-date').value;
+  var errEl = document.getElementById('approve-error');
+  if (!date) { errEl.textContent = 'Please select a date.'; errEl.style.display = 'block'; return; }
+  errEl.style.display = 'none';
+  var btn = document.getElementById('approve-confirm-btn');
+  btn.disabled = true; btn.textContent = 'Approving…';
   try {
-    var resp = await fetch('/api/ripe-orders/' + orderId, {
+    var resp = await fetch('/api/ripe-orders/' + _approveOrderId, {
       method: 'PATCH',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(body)
+      body: JSON.stringify({action: 'approve', delivery_date: date})
     });
     var data = await resp.json();
     if (resp.ok) {
-      showToast('Order updated', true);
-      setTimeout(() => location.reload(), 800);
+      document.getElementById('approve-modal-actions').style.display = 'none';
+      var banner = document.getElementById('approve-success');
+      if (data.payment_pending) {
+        banner.textContent = '✓ Order approved. Stripe invoice sent. Inventory deducts on ' + date + '. Sale pending payment.';
+      } else {
+        banner.textContent = '✓ Order approved. Inventory deducts on ' + date + '.';
+      }
+      banner.style.display = 'block';
+      setTimeout(() => { closeApproveModal(); location.reload(); }, 2200);
     } else {
-      var msg = data.error || 'Failed';
-      if (data.details) msg += ': ' + data.details.join('; ');
-      showToast(msg, false);
+      errEl.textContent = data.error || data.warning || 'Failed to approve order.';
+      errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Confirm Approval';
     }
-  } catch (err) {
-    showToast('Network error', false);
+  } catch(err) {
+    errEl.textContent = 'Network error — please try again.';
+    errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Confirm Approval';
   }
 }
+
+async function doDecline(orderId, e) {
+  e.stopPropagation();
+  var reason = prompt('Decline reason (optional):');
+  if (reason === null) return;
+  var body = {action: 'decline'};
+  if (reason.trim()) body.reason = reason.trim();
+  var resp = await fetch('/api/ripe-orders/' + orderId, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  var data = await resp.json();
+  if (resp.ok) { showToast('Order declined', true); setTimeout(() => location.reload(), 800); }
+  else showToast(data.error || 'Failed', false);
+}
+
+async function doFulfill(orderId, e) {
+  e.stopPropagation();
+  if (!confirm('Mark this order as fulfilled?')) return;
+  var resp = await fetch('/api/ripe-orders/' + orderId, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'fulfill'})});
+  var data = await resp.json();
+  if (resp.ok) { showToast('Order fulfilled', true); setTimeout(() => location.reload(), 800); }
+  else showToast(data.error || 'Failed', false);
+}
+
+// Close modal on backdrop click
+document.getElementById('approve-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeApproveModal();
+});
 </script>
 </body>
 </html>
