@@ -638,13 +638,91 @@ body.inv-page .modal-actions {
     .inv-grid-unit-col { display: none; }
     #add-inv-ingredient-grid > div { grid-template-columns: 1fr 130px 90px 0px !important; }
     #add-inv-ingredient-grid > div > div:last-child { display: none; }
+
+    /* ── New FG / Buyers / Record Sale mobile rules ── */
+
+    /* Record Sale SKU grid — drop stock col, keep product + qty */
+    #sale-sku-grid > div {
+        grid-template-columns: 1fr 60px !important;
+    }
+    #sale-sku-grid > div > div:nth-child(2) { display: none; }
+
+    /* FG Adjust grid — drop stock col, keep SKU + adjust */
+    #fg-adj-grid > div {
+        grid-template-columns: 1fr 80px !important;
+    }
+    #fg-adj-grid > div > div:nth-child(2) { display: none; }
+
+    /* Buyer SKU list — bigger tap targets */
+    #buyer-sku-list label {
+        padding: 12px 10px !important;
+        min-height: 48px;
+    }
+
+    /* Sale doc export buttons — stack on mobile */
+    #sale-doc-buttons > div:last-child {
+        flex-direction: column;
+        gap: 8px;
+    }
+    #sale-doc-buttons > div:last-child button {
+        width: 100%;
+    }
+
+    /* Tab bar — 6 tabs, shrink further on mobile */
+    .tab-btn { padding: 10px 10px; font-size: 11px; white-space: nowrap; }
+
+    /* FG action button row — stack on very narrow */
+    #tab-fg .card > div:first-child {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    #tab-fg .card > div:first-child .btn,
+    #tab-fg .card > div:first-child .btn-outline {
+        width: 100%;
+        text-align: center;
+        justify-content: center;
+    }
+
+    /* Buyers list — action buttons don't overflow */
+    #buyers-list-container > div {
+        flex-direction: column;
+        gap: 10px;
+    }
+    #buyers-list-container > div > div:last-child {
+        display: flex;
+        gap: 8px;
+    }
+    #buyers-list-container > div > div:last-child button {
+        flex: 1;
+    }
+
+    /* Sale step 2 buyer/date header — stack on mobile */
+    #sale-step2 > div:first-child {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+
+    /* Hide matching header cols when grid cols are hidden */
+    #sale-sku-grid-header { grid-template-columns: 1fr 60px !important; }
+    #sale-sku-grid-header > div:nth-child(2) { display: none; }
+    #fg-adj-grid-header { grid-template-columns: 1fr 80px !important; }
+    #fg-adj-grid-header > div:nth-child(2) { display: none; }
 }
 
 /* Extra small phones (< 390px) */
 @media (max-width: 390px) {
-    .tab-btn { padding: 9px 10px; font-size: 11px; }
+    .tab-btn { padding: 8px 8px; font-size: 10px; min-height: 38px; }
     body.inv-page .card { padding: 12px; }
     body.inv-page .card h2 { font-size: 14px; }
+    /* Hide label text on smallest tabs, keep tappable */
+    .tab-btn:not(.active) { color: transparent; position: relative; min-width: 28px; }
+    .tab-btn:not(.active)::after { 
+        content: '●'; color: var(--text-light); 
+        position: absolute; left: 50%; transform: translateX(-50%);
+        font-size: 8px; top: 50%; margin-top: -4px;
+    }
+    .tab-btn.active { color: #fff; }
 }
 </style>
 </head>
@@ -661,6 +739,7 @@ body.inv-page .modal-actions {
         <button class="tab-btn" onclick="showTab('fg')">Finished Goods</button>
         <button class="tab-btn" onclick="showTab('records')">Records</button>
         <button class="tab-btn" onclick="showTab('suppliers')">Suppliers</button>
+        <button class="tab-btn" onclick="showTab('buyers')">Buyers</button>
     </div>
 
     <!-- TAB 1: Raw Materials -->
@@ -693,48 +772,127 @@ body.inv-page .modal-actions {
 
     <!-- TAB 3: Finished Goods -->
     <div class="tab-content" id="tab-fg">
-        <div class="card">
-            <h2>Finished Goods Inventory <span class="count-badge" id="fg-count">—</span></h2>
-            <p>One row per SKU (brand + recipe + format). Click a row for LOT-level detail. Sales draw from the oldest LOT first (FIFO).</p>
-            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px;">
-                <div class="filter-bar" style="margin:0;">
-                    <button class="filter-btn active" data-fg-filter="all" onclick="setFgFilter('all',this)">All</button>
-                    <button class="filter-btn" data-fg-filter="Organic" onclick="setFgFilter('Organic',this)">Organic</button>
-                    <button class="filter-btn" data-fg-filter="Pasture Raised" onclick="setFgFilter('Pasture Raised',this)">Pasture Raised</button>
-                    <button class="filter-btn" data-fg-filter="Conventional" onclick="setFgFilter('Conventional',this)">Conventional</button>
-                </div>
-                <div style="display:flex;flex-wrap:wrap;gap:10px;">
-                    <button class="btn btn-primary" onclick="openScanSale()" style="background:#0288d1;border-color:#0288d1;">📷 Scan Packing Slip</button>
-                    <button class="btn-baseline" onclick="openBaselineBulkGrid()">Baseline Inventory</button>
-                    <button class="btn-outline" onclick="openBaselineSingle()" title="Add a single SKU to baseline (use after bulk pass for missed items)" style="font-size:13px;padding:10px 14px;">+ Single SKU</button>
-                </div>
+        <div class="card" style="padding-bottom:18px;">
+            <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;">
+                <button class="btn btn-primary" onclick="openRecordSaleModal()" style="background:#0288d1;border-color:#0288d1;">&#128176; Record Sale</button>
+                <button class="btn-outline" onclick="openFgAdjustModal()" style="font-size:13px;">&#9881; Adjust Inventory</button>
+                <button class="btn-outline" onclick="openBaselineSingle()" style="font-size:13px;">+ Add SKU</button>
+            </div>
+            <p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Inventory is grouped by brand. Click a row for LOT detail. Sales draw from the oldest LOT first (FIFO) and auto-generate a packing slip.</p>
+            <div class="filter-bar" style="margin-bottom:14px;">
+                <button class="filter-btn active" data-fg-filter="all" onclick="setFgFilter('all',this)">All</button>
+                <button class="filter-btn" data-fg-filter="Organic" onclick="setFgFilter('Organic',this)">Organic</button>
+                <button class="filter-btn" data-fg-filter="Pasture Raised" onclick="setFgFilter('Pasture Raised',this)">Pasture Raised</button>
+                <button class="filter-btn" data-fg-filter="Conventional" onclick="setFgFilter('Conventional',this)">Conventional</button>
             </div>
             <div id="fg-container"><div class="empty-state">Loading...</div></div>
         </div>
     </div>
 
-    <!-- Sale modal (opens from per-SKU "Sell" button) -->
-    <div class="modal-overlay" id="sale-modal">
-        <div class="modal">
-            <button class="modal-close" onclick="closeSellForm()">&times;</button>
-            <h2>Record Sale</h2>
-            <input type="hidden" id="sale-sku-key">
-            <div id="sale-sku-display" style="background:#fafaf5;padding:10px;border-radius:4px;margin-bottom:14px;font-size:13px;"></div>
-            <div class="form-row">
-                <div class="form-field"><label>Quantity (units)</label><input type="number" id="sale-qty-modal" inputmode="numeric" placeholder="0" min="1"></div>
-                <div class="form-field"><label>Sale Date</label><input type="date" id="sale-date-modal"></div>
+    <!-- Record Sale Modal — 2-step: buyer → SKU grid -->
+    <div class="modal-overlay" id="record-sale-modal">
+        <div class="modal" style="max-width:700px;">
+            <button class="modal-close" onclick="closeRecordSaleModal()">&times;</button>
+            <h2 style="color:#0288d1;">&#128176; Record Sale</h2>
+
+            <!-- Step 1: Date + Buyer -->
+            <div id="sale-step1">
+                <p style="font-size:13px;color:var(--text-light);margin-bottom:16px;">Select the sale date and buyer. Their product list will load automatically.</p>
+                <div class="form-row">
+                    <div class="form-field">
+                        <label>Sale Date</label>
+                        <input type="date" id="sale-date-modal">
+                    </div>
+                    <div class="form-field">
+                        <label>Buyer</label>
+                        <select id="sale-buyer-select" onchange="onSaleBuyerChange()">
+                            <option value="">— Select buyer —</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-field" style="margin-bottom:14px;">
+                    <label>PO / Case LOT# (optional)</label>
+                    <input type="text" id="sale-po-modal" placeholder="PO number or case LOT">
+                </div>
+                <div id="sale-step1-msg" class="status"></div>
+                <div class="modal-actions">
+                    <button class="btn btn-outline" onclick="closeRecordSaleModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="goToSaleStep2()" style="background:#0288d1;border-color:#0288d1;">Next →</button>
+                </div>
             </div>
-            <div class="form-row">
-                <div class="form-field"><label>Buyer / Distributor</label><input id="sale-buyer-modal" list="buyer-list" placeholder="Company name"><datalist id="buyer-list"></datalist></div>
-                <div class="form-field"><label>Case LOT# (optional)</label><input id="sale-case-lot-modal" placeholder="Case lot number"></div>
-            </div>
-            <div id="sale-status-modal" class="status" style="margin:10px 0;"></div>
-            <div class="modal-actions">
-                <button class="btn btn-outline" onclick="closeSellForm()">Cancel</button>
-                <button class="btn btn-primary" onclick="submitSale()">Record Sale</button>
+
+            <!-- Step 2: SKU grid -->
+            <div id="sale-step2" style="display:none;">
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+                    <div style="font-size:13px;color:var(--text-light);">
+                        <strong id="sale-buyer-label"></strong> · <span id="sale-date-label"></span>
+                    </div>
+                    <button style="background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;text-decoration:underline;" onclick="goBackToSaleStep1()">← Change buyer</button>
+                </div>
+                <p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Enter quantity for each product sold. Leave blank to skip.</p>
+                <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px;">
+                    <div id="sale-sku-grid-header" style="display:grid;grid-template-columns:1fr 90px 60px;background:#f5f5f0;padding:8px 12px;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;gap:8px;">
+                        <div>Product</div><div>In Stock</div><div>Qty</div>
+                    </div>
+                    <div id="sale-sku-grid" style="max-height:45vh;overflow-y:auto;"></div>
+                </div>
+                <div id="sale-step2-msg" class="status" style="margin-bottom:10px;"></div>
+                <!-- After-save doc buttons (shown after successful save) -->
+                <div id="sale-doc-buttons" style="display:none;background:#e8f5e9;border-radius:8px;padding:14px;margin-bottom:14px;">
+                    <div style="font-size:13px;font-weight:600;color:#2e7d32;margin-bottom:10px;">&#10003; Sale recorded — export documents:</div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <button class="btn btn-primary" id="sale-packing-slip-btn" onclick="openPackingSlip()" style="background:#0288d1;border-color:#0288d1;">&#128196; Packing Slip PDF</button>
+                        <button class="btn-outline" id="sale-qbo-btn" onclick="downloadQBO()">&#128190; QBO Invoice CSV</button>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-outline" id="sale-close-btn" onclick="closeRecordSaleModal()">Close</button>
+                    <button class="btn btn-primary" id="sale-submit-btn" onclick="submitRecordSale()" style="background:#0288d1;border-color:#0288d1;">Save Sale</button>
+                </div>
             </div>
         </div>
     </div>
+
+    <!-- FG Adjustment Modal -->
+    <div class="modal-overlay" id="fg-adjust-modal">
+        <div class="modal" style="max-width:640px;">
+            <button class="modal-close" onclick="closeFgAdjustModal()">&times;</button>
+            <h2>&#9881; Adjust FG Inventory</h2>
+            <p style="font-size:13px;color:var(--text-light);margin-bottom:16px;">Record corrections for spillage, theft, spoilage, or audit. Enter negative to reduce, positive to add.</p>
+            <div class="form-row" style="margin-bottom:14px;">
+                <div class="form-field">
+                    <label>Reason</label>
+                    <select id="fg-adj-reason">
+                        <option value="Spillage">Spillage</option>
+                        <option value="Spoilage">Spoilage</option>
+                        <option value="Theft">Theft</option>
+                        <option value="Sample">Sample</option>
+                        <option value="Donation">Donation</option>
+                        <option value="Audit correction">Audit correction</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label>Notes (optional)</label>
+                    <input type="text" id="fg-adj-notes" placeholder="Additional detail">
+                </div>
+            </div>
+            <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px;">
+                <div id="fg-adj-grid-header" style="display:grid;grid-template-columns:1fr 80px 80px;background:#f5f5f0;padding:8px 12px;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;gap:8px;">
+                    <div>SKU</div><div>Stock</div><div>Adjust</div>
+                </div>
+                <div id="fg-adj-grid" style="max-height:50vh;overflow-y:auto;"></div>
+            </div>
+            <div id="fg-adj-status" class="status" style="margin-bottom:10px;"></div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeFgAdjustModal()">Cancel</button>
+                <button class="btn btn-primary" id="fg-adj-submit-btn" onclick="submitFgAdjust()" style="background:#e65100;border-color:#e65100;">Save Adjustment</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keep legacy sale-modal ID for any existing JS that references it -->
+    <div class="modal-overlay" id="sale-modal" style="display:none!important;"></div>
 
     <!-- Manual Add modal -->
     <div class="modal-overlay" id="manual-add-modal">
@@ -1185,6 +1343,46 @@ body.inv-page .modal-actions {
         </div>
     </div>
 
+    <!-- TAB 6: Buyers -->
+    <div class="tab-content" id="tab-buyers">
+        <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+                <h2 style="border-bottom:none;padding-bottom:0;margin-bottom:0;">Buyers <span class="count-badge" id="buyer-count">—</span></h2>
+                <button class="btn btn-primary" onclick="openAddBuyerModal()" style="background:#0288d1;border-color:#0288d1;">+ Add Buyer</button>
+            </div>
+            <p style="font-size:13px;color:var(--text-light);margin-bottom:16px;">Assign products to each buyer. When you record a sale, selecting a buyer pre-fills their product list. Each buyer is pre-seeded with their brand's SKUs — add or remove as needed.</p>
+            <div id="buyers-list-container"><div class="empty-state">Loading...</div></div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Buyer Modal -->
+    <div class="modal-overlay" id="buyer-modal">
+        <div class="modal" style="max-width:680px;">
+            <button class="modal-close" onclick="closeBuyerModal()">&times;</button>
+            <h2 id="buyer-modal-title">Add Buyer</h2>
+
+            <div class="form-field" style="margin-bottom:16px;">
+                <label>Buyer Name</label>
+                <input type="text" id="buyer-name-input" placeholder="e.g. Ripe Nutrition" style="width:100%;box-sizing:border-box;">
+            </div>
+
+            <div>
+                <div style="font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Assigned Products</div>
+                <p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Check all SKUs this buyer can purchase.</p>
+                <div style="margin-bottom:8px;">
+                    <input type="text" id="buyer-sku-search" placeholder="Filter products…" oninput="renderBuyerSkuList()" style="width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+                </div>
+                <div id="buyer-sku-list" style="max-height:45vh;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px;background:#fff;"></div>
+            </div>
+
+            <div id="buyer-modal-msg" class="status" style="margin:10px 0;"></div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="closeBuyerModal()">Cancel</button>
+                <button class="btn btn-primary" id="buyer-save-btn" onclick="saveBuyer()" style="background:#0288d1;border-color:#0288d1;">Save Buyer</button>
+            </div>
+        </div>
+    </div>
+
     <!-- TAB 4: Records -->
     <div class="tab-content" id="tab-records">
 
@@ -1313,13 +1511,14 @@ function showTab(tab){
     document.querySelectorAll('.tab-btn').forEach(function(b,i){b.classList.remove('active');});
     document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active');});
     document.getElementById('tab-'+tab).classList.add('active');
-    var tabs=['raw','runs','fg','records','suppliers'];
+    var tabs=['raw','runs','fg','records','suppliers','buyers'];
     document.querySelectorAll('.tab-btn')[tabs.indexOf(tab)].classList.add('active');
     if(tab==='raw')loadRawMaterials();
     if(tab==='runs')loadRuns();
     if(tab==='fg')loadFinishedGoods();
     if(tab==='records'){loadSales();loadReceiving();}
     if(tab==='suppliers')loadSuppliers();
+    if(tab==='buyers')loadBuyers();
 }
 
 // ── Raw Materials ──
@@ -2432,6 +2631,412 @@ async function submitAddInventory(){
         msg.className='status error'; msg.textContent = e.message;
         btn.disabled=false; btn.textContent='Save Delivery';
     }
+}
+
+// ── Record Sale Modal ───────────────────────────────────────────────────
+var _rsLastSaleId = null;  // track last saved sale for doc export
+var _rsBuyers = [];
+var _rsFgGrouped = [];  // current FG inventory snapshot for stock display
+
+async function openRecordSaleModal(){
+    var today = new Date().toISOString().split('T')[0];
+    document.getElementById('sale-date-modal').value = today;
+    document.getElementById('sale-po-modal').value = '';
+    document.getElementById('sale-step1-msg').textContent = '';
+    document.getElementById('sale-step2-msg').textContent = '';
+    document.getElementById('sale-step1').style.display = '';
+    document.getElementById('sale-step2').style.display = 'none';
+    document.getElementById('sale-doc-buttons').style.display = 'none';
+    document.getElementById('sale-submit-btn').style.display = '';
+    document.getElementById('sale-close-btn').textContent = 'Cancel';
+    _rsLastSaleId = null;
+
+    try {
+        var [buyersRes, fgRes] = await Promise.all([
+            fetch('/api/buyers'),
+            fetch('/api/organic/finished-goods/grouped'),
+        ]);
+        _rsBuyers = await buyersRes.json();
+        _rsFgGrouped = await fgRes.json();
+    } catch(e) { _rsBuyers = []; _rsFgGrouped = []; }
+
+    var sel = document.getElementById('sale-buyer-select');
+    sel.innerHTML = '<option value="">— Select buyer —</option>';
+    _rsBuyers.forEach(function(b){
+        var o = document.createElement('option');
+        o.value = b.id; o.textContent = b.name;
+        sel.appendChild(o);
+    });
+
+    document.getElementById('record-sale-modal').classList.add('active');
+}
+
+function closeRecordSaleModal(){
+    document.getElementById('record-sale-modal').classList.remove('active');
+    if(_rsLastSaleId){ loadFinishedGoods(); loadSales(); }
+}
+
+function goBackToSaleStep1(){
+    document.getElementById('sale-step1').style.display = '';
+    document.getElementById('sale-step2').style.display = 'none';
+}
+
+function goToSaleStep2(){
+    var date = document.getElementById('sale-date-modal').value;
+    var buyerId = document.getElementById('sale-buyer-select').value;
+    var msg = document.getElementById('sale-step1-msg');
+    if(!date){ msg.className='status error'; msg.textContent='Please select a date.'; return; }
+    if(!buyerId){ msg.className='status error'; msg.textContent='Please select a buyer.'; return; }
+    var buyer = _rsBuyers.find(function(b){ return b.id === buyerId; });
+    if(!buyer || !buyer.skus || !buyer.skus.length){
+        msg.className='status error'; msg.textContent='This buyer has no products assigned. Go to the Buyers tab to assign them.';
+        return;
+    }
+    msg.textContent='';
+    document.getElementById('sale-buyer-label').textContent = buyer.name;
+    document.getElementById('sale-date-label').textContent = new Date(date+'T12:00:00').toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'});
+
+    // Build SKU grid
+    var grid = document.getElementById('sale-sku-grid');
+    // Build a quick lookup for stock from FG grouped
+    var stockMap = {};
+    _rsFgGrouped.forEach(function(row){ stockMap[row.sku_key] = row.total_remaining || 0; });
+
+    grid.innerHTML = '';
+    buyer.skus.forEach(function(sku, idx){
+        var stock = stockMap[sku.sku_key] || 0;
+        var bg = idx % 2 === 0 ? '#fff' : '#fafaf8';
+        var outOfStock = stock <= 0;
+        var row = document.createElement('div');
+        row.style.cssText = 'display:grid;grid-template-columns:1fr 90px 60px;gap:8px;padding:8px 12px;background:'+bg+';align-items:center;border-bottom:1px solid #f0f0eb;' + (outOfStock ? 'opacity:0.5;' : '');
+        row.innerHTML =
+            '<div style="font-size:13px;font-weight:500;">'+escHtml(sku.display || sku.recipe)+'</div>'
+            + '<div style="font-size:13px;color:'+(outOfStock?'#c62828':'var(--accent)')+';">'+(outOfStock?'Out':''+stock+' u')+'</div>'
+            + '<div><input type="number" data-rs-sku="'+escHtml(sku.sku_key)+'" min="0" step="1" inputmode="numeric" placeholder="0" '+(outOfStock?'disabled':'')+' style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;'+(outOfStock?'background:#f0f0f0;':'')+'"></div>';
+        grid.appendChild(row);
+    });
+
+    document.getElementById('sale-step1').style.display = 'none';
+    document.getElementById('sale-step2').style.display = '';
+}
+
+async function submitRecordSale(){
+    var date = document.getElementById('sale-date-modal').value;
+    var buyerId = document.getElementById('sale-buyer-select').value;
+    var po = document.getElementById('sale-po-modal').value.trim();
+    var buyer = _rsBuyers.find(function(b){ return b.id === buyerId; });
+    var msg = document.getElementById('sale-step2-msg');
+    var btn = document.getElementById('sale-submit-btn');
+    msg.textContent=''; msg.className='status';
+
+    var inputs = document.querySelectorAll('[data-rs-sku]');
+    var lines = [];
+    inputs.forEach(function(input){
+        var qty = parseInt(input.value);
+        if(!isNaN(qty) && qty > 0){
+            var skuKey = input.getAttribute('data-rs-sku');
+            var skuInfo = (buyer && buyer.skus || []).find(function(s){ return s.sku_key === skuKey; }) || {};
+            lines.push({ sku_key: skuKey, quantity: qty, skuInfo: skuInfo });
+        }
+    });
+
+    if(!lines.length){ msg.className='status error'; msg.textContent='Enter a quantity for at least one product.'; return; }
+
+    btn.disabled=true; btn.textContent='Saving…';
+
+    // Submit one sale record per SKU line
+    var savedIds = [];
+    var errors = [];
+    for(var i=0;i<lines.length;i++){
+        var line = lines[i];
+        try {
+            var res = await fetch('/api/organic/sales', {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({
+                    brand: line.skuInfo.brand || '',
+                    recipe: line.skuInfo.recipe || '',
+                    format: line.skuInfo.format || '',
+                    quantity: line.quantity,
+                    buyer: buyer ? buyer.name : '',
+                    sale_date: date,
+                    po_number: po,
+                }),
+            });
+            var data = await res.json();
+            if(data.success && data.id){
+                savedIds.push(data.id);
+            } else if(data.success && data.sale && data.sale.id){
+                savedIds.push(data.sale.id);
+            } else {
+                errors.push(line.skuInfo.display || line.sku_key);
+            }
+        } catch(e) { errors.push(line.skuInfo.display || line.sku_key); }
+    }
+
+    if(errors.length){
+        msg.className='status error';
+        msg.textContent='Some lines failed: '+errors.join(', ');
+        btn.disabled=false; btn.textContent='Save Sale';
+        return;
+    }
+
+    _rsLastSaleId = savedIds[0] || null;  // use first sale for doc export
+
+    // Show doc buttons, hide submit
+    document.getElementById('sale-doc-buttons').style.display = '';
+    document.getElementById('sale-submit-btn').style.display = 'none';
+    document.getElementById('sale-close-btn').textContent = 'Done';
+    msg.className='status success';
+    msg.textContent = 'Sale recorded — '+lines.length+' product'+(lines.length===1?'':'s')+' · '+lines.reduce(function(a,l){return a+l.quantity;},0)+' units total.';
+    btn.disabled=false;
+}
+
+function openPackingSlip(){
+    if(!_rsLastSaleId) return;
+    window.open('/api/organic/sales/'+_rsLastSaleId+'/packing-slip', '_blank');
+}
+
+function downloadQBO(){
+    if(!_rsLastSaleId) return;
+    window.location = '/api/organic/sales/'+_rsLastSaleId+'/qbo-csv';
+}
+
+// Legacy openSellForm — redirect to new modal (called from per-SKU sell buttons)
+function openSellForm(skuKey){
+    openRecordSaleModal();
+}
+function closeSellForm(){
+    closeRecordSaleModal();
+}
+
+// ── FG Adjust Modal ──────────────────────────────────────────────────────
+async function openFgAdjustModal(){
+    document.getElementById('fg-adj-notes').value='';
+    document.getElementById('fg-adj-status').textContent='';
+    document.getElementById('fg-adj-submit-btn').disabled=false;
+    document.getElementById('fg-adj-submit-btn').textContent='Save Adjustment';
+
+    var res = await fetch('/api/organic/finished-goods/grouped');
+    var skus = await res.json();
+    var grid = document.getElementById('fg-adj-grid');
+    if(!skus.length){
+        grid.innerHTML='<div style="padding:12px;color:var(--text-light);font-size:13px;">No SKUs found.</div>';
+    } else {
+        var h='';
+        skus.forEach(function(sku,idx){
+            var bg = idx%2===0?'#fff':'#fafaf8';
+            h+='<div style="display:grid;grid-template-columns:1fr 80px 80px;gap:8px;padding:8px 12px;background:'+bg+';align-items:center;border-bottom:1px solid #f0f0eb;">'
+             +'<div style="font-size:13px;">'+escHtml(sku.display||sku.recipe)+'<div style="font-size:11px;color:var(--text-light);">Stock: '+(sku.total_remaining||0)+'</div></div>'
+             +'<div style="font-size:13px;color:var(--accent);">'+(sku.total_remaining||0)+'</div>'
+             +'<div><input type="number" data-fg-adj-sku="'+escHtml(sku.sku_key)+'" data-fg-adj-brand="'+escHtml(sku.brand||'')+'" data-fg-adj-recipe="'+escHtml(sku.recipe||'')+'" data-fg-adj-format="'+escHtml(sku.format||'')+'" placeholder="±" step="1" inputmode="decimal" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;"></div>'
+             +'</div>';
+        });
+        grid.innerHTML=h;
+    }
+    document.getElementById('fg-adjust-modal').classList.add('active');
+}
+
+function closeFgAdjustModal(){
+    document.getElementById('fg-adjust-modal').classList.remove('active');
+}
+
+async function submitFgAdjust(){
+    var reason = document.getElementById('fg-adj-reason').value;
+    var notes = document.getElementById('fg-adj-notes').value.trim();
+    var msg = document.getElementById('fg-adj-status');
+    var btn = document.getElementById('fg-adj-submit-btn');
+    msg.textContent=''; msg.className='status';
+
+    var inputs = document.querySelectorAll('[data-fg-adj-sku]');
+    var lines = [];
+    inputs.forEach(function(inp){
+        var val = parseInt(inp.value);
+        if(!isNaN(val) && val !== 0){
+            lines.push({
+                sku_key: inp.getAttribute('data-fg-adj-sku'),
+                brand: inp.getAttribute('data-fg-adj-brand'),
+                recipe: inp.getAttribute('data-fg-adj-recipe'),
+                format: inp.getAttribute('data-fg-adj-format'),
+                quantity: Math.abs(val),
+                direction: val < 0 ? 'subtract' : 'add',
+                reason: reason + (notes ? ': '+notes : ''),
+            });
+        }
+    });
+
+    if(!lines.length){ msg.className='status error'; msg.textContent='Enter at least one adjustment.'; return; }
+    btn.disabled=true; btn.textContent='Saving…';
+
+    var errors=[];
+    for(var i=0;i<lines.length;i++){
+        var l=lines[i];
+        var endpoint = l.direction==='subtract'
+            ? '/api/organic/finished-goods/manual-subtract'
+            : '/api/organic/finished-goods/manual-add';
+        try{
+            var res=await fetch(endpoint,{
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({sku_key:l.sku_key,brand:l.brand,recipe:l.recipe,format:l.format,quantity:l.quantity,reason:l.reason}),
+            });
+            var data=await res.json();
+            if(!data.success) errors.push(l.recipe);
+        }catch(e){ errors.push(l.recipe); }
+    }
+
+    if(errors.length){
+        msg.className='status error'; msg.textContent='Failed: '+errors.join(', ');
+        btn.disabled=false; btn.textContent='Save Adjustment'; return;
+    }
+    closeFgAdjustModal();
+    loadFinishedGoods();
+}
+
+// ── Buyers Tab ───────────────────────────────────────────────────────────
+var _buyerModalMode = 'add';
+var _buyerEditId = null;
+var _buyerAllSkus = [];   // [{brand,recipe,format,sku_key,display}]
+var _buyerChecked = {};   // {sku_key: bool}
+var _buyerSkuGroups = []; // [{brand, skus:[]}]
+
+async function loadBuyers(){
+    var container = document.getElementById('buyers-list-container');
+    var countEl = document.getElementById('buyer-count');
+    try {
+        var res = await fetch('/api/buyers');
+        var buyers = await res.json();
+        if(countEl) countEl.textContent = buyers.length;
+        if(!buyers.length){
+            container.innerHTML='<div class="empty-state">No buyers yet. Click <strong>+ Add Buyer</strong> to get started.<br><br>Tip: Add a buyer with the same name as a brand to auto-assign all their SKUs.</div>';
+            return;
+        }
+        var h='';
+        buyers.forEach(function(b){
+            var skuCount=(b.skus||[]).length;
+            var preview=(b.skus||[]).slice(0,3).map(function(s){return escHtml(s.display||s.recipe);}).join(', ');
+            if(skuCount>3) preview+=' +' + (skuCount-3)+' more';
+            h+='<div style="border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px;background:#fff;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">'
+             +'<div style="flex:1;min-width:0;">'
+             +'<div style="font-size:15px;font-weight:600;margin-bottom:4px;">'+escHtml(b.name)+'</div>'
+             +'<div style="font-size:12px;color:var(--text-light);">'+skuCount+' product'+(skuCount===1?'':'s')+(preview?' · '+preview:'')+'</div>'
+             +'</div>'
+             +'<div style="display:flex;gap:8px;flex-shrink:0;">'
+             +'<button class="btn-outline" style="font-size:12px;padding:7px 12px;" data-edit-bid="'+escHtml(b.id)+'">Edit</button>'
+             +'<button class="btn-outline" style="font-size:12px;padding:7px 12px;color:#c62828;border-color:#c62828;" data-del-bid="'+escHtml(b.id)+'" data-del-bname="'+escHtml(b.name)+'">Delete</button>'
+             +'</div></div>';
+        });
+        container.innerHTML=h;
+        container.querySelectorAll('[data-edit-bid]').forEach(function(btn){
+            btn.addEventListener('click',function(){ openEditBuyerModal(this.getAttribute('data-edit-bid')); });
+        });
+        container.querySelectorAll('[data-del-bid]').forEach(function(btn){
+            btn.addEventListener('click',function(){ deleteBuyer(this.getAttribute('data-del-bid'),this.getAttribute('data-del-bname')); });
+        });
+    } catch(e){
+        container.innerHTML='<div class="empty-state">Error loading buyers.</div>';
+    }
+}
+
+async function _fetchSkuCatalog(){
+    try{
+        var res = await fetch('/api/buyers/sku-catalog');
+        _buyerSkuGroups = await res.json();
+        _buyerAllSkus = [];
+        _buyerSkuGroups.forEach(function(g){ g.skus.forEach(function(s){ _buyerAllSkus.push(s); }); });
+    } catch(e){ _buyerSkuGroups=[]; _buyerAllSkus=[]; }
+}
+
+async function openAddBuyerModal(){
+    _buyerModalMode='add'; _buyerEditId=null;
+    document.getElementById('buyer-modal-title').textContent='Add Buyer';
+    document.getElementById('buyer-name-input').value='';
+    document.getElementById('buyer-sku-search').value='';
+    document.getElementById('buyer-modal-msg').textContent='';
+    document.getElementById('buyer-save-btn').disabled=false;
+    document.getElementById('buyer-save-btn').textContent='Save Buyer';
+    await _fetchSkuCatalog();
+    _buyerChecked={};
+    renderBuyerSkuList();
+    document.getElementById('buyer-modal').classList.add('active');
+    setTimeout(function(){ document.getElementById('buyer-name-input').focus(); },100);
+}
+
+async function openEditBuyerModal(bid){
+    _buyerModalMode='edit'; _buyerEditId=bid;
+    var res=await fetch('/api/buyers');
+    var buyers=await res.json();
+    var b=buyers.find(function(x){ return x.id===bid; });
+    if(!b) return;
+    document.getElementById('buyer-modal-title').textContent='Edit Buyer';
+    document.getElementById('buyer-name-input').value=b.name;
+    document.getElementById('buyer-sku-search').value='';
+    document.getElementById('buyer-modal-msg').textContent='';
+    document.getElementById('buyer-save-btn').disabled=false;
+    document.getElementById('buyer-save-btn').textContent='Save Changes';
+    await _fetchSkuCatalog();
+    _buyerChecked={};
+    (b.skus||[]).forEach(function(s){ _buyerChecked[s.sku_key]=true; });
+    renderBuyerSkuList();
+    document.getElementById('buyer-modal').classList.add('active');
+}
+
+function renderBuyerSkuList(){
+    var search=(document.getElementById('buyer-sku-search').value||'').toLowerCase();
+    var list=document.getElementById('buyer-sku-list');
+    var html='';
+    _buyerSkuGroups.forEach(function(group){
+        var filtered=group.skus.filter(function(s){
+            return !search||(s.display||s.recipe).toLowerCase().includes(search);
+        });
+        if(!filtered.length) return;
+        html+='<div style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:0.5px;padding:8px 10px 4px;background:#fafaf8;">'+escHtml(group.brand)+'</div>';
+        filtered.forEach(function(sku,idx){
+            var checked=_buyerChecked[sku.sku_key]?'checked':'';
+            var bg=idx%2===0?'#fff':'#fafaf8';
+            html+='<label style="display:flex;align-items:center;gap:10px;padding:10px 10px;background:'+bg+';cursor:pointer;">'
+               +'<input type="checkbox" '+checked+' data-bsku="'+escHtml(sku.sku_key)+'" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;">'
+               +'<span style="font-size:13px;flex:1;">'+escHtml(sku.display||sku.recipe)+'</span>'
+               +'</label>';
+        });
+    });
+    if(!html) html='<div style="padding:12px;color:var(--text-light);font-size:13px;">No products match.</div>';
+    list.innerHTML=html;
+    list.querySelectorAll('[data-bsku]').forEach(function(cb){
+        cb.addEventListener('change',function(){ _buyerChecked[this.getAttribute('data-bsku')]=this.checked; });
+    });
+}
+
+async function saveBuyer(){
+    var name=(document.getElementById('buyer-name-input').value||'').trim();
+    var msg=document.getElementById('buyer-modal-msg');
+    var btn=document.getElementById('buyer-save-btn');
+    msg.textContent=''; msg.className='status';
+    if(!name){ msg.className='status error'; msg.textContent='Name required.'; return; }
+    var skus=_buyerAllSkus.filter(function(s){ return _buyerChecked[s.sku_key]; });
+    btn.disabled=true; btn.textContent='Saving…';
+    try{
+        var url=_buyerModalMode==='edit'?'/api/buyers/'+_buyerEditId:'/api/buyers';
+        var method=_buyerModalMode==='edit'?'PUT':'POST';
+        var res=await fetch(url,{method:method,headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,skus:skus})});
+        var data=await res.json();
+        if(!res.ok) throw new Error(data.error||'Save failed');
+        closeBuyerModal();
+        loadBuyers();
+    }catch(e){
+        msg.className='status error'; msg.textContent=e.message;
+        btn.disabled=false; btn.textContent=(_buyerModalMode==='edit'?'Save Changes':'Save Buyer');
+    }
+}
+
+function closeBuyerModal(){
+    document.getElementById('buyer-modal').classList.remove('active');
+}
+
+async function deleteBuyer(bid,name){
+    var ok=await mobileConfirm('Delete buyer "'+name+'"? This will not affect existing sales records.',{title:'Delete buyer',okLabel:'Delete',danger:true});
+    if(!ok) return;
+    await fetch('/api/buyers/'+bid,{method:'DELETE'});
+    loadBuyers();
 }
 
 // ── Suppliers Tab ────────────────────────────────────────────────────────
@@ -3810,16 +4415,18 @@ async function loadSales(){
     var grouped = _timelineGroup(data, 'sale_date');
 
     function renderSalesTable(rows){
-        var h='<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Product</th><th>Buyer</th><th>LOT#(s)</th><th>Qty</th><th></th></tr>';
+        var h='<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Product</th><th>Buyer</th><th>LOT#(s)</th><th>Qty</th><th>PO#</th><th></th></tr>';
         rows.forEach(function(s){
-            var lots=(s.lots&&s.lots.length)?s.lots.map(function(l){return l.lot;}).join(', '):(s.fg_lot||'');
-            var product=(s.brand?s.brand+'-':'')+s.recipe;
+            var lots=(s.lots&&s.lots.length)?s.lots.map(function(l){return l.lot;}).filter(Boolean).join(', '):(s.fg_lot||'');
+            var product = (s.brand ? s.brand+' ' : '') + (s.recipe||'') + (s.format ? ' '+s.format : '');
+            var po = s.po_number || s.case_lot || '';
             h+='<tr>'
               +'<td>'+(s.sale_date||'')+'</td>'
-              +'<td>'+escSku(product)+'</td>'
+              +'<td>'+escSku(product.trim())+'</td>'
               +'<td>'+escSku(s.buyer||'')+'</td>'
               +'<td>'+escSku(lots)+'</td>'
               +'<td>'+s.quantity+'</td>'
+              +(po?'<td>'+escSku(po)+'</td>':'<td>—</td>')
               +'<td><button class="btn-danger" data-del-sale="'+escHtml(s.id)+'">Del</button></td>'
               +'</tr>';
         });
@@ -3932,8 +4539,9 @@ async function doTrace(){
         html += '<div><div style="font-size:12px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Sales Matches</div>';
         html += '<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Product</th><th>Buyer</th><th>LOT#</th><th>Qty</th></tr>';
         matchedSales.slice(0,20).forEach(function(s){
-            var lots=(s.lots||[]).map(function(l){return l.lot;}).join(', ')||s.fg_lot||'';
-            html += '<tr><td>'+(s.sale_date||'')+'</td><td>'+escHtml((s.brand?s.brand+'-':'')+s.recipe)+'</td><td>'+escHtml(s.buyer||'')+'</td><td>'+escHtml(lots)+'</td><td>'+(s.quantity||'')+'</td></tr>';
+            var lots=(s.lots||[]).map(function(l){return l.lot;}).filter(Boolean).join(', ')||s.fg_lot||'';
+            var prod=(s.brand?s.brand+' ':'')+s.recipe+(s.format?' '+s.format:'');
+            html += '<tr><td>'+(s.sale_date||'')+'</td><td>'+escHtml(prod.trim())+'</td><td>'+escHtml(s.buyer||'')+'</td><td>'+escHtml(lots)+'</td><td>'+(s.quantity||'')+'</td></tr>';
         });
         html += '</table></div></div>';
     }

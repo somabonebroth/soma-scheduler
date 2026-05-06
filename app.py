@@ -3421,11 +3421,21 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
         # Compute already-sold quantity for this FG so quantity_remaining is correct on edit
         already_sold = 0
         for s in sales:
+            # Legacy path: single fg_id on sale record
             if s.get("fg_id") == fg_id:
                 try:
                     already_sold += int(s.get("quantity", 0))
                 except (ValueError, TypeError):
                     pass
+                continue
+            # New path: per-lot breakdown in lots[] array
+            for lot_entry in (s.get("lots") or []):
+                for b in (lot_entry.get("breakdown") or []):
+                    if b.get("fg_id") == fg_id:
+                        try:
+                            already_sold += int(b.get("quantity", 0))
+                        except (ValueError, TypeError):
+                            pass
 
         # Detect manual lot-adjust collision: if an existing FG entry shows a
         # remaining quantity inconsistent with (produced - sold), the user has
@@ -4323,8 +4333,15 @@ def add_organic_sale():
     sku_key = (data.get("sku_key") or "").strip()
     fg_id = (data.get("fg_id") or "").strip()
 
+    # Auto-derive sku_key from brand/recipe/format if not supplied directly
     if not sku_key and not fg_id:
-        return jsonify({"error": "Either sku_key or fg_id required"}), 400
+        brand_f = (data.get("brand") or "").strip()
+        recipe_f = (data.get("recipe") or "").strip()
+        format_f = (data.get("format") or "").strip()
+        if recipe_f:
+            sku_key = _sku_key(brand_f, recipe_f, format_f)
+        else:
+            return jsonify({"error": "Either sku_key, fg_id, or recipe required"}), 400
 
     sale_lots = []   # records what was deducted
     brand = recipe = fmt = ""
@@ -4432,6 +4449,7 @@ def add_organic_sale():
         "buyer": data.get("buyer", ""),
         "sale_date": data.get("sale_date", ""),
         "case_lot": data.get("case_lot", ""),
+        "po_number": data.get("po_number", ""),
         "created_at": datetime.now().isoformat(),
     }
     sales.append(sale)
@@ -4440,7 +4458,7 @@ def add_organic_sale():
     buyer = data.get("buyer", "").strip()
     if buyer:
         _add_contact("buyer", buyer)
-    return jsonify({"success": True, "sale": sale})
+    return jsonify({"success": True, "id": sale["id"], "sale": sale})
 
 
 @app.route("/api/organic/sales/<sale_id>", methods=["DELETE"])
@@ -4489,6 +4507,7 @@ def delete_organic_sale(sale_id):
     return jsonify({"success": True})
 
 
+
 def _migrate_legacy_sales():
     """Convert old-style sales (single fg_id) to new lots[] shape.
     Idempotent: only migrates entries that don't already have a 'lots' field."""
@@ -4521,11 +4540,217 @@ def _migrate_legacy_sales():
             pass
 
 
+
+# ── Buyer catalog ────────────────────────────────────────────────────────
+BUYERS_PATH = os.path.join(INVENTORY_DIR, "buyers.json")
+
+
+def _all_sku_catalog():
+    recipes = load_recipes()
+    catalog = []
+    seen = set()
+    for rname, rdata in recipes.items():
+        if rdata.get("archived"):
+            continue
+        brand = (rdata.get("brand") or "").strip()
+        fmt = (rdata.get("format") or "").strip()
+        key = _sku_key(brand, rname, fmt)
+        if key in seen:
+            continue
+        seen.add(key)
+        catalog.append({"brand": brand, "recipe": rname, "format": fmt,
+                         "sku_key": key, "display": _sku_display(brand, rname, fmt)})
+    catalog.sort(key=lambda s: (s["brand"].lower(), s["recipe"].lower()))
+    return catalog
+
+
+def _load_buyers():
+    return _load_json(BUYERS_PATH, [])
+
+
+def _save_buyers(data):
+    _save_json(BUYERS_PATH, data)
+
+
+@app.route("/api/buyers", methods=["GET"])
+@login_required
+def get_buyers():
+    return jsonify(_load_buyers())
+
+
+@app.route("/api/buyers/sku-catalog", methods=["GET"])
+@login_required
+def get_buyer_sku_catalog():
+    catalog = _all_sku_catalog()
+    groups = {}
+    for sku in catalog:
+        b = sku["brand"] or "No Brand"
+        if b not in groups:
+            groups[b] = []
+        groups[b].append(sku)
+    return jsonify([{"brand": b, "skus": groups[b]} for b in sorted(groups.keys())])
+
+
+@app.route("/api/buyers", methods=["POST"])
+@login_required
+def create_buyer():
+    data = request.get_json(force=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Name required"}), 400
+    buyers = _load_buyers()
+    if any(b["name"].lower() == name.lower() for b in buyers):
+        return jsonify({"error": "Buyer already exists"}), 409
+    sku_catalog = _all_sku_catalog()
+    default_skus = [s for s in sku_catalog if s["brand"].lower() == name.lower()]
+    buyer = {"id": datetime.now().strftime("%Y%m%d%H%M%S%f"),
+             "name": name, "skus": default_skus}
+    buyers.append(buyer)
+    _save_buyers(buyers)
+    return jsonify(buyer), 201
+
+
+@app.route("/api/buyers/<bid>", methods=["PUT"])
+@login_required
+def update_buyer(bid):
+    data = request.get_json(force=True) or {}
+    buyers = _load_buyers()
+    idx = next((i for i, b in enumerate(buyers) if b["id"] == bid), None)
+    if idx is None:
+        return jsonify({"error": "Not found"}), 404
+    if "name" in data:
+        name = data["name"].strip()
+        if not name:
+            return jsonify({"error": "Name required"}), 400
+        if any(b["name"].lower() == name.lower() and b["id"] != bid for b in buyers):
+            return jsonify({"error": "Name taken"}), 409
+        buyers[idx]["name"] = name
+    if "skus" in data:
+        buyers[idx]["skus"] = data["skus"]
+    _save_buyers(buyers)
+    return jsonify(buyers[idx])
+
+
+@app.route("/api/buyers/<bid>", methods=["DELETE"])
+@login_required
+def delete_buyer(bid):
+    _save_buyers([b for b in _load_buyers() if b["id"] != bid])
+    return jsonify({"ok": True})
+
+
+# ── Sale documents ────────────────────────────────────────────────────────
+@app.route("/api/organic/sales/<sale_id>/packing-slip", methods=["GET"])
+@login_required
+def get_packing_slip(sale_id):
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    sale = next((s for s in sales if s.get("id") == sale_id), None)
+    if not sale:
+        return jsonify({"error": "Sale not found"}), 404
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    import io as _io
+    buf = _io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter,
+                            rightMargin=0.75*inch, leftMargin=0.75*inch,
+                            topMargin=0.75*inch, bottomMargin=0.75*inch)
+    styles = getSampleStyleSheet()
+    story = []
+    label_s = ParagraphStyle("lbl", parent=styles["Normal"], fontSize=9, textColor=colors.grey)
+    body_s = ParagraphStyle("bod", parent=styles["Normal"], fontSize=11)
+    story.append(Paragraph("Packing Slip", ParagraphStyle("t", parent=styles["Heading1"], fontSize=22, spaceAfter=4)))
+    story.append(Paragraph("Soma Bone Broth", ParagraphStyle("sub", parent=styles["Normal"], fontSize=10, textColor=colors.grey, spaceAfter=2)))
+    story.append(Spacer(1, 0.15*inch))
+    buyer = sale.get("buyer") or "—"
+    sale_date = sale.get("sale_date") or "—"
+    po = sale.get("po_number") or sale.get("case_lot") or "—"
+    info = Table([
+        [Paragraph("Ship To", label_s), Paragraph(buyer, body_s), Paragraph("Date", label_s), Paragraph(sale_date, body_s)],
+        [Paragraph("PO / Case LOT#", label_s), Paragraph(po, body_s), Paragraph("Sale ID", label_s), Paragraph(sale_id[-8:], body_s)],
+    ], colWidths=[1.2*inch, 2.8*inch, 1.2*inch, 1.8*inch])
+    info.setStyle(TableStyle([("BOTTOMPADDING",(0,0),(-1,-1),8),("TOPPADDING",(0,0),(-1,-1),4)]))
+    story.append(info)
+    story.append(Spacer(1, 0.2*inch))
+    lots = sale.get("lots") or []
+    product = ((sale.get("brand","")+" " if sale.get("brand") else "") + (sale.get("recipe") or "")).strip()
+    fmt = sale.get("format") or ""
+    rows = [["Product","LOT#","Qty","Format"]]
+    total = 0
+    for lot in lots:
+        qty = int(lot.get("quantity") or 0)
+        total += qty
+        rows.append([product, lot.get("lot","—"), str(qty), fmt])
+    rows.append(["","",f"Total: {total}",""])
+    tbl = Table(rows, colWidths=[3.0*inch,1.5*inch,1.3*inch,1.2*inch])
+    tbl.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#2e7d32")),
+        ("TEXTCOLOR",(0,0),(-1,0),colors.white),
+        ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
+        ("FONTSIZE",(0,0),(-1,-1),10),
+        ("ROWBACKGROUNDS",(0,1),(-1,-2),[colors.white,colors.HexColor("#f5f5f0")]),
+        ("GRID",(0,0),(-1,-2),0.5,colors.HexColor("#d0d0c8")),
+        ("TOPPADDING",(0,0),(-1,-1),8),("BOTTOMPADDING",(0,0),(-1,-1),8),
+        ("FONTNAME",(0,-1),(-1,-1),"Helvetica-Bold"),
+    ]))
+    story.append(tbl)
+    story.append(Spacer(1,0.3*inch))
+    story.append(Paragraph("Thank you for your order.", styles["Italic"]))
+    doc.build(story)
+    buf.seek(0)
+    return send_file(buf, mimetype="application/pdf", as_attachment=False,
+                     download_name=f"packing-slip-{sale_id[-8:]}.pdf")
+
+
+@app.route("/api/organic/sales/<sale_id>/qbo-csv", methods=["GET"])
+@login_required
+def get_qbo_csv(sale_id):
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    sale = next((s for s in sales if s.get("id") == sale_id), None)
+    if not sale:
+        return jsonify({"error": "Sale not found"}), 404
+    import csv
+    import io as _io
+    buf = _io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["InvoiceNo","Customer","InvoiceDate","DueDate",
+                     "Item(Product/Service)","ItemQuantity","ItemRate","ItemAmount","Memo"])
+    lots = sale.get("lots") or []
+    product = ((sale.get("brand","")+" " if sale.get("brand") else "") +
+               (sale.get("recipe") or "") +
+               (" "+sale.get("format") if sale.get("format") else "")).strip()
+    lot_str = ", ".join(l.get("lot","") for l in lots if l.get("lot"))
+    total_qty = sum(int(l.get("quantity") or 0) for l in lots)
+    writer.writerow([sale_id[-8:].upper(), sale.get("buyer",""),
+                     sale.get("sale_date",""), sale.get("sale_date",""),
+                     product, total_qty, "", "", f"LOT#: {lot_str}" if lot_str else ""])
+    buf.seek(0)
+    from flask import Response
+    return Response(buf.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=invoice-{sale_id[-8:].upper()}.csv"})
+
+
 _migrate_legacy_sales()
 _autotag_existing_organic_data()
 
 
 # ── Organic: Search / Trace ──────────────────────────────────────────
+def _sale_touches_fg(s, fids):
+    """Return True if sale s drew from any fg_id in fids.
+    Handles both new lots[].breakdown and legacy fg_id shapes."""
+    if s.get("fg_id") in fids:
+        return True
+    for lot in (s.get("lots") or []):
+        for b in (lot.get("breakdown") or []):
+            if b.get("fg_id") in fids:
+                return True
+        for fid in (lot.get("fg_ids") or []):
+            if fid in fids:
+                return True
+    return False
+
+
 @app.route("/api/organic/trace", methods=["GET"])
 @login_required
 def organic_trace():
@@ -4549,9 +4774,9 @@ def organic_trace():
         # Find finished goods from those runs
         run_ids = {r["id"] for r in matched_runs}
         matched_fg = [f for f in fg if f.get("run_id") in run_ids]
-        # Find sales of those finished goods
+        # Find sales of those finished goods (handle both new lots[] and legacy fg_id)
         fg_ids = {f["id"] for f in matched_fg}
-        matched_sales = [s for s in sales if s.get("fg_id") in fg_ids]
+        matched_sales = [s for s in sales if _sale_touches_fg(s, fg_ids)]
         return jsonify({
             "search_type": "raw_lot",
             "query": query,
@@ -4566,9 +4791,9 @@ def organic_trace():
         # Find runs that produced them
         run_ids = {f.get("run_id") for f in matched_fg}
         matched_runs = [r for r in runs if r.get("id") in run_ids]
-        # Find sales
+        # Find sales (handle both new lots[] and legacy fg_id)
         fg_ids = {f["id"] for f in matched_fg}
-        matched_sales = [s for s in sales if s.get("fg_id") in fg_ids]
+        matched_sales = [s for s in sales if _sale_touches_fg(s, fg_ids)]
         return jsonify({
             "search_type": "fg_lot",
             "query": query,
