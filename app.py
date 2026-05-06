@@ -4298,6 +4298,9 @@ def internal_fg_stock():
             "par": m.get("par"),
         }
     return jsonify(result)
+
+
+@app.route("/api/sku-meta/<path:sku_key>", methods=["PATCH"])
 @login_required
 def update_sku_meta(sku_key):
     """Update PAR level and/or price for a SKU.
