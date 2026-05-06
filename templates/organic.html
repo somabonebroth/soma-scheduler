@@ -544,11 +544,107 @@ body.inv-page .modal-actions {
     box-shadow: 0 0 0 3px rgba(179,139,0,0.15);
 }
 
-/* Mobile/tablet adjustments */
+/* ── Mobile adjustments ─────────────────────────────────────────────── */
 @media (max-width: 768px) {
-    body.inv-page .card { padding: 18px; }
-    body.inv-page .card h2 { font-size: 16px; }
-    body.inv-page .form-row { gap: 12px; }
+    /* Cards */
+    body.inv-page .card { padding: 16px; margin-bottom: 14px; }
+    body.inv-page .card h2 { font-size: 15px; padding-bottom: 10px; margin-bottom: 12px; }
+    body.inv-page .card > p { font-size: 12px; margin-bottom: 10px; }
+
+    /* Tab bar — compress tabs on mobile */
+    .tab-bar { margin-bottom: 16px; }
+    .tab-btn { padding: 10px 13px; font-size: 12px; }
+
+    /* Forms */
+    body.inv-page .form-row { gap: 10px; grid-template-columns: 1fr; }
+
+    /* Buttons — full width on small screens for primary actions */
+    body.inv-page .btn { padding: 12px 16px; font-size: 13px; }
+
+    /* Raw materials rows — stack info/qty vertically */
+    body.inv-page .rm-row { padding: 12px 0; }
+    body.inv-page .rm-info { font-size: 13px; min-width: 0; }
+    body.inv-page .rm-qty { font-size: 14px; min-width: 80px; }
+
+    /* FG rows */
+    body.inv-page .fg-info { font-size: 13px; min-width: 0; }
+    body.inv-page .fg-qty { font-size: 14px; }
+
+    /* Tables — reduce padding so more columns fit */
+    body.inv-page .inv-table { font-size: 12px; }
+    body.inv-page .inv-table th { padding: 10px 10px; font-size: 10px; }
+    body.inv-page .inv-table td { padding: 10px 10px; }
+
+    /* Modals — nearly full screen, anchor to bottom on mobile */
+    .modal-overlay { align-items: flex-end; }
+    .modal {
+        width: 100% !important;
+        max-width: 100% !important;
+        border-radius: 16px 16px 0 0;
+        max-height: 92vh;
+        padding: 20px 16px 28px;
+    }
+    .modal-close { top: 14px; right: 14px; font-size: 22px; min-width: 44px; min-height: 44px; }
+
+    /* Modal actions — stack on mobile */
+    body.inv-page .modal-actions {
+        flex-direction: column-reverse;
+        gap: 8px;
+    }
+    body.inv-page .modal-actions button {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* Add Inventory ingredient grid — collapse LOT# below name */
+    #add-inv-ingredient-grid > div {
+        grid-template-columns: 1fr 90px !important;
+        grid-template-rows: auto auto;
+    }
+    #add-inv-ingredient-grid > div > div:first-child {
+        grid-column: 1 / -1;
+        padding-bottom: 4px;
+        border-bottom: 1px solid #f0f0eb;
+    }
+
+    /* Adjustment ingredient grid — collapse similarly */
+    #adj-ingredient-grid > div {
+        grid-template-columns: 1fr 90px !important;
+    }
+
+    /* Supplier ingredient list — bigger tap targets */
+    #supplier-ingredient-list label {
+        padding: 12px 10px !important;
+        min-height: 48px;
+    }
+
+    /* Search bar in records */
+    .search-bar { gap: 8px; }
+    .search-bar input { min-width: 0; }
+
+    /* Collapsible month blocks */
+    details > summary { padding: 12px 14px !important; }
+
+    /* Run cards */
+    .run-header { padding: 12px 14px; font-size: 12px; }
+    .run-body { padding: 12px 14px; }
+
+    /* Photo buttons in add inventory */
+    #add-inv-photo-buttons { flex-direction: column; }
+    #add-inv-photo-buttons button { width: 100%; text-align: center; }
+
+    /* Add inventory ingredient grid header — hide unit col on mobile since unit shows inline */
+    .inv-grid-header { grid-template-columns: 1fr 130px 90px !important; }
+    .inv-grid-unit-col { display: none; }
+    #add-inv-ingredient-grid > div { grid-template-columns: 1fr 130px 90px 0px !important; }
+    #add-inv-ingredient-grid > div > div:last-child { display: none; }
+}
+
+/* Extra small phones (< 390px) */
+@media (max-width: 390px) {
+    .tab-btn { padding: 9px 10px; font-size: 11px; }
+    body.inv-page .card { padding: 12px; }
+    body.inv-page .card h2 { font-size: 14px; }
 }
 </style>
 </head>
@@ -867,20 +963,43 @@ body.inv-page .modal-actions {
 
                 <!-- Ingredient grid -->
                 <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px;">
-                    <div style="display:grid;grid-template-columns:1fr 140px 100px 80px;background:#f5f5f0;padding:8px 12px;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;gap:8px;">
-                        <div>Ingredient</div><div>Supplier LOT#</div><div>Qty</div><div>Unit</div>
+                    <div class="inv-grid-header" style="display:grid;grid-template-columns:1fr 140px 100px 80px;background:#f5f5f0;padding:8px 12px;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;gap:8px;">
+                        <div>Ingredient</div><div>Supplier LOT#</div><div>Qty</div><div class="inv-grid-unit-col">Unit</div>
                     </div>
                     <div id="add-inv-ingredient-grid" style="max-height:45vh;overflow-y:auto;"></div>
                 </div>
 
                 <!-- Invoice photo attach -->
                 <div style="background:#f9f9f7;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px;">
-                    <div style="font-size:13px;font-weight:600;margin-bottom:8px;">📎 Attach Invoice Photo (optional)</div>
-                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                        <input type="file" id="add-inv-photo" accept="image/*,application/pdf" capture="environment" style="font-size:13px;flex:1;min-width:0;">
-                        <div id="add-inv-photo-preview" style="font-size:12px;color:var(--text-light);"></div>
+                    <div style="font-size:13px;font-weight:600;margin-bottom:10px;">📎 Attach Invoice (optional)</div>
+
+                    <!-- Hidden inputs — one camera, one file -->
+                    <input type="file" id="add-inv-photo" accept="image/*,application/pdf" style="display:none;" onchange="onInvPhotoSelected(this)">
+                    <input type="file" id="add-inv-photo-camera" accept="image/*" capture="environment" style="display:none;" onchange="onInvPhotoSelected(this)">
+
+                    <!-- Buttons -->
+                    <div id="add-inv-photo-buttons" style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <button type="button" class="btn-outline" onclick="document.getElementById('add-inv-photo-camera').click()" style="font-size:13px;padding:9px 16px;">
+                            📷 Take Photo
+                        </button>
+                        <button type="button" class="btn-outline" onclick="document.getElementById('add-inv-photo').click()" style="font-size:13px;padding:9px 16px;">
+                            📁 Upload File
+                        </button>
                     </div>
-                    <p style="font-size:11px;color:var(--text-light);margin-top:6px;">Photo or PDF of the invoice, stored with this entry. JPG, PNG, WEBP, HEIC, or PDF. Max 20 MB.</p>
+
+                    <!-- Preview -->
+                    <div id="add-inv-photo-preview" style="display:none;margin-top:10px;">
+                        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                            <img id="add-inv-photo-thumb" src="" alt="preview" style="height:60px;width:auto;border-radius:4px;border:1px solid var(--border);display:none;">
+                            <div style="flex:1;min-width:0;">
+                                <div id="add-inv-photo-name" style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+                                <div id="add-inv-photo-size" style="font-size:11px;color:var(--text-light);margin-top:2px;"></div>
+                            </div>
+                            <button type="button" class="btn-outline" onclick="clearInvPhoto()" style="font-size:12px;padding:6px 12px;color:#c62828;border-color:#c62828;">✕ Remove</button>
+                        </div>
+                    </div>
+
+                    <p style="font-size:11px;color:var(--text-light);margin-top:8px;">JPG, PNG, WEBP, HEIC, or PDF. Max 20 MB.</p>
                 </div>
 
                 <div id="add-inv-step2-msg" class="status" style="margin:8px 0;"></div>
@@ -2108,6 +2227,64 @@ async function saveSections(){
 // ── Camera-scan: Receive Inventory ───────────────────────────────────────
 // Captures invoice photo, sends to Claude Vision via /api/scan/invoice,
 // renders an editable review grid, and submits via /api/organic/raw-materials/bulk.
+// ── Invoice photo helpers ────────────────────────────────────────────────
+function _getInvPhotoFile(){
+    // Return whichever input has a selected file (camera takes priority)
+    var cam = document.getElementById('add-inv-photo-camera');
+    var file = document.getElementById('add-inv-photo');
+    if(cam && cam.files && cam.files[0]) return cam.files[0];
+    if(file && file.files && file.files[0]) return file.files[0];
+    return null;
+}
+
+function onInvPhotoSelected(input){
+    var f = input.files && input.files[0];
+    if(!f) return;
+    // Clear the other input so _getInvPhotoFile only returns one
+    var other = input.id === 'add-inv-photo-camera'
+        ? document.getElementById('add-inv-photo')
+        : document.getElementById('add-inv-photo-camera');
+    if(other) other.value = '';
+
+    var preview = document.getElementById('add-inv-photo-preview');
+    var thumb = document.getElementById('add-inv-photo-thumb');
+    var nameEl = document.getElementById('add-inv-photo-name');
+    var sizeEl = document.getElementById('add-inv-photo-size');
+
+    nameEl.textContent = f.name;
+    sizeEl.textContent = (f.size / 1024 < 1000)
+        ? Math.round(f.size/1024) + ' KB'
+        : (f.size/1024/1024).toFixed(1) + ' MB';
+
+    // Show image thumbnail if it's an image
+    if(f.type.startsWith('image/')){
+        var reader = new FileReader();
+        reader.onload = function(e){
+            thumb.src = e.target.result;
+            thumb.style.display = '';
+        };
+        reader.readAsDataURL(f);
+    } else {
+        thumb.style.display = 'none';
+        thumb.src = '';
+    }
+    preview.style.display = '';
+    document.getElementById('add-inv-photo-buttons').style.display = 'none';
+}
+
+function clearInvPhoto(){
+    var cam = document.getElementById('add-inv-photo-camera');
+    var file = document.getElementById('add-inv-photo');
+    if(cam) cam.value = '';
+    if(file) file.value = '';
+    var preview = document.getElementById('add-inv-photo-preview');
+    var thumb = document.getElementById('add-inv-photo-thumb');
+    if(preview) preview.style.display = 'none';
+    if(thumb){ thumb.src=''; thumb.style.display='none'; }
+    var buttons = document.getElementById('add-inv-photo-buttons');
+    if(buttons) buttons.style.display = '';
+}
+
 // ── Add Inventory Modal ─────────────────────────────────────────────────
 var _addInvSuppliers = [];
 
@@ -2119,8 +2296,7 @@ async function openAddInventoryModal(){
     document.getElementById('add-inv-step2-msg').textContent = '';
     document.getElementById('add-inv-step1').style.display = '';
     document.getElementById('add-inv-step2').style.display = 'none';
-    document.getElementById('add-inv-photo').value = '';
-    document.getElementById('add-inv-photo-preview').textContent = '';
+    clearInvPhoto();
 
     // Load suppliers
     try {
@@ -2236,7 +2412,7 @@ async function submitAddInventory(){
         if(!res.ok){ throw new Error(data.error || 'Save failed'); }
 
         // Upload photo if selected, attach to first saved entry id
-        var photoFile = document.getElementById('add-inv-photo').files[0];
+        var photoFile = _getInvPhotoFile();
         var savedIds = data.ids || [];
         if(photoFile && savedIds.length > 0){
             var fd = new FormData();
