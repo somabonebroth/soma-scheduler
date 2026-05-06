@@ -2264,7 +2264,7 @@ async function loadSuppliers(){
     try {
         var res = await fetch('/api/suppliers');
         var suppliers = await res.json();
-        countEl.textContent = suppliers.length;
+        if(countEl) countEl.textContent = suppliers.length;
         if(!suppliers.length){
             container.innerHTML = '<div class="empty-state">No suppliers yet. Click <strong>+ Add Supplier</strong> to get started.</div>';
             return;
@@ -2272,20 +2272,29 @@ async function loadSuppliers(){
         var html = '';
         suppliers.forEach(function(s){
             var ingCount = (s.ingredients || []).length;
-            var ingPreview = (s.ingredients || []).slice(0,4).map(function(i){ return i.name; }).join(', ');
-            if(ingCount > 4) ingPreview += ' +' + (ingCount-4) + ' more';
-            html += '<div style="border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px;background:#fff;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">' +
-                '<div style="flex:1;min-width:0;">' +
-                '<div style="font-size:15px;font-weight:600;margin-bottom:4px;">'+s.name+'</div>' +
-                '<div style="font-size:12px;color:var(--text-light);">'+ingCount+' ingredient'+(ingCount===1?'':'s')+(ingPreview ? ' · '+ingPreview : '')+'</div>' +
-                '</div>' +
-                '<div style="display:flex;gap:8px;flex-shrink:0;">' +
-                '<button class="btn-outline" style="font-size:12px;padding:7px 12px;" onclick="openEditSupplierModal(''+s.id+'')">Edit</button>' +
-                '<button class="btn-outline" style="font-size:12px;padding:7px 12px;color:#c62828;border-color:#c62828;" onclick="deleteSupplier(''+s.id+'',''+s.name.replace(/'/g,"\'") +'')">Delete</button>' +
-                '</div>' +
-                '</div>';
+            var preview = (s.ingredients || []).slice(0,4).map(function(i){ return escHtml(i.name); }).join(', ');
+            if(ingCount > 4) preview += ' +' + (ingCount-4) + ' more';
+            var sid = escHtml(s.id);
+            var sname = escHtml(s.name);
+            html += '<div style="border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px;background:#fff;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">'
+                + '<div style="flex:1;min-width:0;">'
+                + '<div style="font-size:15px;font-weight:600;margin-bottom:4px;">' + sname + '</div>'
+                + '<div style="font-size:12px;color:var(--text-light);">' + ingCount + ' ingredient' + (ingCount===1?'':'s') + (preview ? ' · ' + preview : '') + '</div>'
+                + '</div>'
+                + '<div style="display:flex;gap:8px;flex-shrink:0;">'
+                + '<button class="btn-outline" style="font-size:12px;padding:7px 12px;" data-edit-sid="' + sid + '">Edit</button>'
+                + '<button class="btn-outline" style="font-size:12px;padding:7px 12px;color:#c62828;border-color:#c62828;" data-del-sid="' + sid + '" data-del-name="' + sname + '">Delete</button>'
+                + '</div>'
+                + '</div>';
         });
         container.innerHTML = html;
+        // Attach handlers after rendering (avoids all inline onclick quoting issues)
+        container.querySelectorAll('[data-edit-sid]').forEach(function(btn){
+            btn.addEventListener('click', function(){ openEditSupplierModal(this.getAttribute('data-edit-sid')); });
+        });
+        container.querySelectorAll('[data-del-sid]').forEach(function(btn){
+            btn.addEventListener('click', function(){ deleteSupplier(this.getAttribute('data-del-sid'), this.getAttribute('data-del-name')); });
+        });
     } catch(e) {
         container.innerHTML = '<div class="empty-state">Error loading suppliers.</div>';
     }
@@ -2362,13 +2371,17 @@ function renderSupplierIngredientList(){
         var key = ing.name+'|'+ing.unit;
         var checked = _supplierChecked[key] ? 'checked' : '';
         var bg = idx % 2 === 0 ? '#fff' : '#fafaf8';
-        html += '<label style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:'+bg+';cursor:pointer;border-radius:5px;">' +
-            '<input type="checkbox" '+checked+' onchange="toggleSupplierIngredient(''+key+'')" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;">' +
-            '<span style="font-size:13px;flex:1;">'+ing.name+'</span>' +
-            '<span style="font-size:12px;color:var(--text-light);">'+ing.unit+'</span>' +
-            '</label>';
+        html += '<label style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:'+bg+';cursor:pointer;border-radius:5px;">'
+            + '<input type="checkbox" ' + checked + ' data-ing-key="' + escHtml(key) + '" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;">'
+            + '<span style="font-size:13px;flex:1;">' + escHtml(ing.name) + '</span>'
+            + '<span style="font-size:12px;color:var(--text-light);">' + escHtml(ing.unit) + '</span>'
+            + '</label>';
     });
     list.innerHTML = html;
+    // Attach change handlers after render
+    list.querySelectorAll('[data-ing-key]').forEach(function(cb){
+        cb.addEventListener('change', function(){ toggleSupplierIngredient(this.getAttribute('data-ing-key')); });
+    });
 }
 
 function toggleSupplierIngredient(key){
@@ -3201,6 +3214,7 @@ var fgSkus=[];
 var expandedSku=null;
 
 function escSku(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function escHtml(s){return escSku(s);}
 
 var currentFgFilter='all';
 var currentSalesFilter='all';
