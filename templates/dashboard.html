@@ -39,6 +39,14 @@
 </div>
 <div class="main">
     <div class="dashboard-grid">
+        <div class="section-label">Ripe Orders</div>
+        <div class="dash-row">
+            <a href="/ripe-orders" class="dash-btn highlight" style="border-color:#1565c0; position:relative;" id="ripe-orders-btn">
+                <span class="icon">📋</span>
+                <span class="label">Ripe Orders <span id="ripe-badge" style="display:none; background:#c62828; color:#fff; border-radius:50%; width:18px; height:18px; font-size:10px; font-weight:700; line-height:18px; text-align:center; display:inline-flex; align-items:center; justify-content:center; margin-left:4px;"></span></span>
+                <span class="sublabel">Manage incoming Ripe orders</span>
+            </a>
+        </div>
         <div class="section-label">Schedule</div>
         <div class="dash-row">
             <a href="/create-schedule" class="dash-btn highlight"><span class="icon">+</span><span class="label">Create New Schedule</span><span class="sublabel">Plan the week's production</span></a>
@@ -78,6 +86,18 @@
 <script>
 var DAYNAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 async function doLogout(){await fetch('/api/logout',{method:'POST'});window.location.href='/login';}
+
+// Ripe Orders pending badge
+(async function loadRipeBadge() {
+  try {
+    var r = await fetch('/api/ripe-orders/pending-count');
+    var d = await r.json();
+    if (d.count > 0) {
+      var badge = document.getElementById('ripe-badge');
+      if (badge) { badge.textContent = d.count; badge.style.display = 'inline-flex'; }
+    }
+  } catch(e) {}
+})();
 function getWeekId(date){var d=new Date(date);var day=d.getDay();var diff=day===0?-6:1-day;d.setDate(d.getDate()+diff);return d.toISOString().split('T')[0];}
 function getDayIdx(date){var day=date.getDay();return day===0?6:day-1;}
 async function goToDay(offset){var target=new Date();target.setDate(target.getDate()+offset);var weekId=getWeekId(target);var dayIdx=getDayIdx(target);var res=await fetch('/api/schedule/'+weekId);var data=await res.json();if(!data.schedule){alert('No schedule created for this week.');return;}var dayData=data.schedule[String(dayIdx)]||{};var hasP=Object.values(dayData).some(function(v){return v;});if(!hasP){alert('No production scheduled for '+DAYNAMES[target.getDay()]+'.');return;}window.location.href='/daily-production/'+weekId+'/'+dayIdx;}

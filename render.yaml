@@ -7,6 +7,10 @@ services:
     envVars:
       - key: DATA_DIR
         value: /opt/render/project/data
+      - key: RIPE_PORTAL_URL
+        sync: false
+      - key: INTERNAL_API_KEY
+        sync: false
     disk:
       name: soma-data
       mountPath: /opt/render/project/data

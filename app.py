@@ -13,9 +13,11 @@ import os
 import re
 import zipfile
 import io
+from ripe_orders import ripe_orders_bp, init_paths as _ripe_init_paths
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ.get("SECRET_KEY", "soma-bone-broth-2026-change-me")
+app.register_blueprint(ripe_orders_bp)
 
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "soma2026")
 VESSELS = ["K1", "K2", "K3", "115L"]
@@ -2193,6 +2195,7 @@ def _migrate_organic_to_inventory():
 
 _migrate_organic_to_inventory()
 os.makedirs(INVENTORY_DIR, exist_ok=True)
+_ripe_init_paths(INVENTORY_DIR)  # wire Ripe orders FG deduction to Soma's inventory
 
 
 def _autotag_existing_organic_data():
