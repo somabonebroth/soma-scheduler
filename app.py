@@ -4260,7 +4260,44 @@ def get_finished_goods_grouped():
     return jsonify(grouped)
 
 
-@app.route("/api/sku-meta/<path:sku_key>", methods=["PATCH"])
+@app.route("/api/internal/fg-stock", methods=["GET"])
+def internal_fg_stock():
+    """Return available FG stock per SKU for Ripe portal.
+    Key-gated via X-Internal-Key. Returns {sku_key: units_available}.
+    Excludes committed (scheduled-but-not-yet-deducted) Ripe sales.
+    """
+    internal_key = os.environ.get("INTERNAL_API_KEY", "")
+    provided = request.headers.get("X-Internal-Key", "")
+    import hmac as _hmac
+    if not internal_key or not _hmac.compare_digest(provided.encode(), internal_key.encode()):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    meta = _load_json(SKU_META_PATH, {})
+
+    # Gross stock per SKU
+    stock = {}
+    for entry in fg:
+        key = _sku_key(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", ""))
+        stock[key] = stock.get(key, 0) + int(entry.get("quantity_remaining") or 0)
+
+    # Subtract scheduled (deducted=False) Ripe sales — inventory spoken for
+    for sale in sales:
+        if sale.get("deducted") is False:
+            key = sale.get("sku_key", "")
+            if key in stock:
+                stock[key] = max(0, stock[key] - int(sale.get("quantity") or 0))
+
+    # Build response with PAR info
+    result = {}
+    for key, available in stock.items():
+        m = meta.get(key, {})
+        result[key] = {
+            "available": available,
+            "par": m.get("par"),
+        }
+    return jsonify(result)
 @login_required
 def update_sku_meta(sku_key):
     """Update PAR level and/or price for a SKU.

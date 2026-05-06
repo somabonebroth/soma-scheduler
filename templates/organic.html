@@ -3103,7 +3103,6 @@ function goToBuyerAssignStep(){
 
 function renderBuyerOrderList(){
     var checked = _buyerAllSkus.filter(function(s){ return _buyerChecked[s.sku_key]; });
-    // Sort by current position
     checked.sort(function(a,b){
         return (_buyerSkuOrder[a.sku_key]||999) - (_buyerSkuOrder[b.sku_key]||999);
     });
@@ -3115,20 +3114,25 @@ function renderBuyerOrderList(){
     var html='';
     checked.forEach(function(sku, i){
         var isFirst = i===0, isLast = i===checked.length-1;
+        var skuSafe = escHtml(sku.sku_key);
         html += '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);background:'+(i%2===0?'#fff':'#fafaf8')+';">'
             +'<div style="display:flex;flex-direction:column;gap:2px;">'
-            +'<button onclick="moveBuyerSku(''+escHtml(sku.sku_key)+'', -1)" '+(isFirst?'disabled style="opacity:0.3;cursor:not-allowed;"':'')
-            +' style="background:none;border:1px solid var(--border);border-radius:4px;width:24px;height:22px;cursor:pointer;font-size:10px;line-height:1;padding:0;">▲</button>'
-            +'<button onclick="moveBuyerSku(''+escHtml(sku.sku_key)+'', 1)" '+(isLast?'disabled style="opacity:0.3;cursor:not-allowed;"':'')
-            +' style="background:none;border:1px solid var(--border);border-radius:4px;width:24px;height:22px;cursor:pointer;font-size:10px;line-height:1;padding:0;">▼</button>'
+            +'<button data-move-sku="'+skuSafe+'" data-move-dir="-1" '+(isFirst?'disabled':'')
+            +' style="background:none;border:1px solid var(--border);border-radius:4px;width:24px;height:22px;cursor:pointer;font-size:10px;line-height:1;padding:0;'+(isFirst?'opacity:0.3;cursor:not-allowed;':'')+'">▲</button>'
+            +'<button data-move-sku="'+skuSafe+'" data-move-dir="1" '+(isLast?'disabled':'')
+            +' style="background:none;border:1px solid var(--border);border-radius:4px;width:24px;height:22px;cursor:pointer;font-size:10px;line-height:1;padding:0;'+(isLast?'opacity:0.3;cursor:not-allowed;':'')+'">▼</button>'
             +'</div>'
             +'<span style="font-size:13px;flex:1;">'+escHtml(sku.display||sku.recipe)+'</span>'
             +'<span style="font-size:11px;color:var(--text-light);background:#f0f0ef;padding:2px 7px;border-radius:10px;white-space:nowrap;">'+escHtml(sku.format||'')+'</span>'
             +'</div>';
     });
     list.innerHTML=html;
+    list.querySelectorAll('[data-move-sku]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+            moveBuyerSku(this.getAttribute('data-move-sku'), parseInt(this.getAttribute('data-move-dir')));
+        });
+    });
 }
-
 function moveBuyerSku(skuKey, dir){
     var checked = _buyerAllSkus.filter(function(s){ return _buyerChecked[s.sku_key]; });
     checked.sort(function(a,b){ return (_buyerSkuOrder[a.sku_key]||999)-(_buyerSkuOrder[b.sku_key]||999); });
