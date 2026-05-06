@@ -132,28 +132,26 @@ function closeDashSaleModal(){
 function dashSaleNext(){
     var date = document.getElementById('dash-sale-date').value;
     var buyerVal = document.getElementById('dash-sale-buyer').value;
-    var po = document.getElementById('dash-sale-po').value.trim();
     var msg = document.getElementById('dash-sale-msg');
     if(!date){ msg.textContent='Please select a date.'; msg.style.display='block'; return; }
     if(!buyerVal){ msg.textContent='Please select a buyer.'; msg.style.display='block'; return; }
     msg.style.display='none';
     closeDashSaleModal();
-    // Pass params to the full organic page modal
     var parts = buyerVal.split('|');
     var buyerId = parts[0];
     var buyerName = decodeURIComponent(parts[1] || '');
-    var params = '?action=sell&date='+encodeURIComponent(date)+'&buyer_id='+encodeURIComponent(buyerId)+'&buyer_name='+encodeURIComponent(buyerName)+(po?'&po='+encodeURIComponent(po):'');
+    var params = '?action=sell&date='+encodeURIComponent(date)+'&buyer_id='+encodeURIComponent(buyerId)+'&buyer_name='+encodeURIComponent(buyerName);
     window.location.href = '/organic' + params;
 }
 
 </script>
 
 <!-- Record Sale quick modal -->
-<div class="modal-overlay" id="dash-sale-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:200;align-items:flex-end;justify-content:center;">
-    <div style="background:#fff;border-radius:16px 16px 0 0;width:100%;max-width:480px;padding:28px 24px 36px;position:relative;">
+<div class="modal-overlay" id="dash-sale-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:200;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:16px;width:100%;max-width:400px;margin:16px;padding:28px 24px;position:relative;">
         <button onclick="closeDashSaleModal()" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:#888;">&times;</button>
         <h2 style="font-size:17px;font-weight:700;color:#1a1a1a;margin-bottom:4px;">&#128176; Record Sale</h2>
-        <p style="font-size:13px;color:#888;margin-bottom:20px;">Select buyer and date to continue.</p>
+        <p style="font-size:13px;color:#888;margin-bottom:20px;">Select buyer and date. LOT numbers are assigned automatically by FIFO on the next screen.</p>
         <div style="display:flex;flex-direction:column;gap:14px;">
             <div>
                 <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.3px;display:block;margin-bottom:6px;">Sale Date</label>
@@ -164,10 +162,6 @@ function dashSaleNext(){
                 <select id="dash-sale-buyer" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:15px;background:#fff;">
                     <option value="">— Select buyer —</option>
                 </select>
-            </div>
-            <div>
-                <label style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.3px;display:block;margin-bottom:6px;">PO / Case LOT# <span style="font-weight:400;">(optional)</span></label>
-                <input type="text" id="dash-sale-po" placeholder="PO number or case LOT" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:15px;">
             </div>
             <div id="dash-sale-msg" style="font-size:13px;color:#c62828;display:none;"></div>
             <div style="display:flex;gap:10px;margin-top:4px;">
