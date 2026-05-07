@@ -28,7 +28,7 @@
 .dash-btn.highlight { border-color: var(--accent); background: linear-gradient(135deg, #f5f5f0, #e8efe5); }
 .dash-btn.disabled { opacity: 0.4; cursor: default; }
 .dash-btn.disabled:hover { transform: none; box-shadow: none; border-color: var(--border); }
-.section-label { font-size: 11px; font-weight: 600; color: var(--text-light); text-transform: uppercase; letter-spacing: 1px; margin-top: 12px; margin-bottom: 4px; }
+.section-label { font-size: 11px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 1px; margin-top: 16px; margin-bottom: 6px; border-left: 3px solid var(--accent); padding-left: 8px; }
 </style>
 </head>
 <body>
@@ -67,9 +67,14 @@
             </div>
         </div>
         <details id="resources-section" style="margin-top:4px;">
-          <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;padding:4px 0 8px;">
-            <span class="section-label" style="margin:0;">Resources</span>
-            <span id="res-caret" style="font-size:10px;color:var(--text-light);">▶</span>
+          <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;margin-bottom:4px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:1px;">Resources</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:11px;color:var(--text-light);">Recipes, checklists, inventory & more</span>
+              <span id="res-caret" style="font-size:12px;color:var(--text-light);font-weight:600;">▶</span>
+            </div>
           </summary>
         <div class="dash-row">
             <a href="/recipes" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Recipe Cards</span><span class="sublabel">View and manage recipes</span></a>
@@ -88,8 +93,7 @@
 var DAYNAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 async function doLogout(){await fetch('/api/logout',{method:'POST'});window.location.href='/login';}
 
-// Ripe Orders pending badge
-(// Resources section toggle caret
+// Resources section toggle caret
 var _resSection = document.getElementById('resources-section');
 if(_resSection){
     _resSection.addEventListener('toggle', function(){
@@ -98,7 +102,8 @@ if(_resSection){
     });
 }
 
-async function loadRipeBadge() {
+// Ripe Orders pending badge
+(async function loadRipeBadge() {
   try {
     var r = await fetch('/api/ripe-orders/pending-count');
     var d = await r.json();
@@ -111,7 +116,25 @@ async function loadRipeBadge() {
 function getWeekId(date){var d=new Date(date);var day=d.getDay();var diff=day===0?-6:1-day;d.setDate(d.getDate()+diff);return d.toISOString().split('T')[0];}
 function getDayIdx(date){var day=date.getDay();return day===0?6:day-1;}
 async function goToDay(offset){var target=new Date();target.setDate(target.getDate()+offset);var weekId=getWeekId(target);var dayIdx=getDayIdx(target);var res=await fetch('/api/schedule/'+weekId);var data=await res.json();if(!data.schedule){alert('No schedule created for this week.');return;}var dayData=data.schedule[String(dayIdx)]||{};var hasP=Object.values(dayData).some(function(v){return v;});if(!hasP){alert('No production scheduled for '+DAYNAMES[target.getDay()]+'.');return;}window.location.href='/daily-production/'+weekId+'/'+dayIdx;}
-async function loadDayLabels(){for(var offset=-1;offset<=1;offset++){var target=new Date();target.setDate(target.getDate()+offset);var weekId=getWeekId(target);var dayIdx=getDayIdx(target);var labelId=offset===-1?'yesterday-label':offset===0?'today-label':'tomorrow-label';var dayName=DAYNAMES[target.getDay()];try{var res=await fetch('/api/schedule/'+weekId);var data=await res.json();if(data.schedule){var dd=data.schedule[String(dayIdx)]||{};var r=Object.values(dd).filter(function(v){return v;});document.getElementById(labelId).textContent=dayName+' - '+(r.length>0?r.length+' kettle(s)':'No production');}else{document.getElementById(labelId).textContent=dayName+' - No schedule';}}catch(e){document.getElementById(labelId).textContent=dayName;}}}
+async function loadDayLabels(){
+    var target=new Date();
+    var weekId=getWeekId(target);
+    var dayIdx=getDayIdx(target);
+    var dayName=DAYNAMES[target.getDay()];
+    var el=document.getElementById('today-label');
+    if(!el) return;
+    try{
+        var res=await fetch('/api/schedule/'+weekId);
+        var data=await res.json();
+        if(data.schedule){
+            var dd=data.schedule[String(dayIdx)]||{};
+            var r=Object.values(dd).filter(function(v){return v;});
+            el.textContent=dayName+' — '+(r.length>0?r.length+' kettle'+(r.length===1?'':'s'):'No production');
+        } else {
+            el.textContent=dayName+' — No schedule';
+        }
+    } catch(e){ el.textContent=dayName; }
+}
 document.addEventListener('DOMContentLoaded',loadDayLabels);
 
 // ── Dashboard Record Sale modal ──
