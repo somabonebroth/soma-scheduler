@@ -1332,11 +1332,41 @@ body.inv-page .modal-actions {
             <button class="modal-close" onclick="closeSupplierModal()">&times;</button>
             <h2 id="supplier-modal-title">Add Supplier</h2>
 
-            <div class="form-field" style="margin-bottom:16px;">
+            <div class="form-field" style="margin-bottom:10px;">
                 <label>Supplier Name</label>
                 <input type="text" id="supplier-name-input" placeholder="e.g. Pfennings Organic" style="width:100%;box-sizing:border-box;">
             </div>
 
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div class="form-field">
+                    <label>Contact Name</label>
+                    <input type="text" id="supplier-contact-name" placeholder="e.g. Jane Smith" style="width:100%;box-sizing:border-box;">
+                </div>
+                <div class="form-field">
+                    <label>Phone</label>
+                    <input type="tel" id="supplier-phone" placeholder="e.g. 416-555-0100" style="width:100%;box-sizing:border-box;">
+                </div>
+                <div class="form-field">
+                    <label>Email</label>
+                    <input type="email" id="supplier-email" placeholder="e.g. orders@supplier.com" style="width:100%;box-sizing:border-box;">
+                </div>
+                <div class="form-field">
+                    <label>Website</label>
+                    <input type="url" id="supplier-website" placeholder="https://" style="width:100%;box-sizing:border-box;">
+                </div>
+            </div>
+            <div class="form-field" style="margin-bottom:10px;">
+                <label>Address</label>
+                <input type="text" id="supplier-address" placeholder="Street, City, Province, Postal" style="width:100%;box-sizing:border-box;">
+            </div>
+            <div class="form-field" style="margin-bottom:10px;">
+                <label>Certifications</label>
+                <input type="text" id="supplier-certifications" placeholder="e.g. Certified Organic, GAP, etc." style="width:100%;box-sizing:border-box;">
+            </div>
+            <div class="form-field" style="margin-bottom:14px;">
+                <label>Notes</label>
+                <textarea id="supplier-notes" rows="2" placeholder="Additional info…" style="width:100%;box-sizing:border-box;resize:vertical;"></textarea>
+            </div>
             <div>
                 <div style="font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Assigned Ingredients</div>
                 <p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Check all ingredients this supplier provides.</p>
@@ -1377,6 +1407,36 @@ body.inv-page .modal-actions {
                 <input type="text" id="buyer-name-input" placeholder="e.g. Ripe Nutrition" style="width:100%;box-sizing:border-box;">
             </div>
 
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                <div class="form-field">
+                    <label>Contact Name</label>
+                    <input type="text" id="buyer-contact-name" placeholder="e.g. Jane Smith" style="width:100%;box-sizing:border-box;">
+                </div>
+                <div class="form-field">
+                    <label>Phone</label>
+                    <input type="tel" id="buyer-phone" placeholder="e.g. 416-555-0100" style="width:100%;box-sizing:border-box;">
+                </div>
+                <div class="form-field">
+                    <label>Email</label>
+                    <input type="email" id="buyer-email" placeholder="e.g. orders@supplier.com" style="width:100%;box-sizing:border-box;">
+                </div>
+                <div class="form-field">
+                    <label>Website</label>
+                    <input type="url" id="buyer-website" placeholder="https://" style="width:100%;box-sizing:border-box;">
+                </div>
+            </div>
+            <div class="form-field" style="margin-bottom:10px;">
+                <label>Address</label>
+                <input type="text" id="buyer-address" placeholder="Street, City, Province, Postal" style="width:100%;box-sizing:border-box;">
+            </div>
+            <div class="form-field" style="margin-bottom:10px;">
+                <label>Certifications</label>
+                <input type="text" id="buyer-certifications" placeholder="e.g. Certified Organic, GAP, etc." style="width:100%;box-sizing:border-box;">
+            </div>
+            <div class="form-field" style="margin-bottom:14px;">
+                <label>Notes</label>
+                <textarea id="buyer-notes" rows="2" placeholder="Additional info…" style="width:100%;box-sizing:border-box;resize:vertical;"></textarea>
+            </div>
             <!-- Step A: check which SKUs are assigned -->
             <div id="buyer-step-assign">
                 <div style="font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Assigned Products</div>
@@ -2975,8 +3035,14 @@ async function loadBuyers(){
             if(skuCount>3) preview+=' +' + (skuCount-3)+' more';
             h+='<div style="border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px;background:#fff;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">'
              +'<div style="flex:1;min-width:0;">'
-             +'<div style="font-size:15px;font-weight:600;margin-bottom:4px;">'+escHtml(b.name)+'</div>'
+             +'<div style="font-size:15px;font-weight:600;margin-bottom:2px;">'+escHtml(b.name)+'</div>'
              +'<div style="font-size:12px;color:var(--text-light);">'+skuCount+' product'+(skuCount===1?'':'s')+(preview?' · '+preview:'')+'</div>'
+             +(b.contact_name||b.phone||b.email||b.website ? '<div style="font-size:12px;color:var(--text-light);margin-top:3px;">'
+                +[b.contact_name?escHtml(b.contact_name):'',b.phone?'<a href="tel:'+escHtml(b.phone)+'">'+escHtml(b.phone)+'</a>':'',b.email?'<a href="mailto:'+escHtml(b.email)+'">'+escHtml(b.email)+'</a>':'',b.website?'<a href="'+escHtml(b.website)+'" target="_blank" rel="noopener">Website</a>':''].filter(Boolean).join(' · ')
+                +'</div>' : '')
+             +(b.address?'<div style="font-size:12px;color:var(--text-light);margin-top:2px;">'+escHtml(b.address)+'</div>':'')
+             +(b.certifications?'<div style="font-size:11px;margin-top:4px;"><span style="background:#e3f2fd;color:#0a4081;border:1px solid #90caf9;padding:1px 7px;border-radius:10px;">'+escHtml(b.certifications)+'</span></div>':'')
+             +(b.notes?'<div style="font-size:11px;color:var(--text-light);margin-top:4px;font-style:italic;">'+escHtml(b.notes)+'</div>':'')
              +'</div>'
              +'<div style="display:flex;gap:8px;flex-shrink:0;">'
              +'<button class="btn-outline" style="font-size:12px;padding:7px 12px;" data-edit-bid="'+escHtml(b.id)+'">Edit</button>'
@@ -3015,6 +3081,13 @@ async function openAddBuyerModal(){
     await _fetchSkuCatalog();
     _buyerChecked={};
     _buyerSkuOrder={};
+    document.getElementById('buyer-contact-name').value='';
+    document.getElementById('buyer-phone').value='';
+    document.getElementById('buyer-email').value='';
+    document.getElementById('buyer-address').value='';
+    document.getElementById('buyer-website').value='';
+    document.getElementById('buyer-certifications').value='';
+    document.getElementById('buyer-notes').value='';
     document.getElementById('buyer-step-assign').style.display='';
     document.getElementById('buyer-step-order').style.display='none';
     document.getElementById('buyer-modal-actions').style.display='none';
@@ -3031,6 +3104,13 @@ async function openEditBuyerModal(bid){
     if(!b) return;
     document.getElementById('buyer-modal-title').textContent='Edit Buyer';
     document.getElementById('buyer-name-input').value=b.name;
+    document.getElementById('buyer-contact-name').value=b.contact_name||'';
+    document.getElementById('buyer-phone').value=b.phone||'';
+    document.getElementById('buyer-email').value=b.email||'';
+    document.getElementById('buyer-address').value=b.address||'';
+    document.getElementById('buyer-website').value=b.website||'';
+    document.getElementById('buyer-certifications').value=b.certifications||'';
+    document.getElementById('buyer-notes').value=b.notes||'';
     document.getElementById('buyer-sku-search').value='';
     document.getElementById('buyer-modal-msg').textContent='';
     document.getElementById('buyer-save-btn').disabled=false;
@@ -3079,12 +3159,22 @@ function goToBuyerOrderStep(){
     var checked = _buyerAllSkus.filter(function(s){ return _buyerChecked[s.sku_key]; });
     // Assign positions to newly checked items (not yet in _buyerSkuOrder)
     var maxPos = 0;
+    // Get max of real positions (ignore 999 defaults)
     checked.forEach(function(s){
-        if(_buyerSkuOrder[s.sku_key] !== undefined) maxPos = Math.max(maxPos, _buyerSkuOrder[s.sku_key]);
+        var p = _buyerSkuOrder[s.sku_key];
+        if(p !== undefined && p !== 999) maxPos = Math.max(maxPos, p);
     });
-    checked.forEach(function(s){
-        if(_buyerSkuOrder[s.sku_key] === undefined){ _buyerSkuOrder[s.sku_key] = ++maxPos; }
-    });
+    // If all were 999, assign sequential positions based on current array order
+    var anyAssigned = checked.some(function(s){ return _buyerSkuOrder[s.sku_key] !== undefined && _buyerSkuOrder[s.sku_key] !== 999; });
+    if(!anyAssigned){
+        checked.forEach(function(s, i){ _buyerSkuOrder[s.sku_key] = i + 1; });
+    } else {
+        checked.forEach(function(s){
+            if(_buyerSkuOrder[s.sku_key] === undefined || _buyerSkuOrder[s.sku_key] === 999){
+                _buyerSkuOrder[s.sku_key] = ++maxPos;
+            }
+        });
+    }
     // Remove order entries for unchecked items
     Object.keys(_buyerSkuOrder).forEach(function(k){
         if(!_buyerChecked[k]) delete _buyerSkuOrder[k];
@@ -3119,9 +3209,9 @@ function renderBuyerOrderList(){
         var rawKey = sku.sku_key;
         html += '<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);background:'+(i%2===0?'#fff':'#fafaf8')+';">'
             +'<div style="display:flex;flex-direction:column;gap:2px;">'
-            +'<button data-move-sku="'+rawKey+'" data-move-dir="-1" '+(isFirst?'disabled':'')
+            +'<button data-move-idx="'+i+'" data-move-dir="-1" '+(isFirst?'disabled':'')
             +' style="background:none;border:1px solid var(--border);border-radius:4px;width:24px;height:22px;cursor:pointer;font-size:10px;line-height:1;padding:0;'+(isFirst?'opacity:0.3;cursor:not-allowed;':'')+'">▲</button>'
-            +'<button data-move-sku="'+rawKey+'" data-move-dir="1" '+(isLast?'disabled':'')
+            +'<button data-move-idx="'+i+'" data-move-dir="1" '+(isLast?'disabled':'')
             +' style="background:none;border:1px solid var(--border);border-radius:4px;width:24px;height:22px;cursor:pointer;font-size:10px;line-height:1;padding:0;'+(isLast?'opacity:0.3;cursor:not-allowed;':'')+'">▼</button>'
             +'</div>'
             +'<span style="font-size:13px;flex:1;">'+escHtml(sku.display||sku.recipe)+'</span>'
@@ -3129,23 +3219,24 @@ function renderBuyerOrderList(){
             +'</div>';
     });
     list.innerHTML=html;
-    list.querySelectorAll('[data-move-sku]').forEach(function(btn){
+    list.querySelectorAll('[data-move-idx]').forEach(function(btn){
         btn.addEventListener('click', function(){
-            moveBuyerSku(this.getAttribute('data-move-sku'), parseInt(this.getAttribute('data-move-dir')));
+            moveBuyerSku(parseInt(this.getAttribute('data-move-idx')), parseInt(this.getAttribute('data-move-dir')));
         });
     });
 }
-function moveBuyerSku(skuKey, dir){
+function moveBuyerSku(rowIdx, dir){
+    // rowIdx is the current position in the sorted list (integer)
     var checked = _buyerAllSkus.filter(function(s){ return _buyerChecked[s.sku_key]; });
     checked.sort(function(a,b){ return (_buyerSkuOrder[a.sku_key]||999)-(_buyerSkuOrder[b.sku_key]||999); });
-    var idx = checked.findIndex(function(s){ return s.sku_key===skuKey; });
-    var swapIdx = idx+dir;
-    if(swapIdx<0||swapIdx>=checked.length) return;
-    // Swap positions
-    var posA = _buyerSkuOrder[checked[idx].sku_key];
-    var posB = _buyerSkuOrder[checked[swapIdx].sku_key];
-    _buyerSkuOrder[checked[idx].sku_key] = posB;
-    _buyerSkuOrder[checked[swapIdx].sku_key] = posA;
+    var swapIdx = rowIdx + dir;
+    if(swapIdx < 0 || swapIdx >= checked.length) return;
+    var keyA = checked[rowIdx].sku_key;
+    var keyB = checked[swapIdx].sku_key;
+    var posA = _buyerSkuOrder[keyA];
+    var posB = _buyerSkuOrder[keyB];
+    _buyerSkuOrder[keyA] = posB;
+    _buyerSkuOrder[keyB] = posA;
     renderBuyerOrderList();
 }
 
@@ -3157,11 +3248,20 @@ async function saveBuyer(){
     if(!name){ msg.className='status error'; msg.textContent='Name required.'; return; }
     var skus=_buyerAllSkus.filter(function(s){ return _buyerChecked[s.sku_key]; })
         .map(function(s){ return Object.assign({}, s, {position: _buyerSkuOrder[s.sku_key] !== undefined ? _buyerSkuOrder[s.sku_key] : 999}); });
+    var contactPayload = {
+        contact_name: (document.getElementById('buyer-contact-name').value||'').trim(),
+        phone: (document.getElementById('buyer-phone').value||'').trim(),
+        email: (document.getElementById('buyer-email').value||'').trim(),
+        website: (document.getElementById('buyer-website').value||'').trim(),
+        address: (document.getElementById('buyer-address').value||'').trim(),
+        certifications: (document.getElementById('buyer-certifications').value||'').trim(),
+        notes: (document.getElementById('buyer-notes').value||'').trim(),
+    };
     btn.disabled=true; btn.textContent='Saving…';
     try{
         var url=_buyerModalMode==='edit'?'/api/buyers/'+_buyerEditId:'/api/buyers';
         var method=_buyerModalMode==='edit'?'PUT':'POST';
-        var res=await fetch(url,{method:method,headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,skus:skus})});
+        var res=await fetch(url,{method:method,headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({name:name,skus:skus},contactPayload))});
         var data=await res.json();
         if(!res.ok) throw new Error(data.error||'Save failed');
         closeBuyerModal();
@@ -3209,8 +3309,14 @@ async function loadSuppliers(){
             var sname = escHtml(s.name);
             html += '<div style="border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px;background:#fff;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">'
                 + '<div style="flex:1;min-width:0;">'
-                + '<div style="font-size:15px;font-weight:600;margin-bottom:4px;">' + sname + '</div>'
+                + '<div style="font-size:15px;font-weight:600;margin-bottom:2px;">' + sname + '</div>'
                 + '<div style="font-size:12px;color:var(--text-light);">' + ingCount + ' ingredient' + (ingCount===1?'':'s') + (preview ? ' · ' + preview : '') + '</div>'
+                + (s.contact_name||s.phone||s.email||s.website ? '<div style="font-size:12px;color:var(--text-light);margin-top:3px;">'
+                    + [s.contact_name?escHtml(s.contact_name):'', s.phone?'<a href="tel:'+escHtml(s.phone)+'">'+escHtml(s.phone)+'</a>':'', s.email?'<a href="mailto:'+escHtml(s.email)+'">'+escHtml(s.email)+'</a>':'', s.website?'<a href="'+escHtml(s.website)+'" target="_blank" rel="noopener">Website</a>':''].filter(Boolean).join(' · ')
+                    + '</div>' : '')
+                + (s.address ? '<div style="font-size:12px;color:var(--text-light);margin-top:2px;">'+escHtml(s.address)+'</div>' : '')
+                + (s.certifications ? '<div style="font-size:11px;margin-top:4px;"><span style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;padding:1px 7px;border-radius:10px;">'+escHtml(s.certifications)+'</span></div>' : '')
+                + (s.notes ? '<div style="font-size:11px;color:var(--text-light);margin-top:4px;font-style:italic;">'+escHtml(s.notes)+'</div>' : '')
                 + '</div>'
                 + '<div style="display:flex;gap:8px;flex-shrink:0;">'
                 + '<button class="btn-outline" style="font-size:12px;padding:7px 12px;" data-edit-sid="' + sid + '">Edit</button>'
@@ -3257,6 +3363,13 @@ async function openAddSupplierModal(){
 
     _supplierAllIngredients = await _fetchIngredientCatalog();
     _supplierChecked = {};
+    document.getElementById('supplier-contact-name').value = '';
+    document.getElementById('supplier-phone').value = '';
+    document.getElementById('supplier-email').value = '';
+    document.getElementById('supplier-address').value = '';
+    document.getElementById('supplier-website').value = '';
+    document.getElementById('supplier-certifications').value = '';
+    document.getElementById('supplier-notes').value = '';
     renderSupplierIngredientList();
     document.getElementById('supplier-modal').classList.add('active');
     setTimeout(function(){ document.getElementById('supplier-name-input').focus(); }, 100);
@@ -3273,6 +3386,13 @@ async function openEditSupplierModal(sid){
 
     document.getElementById('supplier-modal-title').textContent = 'Edit Supplier';
     document.getElementById('supplier-name-input').value = s.name;
+    document.getElementById('supplier-contact-name').value = s.contact_name || '';
+    document.getElementById('supplier-phone').value = s.phone || '';
+    document.getElementById('supplier-email').value = s.email || '';
+    document.getElementById('supplier-address').value = s.address || '';
+    document.getElementById('supplier-website').value = s.website || '';
+    document.getElementById('supplier-certifications').value = s.certifications || '';
+    document.getElementById('supplier-notes').value = s.notes || '';
     document.getElementById('supplier-ing-search').value = '';
     document.getElementById('supplier-modal-msg').textContent = '';
     document.getElementById('supplier-save-btn').disabled = false;
@@ -3339,7 +3459,13 @@ async function saveSupplier(){
         var res = await fetch(url, {
             method: method,
             headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({name: name, ingredients: ingredients}),
+            body: JSON.stringify({name: name, ingredients: ingredients, contact_name: (document.getElementById('supplier-contact-name').value||'').trim(),
+        phone: (document.getElementById('supplier-phone').value||'').trim(),
+        email: (document.getElementById('supplier-email').value||'').trim(),
+        address: (document.getElementById('supplier-address').value||'').trim(),
+        website: (document.getElementById('supplier-website').value||'').trim(),
+        certifications: (document.getElementById('supplier-certifications').value||'').trim(),
+        notes: (document.getElementById('supplier-notes').value||'').trim()}),
         });
         var data = await res.json();
         if(!res.ok){ throw new Error(data.error || 'Save failed'); }
@@ -4215,13 +4341,13 @@ async function loadFinishedGoods(){
         var inStock=skus.filter(function(s){return(s.total_remaining||0)>0;}).length;
         var isCollapsed=(brand in _fgCollapsedBrands)?_fgCollapsedBrands[brand]:_fgDefaultCollapsed;
         html+='<div class="fg-brand-section">';
-        html+='<div class="fg-brand-header" data-fg-brand="'+brandSafe+'">';
+        html+='<div class="fg-brand-header" data-fg-brand="'+brandSafe+'" style="cursor:pointer;">';
         html+='<span class="fg-brand-toggle">'+(isCollapsed?'▶':'▼')+'</span>';
         html+='<span class="fg-brand-name">'+brandSafe+'</span>';
         html+='<span class="fg-brand-meta">'+inStock+' in stock · '+brandUnits+' units</span>';
         html+='</div>';
-        if(!isCollapsed){
-        html+='<div class="fg-brand-body" id="'+brandId+'">';
+        html+='<div class="fg-brand-body" id="'+brandId+'" style="'+(isCollapsed?'display:none;':'')+'">';
+        if(true){
 
         skus.forEach(function(s){
             var keyAttr=encodeURIComponent(s.sku_key);
@@ -4261,29 +4387,58 @@ async function loadFinishedGoods(){
             // Price
             var priceVal = (s.price !== null && s.price !== undefined) ? s.price.toFixed(2) : '';
 
-            html+='<div class="fg-row sku-row" data-sku="'+keyAttr+'" style="'+rowOpacity+'padding:12px 4px;">';
-            html+='<div class="fg-info" style="flex:1;min-width:180px;">';
-            html+='<strong>'+displaySafe+'</strong>'+certBadge(s.certification)+baselineBadge+stockBadge+parWarningBadge;
-            html+='<br><span style="font-size:11px;color:var(--text-light);margin-top:4px;display:inline-block;">'+lotNote+(s.total_produced?' • '+s.total_produced+' produced lifetime':'')+'</span>';
+            // PAR progress bar (0% when no PAR, filled green/amber/red)
+            var parBar = '';
+            if(!parNoPar && s.par > 0){
+                var pct = Math.min(100, Math.round((s.total_remaining / s.par) * 100));
+                var barColor = pct >= 75 ? '#4caf50' : pct >= 40 ? '#ff9800' : '#f44336';
+                parBar = '<div style="margin-top:5px;height:4px;border-radius:2px;background:#f0f0eb;overflow:hidden;width:100%;">'
+                    + '<div style="height:4px;border-radius:2px;background:'+barColor+';width:'+pct+'%;transition:width .3s;"></div></div>';
+            }
+
+            html+='<div class="fg-row sku-row" data-sku="'+keyAttr+'" style="'+rowOpacity+'padding:12px 4px;gap:10px;">';
+
+            // Name + meta block
+            html+='<div class="fg-info" style="flex:1;min-width:160px;">';
+            html+='<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;"><strong>'+displaySafe+'</strong>'+certBadge(s.certification)+baselineBadge+stockBadge+parWarningBadge+'</div>';
+            html+='<div style="font-size:11px;color:var(--text-light);margin-top:3px;">'+lotNote+(s.total_produced?' • '+s.total_produced+' produced lifetime':'')+'</div>';
+            html+='<div style="font-size:10px;color:#b8b8b0;font-family:ui-monospace,monospace;margin-top:2px;user-select:all;" title="Soma SKU Key — copy into Ripe portal">'+escSku(s.sku_key)+'</div>';
             html+='</div>';
-            html+='<div class="fg-qty'+(outOfStock?' negative':'')+'" style="min-width:80px;text-align:right;">'+s.total_remaining+' units</div>';
-            // PAR field
-            html+='<div style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:110px;">';
-            html+='<label style="font-size:9px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;">PAR</label>';
-            html+='<div style="display:flex;align-items:center;gap:5px;">';
-            html+='<input type="number" class="sku-par-input" data-sku-key="'+keyAttr+'" min="0" step="1" value="'+escHtml(String(parVal))+'" placeholder="—" '+(parNoPar?'disabled':'')+' style="width:58px;padding:5px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px;'+(parNoPar?'background:#f5f5f0;opacity:0.5;':'')+(parBelowPar?'border-color:#f57f17;background:#fff8e1;':'')+'">';
-            html+='<label style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--text-light);cursor:pointer;" title="No PAR level for this SKU">';
-            html+='<input type="checkbox" class="sku-nopar-cb" data-sku-key="'+keyAttr+'" '+(parNoPar?'checked':'')+' style="width:12px;height:12px;cursor:pointer;">None';
-            html+='</label></div></div>';
-            // Price field
-            html+='<div style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:90px;">';
-            html+='<label style="font-size:9px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;">Price / unit</label>';
-            html+='<div style="display:flex;align-items:center;gap:2px;">';
-            html+='<span style="font-size:12px;color:var(--text-light);">$</span>';
-            html+='<input type="number" class="sku-price-input" data-sku-key="'+keyAttr+'" min="0" step="0.01" value="'+escHtml(String(priceVal))+'" placeholder="0.00" style="width:62px;padding:5px 6px;border:1px solid var(--border);border-radius:5px;font-size:12px;">';
-            html+='</div></div>';
+
+            // Stock pill
+            html+='<div style="display:flex;flex-direction:column;align-items:flex-end;min-width:72px;">';
+            html+='<div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;">Stock</div>';
+            html+='<div class="fg-qty'+(outOfStock?' negative':'')+'" style="font-size:16px;font-weight:700;line-height:1;">'+s.total_remaining+'</div>';
+            html+='<div style="font-size:10px;color:var(--text-light);">units</div>';
+            html+='</div>';
+
+            // PAR block
+            html+='<div style="min-width:120px;">';
+            html+='<div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">PAR Level</div>';
+            html+='<div style="display:flex;align-items:center;gap:6px;">';
+            html+='<input type="number" class="sku-par-input" data-sku-key="'+keyAttr+'" min="0" step="1" value="'+escHtml(String(parVal))+'" placeholder="—" '+(parNoPar?'disabled':'')+' style="width:60px;padding:6px 8px;border:1px solid '+(parBelowPar?'#f57f17':'var(--border)')+';border-radius:6px;font-size:13px;font-weight:600;background:'+(parNoPar?'#f5f5f0':parBelowPar?'#fff8e1':'#fff')+';'+(parNoPar?'opacity:0.45;':'')+'">';
+            html+='<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-light);cursor:pointer;white-space:nowrap;">';
+            html+='<input type="checkbox" class="sku-nopar-cb" data-sku-key="'+keyAttr+'" '+(parNoPar?'checked':'')+' style="width:13px;height:13px;cursor:pointer;accent-color:var(--accent);"> No PAR';
+            html+='</label></div>';
+            html+=parBar;
+            if(!parNoPar && parBelowPar){
+                var short = s.par - s.total_remaining;
+                html+='<div style="font-size:10px;color:#f57f17;margin-top:3px;font-weight:600;">'+short+' units short</div>';
+            }
+            html+='</div>';
+
+            // Price block
+            html+='<div style="min-width:90px;">';
+            html+='<div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">Sale Price</div>';
+            html+='<div style="display:flex;align-items:center;background:#f9f9f7;border:1px solid var(--border);border-radius:6px;overflow:hidden;">';
+            html+='<span style="font-size:12px;color:var(--text-light);padding:0 5px 0 8px;font-weight:500;">$</span>';
+            html+='<input type="number" class="sku-price-input" data-sku-key="'+keyAttr+'" min="0" step="0.01" value="'+escHtml(String(priceVal))+'" placeholder="0.00" style="width:60px;padding:6px 8px 6px 0;border:none;font-size:13px;font-weight:600;background:transparent;outline:none;">';
+            html+='</div>';
+            if(priceVal) html+='<div style="font-size:10px;color:var(--text-light);margin-top:3px;">$'+(parseFloat(priceVal)*12).toFixed(2)+'/case</div>';
+            html+='</div>';
+
             // Lots toggle
-            html+='<div>'+expandBtn+'</div>';
+            html+='<div style="flex-shrink:0;">'+expandBtn+'</div>';
             html+='</div>';
 
             if(isExpanded && hasHistory){
@@ -4292,7 +4447,6 @@ async function loadFinishedGoods(){
         });
 
         html+='</div>'; // fg-brand-body
-        } // end !isCollapsed
         html+='</div>'; // fg-brand-section
     });
     container.innerHTML=html;
@@ -4371,12 +4525,26 @@ function attachFgClickDelegationOnce(){
     if(!c || c.dataset.delegated)return;
     c.dataset.delegated='1';
     c.addEventListener('click',function(e){
-        // Brand header collapse/expand
+        // Brand header collapse/expand — toggle DOM directly, no full re-render
         var brandHdr=e.target.closest('[data-fg-brand]');
         if(brandHdr && !e.target.closest('[data-action]')){
             var brand=brandHdr.getAttribute('data-fg-brand');
-            _fgCollapsedBrands[brand]=!_fgCollapsedBrands[brand];
-            loadFinishedGoods();
+            var section=brandHdr.closest('.fg-brand-section');
+            var body=section?section.querySelector('.fg-brand-body'):null;
+            var arrow=brandHdr.querySelector('.fg-brand-toggle');
+            var isNowCollapsed;
+            if(body){
+                // Body already rendered — just hide/show
+                var hidden=body.style.display==='none';
+                body.style.display=hidden?'':'none';
+                isNowCollapsed=!hidden;
+                if(arrow) arrow.textContent=isNowCollapsed?'▶':'▼';
+                _fgCollapsedBrands[brand]=isNowCollapsed;
+            } else {
+                // Body not rendered yet (was collapsed on initial load) — need full render
+                _fgCollapsedBrands[brand]=false;
+                loadFinishedGoods();
+            }
             return;
         }
         var el=e.target.closest('[data-action]');

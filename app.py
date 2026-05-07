@@ -4160,6 +4160,9 @@ def update_supplier(sid):
         suppliers[idx]["name"] = name
     if "ingredients" in data:
         suppliers[idx]["ingredients"] = data["ingredients"]
+    for field in ("contact_name","phone","email","address","website","certifications","notes"):
+        if field in data:
+            suppliers[idx][field] = (data[field] or "").strip()
     _save_suppliers(suppliers)
     return jsonify(suppliers[idx])
 
@@ -4725,6 +4728,9 @@ def update_buyer(bid):
         buyers[idx]["name"] = name
     if "skus" in data:
         buyers[idx]["skus"] = data["skus"]
+    for field in ("contact_name","phone","email","address","website","certifications","notes"):
+        if field in data:
+            buyers[idx][field] = (data[field] or "").strip()
     _save_buyers(buyers)
     return jsonify(buyers[idx])
 
