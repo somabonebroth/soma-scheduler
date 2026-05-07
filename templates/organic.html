@@ -4547,14 +4547,7 @@ async function loadFinishedGoods(){
             var priceVal = (s.price !== null && s.price !== undefined) ? s.price.toFixed(2) : '';
 
             // PAR progress bar (0% when no PAR, filled green/amber/red)
-            var parBar = '';
-            if(!parNoPar && s.par > 0){
-                var pct = Math.min(100, Math.round((s.total_remaining / s.par) * 100));
-                var barColor = pct >= 75 ? '#4caf50' : pct >= 40 ? '#ff9800' : '#f44336';
-                parBar = '<div style="margin-top:5px;height:4px;border-radius:2px;background:#f0f0eb;overflow:hidden;width:100%;">'
-                    + '<div style="height:4px;border-radius:2px;background:'+barColor+';width:'+pct+'%;transition:width .3s;"></div></div>';
-            }
-
+                  var parBar = ''; // removed for UI simplicity
             html+='<div class="fg-row sku-row" data-sku="'+keyAttr+'" style="'+rowOpacity+'padding:12px 4px;gap:10px;">';
 
             // Name + meta block
@@ -4579,11 +4572,7 @@ async function loadFinishedGoods(){
             html+='<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-light);cursor:pointer;white-space:nowrap;">';
             html+='<input type="checkbox" class="sku-nopar-cb" data-sku-key="'+keyAttr+'" '+(parNoPar?'checked':'')+' style="width:13px;height:13px;cursor:pointer;accent-color:var(--accent);"> No PAR';
             html+='</label></div>';
-            html+=parBar;
-            if(!parNoPar && parBelowPar){
-                var short = s.par - s.total_remaining;
-                html+='<div style="font-size:10px;color:#f57f17;margin-top:3px;font-weight:600;">'+short+' units short</div>';
-            }
+            // parBar removed for UI simplicity
             html+='</div>';
 
             // Price block
@@ -4609,6 +4598,7 @@ async function loadFinishedGoods(){
         html+='</div>'; // fg-brand-section
     });
     container.innerHTML=html;
+    delete container.dataset.metaDelegated;  // allow listener re-attach after rebuild
     attachFgClickDelegationOnce();
     attachSkuMetaListeners();
     if(expandedSku){
@@ -4628,6 +4618,20 @@ function attachSkuMetaListeners(){
     if(!container || container.dataset.metaDelegated) return;
     container.dataset.metaDelegated = '1';
 
+    // 'change' fires on blur — catches values typed then lost before debounce fires
+    container.addEventListener('change', function(e){
+        var input = e.target;
+        if(input.classList.contains('sku-par-input')){
+            var skuKey = decodeURIComponent(input.getAttribute('data-sku-key'));
+            clearTimeout(_skuMetaTimers[skuKey+'_par']);
+            saveSkuMeta(skuKey, {par: input.value.trim()==='' ? null : parseInt(input.value)});
+        }
+        if(input.classList.contains('sku-price-input')){
+            var skuKey = decodeURIComponent(input.getAttribute('data-sku-key'));
+            clearTimeout(_skuMetaTimers[skuKey+'_price']);
+            saveSkuMeta(skuKey, {price: input.value.trim()==='' ? null : parseFloat(input.value)});
+        }
+    });
     container.addEventListener('input', function(e){
         var input = e.target;
         if(input.classList.contains('sku-par-input')){

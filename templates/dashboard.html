@@ -51,37 +51,37 @@
         <div class="dash-row">
             <a href="/create-schedule" class="dash-btn highlight"><span class="icon">+</span><span class="label">Create New Schedule</span><span class="sublabel">Plan the week's production</span></a>
             <a href="/weekly-schedule" class="dash-btn"><span class="icon">&#128197;</span><span class="label">Weekly Schedule</span><span class="sublabel">View current week</span></a>
+            <div class="dash-btn highlight" onclick="goToDay(0)" style="cursor:pointer;"><span class="icon">&#9654;</span><span class="label">Today's Production</span><span class="sublabel" id="today-label">Loading...</span></div>
         </div>
-        <div class="section-label">Daily Production</div>
+        <div class="section-label">Quick Actions</div>
         <div class="dash-row">
-            <div class="dash-btn" onclick="goToDay(-1)"><span class="icon">&#9664;</span><span class="label">Yesterday's Production</span><span class="sublabel" id="yesterday-label">Loading...</span></div>
-            <div class="dash-btn highlight" onclick="goToDay(0)"><span class="icon">&#9654;</span><span class="label">Today's Production</span><span class="sublabel" id="today-label">Loading...</span></div>
-            <div class="dash-btn" onclick="goToDay(1)"><span class="icon">&#9654;&#9654;</span><span class="label">Tomorrow's Production</span><span class="sublabel" id="tomorrow-label">Loading...</span></div>
-        </div>
-        <div class="section-label">Inventory Actions</div>
-        <div class="dash-row">
-            <div class="dash-btn highlight" onclick="openReceiveModal()" style="border-color:#2e7d32;cursor:pointer;">
-                <span class="icon">&#128230;</span>
-                <span class="label">Receive Inventory</span>
-                <span class="sublabel">Record a supplier delivery</span>
+            <div class="dash-btn" onclick="openReceiveModal()" style="background:#2e7d32;border-color:#2e7d32;cursor:pointer;">
+                <span class="icon" style="color:#fff;">&#128230;</span>
+                <span class="label" style="color:#fff;">Receive Inventory</span>
+                <span class="sublabel" style="color:rgba(255,255,255,0.75);">Record a supplier delivery</span>
             </div>
-            <div class="dash-btn highlight" onclick="openDashSaleModal()" style="border-color:#0288d1;cursor:pointer;">
-                <span class="icon">&#128176;</span>
-                <span class="label">Record Sale</span>
-                <span class="sublabel">Select buyer and date</span>
+            <div class="dash-btn" onclick="openDashSaleModal()" style="background:#0288d1;border-color:#0288d1;cursor:pointer;">
+                <span class="icon" style="color:#fff;">&#128176;</span>
+                <span class="label" style="color:#fff;">Record Sale</span>
+                <span class="sublabel" style="color:rgba(255,255,255,0.75);">Select buyer and date</span>
             </div>
         </div>
-        <div class="section-label">Resources</div>
+        <details id="resources-section" style="margin-top:4px;">
+          <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;padding:4px 0 8px;">
+            <span class="section-label" style="margin:0;">Resources</span>
+            <span id="res-caret" style="font-size:10px;color:var(--text-light);">▶</span>
+          </summary>
         <div class="dash-row">
             <a href="/recipes" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Recipe Cards</span><span class="sublabel">View and manage recipes</span></a>
             <a href="/ccp-master" class="dash-btn"><span class="icon">&#9989;</span><span class="label">CCP Checklist</span><span class="sublabel">Master reference</span></a>
             <a href="/production-tracker" class="dash-btn"><span class="icon">&#128200;</span><span class="label">Production Tracker</span><span class="sublabel">Weekly output charts</span></a>
             <a href="/traceability" class="dash-btn"><span class="icon">&#128451;</span><span class="label">Completed Production</span><span class="sublabel">Review and sign off weekly records</span></a>
-            <a href="/organic" class="dash-btn highlight" style="border-color:#2e7d32;"><span class="icon">&#128230;</span><span class="label">Inventory</span><span class="sublabel">Raw materials, finished goods &amp; traceability</span></a>
+            <a href="/organic" class="dash-btn highlight" style="border-color:#2e7d32;"><span class="icon">&#128230;</span><span class="label">Manage Inventory</span><span class="sublabel">Raw materials, finished goods &amp; traceability</span></a>
             <a href="/contacts" class="dash-btn"><span class="icon">&#128101;</span><span class="label">Contacts &amp; Settings</span><span class="sublabel">Suppliers, buyers, company info</span></a>
             <div class="dash-btn disabled"><span class="icon">&#128295;</span><span class="label">Equipment &amp; Maintenance</span><span class="sublabel">Coming soon</span></div>
             <div class="dash-btn disabled"><span class="icon">&#128196;</span><span class="label">Organic Certification Documents</span><span class="sublabel">Coming soon</span></div>
         </div>
+        </details>
     </div>
 </div>
 <script>
@@ -89,7 +89,16 @@ var DAYNAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Satur
 async function doLogout(){await fetch('/api/logout',{method:'POST'});window.location.href='/login';}
 
 // Ripe Orders pending badge
-(async function loadRipeBadge() {
+(// Resources section toggle caret
+var _resSection = document.getElementById('resources-section');
+if(_resSection){
+    _resSection.addEventListener('toggle', function(){
+        var c = document.getElementById('res-caret');
+        if(c) c.textContent = this.open ? '▼' : '▶';
+    });
+}
+
+async function loadRipeBadge() {
   try {
     var r = await fetch('/api/ripe-orders/pending-count');
     var d = await r.json();
