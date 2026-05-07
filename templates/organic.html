@@ -861,18 +861,20 @@ body.inv-page .modal-actions {
                     </div>
                 </div>
                 <!-- Location dropdown — shown when buyer has multiple delivery locations -->
-                <div id="sale-location-field" style="display:none;margin-top:10px;padding:12px 14px;background:#f0f7ff;border:1.5px solid #90caf9;border-radius:8px;">
-                    <label style="display:block;font-size:11px;font-weight:700;color:#0288d1;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">
-                        &#128205; Delivery Location
-                    </label>
-                    <select id="sale-location-select" style="width:100%;box-sizing:border-box;font-size:14px;padding:10px 12px;border:1.5px solid #90caf9;border-radius:7px;background:#fff;">
+                <div id="sale-location-field" style="display:none;margin-top:12px;padding:14px 16px;background:#e3f2fd;border:2px solid #1976d2;border-radius:10px;">
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+                        <span style="font-size:16px;">&#128205;</span>
+                        <span style="font-size:13px;font-weight:700;color:#1565c0;">Select Delivery Location</span>
+                    </div>
+                    <select id="sale-location-select" style="width:100%;box-sizing:border-box;font-size:14px;padding:11px 12px;border:1.5px solid #1976d2;border-radius:8px;background:#fff;color:#1a1a1a;font-weight:500;">
                         <option value="">— Main / Primary address —</option>
                     </select>
+                    <div style="font-size:11px;color:#1565c0;margin-top:6px;opacity:0.8;">Choose a location or leave as primary. This appears on the packing slip.</div>
                 </div>
                 <div id="sale-step1-msg" class="status"></div>
                 <div class="modal-actions">
                     <button class="btn btn-outline" onclick="closeRecordSaleModal()">Cancel</button>
-                    <button class="btn btn-primary" onclick="onSaleBuyerChange();goToSaleStep2();" style="background:#0288d1;border-color:#0288d1;">Next →</button>
+                    <button class="btn btn-primary" onclick="goToSaleStep2();" style="background:#0288d1;border-color:#0288d1;">Next →</button>
                 </div>
             </div>
 
@@ -2835,6 +2837,8 @@ async function openRecordSaleModal(){
     document.getElementById('sale-submit-btn').style.display = '';
     document.getElementById('sale-close-btn').textContent = 'Cancel';
     _rsLastSaleId = null;
+    _rsLocationName = '';
+    _rsLocationAddress = '';
 
     try {
         var [buyersRes, fgRes] = await Promise.all([
@@ -2864,7 +2868,13 @@ function closeRecordSaleModal(){
 function goBackToSaleStep1(){
     document.getElementById('sale-step1').style.display = '';
     document.getElementById('sale-step2').style.display = 'none';
+    // Re-populate location dropdown since step 1 is visible again
+    onSaleBuyerChange();
 }
+
+// Captured location selection — read before step 1 is hidden
+var _rsLocationName = '';
+var _rsLocationAddress = '';
 
 function goToSaleStep2(){
     var date = document.getElementById('sale-date-modal').value;
@@ -2877,6 +2887,11 @@ function goToSaleStep2(){
         msg.className='status error'; msg.textContent='This buyer has no products assigned. Go to the Buyers tab to assign them.';
         return;
     }
+    // Capture selected location NOW before step 1 is hidden
+    var locSel = document.getElementById('sale-location-select');
+    var locOpt = locSel ? locSel.options[locSel.selectedIndex] : null;
+    _rsLocationName    = locOpt ? (locOpt.getAttribute('data-name')    || '') : '';
+    _rsLocationAddress = locOpt ? (locOpt.getAttribute('data-address') || '') : '';
     msg.textContent='';
     document.getElementById('sale-buyer-label').textContent = buyer.name;
     document.getElementById('sale-date-label').textContent = new Date(date+'T12:00:00').toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'});
@@ -2944,10 +2959,9 @@ async function submitRecordSale(){
     var btn = document.getElementById('sale-submit-btn');
     msg.textContent=''; msg.className='status';
 
-    var locSel = document.getElementById('sale-location-select');
-    var locOpt = locSel ? locSel.options[locSel.selectedIndex] : null;
-    var locName = locOpt ? (locOpt.getAttribute('data-name') || '') : '';
-    var locAddr = locOpt ? (locOpt.getAttribute('data-address') || '') : '';
+    // Location was captured in goToSaleStep2() before step 1 was hidden
+    var locName = _rsLocationName    || '';
+    var locAddr = _rsLocationAddress || '';
 
     var inputs = document.querySelectorAll('[data-rs-sku]');
     var lines = [];
@@ -3033,6 +3047,8 @@ function onSaleBuyerChange(){
     var buyer = _rsBuyers.find(function(b){ return b.id === buyerId; });
     var locField = document.getElementById('sale-location-field');
     var locSel = document.getElementById('sale-location-select');
+    console.log('[Sale] buyer selected:', buyer ? buyer.name : 'none',
+                '| locations:', buyer ? (buyer.locations||[]).length : 0);
     if(buyer && buyer.locations && buyer.locations.length > 0){
         locSel.innerHTML = '<option value="">— Main / Primary address —</option>';
         buyer.locations.forEach(function(loc){
@@ -5566,9 +5582,10 @@ document.addEventListener('DOMContentLoaded',function(){
                     }
                 }
             }
-            // Populate location dropdown then advance to step 2
+            // Populate location dropdown (for display), then advance to step 2.
+            // goToSaleStep2 captures the location selection automatically.
             if(buyerId && date){
-                onSaleBuyerChange(); // populate locations for this buyer
+                onSaleBuyerChange();
                 goToSaleStep2();
             }
         }, 200);
