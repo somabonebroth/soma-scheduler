@@ -604,12 +604,19 @@ body.inv-page .modal-actions {
     /* Modal actions — stack on mobile */
     body.inv-page .modal-actions {
         flex-direction: column-reverse;
-        gap: 8px;
+        gap: 10px;
     }
-    body.inv-page .modal-actions button {
+    body.inv-page .modal-actions button,
+    body.inv-page .modal-actions .btn {
         width: 100%;
+        min-height: 48px;
         justify-content: center;
+        box-sizing: border-box;
+        text-align: center;
     }
+    /* Dashboard modals */
+    .dash-modal-overlay .modal-actions { flex-direction: column-reverse; gap: 10px; }
+    .dash-modal-overlay .modal-actions button { width: 100%; min-height: 48px; box-sizing: border-box; }
 
     /* Add Inventory ingredient grid — collapse LOT# below name */
     #add-inv-ingredient-grid > div {
@@ -753,8 +760,7 @@ body.inv-page .modal-actions {
         <button class="tab-btn" onclick="showTab('runs')">Production Runs</button>
         <button class="tab-btn" onclick="showTab('fg')">Finished Goods</button>
         <button class="tab-btn" onclick="showTab('records')">Records</button>
-        <button class="tab-btn" onclick="showTab('suppliers')">Suppliers</button>
-        <button class="tab-btn" onclick="showTab('buyers')">Buyers</button>
+
     </div>
 
     <!-- TAB 1: Raw Materials -->
@@ -804,6 +810,35 @@ body.inv-page .modal-actions {
         </div>
     </div>
 
+    <!-- TAB 7: Settings (Company Info) -->
+    <div class="tab-content" id="tab-settings">
+        <div class="card">
+            <h2 style="border-bottom:none;padding-bottom:0;margin-bottom:4px;">Company Information</h2>
+            <p style="font-size:13px;color:var(--text-light);margin-bottom:20px;">Used on packing slips and documents. Changes save automatically.</p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+                <div class="form-field"><label>Company Name</label><input type="text" id="ci-name" placeholder="Soma Bone Broth" oninput="debounceSaveCompanyInfo()" style="width:100%;box-sizing:border-box;"></div>
+                <div class="form-field"><label>Phone</label><input type="tel" id="ci-phone" placeholder="416-555-0100" oninput="debounceSaveCompanyInfo()" style="width:100%;box-sizing:border-box;"></div>
+                <div class="form-field"><label>Email</label><input type="email" id="ci-email" placeholder="hello@somabonebroth.com" oninput="debounceSaveCompanyInfo()" style="width:100%;box-sizing:border-box;"></div>
+                <div class="form-field"><label>Website</label><input type="url" id="ci-website" placeholder="https://somabonebroth.com" oninput="debounceSaveCompanyInfo()" style="width:100%;box-sizing:border-box;"></div>
+            </div>
+            <div class="form-field" style="margin-bottom:12px;"><label>Address</label><input type="text" id="ci-address" placeholder="Street, City, Province, Postal" oninput="debounceSaveCompanyInfo()" style="width:100%;box-sizing:border-box;"></div>
+            <div class="form-field" style="margin-bottom:12px;"><label>City / Province / Postal</label><input type="text" id="ci-city" placeholder="Toronto, ON M5V 1A1" oninput="debounceSaveCompanyInfo()" style="width:100%;box-sizing:border-box;"></div>
+            <div class="form-field" style="margin-bottom:12px;"><label>Registration / Tax #</label><input type="text" id="ci-registration" placeholder="BN 123456789 RT0001" oninput="debounceSaveCompanyInfo()" style="width:100%;box-sizing:border-box;"></div>
+            <div class="form-field" style="margin-bottom:20px;"><label>Notes (footer line)</label><input type="text" id="ci-notes" placeholder="e.g. All products made in Canada" oninput="debounceSaveCompanyInfo()" style="width:100%;box-sizing:border-box;"></div>
+            <div style="border-top:1px solid var(--border);padding-top:16px;">
+                <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Ripe Portal Settings</div>
+                <div class="form-field" style="max-width:280px;">
+                    <label>Inventory Buffer (units withheld from Ripe's view)</label>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <input type="number" id="ci-buffer" min="0" step="1" placeholder="12" oninput="debounceSaveCompanyInfo()" style="width:80px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;font-weight:600;">
+                        <span style="font-size:12px;color:var(--text-light);">units per SKU (default 12)</span>
+                    </div>
+                </div>
+            </div>
+            <div id="ci-saved-msg" style="font-size:12px;color:#2e7d32;margin-top:10px;display:none;">✓ Saved</div>
+        </div>
+    </div>
+
     <!-- Record Sale Modal — 2-step: buyer → SKU grid -->
     <div class="modal-overlay" id="record-sale-modal">
         <div class="modal" style="max-width:700px;">
@@ -822,6 +857,12 @@ body.inv-page .modal-actions {
                         <label>Buyer</label>
                         <select id="sale-buyer-select" onchange="onSaleBuyerChange()">
                             <option value="">— Select buyer —</option>
+                        </select>
+                    </div>
+                    <div class="form-field" id="sale-location-field" style="display:none;">
+                        <label>Delivery Location <span style="font-weight:400;color:var(--text-light);">(optional)</span></label>
+                        <select id="sale-location-select" style="width:100%;box-sizing:border-box;">
+                            <option value="">— Main address —</option>
                         </select>
                     </div>
                 </div>
@@ -1437,6 +1478,15 @@ body.inv-page .modal-actions {
                 <label>Notes</label>
                 <textarea id="buyer-notes" rows="2" placeholder="Additional info…" style="width:100%;box-sizing:border-box;resize:vertical;"></textarea>
             </div>
+
+            <div style="margin-bottom:14px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <div style="font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;">Delivery Locations</div>
+                    <button type="button" onclick="addBuyerLocation()" style="font-size:11px;padding:4px 10px;border:1px solid var(--accent);color:var(--accent);background:#fff;border-radius:5px;cursor:pointer;">+ Add</button>
+                </div>
+                <div id="buyer-locations-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+            </div>
+
             <!-- Step A: check which SKUs are assigned -->
             <div id="buyer-step-assign">
                 <div style="font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Assigned Products</div>
@@ -1597,14 +1647,15 @@ function showTab(tab){
     document.querySelectorAll('.tab-btn').forEach(function(b,i){b.classList.remove('active');});
     document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active');});
     document.getElementById('tab-'+tab).classList.add('active');
-    var tabs=['raw','runs','fg','records','suppliers','buyers'];
-    document.querySelectorAll('.tab-btn')[tabs.indexOf(tab)].classList.add('active');
+    var tabs=['raw','runs','fg','records'];
+    var btnIdx=tabs.indexOf(tab); if(btnIdx>=0) document.querySelectorAll('.tab-btn')[btnIdx].classList.add('active');
     if(tab==='raw')loadRawMaterials();
     if(tab==='runs')loadRuns();
     if(tab==='fg')loadFinishedGoods();
     if(tab==='records'){loadSales();loadReceiving();}
     if(tab==='suppliers')loadSuppliers();
     if(tab==='buyers')loadBuyers();
+    if(tab==='settings')loadCompanyInfo();
 }
 
 // ── Raw Materials ──
@@ -1640,6 +1691,51 @@ function onIngredientSelect(){
         note='Deducts recipe amount per batch (halved for 115L)';
     }
     info.textContent=note;
+}
+
+// ── Company Info ─────────────────────────────────────────────────────────────
+var _ciSaveTimer = null;
+
+async function loadCompanyInfo(){
+    try {
+        var res = await fetch('/api/company-info');
+        var d = await res.json();
+        document.getElementById('ci-name').value = d.name || '';
+        document.getElementById('ci-phone').value = d.phone || '';
+        document.getElementById('ci-email').value = d.email || '';
+        document.getElementById('ci-website').value = d.website || '';
+        document.getElementById('ci-address').value = d.address || '';
+        document.getElementById('ci-city').value = d.city || '';
+        document.getElementById('ci-registration').value = d.registration || '';
+        document.getElementById('ci-notes').value = d.notes || '';
+        document.getElementById('ci-buffer').value = (d.ripe_inventory_buffer !== undefined) ? d.ripe_inventory_buffer : 12;
+    } catch(e) {}
+}
+
+function debounceSaveCompanyInfo(){
+    clearTimeout(_ciSaveTimer);
+    _ciSaveTimer = setTimeout(saveCompanyInfo, 800);
+}
+
+async function saveCompanyInfo(){
+    var patch = {
+        name: document.getElementById('ci-name').value,
+        phone: document.getElementById('ci-phone').value,
+        email: document.getElementById('ci-email').value,
+        website: document.getElementById('ci-website').value,
+        address: document.getElementById('ci-address').value,
+        city: document.getElementById('ci-city').value,
+        registration: document.getElementById('ci-registration').value,
+        notes: document.getElementById('ci-notes').value,
+        ripe_inventory_buffer: parseInt(document.getElementById('ci-buffer').value) || 0,
+    };
+    try {
+        var res = await fetch('/api/company-info', {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch)});
+        if(res.ok){
+            var msg = document.getElementById('ci-saved-msg');
+            if(msg){ msg.style.display='block'; setTimeout(function(){ msg.style.display='none'; }, 2000); }
+        }
+    } catch(e) {}
 }
 
 async function loadContacts(){
@@ -2876,8 +2972,11 @@ async function submitRecordSale(){
                     format: line.skuInfo.format || '',
                     quantity: line.quantity,
                     buyer: buyer ? buyer.name : '',
+                    buyer_id: buyer ? buyer.id : '',
                     sale_date: date,
                     po_number: po,
+                    location_name: (function(){ var s=document.getElementById('sale-location-select'); var o=s&&s.options[s.selectedIndex]; return o&&o.getAttribute('data-name')||''; })(),
+                    location_address: (function(){ var s=document.getElementById('sale-location-select'); var o=s&&s.options[s.selectedIndex]; return o&&o.getAttribute('data-address')||''; })(),
                 }),
             });
             var data = await res.json();
@@ -2920,6 +3019,27 @@ function downloadQBO(){
 }
 
 // Legacy openSellForm — redirect to new modal (called from per-SKU sell buttons)
+function onSaleBuyerChange(){
+    var buyerId = document.getElementById('sale-buyer-select').value;
+    var buyer = _rsBuyers.find(function(b){ return b.id === buyerId; });
+    var locField = document.getElementById('sale-location-field');
+    var locSel = document.getElementById('sale-location-select');
+    if(buyer && buyer.locations && buyer.locations.length > 0){
+        locSel.innerHTML = '<option value="">— Main address —</option>';
+        buyer.locations.forEach(function(loc){
+            var opt = document.createElement('option');
+            opt.value = loc.id;
+            opt.textContent = loc.name + (loc.address ? ' — ' + loc.address : '');
+            opt.setAttribute('data-address', loc.address || '');
+            opt.setAttribute('data-name', loc.name || '');
+            locSel.appendChild(opt);
+        });
+        if(locField) locField.style.display = '';
+    } else {
+        if(locField) locField.style.display = 'none';
+    }
+    goToSaleStep2();
+}
 function openSellForm(skuKey){
     openRecordSaleModal();
 }
@@ -3074,6 +3194,8 @@ async function openAddBuyerModal(){
     _buyerModalMode='add'; _buyerEditId=null;
     document.getElementById('buyer-modal-title').textContent='Add Buyer';
     document.getElementById('buyer-name-input').value='';
+    _buyerLocations=[];
+    renderBuyerLocations();
     document.getElementById('buyer-sku-search').value='';
     document.getElementById('buyer-modal-msg').textContent='';
     document.getElementById('buyer-save-btn').disabled=false;
@@ -3111,6 +3233,8 @@ async function openEditBuyerModal(bid){
     document.getElementById('buyer-website').value=b.website||'';
     document.getElementById('buyer-certifications').value=b.certifications||'';
     document.getElementById('buyer-notes').value=b.notes||'';
+    _buyerLocations=(b.locations||[]).map(function(l){return Object.assign({},l);});
+    renderBuyerLocations();
     document.getElementById('buyer-sku-search').value='';
     document.getElementById('buyer-modal-msg').textContent='';
     document.getElementById('buyer-save-btn').disabled=false;
@@ -3240,6 +3364,37 @@ function moveBuyerSku(rowIdx, dir){
     renderBuyerOrderList();
 }
 
+// ── Buyer locations management ─────────────────────────────────────────────
+var _buyerLocations = []; // [{id, name, address}]
+
+function renderBuyerLocations(){
+    var list = document.getElementById('buyer-locations-list');
+    if(!list) return;
+    if(!_buyerLocations.length){
+        list.innerHTML = '<div style="font-size:12px;color:var(--text-light);">No locations added yet.</div>';
+        return;
+    }
+    list.innerHTML = _buyerLocations.map(function(loc, i){
+        return '<div style="display:flex;gap:6px;align-items:flex-start;background:#f9f9f7;border:1px solid var(--border);border-radius:6px;padding:8px 10px;">'
+            +'<div style="flex:1;">'
+            +'<input placeholder="Location name (e.g. Coco Market)" value="'+escHtml(loc.name)+'" oninput="_buyerLocations['+i+'].name=this.value" style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;margin-bottom:4px;">'
+            +'<input placeholder="Address" value="'+escHtml(loc.address)+'" oninput="_buyerLocations['+i+'].address=this.value" style="width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;">'
+            +'</div>'
+            +'<button onclick="removeBuyerLocation('+i+')" style="background:none;border:none;color:#c62828;cursor:pointer;font-size:18px;padding:2px 4px;flex-shrink:0;">&times;</button>'
+            +'</div>';
+    }).join('');
+}
+
+function addBuyerLocation(){
+    _buyerLocations.push({id: 'loc_'+Date.now(), name: '', address: ''});
+    renderBuyerLocations();
+}
+
+function removeBuyerLocation(i){
+    _buyerLocations.splice(i, 1);
+    renderBuyerLocations();
+}
+
 async function saveBuyer(){
     var name=(document.getElementById('buyer-name-input').value||'').trim();
     var msg=document.getElementById('buyer-modal-msg');
@@ -3261,7 +3416,7 @@ async function saveBuyer(){
     try{
         var url=_buyerModalMode==='edit'?'/api/buyers/'+_buyerEditId:'/api/buyers';
         var method=_buyerModalMode==='edit'?'PUT':'POST';
-        var res=await fetch(url,{method:method,headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({name:name,skus:skus},contactPayload))});
+        var res=await fetch(url,{method:method,headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({name:name,skus:skus,locations:_buyerLocations},contactPayload))});
         var data=await res.json();
         if(!res.ok) throw new Error(data.error||'Save failed');
         closeBuyerModal();
@@ -4886,7 +5041,11 @@ async function loadSales(){
             h+='<div style="padding:8px 14px 12px;"><table class="inv-table" style="font-size:12px;"><tr><th>Product</th><th>LOT#(s)</th><th>Qty</th><th></th></tr>';
             tx.items.forEach(function(s){
                 h+='<tr><td>'+fmtProd(s)+'</td><td>'+fmtLots(s)+'</td><td>'+s.quantity+'</td>'
-                  +'<td><button class="btn-danger" data-del-sale="'+escHtml(s.id)+'">Del</button></td></tr>';
+                  +'<td style="white-space:nowrap;">'
+                  +'<button class="btn-sm" style="font-size:10px;padding:4px 7px;margin-right:3px;" data-slip-id="'+escHtml(s.id)+'" title="Print packing slip">📋</button>'
+                  +'<button class="btn-sm" style="font-size:10px;padding:4px 7px;margin-right:3px;" data-edit-sale="'+escHtml(s.id)+'" data-edit-qty="'+s.quantity+'" data-edit-date="'+(s.sale_date||'')+'" data-edit-buyer="'+escHtml(s.buyer||'')+'" data-edit-po="'+escHtml(s.po_number||'')+'" title="Edit sale">✏</button>'
+                  +'<button class="btn-danger" style="font-size:10px;padding:4px 7px;" data-del-sale="'+escHtml(s.id)+'">Del</button>'
+                  +'</td></tr>';
             });
             h+='</table></div></details>';
             return h;
@@ -4942,12 +5101,71 @@ async function loadSales(){
     container.querySelectorAll('[data-del-sale]').forEach(function(btn){
         btn.addEventListener('click',function(){deleteSale(this.getAttribute('data-del-sale'));});
     });
+    container.querySelectorAll('[data-edit-sale]').forEach(function(btn){
+        btn.addEventListener('click',function(e){
+            e.stopPropagation();
+            openSaleEditModal(
+                this.getAttribute('data-edit-sale'),
+                this.getAttribute('data-edit-qty'),
+                this.getAttribute('data-edit-date'),
+                this.getAttribute('data-edit-buyer'),
+                this.getAttribute('data-edit-po')
+            );
+        });
+    });
     container.querySelectorAll('[data-settle-ids]').forEach(function(btn){
         btn.addEventListener('click',function(e){
             e.stopPropagation();
             manualSettleAll(this.getAttribute('data-settle-ids').split(',').filter(Boolean));
         });
     });
+    container.querySelectorAll('[data-slip-id]').forEach(function(btn){
+        btn.addEventListener('click',function(e){
+            e.stopPropagation();
+            window.open('/api/organic/sales/'+this.getAttribute('data-slip-id')+'/packing-slip','_blank');
+        });
+    });
+}
+
+var _saleEditId = null;
+function openSaleEditModal(id, qty, date, buyer, po){
+    _saleEditId = id;
+    document.getElementById('se-date').value = date || '';
+    document.getElementById('se-buyer').value = buyer || '';
+    document.getElementById('se-qty').value = qty || '';
+    document.getElementById('se-po').value = po || '';
+    document.getElementById('se-msg').style.display = 'none';
+    document.getElementById('sale-edit-modal').classList.add('active');
+}
+function closeSaleEditModal(){
+    document.getElementById('sale-edit-modal').classList.remove('active');
+}
+async function submitSaleEdit(){
+    if(!_saleEditId) return;
+    var patch = {
+        sale_date: document.getElementById('se-date').value,
+        buyer: document.getElementById('se-buyer').value.trim(),
+        quantity: parseInt(document.getElementById('se-qty').value) || 0,
+        po_number: document.getElementById('se-po').value.trim(),
+    };
+    var msg = document.getElementById('se-msg');
+    try {
+        var res = await fetch('/api/organic/sales/'+_saleEditId, {
+            method:'PATCH', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(patch)
+        });
+        var data = await res.json();
+        if(res.ok){
+            closeSaleEditModal();
+            loadFinishedGoods(); loadSales();
+        } else {
+            msg.textContent = data.error || 'Failed to save changes.';
+            msg.style.display = 'block';
+        }
+    } catch(e) {
+        msg.textContent = 'Network error.';
+        msg.style.display = 'block';
+    }
 }
 
 async function manualSettleAll(ids){
@@ -5318,5 +5536,34 @@ document.addEventListener('DOMContentLoaded',function(){
     }
 });
 </script>
+
+<!-- Sale Edit Modal -->
+<div class="modal-overlay" id="sale-edit-modal" style="z-index:300;">
+  <div class="modal" style="max-width:400px;">
+    <h3 style="margin:0 0 14px;font-size:16px;">Edit Sale</h3>
+    <div class="form-field" style="margin-bottom:12px;">
+      <label>Sale Date</label>
+      <input type="date" id="se-date" style="width:100%;box-sizing:border-box;">
+    </div>
+    <div class="form-field" style="margin-bottom:12px;">
+      <label>Buyer</label>
+      <input type="text" id="se-buyer" style="width:100%;box-sizing:border-box;">
+    </div>
+    <div class="form-field" style="margin-bottom:12px;">
+      <label>Quantity (units)</label>
+      <input type="number" id="se-qty" min="0" step="1" style="width:100%;box-sizing:border-box;">
+      <div style="font-size:11px;color:var(--text-light);margin-top:3px;">Changing quantity adjusts FG inventory by the difference.</div>
+    </div>
+    <div class="form-field" style="margin-bottom:14px;">
+      <label>PO #</label>
+      <input type="text" id="se-po" style="width:100%;box-sizing:border-box;">
+    </div>
+    <div id="se-msg" style="font-size:13px;color:#c62828;margin-bottom:8px;display:none;"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-outline" onclick="closeSaleEditModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitSaleEdit()" style="background:#0288d1;border-color:#0288d1;">Save Changes</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

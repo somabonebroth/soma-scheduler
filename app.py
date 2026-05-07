@@ -820,6 +820,11 @@ def checklist_page(week_id, day_idx):
 def recipes_page():
     return render_template("recipes.html")
 
+@app.route("/contacts")
+@login_required
+def contacts_page():
+    return render_template("contacts.html")
+
 @app.route("/ccp-master")
 @login_required
 def ccp_master_page():
@@ -2153,6 +2158,19 @@ ORGANIC_RUNS_PATH = os.path.join(INVENTORY_DIR, "production_runs.json")
 ORGANIC_FG_PATH = os.path.join(INVENTORY_DIR, "finished_goods.json")
 ORGANIC_SALES_PATH = os.path.join(INVENTORY_DIR, "sales.json")
 ORGANIC_CONTACTS_PATH = os.path.join(INVENTORY_DIR, "contacts.json")
+COMPANY_INFO_PATH = os.path.join(INVENTORY_DIR, "company_info.json")
+
+_DEFAULT_COMPANY_INFO = {
+    "name": "Soma Bone Broth",
+    "address": "",
+    "city": "",
+    "phone": "",
+    "email": "",
+    "website": "",
+    "registration": "",
+    "notes": "",
+    "ripe_inventory_buffer": 12,  # units withheld from Ripe's visible stock
+}
 SKU_META_PATH = os.path.join(INVENTORY_DIR, "sku_meta.json")  # PAR levels + prices
 # Manual inventory adjustments log (additions and subtractions outside of
 # production runs and sales). Each entry records what changed, why, and
@@ -3620,10 +3638,19 @@ def _group_fg_with_catalog(fg, recipes):
             "catalog_only": True,  # signal: never produced or all entries deleted
         }
 
+    def _fmt_sort_key(fmt):
+        """SS (shelf-stable) before FZ (frozen) before anything else."""
+        f = (fmt or "").upper()
+        if f.startswith("SS"): return "0"
+        if f.startswith("FZ"): return "1"
+        return "2" + f
+
     out = list(base.values())
-    out.sort(key=lambda r: ((r.get("brand") or "").lower(),
-                            (r.get("recipe") or "").lower(),
-                            r.get("format") or ""))
+    out.sort(key=lambda r: (
+        (r.get("brand") or "").lower(),
+        _fmt_sort_key(r.get("format") or ""),
+        (r.get("recipe") or "").lower(),
+    ))
     return out
 
 
@@ -4278,6 +4305,8 @@ def internal_fg_stock():
     fg = _load_json(ORGANIC_FG_PATH, [])
     sales = _load_json(ORGANIC_SALES_PATH, [])
     meta = _load_json(SKU_META_PATH, {})
+    company = _load_company_info()
+    buffer_units = int(company.get("ripe_inventory_buffer") or 0)
 
     # Gross stock per SKU
     stock = {}
@@ -4292,10 +4321,11 @@ def internal_fg_stock():
             if key in stock:
                 stock[key] = max(0, stock[key] - int(sale.get("quantity") or 0))
 
-    # Build response with PAR info
+    # Build response — apply buffer so Ripe sees conservative numbers
     result = {}
-    for key, available in stock.items():
+    for key, gross in stock.items():
         m = meta.get(key, {})
+        available = max(0, gross - buffer_units)
         result[key] = {
             "available": available,
             "par": m.get("par"),
@@ -4390,6 +4420,39 @@ def get_finished_goods_sku_detail(sku_key):
         "sku": display_info or {"sku_key": sku_key},
         "lots": lots,
     })
+
+
+# ── Company Info ──────────────────────────────────────────────────────────────
+def _load_company_info():
+    info = _load_json(COMPANY_INFO_PATH, {})
+    merged = dict(_DEFAULT_COMPANY_INFO)
+    merged.update(info)
+    return merged
+
+
+@app.route("/api/company-info", methods=["GET"])
+@login_required
+def get_company_info():
+    return jsonify(_load_company_info())
+
+
+@app.route("/api/company-info", methods=["PATCH"])
+@login_required
+def update_company_info():
+    data = request.get_json() or {}
+    info = _load_company_info()
+    allowed = set(_DEFAULT_COMPANY_INFO.keys())
+    for k, v in data.items():
+        if k in allowed:
+            if k == "ripe_inventory_buffer":
+                try:
+                    info[k] = max(0, int(v))
+                except (TypeError, ValueError):
+                    pass
+            else:
+                info[k] = (v or "").strip()
+    _save_json(COMPANY_INFO_PATH, info)
+    return jsonify({"ok": True, "info": info})
 
 
 # ── Organic: Sales ───────────────────────────────────────────────────
@@ -4562,6 +4625,87 @@ def add_organic_sale():
     return jsonify({"success": True, "id": sale["id"], "sale": sale})
 
 
+@app.route("/api/organic/sales/<sale_id>", methods=["PATCH"])
+@login_required
+def edit_organic_sale(sale_id):
+    """Edit a completed sale record. Supports updating:
+      - sale_date
+      - buyer
+      - location_name / location_address
+      - quantity (adjusts FG by the delta — restores or deducts)
+      - po_number / notes
+
+    Quantity changes: if new qty > old qty, tries to FIFO-deduct the difference.
+    If new qty < old qty, restores the difference to the most recent LOT drawn.
+    """
+    data = request.get_json() or {}
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    idx = next((i for i, s in enumerate(sales) if s.get("id") == sale_id), None)
+    if idx is None:
+        return jsonify({"error": "Sale not found"}), 404
+    sale = dict(sales[idx])
+
+    for field in ("sale_date", "buyer", "po_number", "notes", "location_name", "location_address"):
+        if field in data:
+            sale[field] = (data[field] or "").strip()
+
+    if "quantity" in data:
+        new_qty = int(data["quantity"])
+        if new_qty < 0:
+            return jsonify({"error": "Quantity must be non-negative"}), 400
+        old_qty = int(sale.get("quantity") or 0)
+        delta = new_qty - old_qty
+
+        if delta > 0:
+            # Need to deduct more — FIFO from same SKU
+            sku_key = sale.get("sku_key", "")
+            candidates = [
+                f for f in fg
+                if _sku_key(f.get("brand",""), f.get("recipe",""), f.get("format","")) == sku_key
+                and int(f.get("quantity_remaining") or 0) > 0
+            ]
+            candidates.sort(key=lambda e: (e.get("created_at",""), e.get("lot","")))
+            remaining = delta
+            for entry in candidates:
+                if remaining <= 0:
+                    break
+                avail = int(entry.get("quantity_remaining") or 0)
+                take = min(avail, remaining)
+                entry["quantity_remaining"] = avail - take
+                remaining -= take
+            if remaining > 0:
+                return jsonify({"error": f"Insufficient FG stock for delta of +{delta} units"}), 422
+
+        elif delta < 0:
+            # Restore units — put back into the most recent LOT drawn
+            restore = abs(delta)
+            lots = sale.get("lots") or []
+            for lot_info in reversed(lots):
+                if restore <= 0:
+                    break
+                for fg_entry in fg:
+                    if fg_entry.get("lot") == lot_info.get("lot") and restore > 0:
+                        fg_entry["quantity_remaining"] = int(fg_entry.get("quantity_remaining") or 0) + restore
+                        restore = 0
+                        break
+            # If we couldn't trace back to a specific LOT, restore to most recent entry
+            if restore > 0:
+                sku_key = sale.get("sku_key", "")
+                matching = [f for f in fg if _sku_key(f.get("brand",""), f.get("recipe",""), f.get("format","")) == sku_key]
+                if matching:
+                    matching.sort(key=lambda e: e.get("created_at",""), reverse=True)
+                    matching[0]["quantity_remaining"] = int(matching[0].get("quantity_remaining") or 0) + restore
+
+        sale["quantity"] = new_qty
+        _save_json(ORGANIC_FG_PATH, fg)
+
+    sale["edited_at"] = datetime.now().isoformat()
+    sales[idx] = sale
+    _save_json(ORGANIC_SALES_PATH, sales)
+    return jsonify({"ok": True, "sale": sale})
+
+
 @app.route("/api/organic/sales/<sale_id>", methods=["DELETE"])
 @login_required
 def delete_organic_sale(sale_id):
@@ -4731,6 +4875,17 @@ def update_buyer(bid):
     for field in ("contact_name","phone","email","address","website","certifications","notes"):
         if field in data:
             buyers[idx][field] = (data[field] or "").strip()
+    if "locations" in data:
+        # locations: [{id, name, address}] — client manages IDs
+        locs = data["locations"]
+        if isinstance(locs, list):
+            buyers[idx]["locations"] = [
+                {"id": l.get("id") or str(i),
+                 "name": (l.get("name") or "").strip(),
+                 "address": (l.get("address") or "").strip()}
+                for i, l in enumerate(locs)
+                if (l.get("name") or "").strip()
+            ]
     _save_buyers(buyers)
     return jsonify(buyers[idx])
 
@@ -4750,61 +4905,174 @@ def get_packing_slip(sale_id):
     sale = next((s for s in sales if s.get("id") == sale_id), None)
     if not sale:
         return jsonify({"error": "Sale not found"}), 404
+
+    company = _load_company_info()
+    buyers = _load_buyers()
+    buyer_name = sale.get("buyer") or "—"
+    buyer_rec = next((b for b in buyers if b.get("name") == buyer_name), {})
+    buyer_address = sale.get("location_address") or buyer_rec.get("address") or ""
+    buyer_contact = sale.get("location_name") or ""
+    buyer_phone = buyer_rec.get("phone") or ""
+    buyer_email = buyer_rec.get("email") or ""
+
     from reportlab.lib.pagesizes import letter
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                    Paragraph, Spacer, HRFlowable, Image)
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch
+    from reportlab.lib.enums import TA_RIGHT, TA_LEFT, TA_CENTER
     import io as _io
+
+    DARK_GREEN  = colors.HexColor("#1b5e20")
+    MID_GREEN   = colors.HexColor("#2e7d32")
+    LIGHT_GREEN = colors.HexColor("#e8f5e9")
+    BORDER      = colors.HexColor("#c8d8c8")
+    GREY_TEXT   = colors.HexColor("#555555")
+    LIGHT_ROW   = colors.HexColor("#f5f9f5")
+
     buf = _io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=letter,
-                            rightMargin=0.75*inch, leftMargin=0.75*inch,
-                            topMargin=0.75*inch, bottomMargin=0.75*inch)
+                            rightMargin=0.65*inch, leftMargin=0.65*inch,
+                            topMargin=0.55*inch, bottomMargin=0.65*inch)
     styles = getSampleStyleSheet()
+
+    def _ps(name, **kw):
+        base = styles.get(name, styles["Normal"])
+        return ParagraphStyle("_"+name+"_"+str(abs(hash(str(kw)))), parent=base, **kw)
+
     story = []
-    label_s = ParagraphStyle("lbl", parent=styles["Normal"], fontSize=9, textColor=colors.grey)
-    body_s = ParagraphStyle("bod", parent=styles["Normal"], fontSize=11)
-    story.append(Paragraph("Packing Slip", ParagraphStyle("t", parent=styles["Heading1"], fontSize=22, spaceAfter=4)))
-    story.append(Paragraph("Soma Bone Broth", ParagraphStyle("sub", parent=styles["Normal"], fontSize=10, textColor=colors.grey, spaceAfter=2)))
-    story.append(Spacer(1, 0.15*inch))
-    buyer = sale.get("buyer") or "—"
+
+    # Header: logo left, company info right
+    logo_path = os.path.join(os.path.dirname(__file__), "static", "logo.jpg")
+    if not os.path.exists(logo_path):
+        logo_path = os.path.join(os.path.dirname(__file__), "static", "logo.png")
+
+    company_lines = [company.get("name") or "Soma Bone Broth"]
+    for fld in ("address", "city", "phone", "email", "website"):
+        if company.get(fld): company_lines.append(company[fld])
+
+    company_para = Paragraph(
+        "<br/>".join(company_lines),
+        _ps("Normal", fontSize=8, textColor=GREY_TEXT, alignment=TA_RIGHT, leading=12)
+    )
+
+    if os.path.exists(logo_path):
+        logo_img = Image(logo_path, width=1.4*inch, height=1.4*inch, kind="proportional")
+        header_tbl = Table([[logo_img, company_para]], colWidths=[2.5*inch, 5.0*inch])
+        header_tbl.setStyle(TableStyle([
+            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("ALIGN",  (1,0), (1,0),  "RIGHT"),
+        ]))
+    else:
+        header_tbl = Table(
+            [[Paragraph(company.get("name") or "Soma Bone Broth",
+                        _ps("Normal", fontSize=18, textColor=DARK_GREEN, fontName="Helvetica-Bold")),
+              company_para]],
+            colWidths=[3.0*inch, 4.5*inch]
+        )
+    story.append(header_tbl)
+    story.append(Spacer(1, 0.1*inch))
+    story.append(HRFlowable(width="100%", thickness=2, color=MID_GREEN, spaceAfter=6))
+    story.append(Paragraph("PACKING SLIP",
+        _ps("Normal", fontSize=20, fontName="Helvetica-Bold", textColor=DARK_GREEN, spaceAfter=2)))
+
+    # Ship To / Order Info block
     sale_date = sale.get("sale_date") or "—"
-    po = sale.get("po_number") or sale.get("case_lot") or "—"
-    info = Table([
-        [Paragraph("Ship To", label_s), Paragraph(buyer, body_s), Paragraph("Date", label_s), Paragraph(sale_date, body_s)],
-        [Paragraph("PO / Case LOT#", label_s), Paragraph(po, body_s), Paragraph("Sale ID", label_s), Paragraph(sale_id[-8:], body_s)],
-    ], colWidths=[1.2*inch, 2.8*inch, 1.2*inch, 1.8*inch])
-    info.setStyle(TableStyle([("BOTTOMPADDING",(0,0),(-1,-1),8),("TOPPADDING",(0,0),(-1,-1),4)]))
-    story.append(info)
-    story.append(Spacer(1, 0.2*inch))
-    lots = sale.get("lots") or []
-    product = ((sale.get("brand","")+" " if sale.get("brand") else "") + (sale.get("recipe") or "")).strip()
-    fmt = sale.get("format") or ""
-    rows = [["Product","LOT#","Qty","Format"]]
-    total = 0
-    for lot in lots:
-        qty = int(lot.get("quantity") or 0)
-        total += qty
-        rows.append([product, lot.get("lot","—"), str(qty), fmt])
-    rows.append(["","",f"Total: {total}",""])
-    tbl = Table(rows, colWidths=[3.0*inch,1.5*inch,1.3*inch,1.2*inch])
-    tbl.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#2e7d32")),
-        ("TEXTCOLOR",(0,0),(-1,0),colors.white),
-        ("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
-        ("FONTSIZE",(0,0),(-1,-1),10),
-        ("ROWBACKGROUNDS",(0,1),(-1,-2),[colors.white,colors.HexColor("#f5f5f0")]),
-        ("GRID",(0,0),(-1,-2),0.5,colors.HexColor("#d0d0c8")),
-        ("TOPPADDING",(0,0),(-1,-1),8),("BOTTOMPADDING",(0,0),(-1,-1),8),
-        ("FONTNAME",(0,-1),(-1,-1),"Helvetica-Bold"),
+    po        = sale.get("po_number") or sale.get("case_lot") or "—"
+    ref       = sale_id[-10:]
+
+    lbl   = _ps("Normal", fontSize=8, textColor=GREY_TEXT, fontName="Helvetica-Bold", leading=11, spaceBefore=2)
+    val   = _ps("Normal", fontSize=10, leading=13)
+    val_s = _ps("Normal", fontSize=9, textColor=GREY_TEXT, leading=12)
+
+    ship_lines = [f"<b>{buyer_name}</b>"]
+    if buyer_contact: ship_lines.append(buyer_contact)
+    if buyer_address: ship_lines.append(buyer_address)
+    if buyer_phone:   ship_lines.append(buyer_phone)
+    if buyer_email:   ship_lines.append(buyer_email)
+    ship_para = Paragraph("<br/>".join(ship_lines), val)
+
+    order_info = Table([
+        [Paragraph("SHIP TO", lbl), ship_para,
+         Paragraph("DATE",      lbl), Paragraph(sale_date, val)],
+        ["", "", Paragraph("ORDER REF", lbl), Paragraph(ref, val_s)],
+        ["", "", Paragraph("PO #",      lbl), Paragraph(po,  val_s)],
+    ], colWidths=[0.9*inch, 3.6*inch, 1.0*inch, 2.0*inch])
+    order_info.setStyle(TableStyle([
+        ("VALIGN",        (0,0), (-1,-1), "TOP"),
+        ("SPAN",          (0,0), (0,2)),
+        ("SPAN",          (1,0), (1,2)),
+        ("BACKGROUND",    (0,0), (1,2),  LIGHT_GREEN),
+        ("BOX",           (0,0), (1,2),  0.5, BORDER),
+        ("BOX",           (2,0), (3,2),  0.5, BORDER),
+        ("TOPPADDING",    (0,0), (-1,-1), 7),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 7),
+        ("LEFTPADDING",   (0,0), (-1,-1), 8),
+        ("RIGHTPADDING",  (0,0), (-1,-1), 8),
     ]))
-    story.append(tbl)
-    story.append(Spacer(1,0.3*inch))
-    story.append(Paragraph("Thank you for your order.", styles["Italic"]))
+    story.append(Spacer(1, 0.15*inch))
+    story.append(order_info)
+    story.append(Spacer(1, 0.2*inch))
+
+    # Items table
+    lots    = sale.get("lots") or []
+    product = ((sale.get("brand","")+" " if sale.get("brand") else "") + (sale.get("recipe") or "")).strip()
+    fmt     = sale.get("format") or ""
+
+    hdr_s  = _ps("Normal", fontSize=9, fontName="Helvetica-Bold", textColor=colors.white, alignment=TA_CENTER)
+    cell_l = _ps("Normal", fontSize=10, alignment=TA_LEFT)
+    cell_c = _ps("Normal", fontSize=10, alignment=TA_CENTER)
+    tot_s  = _ps("Normal", fontSize=10, fontName="Helvetica-Bold", alignment=TA_CENTER)
+
+    rows = [[Paragraph("PRODUCT", hdr_s), Paragraph("FORMAT", hdr_s),
+             Paragraph("LOT #", hdr_s),   Paragraph("QTY (units)", hdr_s)]]
+    total_units = 0
+    if lots:
+        for lot in lots:
+            qty = int(lot.get("quantity") or 0)
+            total_units += qty
+            rows.append([Paragraph(product, cell_l), Paragraph(fmt, cell_c),
+                         Paragraph(lot.get("lot") or "—", cell_c), Paragraph(str(qty), cell_c)])
+    else:
+        total_units = int(sale.get("quantity") or 0)
+        rows.append([Paragraph(product, cell_l), Paragraph(fmt, cell_c),
+                     Paragraph(sale.get("fg_lot") or "—", cell_c), Paragraph(str(total_units), cell_c)])
+
+    total_cases = total_units // 12
+    rows.append(["", "", Paragraph("TOTAL", tot_s),
+                 Paragraph(f"{total_units} units  ({total_cases} cases)", tot_s)])
+
+    rc = len(rows)
+    items_tbl = Table(rows, colWidths=[3.2*inch, 1.1*inch, 1.4*inch, 1.8*inch])
+    items_tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0),  (-1,0),    MID_GREEN),
+        ("TEXTCOLOR",     (0,0),  (-1,0),    colors.white),
+        ("ROWBACKGROUNDS",(0,1),  (-1,rc-2), [colors.white, LIGHT_ROW]),
+        ("BACKGROUND",    (0,-1), (-1,-1),   LIGHT_GREEN),
+        ("GRID",          (0,0),  (-1,rc-2), 0.5, BORDER),
+        ("LINEABOVE",     (0,-1), (-1,-1),   1.0, MID_GREEN),
+        ("TOPPADDING",    (0,0),  (-1,-1),   8),
+        ("BOTTOMPADDING", (0,0),  (-1,-1),   8),
+        ("LEFTPADDING",   (0,0),  (-1,-1),   8),
+        ("RIGHTPADDING",  (0,0),  (-1,-1),   8),
+        ("VALIGN",        (0,0),  (-1,-1),   "MIDDLE"),
+    ]))
+    story.append(items_tbl)
+    story.append(Spacer(1, 0.3*inch))
+
+    # Footer
+    story.append(HRFlowable(width="100%", thickness=0.5, color=BORDER, spaceAfter=8))
+    footer = ["Thank you for your business."]
+    if company.get("registration"): footer.append(f"Reg: {company['registration']}")
+    story.append(Paragraph("  |  ".join(footer),
+                            _ps("Normal", fontSize=8, textColor=GREY_TEXT, alignment=TA_CENTER)))
+
     doc.build(story)
     buf.seek(0)
+    safe_buyer = "".join(c for c in buyer_name if c.isalnum() or c in "-_ ")[:20]
     return send_file(buf, mimetype="application/pdf", as_attachment=False,
-                     download_name=f"packing-slip-{sale_id[-8:]}.pdf")
+                     download_name=f"packing-slip-{safe_buyer}-{sale_date}.pdf")
 
 
 @app.route("/api/organic/sales/<sale_id>/qbo-csv", methods=["GET"])

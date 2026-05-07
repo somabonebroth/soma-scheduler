@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Soma">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/logo-180.png">
+<link rel="apple-touch-icon" sizes="192x192" href="/static/logo-192.png">
+<title>Soma – Contacts & Settings</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+body.contacts-page { background: var(--bg); }
+body.contacts-page .card { padding: 24px; margin-bottom: 16px; }
+body.contacts-page .card h2 {
+  font-size: 18px; font-weight: 600; padding-bottom: 10px; margin-bottom: 14px;
+  border-bottom: 2px solid var(--border);
+}
+.tab-bar { display: flex; gap: 4px; overflow-x: auto; padding: 0 16px; margin-bottom: 0;
+  background: var(--card-bg); border-bottom: 1px solid var(--border); }
+.tab-btn { padding: 12px 18px; font-size: 13px; font-weight: 500; border: none;
+  background: none; cursor: pointer; color: var(--text-light); border-bottom: 3px solid transparent;
+  white-space: nowrap; }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.main { padding: 20px 16px; max-width: 900px; margin: 0 auto; }
+
+/* Contact cards */
+.contact-card { border: 1px solid var(--border); border-radius: 10px; padding: 16px;
+  margin-bottom: 10px; background: #fff; display: flex; justify-content: space-between;
+  align-items: flex-start; gap: 12px; }
+.contact-name { font-size: 15px; font-weight: 600; margin-bottom: 3px; }
+.contact-meta { font-size: 12px; color: var(--text-light); line-height: 1.6; }
+.contact-meta a { color: var(--accent); text-decoration: none; }
+.contact-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.cert-badge-g { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7;
+  padding: 1px 8px; border-radius: 10px; font-size: 11px; display: inline-block; margin-top: 4px; }
+.cert-badge-b { background: #e3f2fd; color: #0a4081; border: 1px solid #90caf9;
+  padding: 1px 8px; border-radius: 10px; font-size: 11px; display: inline-block; margin-top: 4px; }
+
+/* Modals */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  z-index: 200; align-items: center; justify-content: center; padding: 12px; }
+.modal-overlay.active { display: flex; }
+.modal { background: #fff; border-radius: 14px; width: 100%; max-width: 560px;
+  max-height: 90vh; overflow-y: auto; padding: 24px; position: relative; }
+.modal-close { position: absolute; top: 14px; right: 14px; background: none;
+  border: none; font-size: 22px; cursor: pointer; color: #888; line-height: 1; }
+.modal h2 { font-size: 17px; font-weight: 700; margin: 0 0 16px; }
+.modal-actions { display: flex; gap: 10px; margin-top: 14px; padding-top: 14px;
+  border-top: 1px solid var(--border); flex-wrap: wrap; }
+.modal-actions button { flex: 1; min-width: 100px; padding: 12px 16px; font-size: 14px;
+  font-weight: 600; border-radius: 8px; cursor: pointer; box-sizing: border-box; }
+.btn { padding: 10px 18px; font-size: 14px; font-weight: 600; border-radius: 8px;
+  cursor: pointer; min-height: 42px; box-sizing: border-box; }
+.btn-primary { background: var(--accent); color: #fff; border: none; }
+.btn-primary:hover { background: var(--accent-dark, #1b5e20); }
+.btn-outline { background: #fff; color: var(--dark); border: 1px solid var(--border); }
+.btn-outline:hover { background: var(--bg); }
+.btn-danger { background: #fff; color: #c62828; border: 1px solid #ef9a9a; font-size: 12px; padding: 7px 12px; }
+.form-field { margin-bottom: 13px; }
+.form-field label { display: block; font-size: 11px; font-weight: 600;
+  color: var(--text-light); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 5px; }
+.form-field input, .form-field select, .form-field textarea {
+  width: 100%; box-sizing: border-box; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 8px; font-size: 14px; background: #fff; }
+.form-field textarea { resize: vertical; }
+.status { font-size: 13px; margin: 6px 0; min-height: 18px; }
+.status.error { color: #c62828; }
+.status.success { color: #2e7d32; }
+.sku-order-item { display: flex; align-items: center; gap: 8px; padding: 9px 11px;
+  border-bottom: 1px solid var(--border); background: #fff; }
+.sku-order-item:nth-child(even) { background: #fafaf8; }
+.loc-row { display: flex; gap: 6px; align-items: flex-start; background: #f9f9f7;
+  border: 1px solid var(--border); border-radius: 7px; padding: 8px 10px; margin-bottom: 6px; }
+.ci-saved { font-size: 12px; color: #2e7d32; display: none; margin-top: 8px; }
+.step-hidden { display: none; }
+
+@media (max-width: 600px) {
+  .modal-actions { flex-direction: column-reverse; }
+  .modal-actions button { width: 100%; flex: none; }
+  .contact-card { flex-direction: column; }
+  .contact-actions { width: 100%; }
+  .contact-actions button { flex: 1; }
+  .two-col { grid-template-columns: 1fr !important; }
+}
+</style>
+</head>
+<body class="contacts-page">
+
+<div class="header">
+  <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+  <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Contacts &amp; Settings</p></div>
+  <div class="header-right"><button class="header-btn" onclick="window.location='/'">← Dashboard</button></div>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="showTab('suppliers')">Suppliers</button>
+  <button class="tab-btn" onclick="showTab('buyers')">Buyers</button>
+  <button class="tab-btn" onclick="showTab('settings')">Company Settings</button>
+</div>
+
+<div class="main">
+
+<!-- ── Suppliers ─────────────────────────────────────────────────── -->
+<div class="tab-content active" id="tab-suppliers">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+      <h2 style="border:none;padding:0;margin:0;">Suppliers</h2>
+      <button class="btn btn-primary" onclick="openAddSupplierModal()" style="background:#2e7d32;border-color:#2e7d32;">+ Add Supplier</button>
+    </div>
+    <div id="supplier-container"><div style="color:var(--text-light);font-size:13px;">Loading…</div></div>
+  </div>
+</div>
+
+<!-- ── Buyers ───────────────────────────────────────────────────── -->
+<div class="tab-content" id="tab-buyers">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+      <h2 style="border:none;padding:0;margin:0;">Buyers</h2>
+      <button class="btn btn-primary" onclick="openAddBuyerModal()" style="background:#0288d1;border-color:#0288d1;">+ Add Buyer</button>
+    </div>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:16px;">Assign products and delivery locations to each buyer. SKU order is set in the Order step.</p>
+    <div id="buyer-container"><div style="color:var(--text-light);font-size:13px;">Loading…</div></div>
+  </div>
+</div>
+
+<!-- ── Settings ─────────────────────────────────────────────────── -->
+<div class="tab-content" id="tab-settings">
+  <div class="card">
+    <h2>Company Information</h2>
+    <p style="font-size:13px;color:var(--text-light);margin-bottom:18px;">Used on packing slips and documents. Changes save automatically.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;" class="two-col">
+      <div class="form-field"><label>Company Name</label><input type="text" id="ci-name" placeholder="Soma Bone Broth" oninput="debounceSaveCI()"></div>
+      <div class="form-field"><label>Phone</label><input type="tel" id="ci-phone" placeholder="416-555-0100" oninput="debounceSaveCI()"></div>
+      <div class="form-field"><label>Email</label><input type="email" id="ci-email" placeholder="hello@somabonebroth.com" oninput="debounceSaveCI()"></div>
+      <div class="form-field"><label>Website</label><input type="url" id="ci-website" placeholder="https://" oninput="debounceSaveCI()"></div>
+    </div>
+    <div class="form-field" style="margin-bottom:12px;"><label>Address</label><input type="text" id="ci-address" placeholder="Street address" oninput="debounceSaveCI()"></div>
+    <div class="form-field" style="margin-bottom:12px;"><label>City / Province / Postal</label><input type="text" id="ci-city" placeholder="Toronto, ON M5V 1A1" oninput="debounceSaveCI()"></div>
+    <div class="form-field" style="margin-bottom:12px;"><label>Registration / Tax #</label><input type="text" id="ci-registration" placeholder="BN 123456789 RT0001" oninput="debounceSaveCI()"></div>
+    <div class="form-field" style="margin-bottom:20px;"><label>Footer Note</label><input type="text" id="ci-notes" placeholder="e.g. All products made in Canada" oninput="debounceSaveCI()"></div>
+    <div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:4px;">
+      <div style="font-size:14px;font-weight:600;margin-bottom:12px;">Ripe Portal Settings</div>
+      <div class="form-field" style="max-width:300px;">
+        <label>Inventory Buffer — units withheld from Ripe's view per SKU</label>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+          <input type="number" id="ci-buffer" min="0" step="1" placeholder="12" oninput="debounceSaveCI()" style="width:80px;font-size:16px;font-weight:700;text-align:center;">
+          <span style="font-size:12px;color:var(--text-light);">units (default 12)</span>
+        </div>
+      </div>
+    </div>
+    <div class="ci-saved" id="ci-saved-msg">✓ Saved</div>
+  </div>
+</div>
+
+</div><!-- /.main -->
+
+<!-- ── Supplier Modal ──────────────────────────────────────────── -->
+<div class="modal-overlay" id="supplier-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeSupplierModal()">&times;</button>
+    <h2 id="supplier-modal-title">Add Supplier</h2>
+    <div class="form-field"><label>Supplier Name</label>
+      <input type="text" id="supplier-name-input" placeholder="e.g. Pfennings Organic"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;" class="two-col">
+      <div class="form-field"><label>Contact Name</label><input type="text" id="supplier-contact-name" placeholder="Jane Smith"></div>
+      <div class="form-field"><label>Phone</label><input type="tel" id="supplier-phone" placeholder="519-555-0100"></div>
+      <div class="form-field"><label>Email</label><input type="email" id="supplier-email" placeholder="orders@supplier.com"></div>
+      <div class="form-field"><label>Website</label><input type="url" id="supplier-website" placeholder="https://"></div>
+    </div>
+    <div class="form-field"><label>Address</label><input type="text" id="supplier-address" placeholder="Street, City, Province, Postal"></div>
+    <div class="form-field"><label>Certifications</label><input type="text" id="supplier-certifications" placeholder="e.g. Certified Organic, GAP"></div>
+    <div class="form-field"><label>Notes</label><textarea id="supplier-notes" rows="2" placeholder="Additional info…"></textarea></div>
+    <div class="form-field">
+      <label>Assigned Ingredients</label>
+      <p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">Check all ingredients this supplier provides.</p>
+      <input type="text" id="supplier-ing-search" placeholder="Filter ingredients…" oninput="renderSupplierIngList()" style="margin-bottom:8px;">
+      <div id="supplier-ing-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px;background:#fff;"></div>
+    </div>
+    <div id="supplier-modal-msg" class="status"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeSupplierModal()">Cancel</button>
+      <button class="btn btn-primary" id="supplier-save-btn" onclick="saveSupplier()" style="background:#2e7d32;border-color:#2e7d32;">Save Supplier</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Buyer Modal ─────────────────────────────────────────────── -->
+<div class="modal-overlay" id="buyer-modal">
+  <div class="modal" style="max-width:600px;">
+    <button class="modal-close" onclick="closeBuyerModal()">&times;</button>
+    <h2 id="buyer-modal-title">Add Buyer</h2>
+    <div class="form-field"><label>Buyer Name</label>
+      <input type="text" id="buyer-name-input" placeholder="e.g. Ripe Nutrition"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;" class="two-col">
+      <div class="form-field"><label>Contact Name</label><input type="text" id="buyer-contact-name" placeholder="Jane Smith"></div>
+      <div class="form-field"><label>Phone</label><input type="tel" id="buyer-phone" placeholder="416-555-0100"></div>
+      <div class="form-field"><label>Email</label><input type="email" id="buyer-email" placeholder="orders@buyer.com"></div>
+      <div class="form-field"><label>Website</label><input type="url" id="buyer-website" placeholder="https://"></div>
+    </div>
+    <div class="form-field"><label>Address</label><input type="text" id="buyer-address" placeholder="Street, City, Province, Postal"></div>
+    <div class="form-field"><label>Certifications</label><input type="text" id="buyer-certifications" placeholder="e.g. Retail, Foodservice"></div>
+    <div class="form-field"><label>Notes</label><textarea id="buyer-notes" rows="2" placeholder="Additional info…"></textarea></div>
+
+    <div style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div style="font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;">Delivery Locations</div>
+        <button type="button" onclick="addBuyerLocation()" style="font-size:11px;padding:4px 10px;border:1px solid var(--accent);color:var(--accent);background:#fff;border-radius:5px;cursor:pointer;">+ Add</button>
+      </div>
+      <div id="buyer-locations-list"></div>
+    </div>
+
+    <!-- Step A: assign SKUs -->
+    <div id="buyer-step-assign">
+      <div style="font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Assigned Products</div>
+      <p style="font-size:12px;color:var(--text-light);margin-bottom:8px;">Check all SKUs this buyer can purchase, then click <strong>Set Order →</strong>.</p>
+      <input type="text" id="buyer-sku-search" placeholder="Filter products…" oninput="renderBuyerSkuList()" style="margin-bottom:8px;width:100%;box-sizing:border-box;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+      <div id="buyer-sku-list" style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:6px;background:#fff;"></div>
+      <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+        <button class="btn btn-primary" onclick="goToBuyerOrderStep()" style="background:#0288d1;border-color:#0288d1;">Set Order →</button>
+      </div>
+    </div>
+
+    <!-- Step B: set order -->
+    <div id="buyer-step-order" class="step-hidden">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <button onclick="goToBuyerAssignStep()" style="background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;text-decoration:underline;padding:0;">← Back</button>
+        <div style="font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;">Set Sale Order</div>
+      </div>
+      <p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Use ▲▼ to set order SKUs appear in the sale grid. Grouped by format automatically.</p>
+      <div id="buyer-order-list" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;"></div>
+    </div>
+
+    <div id="buyer-modal-msg" class="status"></div>
+    <div class="modal-actions" id="buyer-modal-actions" style="display:none;">
+      <button class="btn btn-outline" onclick="closeBuyerModal()">Cancel</button>
+      <button class="btn btn-primary" id="buyer-save-btn" onclick="saveBuyer()" style="background:#0288d1;border-color:#0288d1;">Save Buyer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Utilities ──────────────────────────────────────────────────────────────
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function showTab(tab){
+  document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+  document.querySelectorAll('.tab-content').forEach(function(t){ t.classList.remove('active'); });
+  document.getElementById('tab-'+tab).classList.add('active');
+  var tabs = ['suppliers','buyers','settings'];
+  document.querySelectorAll('.tab-btn')[tabs.indexOf(tab)].classList.add('active');
+  if(tab==='suppliers') loadSuppliers();
+  if(tab==='buyers') loadBuyers();
+  if(tab==='settings') loadCompanyInfo();
+}
+
+// ── Suppliers ──────────────────────────────────────────────────────────────
+var _suppliers = [];
+var _supMode = 'add';
+var _supEditId = null;
+var _supChecked = {}; // {name|unit: true}
+var _allIngredients = [];
+var _supSaveTimer = null;
+
+async function loadSuppliers(){
+  var res = await fetch('/api/suppliers');
+  _suppliers = await res.json();
+  var c = document.getElementById('supplier-container');
+  if(!_suppliers.length){ c.innerHTML='<div style="color:var(--text-light);font-size:13px;">No suppliers yet.</div>'; return; }
+  var html = '';
+  _suppliers.forEach(function(s){
+    var sid = esc(s.id);
+    var meta = [];
+    if(s.contact_name) meta.push(esc(s.contact_name));
+    if(s.phone) meta.push('<a href="tel:'+esc(s.phone)+'">'+esc(s.phone)+'</a>');
+    if(s.email) meta.push('<a href="mailto:'+esc(s.email)+'">'+esc(s.email)+'</a>');
+    if(s.website) meta.push('<a href="'+esc(s.website)+'" target="_blank" rel="noopener">Website</a>');
+    var ingCount = (s.ingredients||[]).length;
+    var preview = (s.ingredients||[]).slice(0,3).map(function(i){ return i.name; }).join(', ') + (ingCount>3?' …':'');
+    html += '<div class="contact-card">'
+      +'<div style="flex:1;min-width:0;">'
+      +'<div class="contact-name">'+esc(s.name)+'</div>'
+      +'<div class="contact-meta">'+ingCount+' ingredient'+(ingCount===1?'':'s')+(preview?' · '+preview:'')+'</div>'
+      +(meta.length ? '<div class="contact-meta">'+meta.join(' · ')+'</div>' : '')
+      +(s.address ? '<div class="contact-meta">'+esc(s.address)+'</div>' : '')
+      +(s.certifications ? '<div><span class="cert-badge-g">'+esc(s.certifications)+'</span></div>' : '')
+      +(s.notes ? '<div class="contact-meta" style="font-style:italic;">'+esc(s.notes)+'</div>' : '')
+      +'</div>'
+      +'<div class="contact-actions">'
+      +'<button class="btn btn-outline" style="font-size:12px;padding:7px 12px;" onclick="openEditSupplierModal(\''+sid+'\')">Edit</button>'
+      +'<button class="btn-danger btn" onclick="deleteSupplier(\''+sid+'\',\''+esc(s.name)+'\')">Delete</button>'
+      +'</div></div>';
+  });
+  c.innerHTML = html;
+}
+
+async function _fetchIngredients(){
+  try {
+    var res = await fetch('/api/organic/ingredients');
+    _allIngredients = await res.json();
+  } catch(e){ _allIngredients = []; }
+}
+
+function renderSupplierIngList(){
+  var search = (document.getElementById('supplier-ing-search').value||'').toLowerCase();
+  var list = document.getElementById('supplier-ing-list');
+  var filtered = _allIngredients.filter(function(i){ return !search || i.name.toLowerCase().includes(search); });
+  if(!filtered.length){ list.innerHTML='<div style="padding:10px;font-size:12px;color:var(--text-light);">No ingredients found.</div>'; return; }
+  list.innerHTML = filtered.map(function(ing){
+    var key = ing.name+'|'+(ing.unit||'');
+    var checked = !!_supChecked[key];
+    return '<label style="display:flex;align-items:center;gap:8px;padding:7px 8px;cursor:pointer;border-radius:4px;font-size:13px;">'
+      +'<input type="checkbox" '+(checked?'checked':'')+' onchange="_supChecked[\''+esc(key)+'\']=this.checked" style="width:16px;height:16px;"> '
+      +esc(ing.name)+' <span style="font-size:11px;color:var(--text-light);">('+esc(ing.unit||'')+')</span>'
+      +'</label>';
+  }).join('');
+}
+
+async function openAddSupplierModal(){
+  _supMode='add'; _supEditId=null;
+  document.getElementById('supplier-modal-title').textContent='Add Supplier';
+  ['supplier-name-input','supplier-contact-name','supplier-phone','supplier-email',
+   'supplier-website','supplier-address','supplier-certifications','supplier-notes'].forEach(function(id){
+    document.getElementById(id).value='';
+  });
+  document.getElementById('supplier-ing-search').value='';
+  document.getElementById('supplier-modal-msg').textContent='';
+  _supChecked={};
+  await _fetchIngredients();
+  renderSupplierIngList();
+  document.getElementById('supplier-modal').classList.add('active');
+}
+
+async function openEditSupplierModal(sid){
+  var s = _suppliers.find(function(x){ return x.id===sid; });
+  if(!s) return;
+  _supMode='edit'; _supEditId=sid;
+  document.getElementById('supplier-modal-title').textContent='Edit Supplier';
+  document.getElementById('supplier-name-input').value=s.name||'';
+  document.getElementById('supplier-contact-name').value=s.contact_name||'';
+  document.getElementById('supplier-phone').value=s.phone||'';
+  document.getElementById('supplier-email').value=s.email||'';
+  document.getElementById('supplier-website').value=s.website||'';
+  document.getElementById('supplier-address').value=s.address||'';
+  document.getElementById('supplier-certifications').value=s.certifications||'';
+  document.getElementById('supplier-notes').value=s.notes||'';
+  document.getElementById('supplier-ing-search').value='';
+  document.getElementById('supplier-modal-msg').textContent='';
+  _supChecked={};
+  (s.ingredients||[]).forEach(function(i){ _supChecked[i.name+'|'+(i.unit||'')]=true; });
+  await _fetchIngredients();
+  renderSupplierIngList();
+  document.getElementById('supplier-modal').classList.add('active');
+}
+
+function closeSupplierModal(){ document.getElementById('supplier-modal').classList.remove('active'); }
+
+async function saveSupplier(){
+  var name = document.getElementById('supplier-name-input').value.trim();
+  var msg = document.getElementById('supplier-modal-msg');
+  if(!name){ msg.className='status error'; msg.textContent='Name required.'; return; }
+  var ingredients = _allIngredients.filter(function(i){ return _supChecked[i.name+'|'+(i.unit||'')]; });
+  var body = {
+    name, ingredients,
+    contact_name: document.getElementById('supplier-contact-name').value.trim(),
+    phone: document.getElementById('supplier-phone').value.trim(),
+    email: document.getElementById('supplier-email').value.trim(),
+    website: document.getElementById('supplier-website').value.trim(),
+    address: document.getElementById('supplier-address').value.trim(),
+    certifications: document.getElementById('supplier-certifications').value.trim(),
+    notes: document.getElementById('supplier-notes').value.trim(),
+  };
+  var btn = document.getElementById('supplier-save-btn');
+  btn.disabled=true; btn.textContent='Saving…';
+  var url = _supMode==='add' ? '/api/suppliers' : '/api/suppliers/'+_supEditId;
+  var method = _supMode==='add' ? 'POST' : 'PUT';
+  var res = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  var data = await res.json();
+  btn.disabled=false; btn.textContent='Save Supplier';
+  if(res.ok){ closeSupplierModal(); loadSuppliers(); }
+  else { msg.className='status error'; msg.textContent=data.error||'Failed.'; }
+}
+
+async function deleteSupplier(sid, name){
+  if(!confirm('Delete supplier "'+name+'"? This cannot be undone.')) return;
+  await fetch('/api/suppliers/'+sid, {method:'DELETE'});
+  loadSuppliers();
+}
+
+// ── Buyers ─────────────────────────────────────────────────────────────────
+var _buyers = [];
+var _buyerMode = 'add';
+var _buyerEditId = null;
+var _buyerChecked = {};
+var _buyerSkuOrder = {};
+var _buyerLocations = [];
+var _allSkus = []; // [{sku_key, brand, recipe, format, display}]
+var _skuGroups = []; // [{brand, skus:[]}]
+
+async function loadBuyers(){
+  var res = await fetch('/api/buyers');
+  _buyers = await res.json();
+  var c = document.getElementById('buyer-container');
+  if(!_buyers.length){ c.innerHTML='<div style="color:var(--text-light);font-size:13px;">No buyers yet.</div>'; return; }
+  var html = '';
+  _buyers.forEach(function(b){
+    var bid = esc(b.id);
+    var meta = [];
+    if(b.contact_name) meta.push(esc(b.contact_name));
+    if(b.phone) meta.push('<a href="tel:'+esc(b.phone)+'">'+esc(b.phone)+'</a>');
+    if(b.email) meta.push('<a href="mailto:'+esc(b.email)+'">'+esc(b.email)+'</a>');
+    if(b.website) meta.push('<a href="'+esc(b.website)+'" target="_blank" rel="noopener">Website</a>');
+    var skuCount = (b.skus||[]).length;
+    var preview = (b.skus||[]).slice(0,3).map(function(s){ return s.display||s.recipe; }).join(', ')+(skuCount>3?' …':'');
+    var locs = (b.locations||[]);
+    html += '<div class="contact-card">'
+      +'<div style="flex:1;min-width:0;">'
+      +'<div class="contact-name">'+esc(b.name)+'</div>'
+      +'<div class="contact-meta">'+skuCount+' product'+(skuCount===1?'':'s')+(preview?' · '+preview:'')+'</div>'
+      +(meta.length?'<div class="contact-meta">'+meta.join(' · ')+'</div>':'')
+      +(b.address?'<div class="contact-meta">'+esc(b.address)+'</div>':'')
+      +(locs.length?'<div class="contact-meta">'+locs.map(function(l){return esc(l.name);}).join(', ')+'</div>':'')
+      +(b.certifications?'<div><span class="cert-badge-b">'+esc(b.certifications)+'</span></div>':'')
+      +(b.notes?'<div class="contact-meta" style="font-style:italic;">'+esc(b.notes)+'</div>':'')
+      +'</div>'
+      +'<div class="contact-actions">'
+      +'<button class="btn btn-outline" style="font-size:12px;padding:7px 12px;" onclick="openEditBuyerModal(\''+bid+'\')">Edit</button>'
+      +'<button class="btn-danger btn" onclick="deleteBuyer(\''+bid+'\',\''+esc(b.name)+'\')">Delete</button>'
+      +'</div></div>';
+  });
+  c.innerHTML = html;
+}
+
+async function _fetchSkuCatalog(){
+  var res = await fetch('/api/buyers/sku-catalog');
+  _skuGroups = await res.json();
+  _allSkus = [];
+  _skuGroups.forEach(function(g){ g.skus.forEach(function(s){ _allSkus.push(s); }); });
+}
+
+function renderBuyerSkuList(){
+  var search = (document.getElementById('buyer-sku-search').value||'').toLowerCase();
+  var list = document.getElementById('buyer-sku-list');
+  var filtered = _allSkus.filter(function(s){ return !search || (s.display||s.recipe||'').toLowerCase().includes(search) || (s.format||'').toLowerCase().includes(search); });
+  if(!filtered.length){ list.innerHTML='<div style="padding:10px;font-size:12px;color:var(--text-light);">No products found.</div>'; return; }
+  // Group by brand
+  var brands = {};
+  filtered.forEach(function(s){ var b=s.brand||'(no brand)'; if(!brands[b]) brands[b]=[]; brands[b].push(s); });
+  var html = '';
+  Object.keys(brands).sort().forEach(function(brand){
+    html += '<div style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;padding:6px 8px 2px;background:#f5f5f0;">'+esc(brand)+'</div>';
+    brands[brand].forEach(function(s){
+      var checked = !!_buyerChecked[s.sku_key];
+      html += '<label style="display:flex;align-items:center;gap:8px;padding:7px 8px;cursor:pointer;font-size:13px;">'
+        +'<input type="checkbox" '+(checked?'checked':'')+' onchange="_buyerChecked[\''+esc(s.sku_key)+'\']=this.checked" style="width:16px;height:16px;"> '
+        +esc(s.display||s.recipe)+' <span style="font-size:11px;color:var(--text-light);">'+esc(s.format||'')+'</span>'
+        +'</label>';
+    });
+  });
+  list.innerHTML = html;
+}
+
+function renderBuyerLocations(){
+  var list = document.getElementById('buyer-locations-list');
+  if(!_buyerLocations.length){
+    list.innerHTML='<div style="font-size:12px;color:var(--text-light);">No locations added yet.</div>';
+    return;
+  }
+  list.innerHTML = _buyerLocations.map(function(loc, i){
+    return '<div class="loc-row">'
+      +'<div style="flex:1;">'
+      +'<input placeholder="Location name (e.g. Coco Market)" value="'+esc(loc.name)+'" '
+      +'oninput="_buyerLocations['+i+'].name=this.value" '
+      +'style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;margin-bottom:4px;">'
+      +'<input placeholder="Address" value="'+esc(loc.address)+'" '
+      +'oninput="_buyerLocations['+i+'].address=this.value" '
+      +'style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--border);border-radius:5px;font-size:12px;">'
+      +'</div>'
+      +'<button onclick="removeBuyerLocation('+i+')" style="background:none;border:none;color:#c62828;cursor:pointer;font-size:20px;padding:2px 6px;">&times;</button>'
+      +'</div>';
+  }).join('');
+}
+
+function addBuyerLocation(){
+  _buyerLocations.push({id:'loc_'+Date.now(), name:'', address:''});
+  renderBuyerLocations();
+}
+function removeBuyerLocation(i){
+  _buyerLocations.splice(i,1);
+  renderBuyerLocations();
+}
+
+function goToBuyerOrderStep(){
+  var checked = _allSkus.filter(function(s){ return _buyerChecked[s.sku_key]; });
+  // Assign positions to unpositioned items
+  var anyReal = checked.some(function(s){ return _buyerSkuOrder[s.sku_key] !== undefined && _buyerSkuOrder[s.sku_key] !== 999; });
+  if(!anyReal){
+    checked.forEach(function(s,i){ _buyerSkuOrder[s.sku_key]=i+1; });
+  } else {
+    var maxPos = Math.max.apply(null, checked.filter(function(s){ return _buyerSkuOrder[s.sku_key]!==999 && _buyerSkuOrder[s.sku_key]!==undefined; }).map(function(s){ return _buyerSkuOrder[s.sku_key]; }));
+    checked.forEach(function(s){
+      if(_buyerSkuOrder[s.sku_key]===undefined||_buyerSkuOrder[s.sku_key]===999) _buyerSkuOrder[s.sku_key]=++maxPos;
+    });
+  }
+  // Remove unchecked
+  Object.keys(_buyerSkuOrder).forEach(function(k){ if(!_buyerChecked[k]) delete _buyerSkuOrder[k]; });
+  document.getElementById('buyer-step-assign').style.display='none';
+  document.getElementById('buyer-step-order').classList.remove('step-hidden');
+  document.getElementById('buyer-modal-actions').style.display='flex';
+  renderBuyerOrderList();
+}
+
+function goToBuyerAssignStep(){
+  document.getElementById('buyer-step-order').classList.add('step-hidden');
+  document.getElementById('buyer-step-assign').style.display='';
+  document.getElementById('buyer-modal-actions').style.display='none';
+}
+
+function renderBuyerOrderList(){
+  var checked = _allSkus.filter(function(s){ return _buyerChecked[s.sku_key]; });
+  checked.sort(function(a,b){ return (_buyerSkuOrder[a.sku_key]||999)-(_buyerSkuOrder[b.sku_key]||999); });
+  var list = document.getElementById('buyer-order-list');
+  if(!checked.length){ list.innerHTML='<div style="padding:14px;color:var(--text-light);font-size:13px;">No products assigned.</div>'; return; }
+  var html = '';
+  checked.forEach(function(sku, i){
+    var isFirst=i===0, isLast=i===checked.length-1;
+    html += '<div class="sku-order-item">'
+      +'<div style="display:flex;flex-direction:column;gap:2px;">'
+      +'<button data-move-idx="'+i+'" data-move-dir="-1" '+(isFirst?'disabled':'')+' style="background:none;border:1px solid var(--border);border-radius:4px;width:24px;height:22px;cursor:pointer;font-size:10px;'+(isFirst?'opacity:0.3;cursor:not-allowed;':'')+'">▲</button>'
+      +'<button data-move-idx="'+i+'" data-move-dir="1" '+(isLast?'disabled':'')+' style="background:none;border:1px solid var(--border);border-radius:4px;width:24px;height:22px;cursor:pointer;font-size:10px;'+(isLast?'opacity:0.3;cursor:not-allowed;':'')+'">▼</button>'
+      +'</div>'
+      +'<span style="font-size:13px;flex:1;">'+esc(sku.display||sku.recipe)+'</span>'
+      +'<span style="font-size:11px;color:var(--text-light);background:#f0f0ef;padding:2px 7px;border-radius:10px;">'+esc(sku.format||'')+'</span>'
+      +'</div>';
+  });
+  list.innerHTML=html;
+  list.querySelectorAll('[data-move-idx]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      moveBuyerSku(parseInt(this.getAttribute('data-move-idx')), parseInt(this.getAttribute('data-move-dir')));
+    });
+  });
+}
+
+function moveBuyerSku(rowIdx, dir){
+  var checked = _allSkus.filter(function(s){ return _buyerChecked[s.sku_key]; });
+  checked.sort(function(a,b){ return (_buyerSkuOrder[a.sku_key]||999)-(_buyerSkuOrder[b.sku_key]||999); });
+  var swapIdx = rowIdx+dir;
+  if(swapIdx<0||swapIdx>=checked.length) return;
+  var posA = _buyerSkuOrder[checked[rowIdx].sku_key];
+  var posB = _buyerSkuOrder[checked[swapIdx].sku_key];
+  _buyerSkuOrder[checked[rowIdx].sku_key] = posB;
+  _buyerSkuOrder[checked[swapIdx].sku_key] = posA;
+  renderBuyerOrderList();
+}
+
+async function openAddBuyerModal(){
+  _buyerMode='add'; _buyerEditId=null;
+  document.getElementById('buyer-modal-title').textContent='Add Buyer';
+  ['buyer-name-input','buyer-contact-name','buyer-phone','buyer-email','buyer-website',
+   'buyer-address','buyer-certifications','buyer-notes','buyer-sku-search'].forEach(function(id){
+    document.getElementById(id).value='';
+  });
+  document.getElementById('buyer-modal-msg').textContent='';
+  document.getElementById('buyer-save-btn').textContent='Save Buyer';
+  _buyerChecked={}; _buyerSkuOrder={}; _buyerLocations=[];
+  renderBuyerLocations();
+  document.getElementById('buyer-step-assign').style.display='';
+  document.getElementById('buyer-step-order').classList.add('step-hidden');
+  document.getElementById('buyer-modal-actions').style.display='none';
+  await _fetchSkuCatalog();
+  renderBuyerSkuList();
+  document.getElementById('buyer-modal').classList.add('active');
+}
+
+async function openEditBuyerModal(bid){
+  var b = _buyers.find(function(x){ return x.id===bid; });
+  if(!b) return;
+  _buyerMode='edit'; _buyerEditId=bid;
+  document.getElementById('buyer-modal-title').textContent='Edit Buyer';
+  document.getElementById('buyer-name-input').value=b.name||'';
+  document.getElementById('buyer-contact-name').value=b.contact_name||'';
+  document.getElementById('buyer-phone').value=b.phone||'';
+  document.getElementById('buyer-email').value=b.email||'';
+  document.getElementById('buyer-website').value=b.website||'';
+  document.getElementById('buyer-address').value=b.address||'';
+  document.getElementById('buyer-certifications').value=b.certifications||'';
+  document.getElementById('buyer-notes').value=b.notes||'';
+  document.getElementById('buyer-sku-search').value='';
+  document.getElementById('buyer-modal-msg').textContent='';
+  document.getElementById('buyer-save-btn').textContent='Save Changes';
+  _buyerChecked={}; _buyerSkuOrder={};
+  _buyerLocations = (b.locations||[]).map(function(l){ return Object.assign({},l); });
+  renderBuyerLocations();
+  (b.skus||[]).forEach(function(s){
+    _buyerChecked[s.sku_key]=true;
+    _buyerSkuOrder[s.sku_key] = (s.position!==undefined)?s.position:999;
+  });
+  document.getElementById('buyer-step-assign').style.display='';
+  document.getElementById('buyer-step-order').classList.add('step-hidden');
+  document.getElementById('buyer-modal-actions').style.display='none';
+  await _fetchSkuCatalog();
+  renderBuyerSkuList();
+  document.getElementById('buyer-modal').classList.add('active');
+}
+
+function closeBuyerModal(){ document.getElementById('buyer-modal').classList.remove('active'); }
+
+async function saveBuyer(){
+  var name = document.getElementById('buyer-name-input').value.trim();
+  var msg = document.getElementById('buyer-modal-msg');
+  if(!name){ msg.className='status error'; msg.textContent='Name required.'; return; }
+  var skus = _allSkus.filter(function(s){ return _buyerChecked[s.sku_key]; })
+    .map(function(s){ return Object.assign({},s,{position:_buyerSkuOrder[s.sku_key]!==undefined?_buyerSkuOrder[s.sku_key]:999}); });
+  var contactPayload = {
+    contact_name: document.getElementById('buyer-contact-name').value.trim(),
+    phone: document.getElementById('buyer-phone').value.trim(),
+    email: document.getElementById('buyer-email').value.trim(),
+    website: document.getElementById('buyer-website').value.trim(),
+    address: document.getElementById('buyer-address').value.trim(),
+    certifications: document.getElementById('buyer-certifications').value.trim(),
+    notes: document.getElementById('buyer-notes').value.trim(),
+  };
+  var btn = document.getElementById('buyer-save-btn');
+  btn.disabled=true; btn.textContent='Saving…';
+  var url = _buyerMode==='add' ? '/api/buyers' : '/api/buyers/'+_buyerEditId;
+  var method = _buyerMode==='add' ? 'POST' : 'PUT';
+  var res = await fetch(url, {
+    method, headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(Object.assign({name,skus,locations:_buyerLocations},contactPayload))
+  });
+  var data = await res.json();
+  btn.disabled=false; btn.textContent='Save Buyer';
+  if(res.ok){ closeBuyerModal(); loadBuyers(); }
+  else { msg.className='status error'; msg.textContent=data.error||'Failed.'; }
+}
+
+async function deleteBuyer(bid, name){
+  if(!confirm('Delete buyer "'+name+'"?')) return;
+  await fetch('/api/buyers/'+bid, {method:'DELETE'});
+  loadBuyers();
+}
+
+// ── Company Info ───────────────────────────────────────────────────────────
+var _ciTimer = null;
+async function loadCompanyInfo(){
+  var res = await fetch('/api/company-info');
+  var d = await res.json();
+  document.getElementById('ci-name').value=d.name||'';
+  document.getElementById('ci-phone').value=d.phone||'';
+  document.getElementById('ci-email').value=d.email||'';
+  document.getElementById('ci-website').value=d.website||'';
+  document.getElementById('ci-address').value=d.address||'';
+  document.getElementById('ci-city').value=d.city||'';
+  document.getElementById('ci-registration').value=d.registration||'';
+  document.getElementById('ci-notes').value=d.notes||'';
+  document.getElementById('ci-buffer').value=(d.ripe_inventory_buffer!==undefined)?d.ripe_inventory_buffer:12;
+}
+function debounceSaveCI(){ clearTimeout(_ciTimer); _ciTimer=setTimeout(saveCI,800); }
+async function saveCI(){
+  var patch = {
+    name:document.getElementById('ci-name').value,
+    phone:document.getElementById('ci-phone').value,
+    email:document.getElementById('ci-email').value,
+    website:document.getElementById('ci-website').value,
+    address:document.getElementById('ci-address').value,
+    city:document.getElementById('ci-city').value,
+    registration:document.getElementById('ci-registration').value,
+    notes:document.getElementById('ci-notes').value,
+    ripe_inventory_buffer:parseInt(document.getElementById('ci-buffer').value)||0,
+  };
+  var res = await fetch('/api/company-info',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)});
+  if(res.ok){
+    var m=document.getElementById('ci-saved-msg');
+    m.style.display='block'; setTimeout(function(){ m.style.display='none'; },2000);
+  }
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+loadSuppliers();
+
+// Honor ?tab= URL param
+(function(){
+  var p = new URLSearchParams(window.location.search);
+  var t = p.get('tab');
+  if(t && ['suppliers','buyers','settings'].includes(t)) showTab(t);
+})();
+</script>
+</body>
+</html>
