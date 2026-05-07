@@ -5613,7 +5613,11 @@ _run_scheduled_deductions()  # run once on startup
 
 
 def _seed_sku_meta_defaults():
-    """One-time seed: any SKU without a PAR or price entry gets PAR=100, price=10.00."""
+    """Seed defaults for any SKU that has never had meta set.
+    Only writes to SKUs with no entry at all — never overwrites existing
+    entries, even if par or price fields are missing (they may be
+    intentionally absent e.g. No PAR checkbox was ticked).
+    """
     meta = _load_json(SKU_META_PATH, {})
     fg = _load_json(ORGANIC_FG_PATH, [])
     recipes = load_recipes()
@@ -5627,13 +5631,8 @@ def _seed_sku_meta_defaults():
         if key not in meta:
             meta[key] = {"par": 100, "price": 10.00}
             changed = True
-        else:
-            if "par" not in meta[key]:
-                meta[key]["par"] = 100
-                changed = True
-            if "price" not in meta[key]:
-                meta[key]["price"] = 10.00
-                changed = True
+        # Never modify existing entries — user may have intentionally
+        # removed par (No PAR) or price fields
     if changed:
         _save_json(SKU_META_PATH, meta)
 

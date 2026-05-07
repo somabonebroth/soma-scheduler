@@ -4598,9 +4598,8 @@ async function loadFinishedGoods(){
         html+='</div>'; // fg-brand-section
     });
     container.innerHTML=html;
-    delete container.dataset.metaDelegated;  // allow listener re-attach after rebuild
-    attachFgClickDelegationOnce();
-    attachSkuMetaListeners();
+    attachFgClickDelegationOnce();   // has its own guard via dataset.delegated
+    attachSkuMetaListeners();          // has its own guard via dataset.metaDelegated
     if(expandedSku){
         renderSkuDetail(expandedSku);
     }
@@ -4613,56 +4612,60 @@ var _skuMetaTimers = {};
 
 function attachSkuMetaListeners(){
     var container = document.getElementById('fg-container');
-    // Guard — use event delegation on the container instead of per-element
-    // listeners so re-renders don't stack copies.
+    // Guard — listeners are on the container element which persists across
+    // innerHTML rebuilds. Attach only once.
     if(!container || container.dataset.metaDelegated) return;
     container.dataset.metaDelegated = '1';
 
-    // 'change' fires on blur — catches values typed then lost before debounce fires
+    // Single change listener handles PAR input, price input, and No PAR checkbox
     container.addEventListener('change', function(e){
-        var input = e.target;
-        if(input.classList.contains('sku-par-input')){
-            var skuKey = decodeURIComponent(input.getAttribute('data-sku-key'));
+        var el = e.target;
+        var rawKey = el.getAttribute('data-sku-key');
+        if(!rawKey) return;
+        var skuKey = decodeURIComponent(rawKey);
+
+        if(el.classList.contains('sku-par-input')){
             clearTimeout(_skuMetaTimers[skuKey+'_par']);
-            saveSkuMeta(skuKey, {par: input.value.trim()==='' ? null : parseInt(input.value)});
+            var val = el.value.trim();
+            saveSkuMeta(skuKey, {par: val === '' ? null : parseInt(val)});
         }
-        if(input.classList.contains('sku-price-input')){
-            var skuKey = decodeURIComponent(input.getAttribute('data-sku-key'));
+        if(el.classList.contains('sku-price-input')){
             clearTimeout(_skuMetaTimers[skuKey+'_price']);
-            saveSkuMeta(skuKey, {price: input.value.trim()==='' ? null : parseFloat(input.value)});
+            var val = el.value.trim();
+            saveSkuMeta(skuKey, {price: val === '' ? null : parseFloat(val)});
         }
-    });
-    container.addEventListener('input', function(e){
-        var input = e.target;
-        if(input.classList.contains('sku-par-input')){
-            var skuKey = decodeURIComponent(input.getAttribute('data-sku-key'));
-            clearTimeout(_skuMetaTimers[skuKey+'_par']);
-            _skuMetaTimers[skuKey+'_par'] = setTimeout(function(){
-                var val = input.value.trim();
-                saveSkuMeta(skuKey, {par: val === '' ? null : parseInt(val)});
-            }, 600);
-        }
-        if(input.classList.contains('sku-price-input')){
-            var skuKey = decodeURIComponent(input.getAttribute('data-sku-key'));
-            clearTimeout(_skuMetaTimers[skuKey+'_price']);
-            _skuMetaTimers[skuKey+'_price'] = setTimeout(function(){
-                var val = input.value.trim();
-                saveSkuMeta(skuKey, {price: val === '' ? null : parseFloat(val)});
-            }, 600);
+        if(el.classList.contains('sku-nopar-cb')){
+            var parInput = container.querySelector('.sku-par-input[data-sku-key="'+rawKey+'"]');
+            if(el.checked){
+                if(parInput){ parInput.disabled=true; parInput.value=''; parInput.style.opacity='0.5'; parInput.style.background='#f5f5f0'; }
+                saveSkuMeta(skuKey, {par: null});
+            } else {
+                if(parInput){ parInput.disabled=false; parInput.style.opacity=''; parInput.style.background=''; parInput.focus(); }
+                // No save yet — wait for user to enter a value
+            }
         }
     });
 
-    container.addEventListener('change', function(e){
-        var cb = e.target;
-        if(!cb.classList.contains('sku-nopar-cb')) return;
-        var rawKey = cb.getAttribute('data-sku-key');
+    // Input listener for live debounce while typing
+    container.addEventListener('input', function(e){
+        var el = e.target;
+        var rawKey = el.getAttribute('data-sku-key');
+        if(!rawKey) return;
         var skuKey = decodeURIComponent(rawKey);
-        var parInput = container.querySelector('.sku-par-input[data-sku-key="'+rawKey+'"]');
-        if(cb.checked){
-            if(parInput){ parInput.disabled=true; parInput.value=''; parInput.style.opacity='0.5'; parInput.style.background='#f5f5f0'; }
-            saveSkuMeta(skuKey, {par: null});
-        } else {
-            if(parInput){ parInput.disabled=false; parInput.style.opacity=''; parInput.style.background=''; parInput.focus(); }
+
+        if(el.classList.contains('sku-par-input')){
+            clearTimeout(_skuMetaTimers[skuKey+'_par']);
+            _skuMetaTimers[skuKey+'_par'] = setTimeout(function(){
+                var val = el.value.trim();
+                saveSkuMeta(skuKey, {par: val === '' ? null : parseInt(val)});
+            }, 700);
+        }
+        if(el.classList.contains('sku-price-input')){
+            clearTimeout(_skuMetaTimers[skuKey+'_price']);
+            _skuMetaTimers[skuKey+'_price'] = setTimeout(function(){
+                var val = el.value.trim();
+                saveSkuMeta(skuKey, {price: val === '' ? null : parseFloat(val)});
+            }, 700);
         }
     });
 }
