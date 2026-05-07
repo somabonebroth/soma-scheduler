@@ -2936,11 +2936,15 @@ function goToSaleStep2(){
 async function submitRecordSale(){
     var date = document.getElementById('sale-date-modal').value;
     var buyerId = document.getElementById('sale-buyer-select').value;
-    var po = '';
     var buyer = _rsBuyers.find(function(b){ return b.id === buyerId; });
     var msg = document.getElementById('sale-step2-msg');
     var btn = document.getElementById('sale-submit-btn');
     msg.textContent=''; msg.className='status';
+
+    var locSel = document.getElementById('sale-location-select');
+    var locOpt = locSel ? locSel.options[locSel.selectedIndex] : null;
+    var locName = locOpt ? (locOpt.getAttribute('data-name') || '') : '';
+    var locAddr = locOpt ? (locOpt.getAttribute('data-address') || '') : '';
 
     var inputs = document.querySelectorAll('[data-rs-sku]');
     var lines = [];
@@ -2949,7 +2953,13 @@ async function submitRecordSale(){
         if(!isNaN(qty) && qty > 0){
             var skuKey = input.getAttribute('data-rs-sku');
             var skuInfo = (buyer && buyer.skus || []).find(function(s){ return s.sku_key === skuKey; }) || {};
-            lines.push({ sku_key: skuKey, quantity: qty, skuInfo: skuInfo });
+            lines.push({
+                sku_key: skuKey,
+                brand:   skuInfo.brand   || '',
+                recipe:  skuInfo.recipe  || '',
+                format:  skuInfo.format  || '',
+                quantity: qty,
+            });
         }
     });
 
@@ -2957,47 +2967,43 @@ async function submitRecordSale(){
 
     btn.disabled=true; btn.textContent='Saving…';
 
-    // Submit one sale record per SKU line
+    // Submit the whole order in one request — all lines share one order_id
     var savedIds = [];
-    var errors = [];
-    for(var i=0;i<lines.length;i++){
-        var line = lines[i];
-        try {
-            var res = await fetch('/api/organic/sales', {
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({
-                    brand: line.skuInfo.brand || '',
-                    recipe: line.skuInfo.recipe || '',
-                    format: line.skuInfo.format || '',
-                    quantity: line.quantity,
-                    buyer: buyer ? buyer.name : '',
-                    buyer_id: buyer ? buyer.id : '',
-                    sale_date: date,
-                    po_number: po,
-                    location_name: (function(){ var s=document.getElementById('sale-location-select'); var o=s&&s.options[s.selectedIndex]; return o&&o.getAttribute('data-name')||''; })(),
-                    location_address: (function(){ var s=document.getElementById('sale-location-select'); var o=s&&s.options[s.selectedIndex]; return o&&o.getAttribute('data-address')||''; })(),
-                }),
-            });
-            var data = await res.json();
-            if(data.success && data.id){
-                savedIds.push(data.id);
-            } else if(data.success && data.sale && data.sale.id){
-                savedIds.push(data.sale.id);
-            } else {
-                errors.push(line.skuInfo.display || line.sku_key);
-            }
-        } catch(e) { errors.push(line.skuInfo.display || line.sku_key); }
-    }
-
-    if(errors.length){
-        msg.className='status error';
-        msg.textContent='Some lines failed: '+errors.join(', ');
+    try {
+        var res = await fetch('/api/organic/sales/order', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+                buyer:            buyer ? buyer.name : '',
+                buyer_id:         buyer ? buyer.id   : '',
+                sale_date:        date,
+                po_number:        '',
+                location_name:    locName,
+                location_address: locAddr,
+                lines:            lines,
+            }),
+        });
+        var data = await res.json();
+        if(!res.ok || !data.success){
+            msg.className='status error';
+            msg.textContent=(data.error||'Save failed')+(data.errors&&data.errors.length?' — '+data.errors.join('; '):'');
+            btn.disabled=false; btn.textContent='Save Sale';
+            return;
+        }
+        savedIds = data.ids || [];
+        if(data.errors && data.errors.length){
+            msg.className='status error';
+            msg.textContent='Partial save — some lines failed: '+data.errors.join('; ');
+            btn.disabled=false; btn.textContent='Save Sale';
+            return;
+        }
+    } catch(e) {
+        msg.className='status error'; msg.textContent='Network error: '+e.message;
         btn.disabled=false; btn.textContent='Save Sale';
         return;
     }
 
-    _rsLastSaleId = savedIds[0] || null;  // use first sale for doc export
+    _rsLastSaleId = savedIds[0] || null;  // first line's id — packing slip resolves all lines via order_id
 
     // Show doc buttons, hide submit
     document.getElementById('sale-doc-buttons').style.display = '';
@@ -4979,8 +4985,27 @@ async function loadSales(){
     function groupSales(rows){
         var txMap={},txOrder=[];
         rows.forEach(function(s){
-            var key=(s.sale_date||'')+'||'+(s.buyer||'')+'||'+(s.ripe_order_id||s.po_number||'');
-            if(!txMap[key]){ txMap[key]={date:s.sale_date||'',buyer:s.buyer||'',order_id:s.ripe_order_id||s.po_number||'',items:[],ids:[]}; txOrder.push(key); }
+            // New records: group by order_id (set at record time, guaranteed unique per transaction)
+            // Legacy records: fall back to date+buyer heuristic but append sale id to prevent
+            //   false merging of two different same-day same-buyer transactions
+            var key;
+            if(s.order_id){
+                key='ord:'+s.order_id;
+            } else if(s.ripe_order_id){
+                key='ripe:'+s.ripe_order_id;
+            } else {
+                // Legacy: use id to keep each record as its own transaction
+                key='legacy:'+s.id;
+            }
+            if(!txMap[key]){
+                txMap[key]={
+                    date:s.sale_date||'',
+                    buyer:s.buyer||'',
+                    order_id:s.order_id||s.ripe_order_id||s.po_number||'',
+                    items:[],ids:[]
+                };
+                txOrder.push(key);
+            }
             txMap[key].items.push(s); txMap[key].ids.push(s.id);
         });
         return txOrder.map(function(k){return txMap[k];});

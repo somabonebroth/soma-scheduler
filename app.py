@@ -4625,6 +4625,173 @@ def add_organic_sale():
     return jsonify({"success": True, "id": sale["id"], "sale": sale})
 
 
+@app.route("/api/organic/sales/order", methods=["POST"])
+@login_required
+def add_sale_order():
+    """Record a complete sale order — multiple SKUs in one transaction.
+
+    Body: {
+        buyer:            str,
+        buyer_id:         str (optional),
+        sale_date:        str YYYY-MM-DD,
+        po_number:        str (optional),
+        location_name:    str (optional),
+        location_address: str (optional),
+        lines: [
+            { sku_key: str, brand: str, recipe: str, format: str, quantity: int },
+            ...
+        ]
+    }
+
+    All lines share one order_id. Each line gets its own sale record (for
+    per-SKU LOT tracking and inventory deduction) but they are linked by
+    order_id so the Records view, packing slip, and invoice treat them as
+    one transaction.
+    """
+    data = request.get_json() or {}
+    lines = data.get("lines") or []
+    if not lines:
+        return jsonify({"error": "lines array required"}), 400
+
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    fg    = _load_json(ORGANIC_FG_PATH, [])
+
+    buyer        = (data.get("buyer") or "").strip()
+    sale_date    = data.get("sale_date") or datetime.now().date().isoformat()
+    po_number    = (data.get("po_number") or "").strip()
+    location_name    = (data.get("location_name") or "").strip()
+    location_address = (data.get("location_address") or "").strip()
+
+    # One order_id shared across all lines in this transaction
+    order_id = "ORD-" + datetime.now().strftime("%Y%m%d%H%M%S")
+
+    saved_ids   = []
+    saved_sales = []
+    errors      = []
+
+    for line in lines:
+        try:
+            quantity = int(line.get("quantity") or 0)
+        except (TypeError, ValueError):
+            quantity = 0
+        if quantity <= 0:
+            continue
+
+        sku_key = (line.get("sku_key") or "").strip()
+        brand   = (line.get("brand")   or "").strip()
+        recipe  = (line.get("recipe")  or "").strip()
+        fmt     = (line.get("format")  or "").strip()
+
+        if not sku_key:
+            if recipe:
+                sku_key = _sku_key(brand, recipe, fmt)
+            else:
+                errors.append(f"Line missing sku_key and recipe: {line}")
+                continue
+
+        # FIFO deduction across this SKU's LOTs
+        candidates = [
+            f for f in fg
+            if _sku_key(f.get("brand",""), f.get("recipe",""), f.get("format","")) == sku_key
+            and int(f.get("quantity_remaining") or 0) > 0
+        ]
+        if not candidates:
+            errors.append(f"No inventory for {sku_key}")
+            continue
+
+        def _prod_date(e):
+            wid, d_idx = e.get("week_id"), e.get("day_idx")
+            if wid and d_idx is not None:
+                try:
+                    return (datetime.strptime(wid, "%Y-%m-%d") + timedelta(days=int(d_idx))).strftime("%Y-%m-%d")
+                except Exception:
+                    pass
+            return (e.get("created_at") or "")[:10]
+
+        candidates.sort(key=lambda e: (_prod_date(e), e.get("lot",""), e.get("id","")))
+        total_available = sum(int(e.get("quantity_remaining") or 0) for e in candidates)
+        if quantity > total_available:
+            errors.append(f"Insufficient stock for {sku_key}: need {quantity}, have {total_available}")
+            continue
+
+        # Deduct
+        remaining = quantity
+        lot_summary = {}
+        for entry in candidates:
+            if remaining <= 0:
+                break
+            avail = int(entry.get("quantity_remaining") or 0)
+            take  = min(avail, remaining)
+            entry["quantity_remaining"] = avail - take
+            remaining -= take
+            lot = entry.get("lot", "")
+            if lot not in lot_summary:
+                lot_summary[lot] = {"lot": lot, "quantity": 0, "fg_ids": [], "breakdown": []}
+            lot_summary[lot]["quantity"]  += take
+            lot_summary[lot]["fg_ids"].append(entry.get("id"))
+            lot_summary[lot]["breakdown"].append({"fg_id": entry.get("id"), "quantity": take})
+
+        sale_lots = list(lot_summary.values())
+
+        # Certification from first lot
+        sale_cert = ""
+        for lot_entry in sale_lots:
+            for b in (lot_entry.get("breakdown") or []):
+                target = next((f for f in fg if f.get("id") == b.get("fg_id")), None)
+                if target and target.get("certification"):
+                    sale_cert = target["certification"]
+                    break
+            if sale_cert:
+                break
+
+        # Pull canonical brand/recipe/format from FG entry
+        first = candidates[0]
+        brand   = first.get("brand",   brand)
+        recipe  = first.get("recipe",  recipe)
+        fmt     = first.get("format",  fmt)
+
+        sale = {
+            "id":          "SL-" + datetime.now().strftime("%Y%m%d%H%M%S%f"),
+            "order_id":    order_id,
+            "sku_key":     sku_key,
+            "brand":       brand,
+            "recipe":      recipe,
+            "format":      fmt,
+            "certification": sale_cert,
+            "quantity":    quantity,
+            "lots":        sale_lots,
+            "fg_lot":      (sale_lots[0]["lot"] if len(sale_lots) == 1 else ""),
+            "fg_id":       (sale_lots[0]["fg_ids"][0] if len(sale_lots) == 1 and sale_lots[0]["fg_ids"] else ""),
+            "buyer":       buyer,
+            "buyer_id":    data.get("buyer_id", ""),
+            "sale_date":   sale_date,
+            "po_number":   po_number,
+            "location_name":    location_name,
+            "location_address": location_address,
+            "created_at":  datetime.now().isoformat(),
+        }
+        saved_ids.append(sale["id"])
+        saved_sales.append(sale)
+        sales.append(sale)
+
+    if errors and not saved_ids:
+        return jsonify({"error": "All lines failed", "details": errors}), 400
+
+    _save_json(ORGANIC_SALES_PATH, sales)
+    _save_json(ORGANIC_FG_PATH, fg)
+
+    if buyer:
+        _add_contact("buyer", buyer)
+
+    return jsonify({
+        "success":  True,
+        "order_id": order_id,
+        "ids":      saved_ids,
+        "saved":    len(saved_ids),
+        "errors":   errors,
+    })
+
+
 @app.route("/api/organic/sales/<sale_id>", methods=["PATCH"])
 @login_required
 def edit_organic_sale(sale_id):
@@ -4906,6 +5073,14 @@ def get_packing_slip(sale_id):
     if not sale:
         return jsonify({"error": "Sale not found"}), 404
 
+    # Collect all lines for this order (order_id groups multi-SKU transactions)
+    order_id = sale.get("order_id")
+    if order_id:
+        order_lines = [s for s in sales if s.get("order_id") == order_id]
+        order_lines.sort(key=lambda s: s.get("created_at", ""))
+    else:
+        order_lines = [sale]  # legacy single-line sale
+
     company = _load_company_info()
     buyers = _load_buyers()
     buyer_name = sale.get("buyer") or "—"
@@ -5015,11 +5190,7 @@ def get_packing_slip(sale_id):
     story.append(order_info)
     story.append(Spacer(1, 0.2*inch))
 
-    # Items table
-    lots    = sale.get("lots") or []
-    product = ((sale.get("brand","")+" " if sale.get("brand") else "") + (sale.get("recipe") or "")).strip()
-    fmt     = sale.get("format") or ""
-
+    # Items table — one row per SKU line across all order lines
     hdr_s  = _ps("Normal", fontSize=9, fontName="Helvetica-Bold", textColor=colors.white, alignment=TA_CENTER)
     cell_l = _ps("Normal", fontSize=10, alignment=TA_LEFT)
     cell_c = _ps("Normal", fontSize=10, alignment=TA_CENTER)
@@ -5028,17 +5199,22 @@ def get_packing_slip(sale_id):
     rows = [[Paragraph("PRODUCT", hdr_s), Paragraph("FORMAT", hdr_s),
              Paragraph("LOT #", hdr_s),   Paragraph("QTY (units)", hdr_s)]]
     total_units = 0
-    if lots:
-        for lot in lots:
-            qty = int(lot.get("quantity") or 0)
-            total_units += qty
-            rows.append([Paragraph(product, cell_l), Paragraph(fmt, cell_c),
-                         Paragraph(lot.get("lot") or "—", cell_c), Paragraph(str(qty), cell_c)])
-    else:
-        total_units = int(sale.get("quantity") or 0)
-        rows.append([Paragraph(product, cell_l), Paragraph(fmt, cell_c),
-                     Paragraph(sale.get("fg_lot") or "—", cell_c), Paragraph(str(total_units), cell_c)])
 
+    for line in order_lines:
+        lp  = ((line.get("brand","")+" " if line.get("brand") else "") + (line.get("recipe") or "")).strip()
+        lf  = line.get("format") or ""
+        ll  = line.get("lots") or []
+        if ll:
+            for lot in ll:
+                qty = int(lot.get("quantity") or 0)
+                total_units += qty
+                rows.append([Paragraph(lp, cell_l), Paragraph(lf, cell_c),
+                             Paragraph(lot.get("lot") or "—", cell_c), Paragraph(str(qty), cell_c)])
+        else:
+            qty = int(line.get("quantity") or 0)
+            total_units += qty
+            rows.append([Paragraph(lp, cell_l), Paragraph(lf, cell_c),
+                         Paragraph(line.get("fg_lot") or "—", cell_c), Paragraph(str(qty), cell_c)])
     total_cases = total_units // 12
     rows.append(["", "", Paragraph("TOTAL", tot_s),
                  Paragraph(f"{total_units} units  ({total_cases} cases)", tot_s)])
