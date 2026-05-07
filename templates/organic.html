@@ -4347,8 +4347,6 @@ async function loadFinishedGoods(){
         html+='<span class="fg-brand-meta">'+inStock+' in stock · '+brandUnits+' units</span>';
         html+='</div>';
         html+='<div class="fg-brand-body" id="'+brandId+'" style="'+(isCollapsed?'display:none;':'')+'">';
-        if(true){
-
         skus.forEach(function(s){
             var keyAttr=encodeURIComponent(s.sku_key);
             var displaySafe=escSku(s.display);
