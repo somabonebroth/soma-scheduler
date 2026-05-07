@@ -5582,11 +5582,23 @@ document.addEventListener('DOMContentLoaded',function(){
                     }
                 }
             }
-            // Populate location dropdown (for display), then advance to step 2.
-            // goToSaleStep2 captures the location selection automatically.
-            if(buyerId && date){
-                onSaleBuyerChange();
+            // If location was passed directly from dashboard modal, use it.
+            var locName = params.get('loc_name') || '';
+            var locAddr = params.get('loc_addr') || '';
+            if(locName || locAddr){
+                // Set the captured vars directly — no need to show step 1
+                _rsLocationName    = locName;
+                _rsLocationAddress = locAddr;
                 goToSaleStep2();
+            } else if(buyerId && date){
+                // No pre-supplied location — show step 1 with location dropdown
+                onSaleBuyerChange();
+                // Only auto-advance if buyer has no locations to choose from
+                var selBuyer = _rsBuyers.find(function(b){ return b.id === buyerId; });
+                if(!selBuyer || !selBuyer.locations || !selBuyer.locations.length){
+                    goToSaleStep2();
+                }
+                // If buyer HAS locations, stay on step 1 so user picks one
             }
         }, 200);
     }

@@ -146,33 +146,65 @@ async function openDashSaleModal(){
     document.getElementById('dash-sale-msg').style.display = 'none';
     try {
         var res = await fetch('/api/buyers');
-        var buyers = await res.json();
+        _dashBuyers = await res.json();
         var sel = document.getElementById('dash-sale-buyer');
         sel.innerHTML = '<option value="">— Select buyer —</option>';
-        buyers.forEach(function(b){
+        _dashBuyers.forEach(function(b){
             var o = document.createElement('option');
-            o.value = b.id + '|' + encodeURIComponent(b.name);
+            o.value = b.id;
             o.textContent = b.name;
             sel.appendChild(o);
         });
     } catch(e) {}
     document.getElementById('dash-sale-modal').classList.add('open');
 }
+var _dashBuyers = [];
+function onDashBuyerChange(){
+    var buyerId = document.getElementById('dash-sale-buyer').value;
+    var buyer = _dashBuyers.find(function(b){ return b.id === buyerId; });
+    var locField = document.getElementById('dash-loc-field');
+    var locSel = document.getElementById('dash-loc-select');
+    if(!locField || !locSel) return;
+    if(buyer && buyer.locations && buyer.locations.length > 0){
+        locSel.innerHTML = '<option value="">— Main / Primary address —</option>';
+        buyer.locations.forEach(function(loc){
+            var o = document.createElement('option');
+            o.value = loc.id;
+            o.textContent = loc.name + (loc.address ? ' — ' + loc.address : '');
+            o.setAttribute('data-name', loc.name || '');
+            o.setAttribute('data-address', loc.address || '');
+            locSel.appendChild(o);
+        });
+        locField.style.display = '';
+    } else {
+        locField.style.display = 'none';
+        locSel.innerHTML = '<option value="">— Main / Primary address —</option>';
+    }
+}
 function closeDashSaleModal(){
     document.getElementById('dash-sale-modal').classList.remove('open');
 }
 function dashSaleNext(){
     var date = document.getElementById('dash-sale-date').value;
-    var buyerVal = document.getElementById('dash-sale-buyer').value;
+    var buyerId = document.getElementById('dash-sale-buyer').value;
     var msg = document.getElementById('dash-sale-msg');
     if(!date){ msg.textContent='Please select a date.'; msg.style.display='block'; return; }
-    if(!buyerVal){ msg.textContent='Please select a buyer.'; msg.style.display='block'; return; }
+    if(!buyerId){ msg.textContent='Please select a buyer.'; msg.style.display='block'; return; }
+    var buyer = _dashBuyers.find(function(b){ return b.id === buyerId; });
+    var buyerName = buyer ? buyer.name : '';
+    // Read selected location from the dashboard modal
+    var locSel = document.getElementById('dash-loc-select');
+    var locOpt = locSel ? locSel.options[locSel.selectedIndex] : null;
+    var locName = locOpt ? (locOpt.getAttribute('data-name') || '') : '';
+    var locAddr = locOpt ? (locOpt.getAttribute('data-address') || '') : '';
     msg.style.display='none';
     closeDashSaleModal();
-    var parts = buyerVal.split('|');
-    var buyerId = parts[0];
-    var buyerName = decodeURIComponent(parts[1] || '');
-    var params = '?action=sell&date='+encodeURIComponent(date)+'&buyer_id='+encodeURIComponent(buyerId)+'&buyer_name='+encodeURIComponent(buyerName);
+    var params = '?action=sell'
+        +'&date='+encodeURIComponent(date)
+        +'&buyer_id='+encodeURIComponent(buyerId)
+        +'&buyer_name='+encodeURIComponent(buyerName)
+        +'&loc_name='+encodeURIComponent(locName)
+        +'&loc_addr='+encodeURIComponent(locAddr);
     window.location.href = '/organic' + params;
 }
 
@@ -212,8 +244,14 @@ function dashSaleNext(){
       </div>
       <div class="dash-modal-field">
         <label>Buyer</label>
-        <select id="dash-sale-buyer">
+        <select id="dash-sale-buyer" onchange="onDashBuyerChange()">
           <option value="">— Select buyer —</option>
+        </select>
+      </div>
+      <div id="dash-loc-field" style="display:none;margin-bottom:14px;padding:12px 14px;background:#e3f2fd;border:2px solid #1976d2;border-radius:9px;">
+        <label style="display:block;font-size:11px;font-weight:700;color:#1565c0;text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px;">&#128205; Delivery Location</label>
+        <select id="dash-loc-select" style="width:100%;padding:10px 12px;border:1.5px solid #1976d2;border-radius:7px;font-size:14px;font-weight:500;background:#fff;">
+          <option value="">— Main / Primary address —</option>
         </select>
       </div>
       <div class="dash-modal-err" id="dash-sale-msg"></div>
