@@ -859,17 +859,20 @@ body.inv-page .modal-actions {
                             <option value="">— Select buyer —</option>
                         </select>
                     </div>
-                    <div class="form-field" id="sale-location-field" style="display:none;">
-                        <label>Delivery Location <span style="font-weight:400;color:var(--text-light);">(optional)</span></label>
-                        <select id="sale-location-select" style="width:100%;box-sizing:border-box;">
-                            <option value="">— Main address —</option>
-                        </select>
-                    </div>
+                </div>
+                <!-- Location dropdown — shown when buyer has multiple delivery locations -->
+                <div id="sale-location-field" style="display:none;margin-top:10px;padding:12px 14px;background:#f0f7ff;border:1.5px solid #90caf9;border-radius:8px;">
+                    <label style="display:block;font-size:11px;font-weight:700;color:#0288d1;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">
+                        &#128205; Delivery Location
+                    </label>
+                    <select id="sale-location-select" style="width:100%;box-sizing:border-box;font-size:14px;padding:10px 12px;border:1.5px solid #90caf9;border-radius:7px;background:#fff;">
+                        <option value="">— Main / Primary address —</option>
+                    </select>
                 </div>
                 <div id="sale-step1-msg" class="status"></div>
                 <div class="modal-actions">
                     <button class="btn btn-outline" onclick="closeRecordSaleModal()">Cancel</button>
-                    <button class="btn btn-primary" onclick="goToSaleStep2()" style="background:#0288d1;border-color:#0288d1;">Next →</button>
+                    <button class="btn btn-primary" onclick="onSaleBuyerChange();goToSaleStep2();" style="background:#0288d1;border-color:#0288d1;">Next →</button>
                 </div>
             </div>
 
@@ -3031,7 +3034,7 @@ function onSaleBuyerChange(){
     var locField = document.getElementById('sale-location-field');
     var locSel = document.getElementById('sale-location-select');
     if(buyer && buyer.locations && buyer.locations.length > 0){
-        locSel.innerHTML = '<option value="">— Main address —</option>';
+        locSel.innerHTML = '<option value="">— Main / Primary address —</option>';
         buyer.locations.forEach(function(loc){
             var opt = document.createElement('option');
             opt.value = loc.id;
@@ -3043,8 +3046,9 @@ function onSaleBuyerChange(){
         if(locField) locField.style.display = '';
     } else {
         if(locField) locField.style.display = 'none';
+        if(locSel) locSel.innerHTML = '<option value="">— Main / Primary address —</option>';
     }
-    goToSaleStep2();
+    // Do NOT auto-advance — let user choose location then click Next →
 }
 function openSellForm(skuKey){
     openRecordSaleModal();
@@ -5562,8 +5566,11 @@ document.addEventListener('DOMContentLoaded',function(){
                     }
                 }
             }
-            // Auto-advance to step 2 if buyer is set
-            if(buyerId && date){ goToSaleStep2(); }
+            // Populate location dropdown then advance to step 2
+            if(buyerId && date){
+                onSaleBuyerChange(); // populate locations for this buyer
+                goToSaleStep2();
+            }
         }, 200);
     }
 });

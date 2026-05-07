@@ -129,6 +129,8 @@ def create_ripe_sale_records(order, delivery_date, payment_key):
             "payment_method": payment_key,
             "ripe_order_id": order.get("id", ""),
             "delivery_label": order.get("delivery_label", ""),
+            "location_name":  order.get("delivery_label", ""),
+            "location_address": order.get("delivery_address", ""),
             "po_number": order.get("id", ""),
             "case_lot": "",
             "created_at": datetime.now().isoformat(),
