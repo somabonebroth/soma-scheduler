@@ -4314,12 +4314,21 @@ def internal_fg_stock():
         key = _sku_key(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", ""))
         stock[key] = stock.get(key, 0) + int(entry.get("quantity_remaining") or 0)
 
-    # Subtract scheduled (deducted=False) Ripe sales — inventory spoken for
+    # Subtract scheduled (deducted=False) Ripe sales — inventory spoken for.
+    # Build a lowercase lookup so legacy sale records with lowercased sku_keys
+    # still correctly reduce the visible stock.
+    stock_lower = {k.lower(): k for k in stock}
     for sale in sales:
         if sale.get("deducted") is False:
-            key = sale.get("sku_key", "")
-            if key in stock:
-                stock[key] = max(0, stock[key] - int(sale.get("quantity") or 0))
+            sale_key = sale.get("sku_key", "")
+            # Try exact match first, then case-insensitive fallback
+            if sale_key in stock:
+                matched_key = sale_key
+            elif sale_key.lower() in stock_lower:
+                matched_key = stock_lower[sale_key.lower()]
+            else:
+                continue
+            stock[matched_key] = max(0, stock[matched_key] - int(sale.get("quantity") or 0))
 
     # Build response — apply buffer so Ripe sees conservative numbers
     result = {}

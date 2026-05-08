@@ -108,7 +108,13 @@ def create_ripe_sale_records(order, delivery_date, payment_key):
         brand = match.get("brand", "") if match else ""
         recipe_fmt = match.get("format", fmt) if match else fmt
         cert = match.get("certification", "") if match else ""
-        sku = "|".join([brand.strip().lower(), recipe_name.strip().lower(), recipe_fmt.strip().upper()])
+        # Use the same _sku_key() function Soma uses everywhere — preserves original
+        # casing so keys match what internal_fg_stock returns
+        from app import _sku_key as _make_sku_key
+        try:
+            sku = _make_sku_key(brand, recipe_name, recipe_fmt)
+        except Exception:
+            sku = "|".join([brand, recipe_name, recipe_fmt.upper()])
 
         sale = {
             "id": datetime.now().strftime("%Y%m%d%H%M%S%f") + str(len(sales) + len(created)),
