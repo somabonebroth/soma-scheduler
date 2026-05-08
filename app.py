@@ -825,6 +825,16 @@ def recipes_page():
 def contacts_page():
     return render_template("contacts.html")
 
+@app.route("/buyers/<bid>/edit")
+@login_required
+def buyer_edit_page(bid):
+    buyers = _load_buyers()
+    buyer = next((b for b in buyers if b["id"] == bid), None)
+    if not buyer:
+        return "Buyer not found", 404
+    sku_catalog = _all_sku_catalog()
+    return render_template("buyer_edit.html", buyer=buyer, sku_catalog=sku_catalog)
+
 @app.route("/ccp-master")
 @login_required
 def ccp_master_page():

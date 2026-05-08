@@ -66,21 +66,15 @@
         </div>
         <div class="section-label">Ripe Wholesale</div>
         <div class="dash-row">
-            <a href="/ripe-orders" class="dash-btn" id="ripe-orders-btn"
-               style="background:#1565c0;border-color:#1565c0;position:relative;">
-                <span class="icon" style="color:#fff;">&#128203;</span>
-                <span class="label" style="color:#fff;display:flex;align-items:center;gap:8px;">
+            <a href="/ripe-orders" class="dash-btn" id="ripe-orders-btn" style="position:relative;">
+                <span class="icon">&#128203;</span>
+                <span class="label" style="display:flex;align-items:center;gap:8px;">
                     Ripe Orders
-                    <span id="ripe-badge" style="display:none;background:#fff;color:#1565c0;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
+                    <span id="ripe-badge" style="display:none;background:#c62828;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
                 </span>
-                <span class="sublabel" style="color:rgba(255,255,255,0.75);">Manage incoming wholesale orders</span>
+                <span class="sublabel">Manage incoming wholesale orders</span>
             </a>
-            <a href="/ripe-products" class="dash-btn" style="border-color:#1565c0;">
-                <span class="icon">&#128230;</span>
-                <span class="label">Products &amp; Pricing</span>
-                <span class="sublabel">Manage the Ripe product catalog</span>
-            </a>
-            <a href="/ripe-analytics" class="dash-btn" style="border-color:#1565c0;">
+<a href="/ripe-analytics" class="dash-btn" style="border-color:#1565c0;">
                 <span class="icon">&#128200;</span>
                 <span class="label">Sales Analytics</span>
                 <span class="sublabel">Revenue, orders, locations</span>
@@ -102,7 +96,7 @@
             <a href="/production-tracker" class="dash-btn"><span class="icon">&#128200;</span><span class="label">Production Tracker</span><span class="sublabel">Weekly output charts</span></a>
             <a href="/traceability" class="dash-btn"><span class="icon">&#128451;</span><span class="label">Completed Production</span><span class="sublabel">Review and sign off weekly records</span></a>
             <a href="/organic" class="dash-btn highlight" style="border-color:#2e7d32;"><span class="icon">&#128230;</span><span class="label">Manage Inventory</span><span class="sublabel">Raw materials, finished goods &amp; traceability</span></a>
-            <a href="/contacts" class="dash-btn"><span class="icon">&#128101;</span><span class="label">Contacts &amp; Settings</span><span class="sublabel">Suppliers, buyers, company info</span></a>
+            <a href="/contacts" class="dash-btn"><span class="icon">&#128101;</span><span class="label">Buyers &amp; Suppliers</span><span class="sublabel">Suppliers, buyers, company info</span></a>
             <div class="dash-btn disabled"><span class="icon">&#128295;</span><span class="label">Equipment &amp; Maintenance</span><span class="sublabel">Coming soon</span></div>
             <div class="dash-btn disabled"><span class="icon">&#128196;</span><span class="label">Organic Certification Documents</span><span class="sublabel">Coming soon</span></div>
         </div>
@@ -130,7 +124,7 @@ if(_resSection){
     if (d.count > 0) {
       var badge = document.getElementById('ripe-badge');
       var btn = document.getElementById('ripe-orders-btn');
-      if (badge) { badge.textContent = d.count + ' pending'; badge.style.display = 'inline-block'; }
+      if (badge) { badge.textContent = d.count; badge.style.display = 'inline-block'; }
       if (btn) { btn.classList.add('has-pending'); }
     }
   } catch(e) {}

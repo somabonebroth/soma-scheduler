@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ buyer.name }} · Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+body.be-page { background:var(--bg); }
+.be-wrap { max-width:960px; margin:0 auto; padding:24px 16px 60px; }
+
+/* Section cards */
+.be-card { background:#fff; border:1px solid var(--border); border-radius:14px; margin-bottom:20px; overflow:hidden; }
+.be-card-head { padding:16px 22px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; background:#fafaf7; }
+.be-card-head h2 { margin:0; font-size:15px; font-weight:700; color:var(--dark); }
+.be-card-body { padding:22px; }
+
+/* Form grid */
+.g2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.g3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+.ff { margin-bottom:14px; }
+.ff label { display:block; font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.05em; margin-bottom:5px; }
+.ff input,.ff textarea { width:100%; box-sizing:border-box; padding:11px 13px; border:1.5px solid var(--border); border-radius:9px; font-size:14px; outline:none; font-family:inherit; }
+.ff input:focus,.ff textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(74,103,65,.1); }
+.ff textarea { resize:vertical; }
+
+/* Locations */
+.loc-card { border:1.5px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:10px; background:#fafaf8; }
+.loc-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; font-size:12px; font-weight:600; color:var(--text-light); }
+
+/* SKU assignment table */
+.sku-section-hdr { font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.06em; padding:8px 14px 6px; background:#f5f5f0; border-bottom:1px solid var(--border); }
+.sku-row { display:grid; grid-template-columns:32px 1fr 80px 80px 75px 60px; gap:8px; align-items:center; padding:9px 14px; border-bottom:1px solid var(--border); background:#fff; }
+.sku-row:last-child { border-bottom:none; }
+.sku-row:hover { background:#f9faf7; }
+.sku-row.assigned { background:#f0f7f0; }
+.sku-hdr { display:grid; grid-template-columns:32px 1fr 80px 80px 75px 60px; gap:8px; padding:8px 14px; background:#f5f5f0; border-bottom:2px solid var(--border); font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
+.sku-hdr span, .sku-row span.hdr { text-align:right; }
+.sku-hdr span:nth-child(2), .sku-row .sku-name { text-align:left; }
+.sku-check { width:17px; height:17px; accent-color:var(--accent); cursor:pointer; }
+.sku-name { font-size:13px; font-weight:600; }
+.sku-fmt { font-size:11px; color:var(--text-light); }
+.p-input { width:100%; box-sizing:border-box; padding:6px 8px; border:1.5px solid var(--border); border-radius:7px; font-size:13px; font-weight:600; text-align:right; outline:none; }
+.p-input:focus { border-color:var(--accent); box-shadow:0 0 0 2px rgba(74,103,65,.1); }
+.p-input:disabled { background:#f5f5f0; opacity:.5; }
+.p-margin { font-size:12px; color:var(--text-light); text-align:right; }
+.p-active-tog { width:34px; height:18px; border-radius:9px; border:none; cursor:pointer; transition:background .2s; position:relative; flex-shrink:0; }
+.p-active-tog::after { content:''; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; transition:transform .2s; }
+.p-active-tog.on { background:var(--accent); }
+.p-active-tog.on::after { transform:translateX(16px); }
+.p-active-tog.off { background:#ccc; }
+
+/* Format group header */
+.fmt-group-hdr { padding:8px 14px; background:#f0f0eb; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--dark); border-bottom:1px solid var(--border); border-top:2px solid var(--border); display:flex; align-items:center; gap:8px; }
+.fmt-pill-ss { border-left:4px solid #2c5a8a; padding-left:8px; }
+.fmt-pill-fz { border-left:4px solid #2d7a3e; padding-left:8px; }
+.fmt-pill-bb { border-left:4px solid #a66b1e; padding-left:8px; }
+
+/* Sticky save bar */
+.save-bar { position:sticky; bottom:0; background:#fff; border-top:1px solid var(--border); padding:14px 22px; display:flex; align-items:center; justify-content:space-between; gap:12px; box-shadow:0 -4px 16px rgba(0,0,0,.07); z-index:10; }
+.save-status { font-size:13px; color:var(--text-light); }
+.save-status.ok { color:#2e7d32; font-weight:600; }
+.save-status.err { color:#c62828; font-weight:600; }
+
+@media(max-width:640px){
+  .g2,.g3 { grid-template-columns:1fr; }
+  .sku-row,.sku-hdr { grid-template-columns:28px 1fr 70px 70px 0 0; }
+  .sku-row>:nth-child(5),.sku-row>:nth-child(6),
+  .sku-hdr>:nth-child(5),.sku-hdr>:nth-child(6) { display:none; }
+}
+</style>
+</head>
+<body class="be-page inv-page">
+<div class="header">
+  <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+  <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Edit Buyer</p></div>
+  <div class="header-right">
+    <a href="/contacts?tab=buyers" class="header-btn">← Buyers &amp; Suppliers</a>
+  </div>
+</div>
+
+<div class="be-wrap">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+    <div style="font-size:24px;font-weight:800;color:var(--dark);">{{ buyer.name }}</div>
+    <span id="sku-count-badge" style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;padding:3px 12px;border-radius:12px;font-size:12px;font-weight:700;">
+      {{ (buyer.skus or [])|length }} SKUs assigned
+    </span>
+  </div>
+
+  <!-- Contact Info -->
+  <div class="be-card">
+    <div class="be-card-head"><h2>Contact Information</h2></div>
+    <div class="be-card-body">
+      <div class="g2">
+        <div class="ff"><label>Buyer Name *</label><input id="b-name" value="{{ buyer.name|e }}"></div>
+        <div class="ff"><label>Contact Person</label><input id="b-contact" value="{{ buyer.contact_name or ''|e }}"></div>
+        <div class="ff"><label>Phone</label><input id="b-phone" type="tel" value="{{ buyer.phone or ''|e }}"></div>
+        <div class="ff"><label>Email</label><input id="b-email" type="email" value="{{ buyer.email or ''|e }}"></div>
+        <div class="ff"><label>Website</label><input id="b-web" type="url" value="{{ buyer.website or ''|e }}"></div>
+        <div class="ff"><label>Type / Certifications</label><input id="b-certs" value="{{ buyer.certifications or ''|e }}"></div>
+      </div>
+      <div class="ff"><label>Primary Address</label><input id="b-addr" value="{{ buyer.address or ''|e }}"></div>
+      <div class="ff"><label>Notes</label><textarea id="b-notes" rows="2">{{ buyer.notes or '' }}</textarea></div>
+    </div>
+  </div>
+
+  <!-- Delivery Locations -->
+  <div class="be-card">
+    <div class="be-card-head">
+      <h2>Delivery Locations</h2>
+      <button class="btn btn-o" style="font-size:12px;padding:7px 14px;" onclick="addLoc()">+ Add Location</button>
+    </div>
+    <div class="be-card-body" id="loc-list">
+      {% if buyer.locations %}
+        {% for loc in buyer.locations %}
+        <div class="loc-card" id="loc-{{ loop.index0 }}">
+          <div class="loc-head">
+            <span>Location {{ loop.index }}</span>
+            <button onclick="rmLoc({{ loop.index0 }})" style="background:none;border:none;color:#c62828;cursor:pointer;font-size:20px;line-height:1;padding:0;">&times;</button>
+          </div>
+          <div class="g2">
+            <div class="ff"><label>Name</label><input class="loc-name" value="{{ loc.name|e }}" placeholder="e.g. Coco Market"></div>
+            <div class="ff"><label>Address</label><input class="loc-addr" value="{{ loc.address|e }}" placeholder="Street, City, Province"></div>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div style="color:var(--text-light);font-size:13px;">No delivery locations added.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Catalogue & Pricing -->
+  <div class="be-card">
+    <div class="be-card-head">
+      <h2>Catalogue &amp; Pricing</h2>
+      <div style="font-size:12px;color:var(--text-light);">Tick to assign · Enter price per unit · COGS &amp; margin are internal only</div>
+    </div>
+
+    {% set ns = namespace(cur_fmt='') %}
+    {% set sku_map = {} %}
+    {% for s in buyer.skus or [] %}{% set _ = sku_map.__setitem__(s.sku_key, s) %}{% endfor %}
+
+    <div id="sku-table">
+      <div class="sku-hdr">
+        <span></span>
+        <span style="text-align:left;">Product</span>
+        <span>Price/unit</span>
+        <span>COGS</span>
+        <span>Margin</span>
+        <span>Active</span>
+      </div>
+
+      {% for group in sku_catalog %}
+        {% set fmt_prefix = group.brand + ' · ' + group.skus[0].format if group.skus else group.brand %}
+        {% for sku in group.skus %}
+          {% set fmt = sku.format|upper %}
+          {% set assigned = sku_map.get(sku.sku_key, {}) %}
+          {% set is_assigned = sku.sku_key in sku_map %}
+          {% set price = assigned.get('price') %}
+          {% set cogs = assigned.get('cogs') %}
+          {% set margin = assigned.get('margin_pct') %}
+          {% set is_active = assigned.get('active', True) if is_assigned else True %}
+
+          {% if loop.first %}
+          <div class="fmt-group-hdr fmt-pill-{{ 'ss' if fmt.startswith('SS') else 'fz' if fmt.startswith('FZ') else 'bb' if fmt.startswith('BB') else 'ot' }}">
+            {{ group.brand }} — {{ sku.format }}
+            <span style="font-size:10px;color:var(--text-light);font-weight:400;">{{ group.skus|length }} product{{ 's' if group.skus|length != 1 else '' }}</span>
+          </div>
+          {% endif %}
+
+          <div class="sku-row {% if is_assigned %}assigned{% endif %}" data-sku="{{ sku.sku_key|e }}">
+            <input type="checkbox" class="sku-check" {% if is_assigned %}checked{% endif %}
+              onchange="toggleSku('{{ sku.sku_key|e }}', this.checked)">
+            <div>
+              <div class="sku-name">{{ sku.recipe }}</div>
+              <div class="sku-fmt">{{ sku.sku_key }}</div>
+            </div>
+            <div>
+              <input type="number" class="p-input price-input" step="0.01" min="0" placeholder="—"
+                value="{{ '%.2f'|format(price) if price is not none else '' }}"
+                data-sku="{{ sku.sku_key|e }}" data-field="price"
+                {% if not is_assigned %}disabled{% endif %}>
+            </div>
+            <div>
+              <input type="number" class="p-input cogs-input" step="0.01" min="0" placeholder="—"
+                value="{{ '%.2f'|format(cogs) if cogs is not none else '' }}"
+                data-sku="{{ sku.sku_key|e }}" data-field="cogs"
+                {% if not is_assigned %}disabled{% endif %}>
+            </div>
+            <div class="p-margin" data-sku-margin="{{ sku.sku_key|e }}">
+              {{ '%.1f'|format(margin) + '%' if margin is not none else '—' }}
+            </div>
+            <div>
+              <button class="p-active-tog {% if is_active %}on{% else %}off{% endif %}"
+                data-sku="{{ sku.sku_key|e }}"
+                {% if not is_assigned %}disabled style="opacity:.4;"{% endif %}
+                onclick="toggleActive('{{ sku.sku_key|e }}', this)"></button>
+            </div>
+          </div>
+        {% endfor %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Sticky save bar -->
+  <div class="save-bar">
+    <div class="save-status" id="save-status"></div>
+    <div style="display:flex;gap:10px;">
+      <a href="/contacts?tab=buyers" class="btn btn-o" style="text-decoration:none;display:inline-flex;align-items:center;">Cancel</a>
+      <button class="btn btn-p" onclick="saveBuyer()" style="background:#0288d1;border:none;min-width:120px;">Save Buyer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var BID = '{{ buyer.id }}';
+var _locs = {{ (buyer.locations or [])|tojson }};
+var _skuData = {};  // sku_key -> {price, cogs, margin_pct, active, assigned}
+
+// Init _skuData from server-rendered state
+document.querySelectorAll('.sku-row').forEach(function(row) {
+  var sk = row.dataset.sku;
+  var chk = row.querySelector('.sku-check');
+  var priceEl = row.querySelector('.price-input');
+  var cogsEl = row.querySelector('.cogs-input');
+  var togEl = row.querySelector('.p-active-tog');
+  _skuData[sk] = {
+    assigned: chk ? chk.checked : false,
+    price:    priceEl && priceEl.value ? parseFloat(priceEl.value) : null,
+    cogs:     cogsEl && cogsEl.value  ? parseFloat(cogsEl.value)  : null,
+    margin_pct: null,
+    active:   togEl ? togEl.classList.contains('on') : true,
+  };
+});
+
+function toggleSku(sk, checked) {
+  var row = document.querySelector('.sku-row[data-sku="'+sk+'"]');
+  if(!row) return;
+  _skuData[sk] = _skuData[sk] || {};
+  _skuData[sk].assigned = checked;
+  // Enable/disable inputs
+  row.querySelectorAll('.p-input').forEach(function(inp){ inp.disabled = !checked; });
+  var tog = row.querySelector('.p-active-tog');
+  if(tog){ tog.disabled = !checked; tog.style.opacity = checked ? '' : '.4'; }
+  row.classList.toggle('assigned', checked);
+  updateSkuBadge();
+}
+
+function toggleActive(sk, btn) {
+  var isOn = btn.classList.contains('on');
+  btn.classList.toggle('on', !isOn);
+  btn.classList.toggle('off', isOn);
+  _skuData[sk] = _skuData[sk] || {};
+  _skuData[sk].active = !isOn;
+}
+
+// Delegated input listener for price/cogs
+document.getElementById('sku-table').addEventListener('input', function(ev) {
+  var el = ev.target;
+  var sk = el.getAttribute('data-sku');
+  var field = el.getAttribute('data-field');
+  if(!sk || !field) return;
+  _skuData[sk] = _skuData[sk] || {};
+  var val = el.value.trim() ? parseFloat(el.value) : null;
+  _skuData[sk][field] = val;
+  // Recalculate margin
+  var p = _skuData[sk].price, c = _skuData[sk].cogs;
+  if(p && c && c > 0) {
+    var m = ((p / c) - 1) * 100;
+    _skuData[sk].margin_pct = Math.round(m * 100) / 100;
+    var mEl = document.querySelector('[data-sku-margin="'+sk+'"]');
+    if(mEl) mEl.textContent = m.toFixed(1) + '%';
+  }
+});
+
+function updateSkuBadge() {
+  var n = Object.values(_skuData).filter(function(d){ return d.assigned; }).length;
+  var badge = document.getElementById('sku-count-badge');
+  if(badge) badge.textContent = n + ' SKU' + (n===1?'':'s') + ' assigned';
+}
+
+// Location management
+function renderLocs() {
+  var list = document.getElementById('loc-list');
+  if(!_locs.length) { list.innerHTML='<div style="color:var(--text-light);font-size:13px;">No delivery locations added.</div>'; return; }
+  list.innerHTML = _locs.map(function(loc, i) {
+    return '<div class="loc-card">'
+      +'<div class="loc-head"><span>Location '+(i+1)+'</span>'
+      +'<button onclick="rmLoc('+i+')" style="background:none;border:none;color:#c62828;cursor:pointer;font-size:20px;line-height:1;padding:0;">&times;</button></div>'
+      +'<div class="g2">'
+      +'<div class="ff"><label>Name</label><input class="loc-name" value="'+(loc.name||'')+'" placeholder="e.g. Coco Market"></div>'
+      +'<div class="ff"><label>Address</label><input class="loc-addr" value="'+(loc.address||'')+'" placeholder="Street, City, Province"></div>'
+      +'</div></div>';
+  }).join('');
+}
+function addLoc() { _locs.push({id:'loc_'+Date.now(),name:'',address:''}); renderLocs(); }
+function rmLoc(i) { _locs.splice(i,1); renderLocs(); }
+function syncLocs() {
+  document.querySelectorAll('.loc-card').forEach(function(card, i) {
+    var n = card.querySelector('.loc-name'), a = card.querySelector('.loc-addr');
+    if(_locs[i]) { if(n) _locs[i].name=n.value.trim(); if(a) _locs[i].address=a.value.trim(); }
+  });
+}
+
+async function saveBuyer() {
+  syncLocs();
+  var btn = document.querySelector('.save-bar .btn-p');
+  var status = document.getElementById('save-status');
+  btn.disabled = true; btn.textContent = 'Saving…'; status.textContent = ''; status.className = 'save-status';
+
+  // Build SKUs list from _skuData
+  // Get ordering from DOM (top to bottom)
+  var orderedKeys = Array.from(document.querySelectorAll('.sku-row')).map(function(r){ return r.dataset.sku; });
+  var skus = [];
+  orderedKeys.forEach(function(sk, idx) {
+    var d = _skuData[sk] || {};
+    if(d.assigned) {
+      skus.push({
+        sku_key:    sk,
+        recipe:     (document.querySelector('.sku-row[data-sku="'+sk+'"] .sku-name')||{}).textContent||'',
+        display:    (document.querySelector('.sku-row[data-sku="'+sk+'"] .sku-name')||{}).textContent||'',
+        position:   idx + 1,
+        price:      d.price,
+        cogs:       d.cogs,
+        margin_pct: d.margin_pct,
+        active:     d.active !== false,
+      });
+    }
+  });
+
+  var body = {
+    name:            document.getElementById('b-name').value.trim(),
+    contact_name:    document.getElementById('b-contact').value.trim(),
+    phone:           document.getElementById('b-phone').value.trim(),
+    email:           document.getElementById('b-email').value.trim(),
+    website:         document.getElementById('b-web').value.trim(),
+    certifications:  document.getElementById('b-certs').value.trim(),
+    address:         document.getElementById('b-addr').value.trim(),
+    notes:           document.getElementById('b-notes').value.trim(),
+    locations:       _locs,
+    skus:            skus,
+  };
+
+  try {
+    var res = await fetch('/api/buyers/' + BID, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+    var data = await res.json();
+    btn.disabled = false; btn.textContent = 'Save Buyer';
+    if(res.ok) {
+      status.textContent = '✓ Saved'; status.className = 'save-status ok';
+      setTimeout(function(){ status.textContent=''; status.className='save-status'; }, 3000);
+    } else {
+      status.textContent = data.error || 'Save failed'; status.className = 'save-status err';
+    }
+  } catch(e) {
+    btn.disabled = false; btn.textContent = 'Save Buyer';
+    status.textContent = 'Network error'; status.className = 'save-status err';
+  }
+}
+</script>
+</body>
+</html>

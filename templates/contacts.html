@@ -11,7 +11,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
 <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
 <link rel="apple-touch-icon" sizes="180x180" href="/static/logo-180.png">
-<title>Soma – Contacts & Settings</title>
+<title>Soma – Buyers & Suppliers</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
 body.cp { background: var(--bg); }
@@ -99,7 +99,7 @@ body.cp { background: var(--bg); }
 <body class="cp">
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-  <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Contacts &amp; Settings</p></div>
+  <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Buyers &amp; Suppliers</p></div>
   <div class="header-right"><button class="header-btn" onclick="window.location='/'">← Dashboard</button></div>
 </div>
 <div class="tab-bar">
@@ -352,20 +352,26 @@ async function loadBuys(){
     if(b.email)m.push('<a href="mailto:'+e(b.email)+'">'+e(b.email)+'</a>');
     if(b.website)m.push('<a href="'+e(b.website)+'" target="_blank">Website ↗</a>');
     var sn=(b.skus||[]).length,ln=(b.locations||[]).length;
-    var prev=(b.skus||[]).slice(0,3).map(function(s){return s.display||s.recipe;}).join(', ')+(sn>3?' +more':'');
-    return '<div class="cc">'
+    var pricedCount=(b.skus||[]).filter(function(s){return s.price!=null&&s.price>0;}).length;
+    var prev=(b.skus||[]).slice(0,4).map(function(s){return '<span>'+e(s.display||s.recipe)+'</span>';}).join('<span style="color:#ccc;margin:0 3px;">·</span>')+(sn>4?'<span style="color:#aaa;"> +'+( sn-4)+' more</span>':'');
+    return '<div class="cc" style="cursor:pointer;" onclick="window.location=\'/buyers/'+bid+'/edit\'">'
       +'<div style="flex:1;min-width:0;">'
-      +'<div class="cc-name">'+e(b.name)+'</div>'
+      +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">'
+      +'<div class="cc-name" style="font-size:17px;">'+e(b.name)+'</div>'
+      +(sn?'<span class="cc-badge bg-g">'+sn+' SKU'+(sn===1?'':'s')+'</span>':'')
+      +(pricedCount===sn&&sn>0?'<span class="cc-badge" style="background:#e8f4fd;color:#0277bd;border:1px solid #90caf9;">Fully priced</span>'
+        :pricedCount>0?'<span class="cc-badge" style="background:#fff8e1;color:#e65100;border:1px solid #ffe082;">'+pricedCount+'/'+sn+' priced</span>':'')
+      +(b.certifications?'<span class="cc-badge bg-b">'+e(b.certifications)+'</span>':'')
+      +'</div>'
       +(m.length?'<div class="cc-sub">'+m.join(' · ')+'</div>':'')
       +(b.address?'<div class="cc-sub">'+e(b.address)+'</div>':'')
-      +(ln?'<div class="cc-sub">'+ln+' location'+(ln===1?'':'s')+': '+(b.locations||[]).map(function(l){return e(l.name);}).join(', ')+'</div>':'')
-      +'<div class="cc-sub" style="margin-top:4px;">'+sn+' product'+(sn===1?'':'s')+(prev?' — '+prev:'')+'</div>'
-      +(b.certifications?'<span class="cc-badge bg-b">'+e(b.certifications)+'</span>':'')
-      +(b.notes?'<div class="cc-sub" style="font-style:italic;margin-top:4px;">'+e(b.notes)+'</div>':'')
+      +(ln?'<div class="cc-sub"><strong>'+ln+'</strong> delivery location'+(ln===1?'':'s')+': '+(b.locations||[]).map(function(l){return e(l.name);}).join(', ')+'</div>':'')
+      +(sn?'<div class="cc-sub" style="margin-top:6px;font-size:11px;line-height:1.7;">'+prev+'</div>':'')
+      +(b.notes?'<div class="cc-sub" style="font-style:italic;margin-top:4px;color:#999;">'+e(b.notes)+'</div>':'')
       +'</div>'
-      +'<div class="cc-actions">'
-      +'<button class="btn btn-o" style="font-size:12px;padding:8px 14px;" onclick="openEditBuy(\''+bid+'\')">Edit</button>'
-      +'<button class="btn-r" onclick="delBuy(\''+bid+'\',\''+e(b.name)+'\')">Delete</button>'
+      +'<div class="cc-actions" onclick="event.stopPropagation();">'
+      +'<a class="btn btn-p" href="/buyers/'+bid+'/edit" style="font-size:12px;padding:8px 16px;text-decoration:none;background:#0288d1;border:none;display:inline-flex;align-items:center;gap:4px;">✎ Edit</a>'
+      +'<button class="btn-r" onclick="delBuy(\''+bid+'\',\''+e(b.name)+'\')" >Delete</button>'
       +'</div></div>';
   }).join('');
 }
