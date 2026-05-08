@@ -73,6 +73,15 @@ body.cp { background: var(--bg); }
 .empty { text-align:center; padding:48px 24px; color:var(--text-light); font-size:14px; border:2px dashed var(--border); border-radius:12px; }
 .scard { background:#fff; border:1px solid var(--border); border-radius:12px; padding:22px 24px; margin-bottom:14px; }
 .scard h3 { font-size:14px; font-weight:700; margin:0 0 16px; color:var(--dark); }
+.price-row { display:grid; grid-template-columns:1fr 80px 80px 70px 60px; gap:6px; align-items:center; padding:9px 12px; border-bottom:1px solid var(--border); background:#fff; font-size:13px; }
+.price-row:nth-child(even) { background:#fafaf8; }
+.price-row:last-child { border-bottom:none; }
+.price-hdr { display:grid; grid-template-columns:1fr 80px 80px 70px 60px; gap:6px; padding:7px 12px; background:#f5f5f0; border-bottom:1px solid var(--border); font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.05em; }
+.p-input { width:100%; box-sizing:border-box; padding:5px 7px; border:1.5px solid var(--border); border-radius:6px; font-size:13px; font-weight:600; text-align:right; outline:none; }
+.p-input:focus { border-color:var(--accent); }
+.p-margin { font-size:12px; color:var(--text-light); text-align:right; }
+.p-sku-name { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.p-sku-fmt { font-size:11px; color:var(--text-light); }
 @media(max-width:600px){
   .g2 { grid-template-columns:1fr; }
   .cc { flex-direction:column; gap:12px; }
@@ -220,8 +229,22 @@ body.cp { background: var(--bg); }
           <button onclick="goAssign()" style="background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;text-decoration:underline;padding:0;">← Back to Products</button>
           <span style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;">Display Order</span>
         </div>
-        <div style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Products appear in this order in the sale grid, grouped by format.</div>
+        <div style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Products appear in this order in the sale grid. Click Set Pricing to assign buyer-specific prices.</div>
         <div id="b-ord-list" style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden;"></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+          <button class="btn btn-p" onclick="goPricingStep()" style="background:#0288d1;border:none;font-size:13px;">Set Pricing →</button>
+        </div>
+      </div>
+
+      <!-- Step C: Pricing per SKU -->
+      <div id="b-step-c" style="display:none;">
+        <div class="mo-div"></div>
+        <div style="margin-top:14px;display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+          <button onclick="goOrderStep()" style="background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;text-decoration:underline;padding:0;">← Back to Order</button>
+          <span style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;">Set Pricing</span>
+        </div>
+        <p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Set the price this buyer pays per unit. COGS and margin are internal only.</p>
+        <div id="b-pricing-list" style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden;"></div>
       </div>
 
       <div class="smsg" id="b-msg"></div>
@@ -312,6 +335,7 @@ async function delSup(sid,name){if(!confirm('Delete supplier "'+name+'"?'))retur
 
 /* ════════ BUYERS ════════ */
 var _buys=[],_bMode='add',_bId=null,_bCk={},_bOrd={},_bLocs=[],_skus=[],_skuG=[];
+var _bPricing={}; // {sku_key: {price, cogs, margin_pct, active}}
 
 async function loadBuys(){
   _buys=await(await fetch('/api/buyers')).json();
@@ -386,6 +410,101 @@ function goOrder(){
   G('b-step-a').style.display='none';G('b-step-b').style.display='';rOrdList();
 }
 function goAssign(){G('b-step-b').style.display='none';G('b-step-a').style.display='';}
+
+function goAssign(){G('b-step-b').style.display='none';G('b-step-a').style.display='';}
+
+function goOrderStep(){G('b-step-c').style.display='none';G('b-step-b').style.display='';}
+
+function goPricingStep(){
+    // Build pricing UI from current checked SKUs with their order positions
+    var checked=_skus.filter(function(s){return _bCk[s.sku_key];});
+    checked.sort(function(a,b){return (_bOrd[a.sku_key]||999)-(_bOrd[b.sku_key]||999);});
+    var list=G('b-pricing-list');
+    if(!checked.length){list.innerHTML='<div style="padding:14px;color:var(--text-light);font-size:13px;">No products assigned.</div>';
+    } else {
+        var hdr='<div class="price-hdr"><span>Product</span><span>Price/unit</span><span>COGS</span><span>Margin</span><span>Active</span></div>';
+        var rows=checked.map(function(s,i){
+            var price=_bPricing[s.sku_key]&&_bPricing[s.sku_key].price!=null?_bPricing[s.sku_key].price:'';
+            var cogs=_bPricing[s.sku_key]&&_bPricing[s.sku_key].cogs!=null?_bPricing[s.sku_key].cogs:'';
+            var active=_bPricing[s.sku_key]&&_bPricing[s.sku_key].active===false?'':'checked';
+            return '<div class="price-row" data-sku="'+e(s.sku_key)+'">'
+                +'<div><div class="p-sku-name">'+e(s.display||s.recipe)+'</div>'
+                +'<div class="p-sku-fmt">'+e(s.format||'')+'</div></div>'
+                +'<div><div style="display:flex;align-items:center;gap:2px;">'
+                +'<span style="font-size:11px;color:var(--text-light);">$</span>'
+                +'<input class="p-input p-price" type="number" min="0" step="0.01" placeholder="0.00" value="'+e(String(price))+'" data-sku="'+e(s.sku_key)+'" data-field="price">'
+                +'</div></div>'
+                +'<div><div style="display:flex;align-items:center;gap:2px;">'
+                +'<span style="font-size:11px;color:var(--text-light);">$</span>'
+                +'<input class="p-input p-cogs" type="number" min="0" step="0.01" placeholder="0.00" value="'+e(String(cogs))+'" data-sku="'+e(s.sku_key)+'" data-field="cogs">'
+                +'</div></div>'
+                +'<div class="p-margin" data-sku-margin="'+e(s.sku_key)+'">'+(_bPricing[s.sku_key]&&_bPricing[s.sku_key].margin_pct!=null?_bPricing[s.sku_key].margin_pct.toFixed(1)+'%':'—')+'</div>'
+                +'<div style="display:flex;justify-content:center;">'
+                +'<input type="checkbox" '+active+' data-sku="'+e(s.sku_key)+'" data-field="active" style="width:16px;height:16px;accent-color:var(--accent);">'
+                +'</div>'
+                +'</div>';
+        }).join('');
+        list.innerHTML=hdr+rows;
+    }
+    G('b-step-b').style.display='none';
+    G('b-step-c').style.display='';
+    // Attach listeners via event delegation
+    var pList=G('b-pricing-list');
+    pList.oninput=function(ev){
+        var el=ev.target;
+        var sk=el.getAttribute('data-sku');
+        var field=el.getAttribute('data-field');
+        if(!sk||!field) return;
+        if(!_bPricing[sk]) _bPricing[sk]={active:true};
+        var val=parseFloat(el.value)||null;
+        _bPricing[sk][field]=val;
+        // Recalc margin
+        var p=_bPricing[sk].price, c=_bPricing[sk].cogs;
+        if(p&&c&&c>0){
+            var m=((p/c)-1)*100;
+            _bPricing[sk].margin_pct=Math.round(m*100)/100;
+            var mEl=pList.querySelector('[data-sku-margin="'+sk+'"]');
+            if(mEl) mEl.textContent=m.toFixed(1)+'%';
+        }
+    };
+    pList.onchange=function(ev){
+        var el=ev.target;
+        if(el.type==='checkbox'){
+            var sk=el.getAttribute('data-sku');
+            if(!sk) return;
+            if(!_bPricing[sk]) _bPricing[sk]={};
+            _bPricing[sk].active=el.checked;
+        }
+    };
+}
+
+function updatePricing(skuKey, input){
+    var price=parseFloat(input.value)||null;
+    if(!_bPricing[skuKey]) _bPricing[skuKey]={};
+    _bPricing[skuKey].price=price;
+    // Recalc margin
+    var cogs=_bPricing[skuKey].cogs;
+    if(price&&cogs&&cogs>0){
+        var margin=((price/cogs)-1)*100;
+        _bPricing[skuKey].margin_pct=Math.round(margin*100)/100;
+        var row=input.closest('.price-row');
+        var mEl=row?row.querySelector('.p-margin'):null;
+        if(mEl) mEl.textContent=margin.toFixed(1)+'%';
+    }
+}
+function updateCogs(skuKey, input){
+    var cogs=parseFloat(input.value)||null;
+    if(!_bPricing[skuKey]) _bPricing[skuKey]={};
+    _bPricing[skuKey].cogs=cogs;
+    var price=_bPricing[skuKey].price;
+    if(price&&cogs&&cogs>0){
+        var margin=((price/cogs)-1)*100;
+        _bPricing[skuKey].margin_pct=Math.round(margin*100)/100;
+        var row=input.closest('.price-row');
+        var mEl=row?row.querySelector('.p-margin'):null;
+        if(mEl) mEl.textContent=margin.toFixed(1)+'%';
+    }
+}
 function rOrdList(){
   var c=_skus.filter(function(s){return _bCk[s.sku_key];});
   c.sort(function(a,b){return (_bOrd[a.sku_key]||999)-(_bOrd[b.sku_key]||999);});
@@ -415,14 +534,15 @@ function mvSku(idx,dir){
   var pa=_bOrd[c[idx].sku_key],pb=_bOrd[c[sw].sku_key];
   _bOrd[c[idx].sku_key]=pb;_bOrd[c[sw].sku_key]=pa;rOrdList();
 }
-function _clrBuy(){['b-name','b-contact','b-phone','b-email','b-web','b-addr','b-certs','b-notes','b-sku-q'].forEach(function(id){G(id).value='';});G('b-msg').textContent='';_bCk={};_bOrd={};_bLocs=[];}
+function _clrBuy(){['b-name','b-contact','b-phone','b-email','b-web','b-addr','b-certs','b-notes','b-sku-q'].forEach(function(id){G(id).value='';});G('b-msg').textContent='';_bCk={};_bOrd={};_bLocs={};_bLocs=[];_bPricing={};}
 async function openAddBuy(){_bMode='add';_bId=null;G('buy-mo-title').textContent='Add Buyer';G('b-save').textContent='Save Buyer';_clrBuy();rLocList();G('b-step-a').style.display='';G('b-step-b').style.display='none';await _fSkus();rSkuList();G('buy-mo').classList.add('open');}
 async function openEditBuy(bid){
   var b=_buys.find(function(x){return x.id===bid;});if(!b)return;
   _bMode='edit';_bId=bid;G('buy-mo-title').textContent='Edit Buyer';G('b-save').textContent='Save Changes';
   G('b-name').value=b.name||'';G('b-contact').value=b.contact_name||'';G('b-phone').value=b.phone||'';G('b-email').value=b.email||'';G('b-web').value=b.website||'';G('b-addr').value=b.address||'';G('b-certs').value=b.certifications||'';G('b-notes').value=b.notes||'';G('b-sku-q').value='';G('b-msg').textContent='';
-  _bCk={};_bOrd={};
+  _bCk={};_bOrd={};_bPricing={};
   _bLocs=(b.locations||[]).map(function(l){return Object.assign({},l);});rLocList();
+  (b.skus||[]).forEach(function(s){ if(s.price!=null||s.cogs!=null){_bPricing[s.sku_key]={price:s.price,cogs:s.cogs,margin_pct:s.margin_pct,active:s.active!==false};} });
   (b.skus||[]).forEach(function(s){_bCk[s.sku_key]=true;_bOrd[s.sku_key]=(s.position!==undefined?s.position:999);});
   G('b-step-a').style.display='';G('b-step-b').style.display='none';
   await _fSkus();rSkuList();G('buy-mo').classList.add('open');
@@ -432,7 +552,7 @@ async function saveBuy(){
   var name=G('b-name').value.trim(),msg=G('b-msg'),btn=G('b-save');
   if(!name){msg.className='smsg err';msg.textContent='Name required.';return;}
   syncLocs();
-  var skus=_skus.filter(function(s){return _bCk[s.sku_key];}).map(function(s){return Object.assign({},s,{position:_bOrd[s.sku_key]!==undefined?_bOrd[s.sku_key]:999});});
+  var skus=_skus.filter(function(s){return _bCk[s.sku_key];}).map(function(s){var pr=_bPricing[s.sku_key]||{};return Object.assign({},s,{position:_bOrd[s.sku_key]!==undefined?_bOrd[s.sku_key]:999,price:pr.price!=null?pr.price:(s.price||null),cogs:pr.cogs!=null?pr.cogs:(s.cogs||null),margin_pct:pr.margin_pct!=null?pr.margin_pct:(s.margin_pct||null),active:pr.active!==undefined?pr.active:true});});
   var body={name,skus,locations:_bLocs.filter(function(l){return l.name;}),contact_name:G('b-contact').value.trim(),phone:G('b-phone').value.trim(),email:G('b-email').value.trim(),website:G('b-web').value.trim(),address:G('b-addr').value.trim(),certifications:G('b-certs').value.trim(),notes:G('b-notes').value.trim()};
   btn.disabled=true;btn.textContent='Saving…';
   var res=await fetch(_bMode==='add'?'/api/buyers':'/api/buyers/'+_bId,{method:_bMode==='add'?'POST':'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});

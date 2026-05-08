@@ -248,12 +248,20 @@ def ripe_order_action(order_id):
 @ripe_orders_bp.route("/ripe-products")
 @_soma_login_required
 def ripe_products_page():
-    """Product catalog management — calls Ripe internal API."""
-    status, data = _ripe_request("GET", "/api/internal/products")
-    products = data if isinstance(data, list) else []
+    """Product catalog management with live stock — calls Ripe internal API."""
+    status, data = _ripe_request("GET", "/api/internal/products-with-stock")
+    if status == 200 and isinstance(data, dict):
+        products = data.get("products", [])
+        stock = data.get("stock", {})
+    elif status == 200 and isinstance(data, list):
+        products = data
+        stock = {}
+    else:
+        products = []
+        stock = {}
     configured = _configured()
     error = None if status == 200 else (data.get("error") if isinstance(data, dict) else "Could not reach Ripe portal")
-    return render_template("ripe_products.html", products=products, configured=configured, error=error)
+    return render_template("ripe_products.html", products=products, stock=stock, configured=configured, error=error)
 
 
 @ripe_orders_bp.route("/api/ripe-products", methods=["POST"])
@@ -323,3 +331,92 @@ def ripe_export_csv():
     return Response(buf.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": "attachment; filename=ripe-orders.csv"})
 
+
+
+@ripe_orders_bp.route("/ripe-sku-audit")
+@_soma_login_required
+def ripe_sku_audit_page():
+    """Run the cross-reference audit and render results."""
+    from flask import current_app
+    import os, json, urllib.request, urllib.error
+
+    # Call own audit endpoint (same app, internal key)
+    internal_key = os.environ.get("INTERNAL_API_KEY", "")
+    audit = {}
+    error = None
+    try:
+        base_url = os.environ.get("SOMA_APP_URL", "http://localhost:5000").rstrip("/")
+        req = urllib.request.Request(
+            f"{base_url}/api/internal/sku-audit",
+            headers={"X-Internal-Key": internal_key},
+            method="GET",
+        )
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            audit = json.loads(resp.read())
+    except Exception as e:
+        # If SOMA_APP_URL isn't set, call the function directly
+        try:
+            from app import _sku_key, _normalize_format, build_display_name, FORMAT_RE
+            from app import load_recipes, _load_json, ORGANIC_FG_PATH
+            import os as _os
+
+            recipes = load_recipes()
+            soma_keys = {}
+            for rname, rdata in recipes.items():
+                if rdata.get("archived"): continue
+                brand = (rdata.get("brand") or "").strip()
+                fmt   = _normalize_format((rdata.get("format") or "").strip())
+                key   = _sku_key(brand, rname, fmt)
+                soma_keys[key] = {
+                    "recipe_name": rname, "brand": brand, "format": fmt,
+                    "display": build_display_name(rdata, rname),
+                    "has_format_in_name": bool(FORMAT_RE.search(rname)),
+                }
+            fg = _load_json(ORGANIC_FG_PATH, [])
+            fg_stock = {}
+            for entry in fg:
+                key = _sku_key(entry.get("brand",""), entry.get("recipe",""), entry.get("format",""))
+                fg_stock[key] = fg_stock.get(key, 0) + int(entry.get("quantity_remaining") or 0)
+
+            status2, ripe_data = _ripe_request("GET", "/api/internal/products")
+            ripe_products = ripe_data if isinstance(ripe_data, list) else []
+
+            ripe_audit = []
+            ripe_matched = set()
+            for p in ripe_products:
+                sk = (p.get("soma_sku_key") or "").strip()
+                res = {"ripe_id": p["id"], "ripe_name": p["name"],
+                       "ripe_format": p.get("format",""), "soma_sku_key": sk,
+                       "active": p.get("active", True)}
+                if not sk:
+                    res["status"] = "no_key"; res["issue"] = "soma_sku_key not set"
+                elif sk in soma_keys:
+                    res["status"] = "matched"; res["soma_recipe"] = soma_keys[sk]
+                    res["fg_units"] = fg_stock.get(sk, 0); res["fg_cases"] = fg_stock.get(sk, 0) // 12
+                    ripe_matched.add(sk)
+                    if soma_keys[sk]["has_format_in_name"]:
+                        res["status"] = "matched_dirty_name"
+                        res["issue"] = f"Recipe name contains format suffix"
+                else:
+                    res["status"] = "broken"; res["issue"] = f"'{sk}' not found in Soma"
+                ripe_audit.append(res)
+
+            unlinked = [{"sku_key": k, **v, "fg_units": fg_stock.get(k, 0)}
+                        for k, v in soma_keys.items() if k not in ripe_matched]
+
+            matched = sum(1 for r in ripe_audit if r["status"] in ("matched","matched_dirty_name"))
+            broken  = sum(1 for r in ripe_audit if r["status"] == "broken")
+            no_key  = sum(1 for r in ripe_audit if r["status"] == "no_key")
+            dirty   = sum(1 for r in ripe_audit if r["status"] == "matched_dirty_name")
+
+            audit = {
+                "summary": {"ripe_products": len(ripe_products), "soma_recipes": len(soma_keys),
+                            "matched": matched, "broken": broken, "no_key": no_key,
+                            "dirty_names": dirty, "unlinked_soma_recipes": len(unlinked)},
+                "ripe_products": ripe_audit,
+                "unlinked_soma_recipes": unlinked,
+            }
+        except Exception as e2:
+            error = str(e2)
+
+    return render_template("ripe_sku_audit.html", audit=audit, error=error)

@@ -492,6 +492,26 @@ async function saveEdit(){
     try{resData=await res.json();}catch(e){resData={error:'Server error'};}
     if(!res.ok){alert(resData.error||'Save failed');return;}
     closeModal('edit-modal');recipes=await(await fetch('/api/recipes')).json();await loadOrder();renderList();checkMigration();
+    // Show cascade summary if a rename/rebrand updated downstream records
+    if(resData.cascade && Object.keys(resData.cascade).length > 0){
+        var c = resData.cascade;
+        var parts = [];
+        if(c.finished_goods) parts.push(c.finished_goods+' FG entr'+(c.finished_goods===1?'y':'ies'));
+        if(c.sales) parts.push(c.sales+' sale record'+(c.sales===1?'':'s'));
+        if(c.runs) parts.push(c.runs+' production run'+(c.runs===1?'':'s'));
+        if(c.schedules) parts.push(c.schedules+' schedule file'+(c.schedules===1?'':'s'));
+        if(c.buyers_skus) parts.push(c.buyers_skus+' buyer SKU'+(c.buyers_skus===1?'':'s'));
+        if(c.sku_meta) parts.push('PAR/price meta');
+        if(c.ripe_products !== undefined) parts.push('Ripe product key '+(c.ripe_products==='unreachable'?'(Ripe unreachable)':c.ripe_products===0?'(no match in Ripe)':'updated'));
+        if(parts.length > 0){
+            var msg = '✓ Saved. Cascade updated: '+parts.join(', ')+'.';
+            var toast = document.createElement('div');
+            toast.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1b5e20;color:#fff;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;max-width:480px;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.25);';
+            toast.textContent=msg;
+            document.body.appendChild(toast);
+            setTimeout(function(){ toast.remove(); }, 5000);
+        }
+    }
 }
 
 // Check if any recipes need migration/review and show banner

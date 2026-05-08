@@ -871,8 +871,12 @@ def get_recipe(name):
 @login_required
 def update_recipe(name):
     """Update an existing recipe. If the body's 'name' differs from the URL
-    name, this is treated as a rename. We REFUSE to silently overwrite a
-    different existing recipe — caller must choose a non-colliding name."""
+    name, this is treated as a rename.
+
+    Cascades any name/brand/format change to all downstream records:
+    FG inventory, sales, production runs, schedules, sku_meta, buyers,
+    and notifies the Ripe portal to update soma_sku_key.
+    """
     data = request.json or {}
     recipes = load_recipes()
     new_name = (data.get("name") or name).strip()
@@ -881,21 +885,140 @@ def update_recipe(name):
     if name not in recipes:
         return jsonify({"error": f"Recipe '{name}' not found"}), 404
 
-    # Rename collision check: if the new name is different AND is already
-    # taken by a different recipe, refuse. This prevents the edit form from
-    # accidentally overwriting an unrelated recipe (which was previously
-    # destroying data when a user renamed a duplicate to match an original).
     if new_name != name and new_name in recipes:
         return jsonify({
             "error": f"A different recipe named '{new_name}' already exists. "
                      f"Choose a different name or delete the other one first."
         }), 409
 
+    # Capture old identity before saving
+    old_recipe = recipes[name]
+    old_brand  = (old_recipe.get("brand") or "").strip()
+    old_format = _normalize_format((old_recipe.get("format") or "").strip())
+    old_sku_key = _sku_key(old_brand, name, old_format)
+
+    new_brand  = (recipe_data.get("brand") or "").strip()
+    new_format = _normalize_format((recipe_data.get("format") or "").strip())
+    new_sku_key = _sku_key(new_brand, new_name, new_format)
+
+    # Save the recipe first
     if new_name != name:
         del recipes[name]
     recipes[new_name] = recipe_data
     save_recipes(recipes)
-    return jsonify({"success": True, "name": new_name})
+
+    # ── Cascade if anything identity-related changed ─────────────────────────
+    identity_changed = (new_name != name or new_brand != old_brand or new_sku_key != old_sku_key)
+    cascade = {}
+
+    if identity_changed:
+        # 1. Finished goods
+        fg = _load_json(ORGANIC_FG_PATH, [])
+        n = 0
+        for e in fg:
+            if (e.get("recipe") or "").strip() == name:
+                e["recipe"] = new_name
+                if new_brand: e["brand"] = new_brand
+                if new_format: e["format"] = new_format
+                n += 1
+        if n: _save_json(ORGANIC_FG_PATH, fg)
+        cascade["finished_goods"] = n
+
+        # 2. Sales records
+        sales = _load_json(ORGANIC_SALES_PATH, [])
+        n = 0
+        for s in sales:
+            if (s.get("recipe") or "").strip() == name:
+                s["recipe"] = new_name
+                if new_brand: s["brand"] = new_brand
+                if new_format: s["format"] = new_format
+                s["sku_key"] = _sku_key(s.get("brand", new_brand), new_name, s.get("format", new_format))
+                n += 1
+        if n: _save_json(ORGANIC_SALES_PATH, sales)
+        cascade["sales"] = n
+
+        # 3. Production runs
+        runs = _load_json(ORGANIC_RUNS_PATH, [])
+        n = 0
+        for r in runs:
+            if (r.get("recipe") or "").strip() == name:
+                r["recipe"] = new_name
+                n += 1
+        if n: _save_json(ORGANIC_RUNS_PATH, runs)
+        cascade["runs"] = n
+
+        # 4. sku_meta — rename the key
+        if old_sku_key != new_sku_key:
+            meta = _load_json(SKU_META_PATH, {})
+            if old_sku_key in meta:
+                meta[new_sku_key] = meta.pop(old_sku_key)
+                _save_json(SKU_META_PATH, meta)
+                cascade["sku_meta"] = 1
+
+        # 5. Buyers — update sku_key/recipe/display on assigned SKUs
+        buyers = _load_buyers()
+        n = 0
+        for buyer in buyers:
+            for sku in (buyer.get("skus") or []):
+                if (sku.get("sku_key") or "") == old_sku_key:
+                    sku["sku_key"] = new_sku_key
+                    sku["recipe"] = new_name
+                    if new_brand: sku["brand"] = new_brand
+                    if new_format: sku["format"] = new_format
+                    sku["display"] = _sku_display(sku.get("brand", new_brand), new_name, sku.get("format", new_format))
+                    n += 1
+        if n: _save_buyers(buyers)
+        cascade["buyers_skus"] = n
+
+        # 6. Schedule files — recipe names as slot values
+        n = 0
+        try:
+            if os.path.isdir(SCHEDULES_DIR):
+                for fname in os.listdir(SCHEDULES_DIR):
+                    if not fname.endswith(".json"): continue
+                    fpath = os.path.join(SCHEDULES_DIR, fname)
+                    with open(fpath) as f: sched = json.load(f)
+                    dirty = False
+                    def _walk(obj):
+                        nonlocal dirty
+                        if isinstance(obj, dict):
+                            for k, v in obj.items():
+                                if isinstance(v, str) and v == name:
+                                    obj[k] = new_name; dirty = True
+                                else: _walk(v)
+                        elif isinstance(obj, list):
+                            for i, item in enumerate(obj):
+                                if isinstance(item, str) and item == name:
+                                    obj[i] = new_name; dirty = True
+                                else: _walk(item)
+                    _walk(sched)
+                    if dirty:
+                        with open(fpath, "w") as f: json.dump(sched, f, indent=2)
+                        n += 1
+        except Exception as e:
+            logger.warning("Schedule cascade failed: %s", e)
+        cascade["schedules"] = n
+
+        # 7. Notify Ripe portal to update soma_sku_key (best-effort)
+        if old_sku_key != new_sku_key:
+            ripe_url = os.environ.get("RIPE_PORTAL_URL", "").rstrip("/")
+            ikey = os.environ.get("INTERNAL_API_KEY", "")
+            if ripe_url and ikey:
+                try:
+                    import urllib.request as _ur
+                    req = _ur.Request(
+                        f"{ripe_url}/api/internal/rename-sku-key",
+                        data=json.dumps({"old_sku_key": old_sku_key, "new_sku_key": new_sku_key}).encode(),
+                        headers={"X-Internal-Key": ikey, "Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with _ur.urlopen(req, timeout=6) as resp:
+                        cascade["ripe_products"] = json.loads(resp.read()).get("updated", 0)
+                except Exception as e:
+                    logger.warning("Could not notify Ripe of sku_key rename: %s", e)
+                    cascade["ripe_products"] = "unreachable"
+
+    return jsonify({"success": True, "name": new_name, "cascade": cascade})
 
 @app.route("/api/recipes/<path:name>", methods=["DELETE"])
 @login_required
@@ -4290,6 +4413,219 @@ def get_finished_goods_grouped():
     return jsonify(grouped)
 
 
+@app.route("/api/internal/catalogue", methods=["GET"])
+def internal_buyer_catalogue():
+    """Return the product catalogue for a specific buyer — their assigned SKUs
+    with buyer-specific pricing and live FG stock.
+    Called by the buyer portal (e.g. Ripe) to build its order form.
+
+    Query params:
+      buyer  — buyer name (e.g. 'Ripe') or buyer id
+    """
+    internal_key = os.environ.get("INTERNAL_API_KEY", "")
+    provided = request.headers.get("X-Internal-Key", "")
+    import hmac as _hmac
+    if not internal_key or not _hmac.compare_digest(provided.encode(), internal_key.encode()):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    buyer_ref = (request.args.get("buyer") or "").strip()
+    if not buyer_ref:
+        return jsonify({"error": "buyer query param required"}), 400
+
+    buyers = _load_buyers()
+    buyer = next(
+        (b for b in buyers
+         if b["name"].lower() == buyer_ref.lower() or b["id"] == buyer_ref),
+        None
+    )
+    if not buyer:
+        return jsonify({"error": f"Buyer '{buyer_ref}' not found"}), 404
+
+    # Build stock map
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    meta = _load_json(SKU_META_PATH, {})
+    company = _load_company_info()
+    buffer_units = int(company.get("ripe_inventory_buffer") or 0)
+
+    stock_map = {}
+    for entry in fg:
+        key = _sku_key(entry.get("brand",""), entry.get("recipe",""), entry.get("format",""))
+        stock_map[key] = stock_map.get(key, 0) + int(entry.get("quantity_remaining") or 0)
+
+    # Subtract committed (not yet deducted) sales
+    lower_map = {k.lower(): k for k in stock_map}
+    for sale in sales:
+        if sale.get("deducted") is False:
+            sk = sale.get("sku_key", "")
+            canonical = stock_map.get(sk) and sk or lower_map.get(sk.lower())
+            if canonical:
+                stock_map[canonical] = max(0, stock_map[canonical] - int(sale.get("quantity") or 0))
+
+    # Build catalogue from buyer's assigned SKUs
+    catalogue = []
+    for sku in (buyer.get("skus") or []):
+        sk = sku.get("sku_key", "")
+        gross = stock_map.get(sk, 0)
+        available = max(0, gross - buffer_units)
+        m = meta.get(sk, {})
+        catalogue.append({
+            "sku_key":     sk,
+            "name":        sku.get("recipe", ""),
+            "brand":       sku.get("brand", ""),
+            "format":      sku.get("format", ""),
+            "display":     sku.get("display", ""),
+            "position":    sku.get("position", 999),
+            # Buyer-specific pricing (set in Soma buyer record)
+            "price":       sku.get("price"),
+            "cogs":        sku.get("cogs"),
+            "margin_pct":  sku.get("margin_pct"),
+            "buyer_sku":   sku.get("buyer_sku", ""),
+            "active":      sku.get("active", True),
+            # Live stock
+            "available_units": available,
+            "available_cases": available // 12,
+            "par":         m.get("par"),
+        })
+
+    catalogue.sort(key=lambda x: (x["position"], x["format"], x["name"]))
+
+    return jsonify({
+        "buyer": buyer["name"],
+        "buyer_id": buyer["id"],
+        "catalogue": catalogue,
+        "units_per_case": 12,
+        "buffer_units": buffer_units,
+    })
+
+
+@app.route("/api/internal/sku-audit", methods=["GET"])
+def internal_sku_audit():
+    """Cross-reference Soma FG recipes against Ripe product soma_sku_key values.
+    Key-gated. Returns a full match/mismatch report.
+    """
+    internal_key = os.environ.get("INTERNAL_API_KEY", "")
+    provided = request.headers.get("X-Internal-Key", "")
+    import hmac as _hmac
+    if not internal_key or not _hmac.compare_digest(provided.encode(), internal_key.encode()):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    # Build Soma side: all active recipe sku_keys
+    recipes = load_recipes()
+    soma_keys = {}  # sku_key -> {recipe_name, brand, format, display}
+    for rname, rdata in recipes.items():
+        if rdata.get("archived"):
+            continue
+        brand  = (rdata.get("brand") or "").strip()
+        fmt    = _normalize_format((rdata.get("format") or "").strip())
+        key    = _sku_key(brand, rname, fmt)
+        soma_keys[key] = {
+            "recipe_name": rname,
+            "brand": brand,
+            "format": fmt,
+            "display": build_display_name(rdata, rname),
+            "has_format_in_name": bool(FORMAT_RE.search(rname)),
+        }
+
+    # Build FG side: which sku_keys actually have inventory
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    fg_stock = {}
+    for entry in fg:
+        key = _sku_key(entry.get("brand",""), entry.get("recipe",""), entry.get("format",""))
+        fg_stock[key] = fg_stock.get(key, 0) + int(entry.get("quantity_remaining") or 0)
+
+    # Build Ripe side: fetch their product list
+    ripe_url = os.environ.get("RIPE_PORTAL_URL", "").rstrip("/")
+    ikey     = os.environ.get("INTERNAL_API_KEY", "")
+    ripe_products = []
+    ripe_error = None
+    if ripe_url and ikey:
+        try:
+            import urllib.request as _ur
+            req = _ur.Request(
+                f"{ripe_url}/api/internal/products",
+                headers={"X-Internal-Key": ikey},
+                method="GET",
+            )
+            with _ur.urlopen(req, timeout=8) as resp:
+                ripe_products = json.loads(resp.read())
+        except Exception as e:
+            ripe_error = str(e)
+
+    # Audit each Ripe product
+    ripe_audit = []
+    ripe_matched_keys = set()
+    for p in ripe_products:
+        sk = (p.get("soma_sku_key") or "").strip()
+        result = {
+            "ripe_id":   p["id"],
+            "ripe_name": p["name"],
+            "ripe_format": p.get("format",""),
+            "soma_sku_key": sk,
+            "active": p.get("active", True),
+        }
+        if not sk:
+            result["status"] = "no_key"
+            result["issue"]  = "soma_sku_key not set"
+        elif sk in soma_keys:
+            result["status"] = "matched"
+            result["soma_recipe"] = soma_keys[sk]
+            result["fg_units"]    = fg_stock.get(sk, 0)
+            result["fg_cases"]    = fg_stock.get(sk, 0) // 12
+            ripe_matched_keys.add(sk)
+            # Warn if recipe name has dirty format suffix
+            if soma_keys[sk]["has_format_in_name"]:
+                result["status"] = "matched_dirty_name"
+                result["issue"]  = f"Recipe name '{soma_keys[sk]['recipe_name']}' contains format suffix — should be cleaned"
+        else:
+            result["status"] = "broken"
+            result["issue"]  = f"soma_sku_key '{sk}' not found in Soma recipes"
+            # Suggest closest match
+            suggestions = []
+            sk_lower = sk.lower()
+            for k, v in soma_keys.items():
+                if v["recipe_name"].lower() in sk_lower or sk_lower in v["recipe_name"].lower():
+                    suggestions.append(k)
+            if suggestions:
+                result["suggestions"] = suggestions
+        ripe_audit.append(result)
+
+    # Soma recipes with no Ripe product mapping
+    unlinked_soma = []
+    for key, info in soma_keys.items():
+        if key not in ripe_matched_keys:
+            unlinked_soma.append({
+                "sku_key": key,
+                "recipe_name": info["recipe_name"],
+                "brand": info["brand"],
+                "format": info["format"],
+                "display": info["display"],
+                "fg_units": fg_stock.get(key, 0),
+                "has_format_in_name": info["has_format_in_name"],
+            })
+
+    # Summary
+    matched  = sum(1 for r in ripe_audit if r["status"] in ("matched","matched_dirty_name"))
+    broken   = sum(1 for r in ripe_audit if r["status"] == "broken")
+    no_key   = sum(1 for r in ripe_audit if r["status"] == "no_key")
+    dirty    = sum(1 for r in ripe_audit if r["status"] == "matched_dirty_name")
+
+    return jsonify({
+        "summary": {
+            "ripe_products": len(ripe_products),
+            "soma_recipes":  len(soma_keys),
+            "matched":  matched,
+            "broken":   broken,
+            "no_key":   no_key,
+            "dirty_names": dirty,
+            "unlinked_soma_recipes": len(unlinked_soma),
+        },
+        "ripe_products": ripe_audit,
+        "unlinked_soma_recipes": unlinked_soma,
+        "ripe_error": ripe_error,
+    })
+
+
 @app.route("/api/internal/fg-stock", methods=["GET"])
 def internal_fg_stock():
     """Return available FG stock per SKU for Ripe portal.
@@ -5047,7 +5383,24 @@ def update_buyer(bid):
             return jsonify({"error": "Name taken"}), 409
         buyers[idx]["name"] = name
     if "skus" in data:
-        buyers[idx]["skus"] = data["skus"]
+        # Preserve pricing fields if they already exist and incoming data
+        # doesn't explicitly include them (allows partial SKU updates)
+        existing_by_key = {s.get("sku_key",""): s for s in (buyers[idx].get("skus") or [])}
+        new_skus = []
+        for sku in data["skus"]:
+            key = sku.get("sku_key", "")
+            existing = existing_by_key.get(key, {})
+            merged = dict(existing)
+            merged.update(sku)
+            # Validate and round pricing fields
+            for pf in ("price", "cogs", "margin_pct"):
+                if pf in merged and merged[pf] is not None:
+                    try:
+                        merged[pf] = round(float(merged[pf]), 2)
+                    except (TypeError, ValueError):
+                        merged[pf] = None
+            new_skus.append(merged)
+        buyers[idx]["skus"] = new_skus
     for field in ("contact_name","phone","email","address","website","certifications","notes"):
         if field in data:
             buyers[idx][field] = (data[field] or "").strip()
@@ -5064,6 +5417,53 @@ def update_buyer(bid):
             ]
     _save_buyers(buyers)
     return jsonify(buyers[idx])
+
+
+@app.route("/api/buyers/<bid>/skus/<path:sku_key>/pricing", methods=["PATCH"])
+@login_required
+def update_buyer_sku_pricing(bid, sku_key):
+    """Update pricing for a single SKU on a buyer.
+    Body: { price, cogs, margin_pct, buyer_sku, active }
+    Computes missing values using the price=cogs*(1+margin/100) relationship.
+    """
+    data = request.get_json() or {}
+    buyers = _load_buyers()
+    idx = next((i for i, b in enumerate(buyers) if b["id"] == bid), None)
+    if idx is None:
+        return jsonify({"error": "Buyer not found"}), 404
+
+    skus = buyers[idx].get("skus") or []
+    sku_idx = next((i for i, s in enumerate(skus) if s.get("sku_key") == sku_key), None)
+    if sku_idx is None:
+        return jsonify({"error": "SKU not assigned to this buyer"}), 404
+
+    sku = dict(skus[sku_idx])
+
+    # Derive pricing triangle: price = cogs * (1 + margin/100)
+    price      = float(data["price"])      if "price"      in data and data["price"]      is not None else sku.get("price")
+    cogs       = float(data["cogs"])       if "cogs"       in data and data["cogs"]       is not None else sku.get("cogs")
+    margin_pct = float(data["margin_pct"]) if "margin_pct" in data and data["margin_pct"] is not None else sku.get("margin_pct")
+
+    if price is not None and cogs is not None:
+        margin_pct = round(((price / cogs) - 1) * 100, 2) if cogs > 0 else 0.0
+    elif price is not None and margin_pct is not None:
+        cogs = round(price / (1 + margin_pct / 100), 2) if (1 + margin_pct / 100) > 0 else price
+    elif cogs is not None and margin_pct is not None:
+        price = round(cogs * (1 + margin_pct / 100), 2)
+
+    if price      is not None: sku["price"]      = round(price, 2)
+    if cogs       is not None: sku["cogs"]        = round(cogs, 2)
+    if margin_pct is not None: sku["margin_pct"]  = round(margin_pct, 2)
+
+    if "buyer_sku" in data:
+        sku["buyer_sku"] = (data["buyer_sku"] or "").strip()
+    if "active" in data:
+        sku["active"] = bool(data["active"])
+
+    skus[sku_idx] = sku
+    buyers[idx]["skus"] = skus
+    _save_buyers(buyers)
+    return jsonify({"ok": True, "sku": sku})
 
 
 @app.route("/api/buyers/<bid>", methods=["DELETE"])

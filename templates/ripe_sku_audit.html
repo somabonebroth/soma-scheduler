@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SKU Audit · Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+body.inv-page .wrap { max-width:1000px; margin:0 auto; padding:24px 16px 48px; }
+.stat-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin-bottom:24px; }
+.stat { background:#fff; border:1px solid var(--border); border-radius:10px; padding:16px 18px; text-align:center; }
+.stat-n { font-size:28px; font-weight:800; }
+.stat-l { font-size:11px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.05em; margin-top:4px; }
+.n-green { color:#2e7d32; } .n-red { color:#c62828; } .n-amber { color:#e65100; } .n-blue { color:#1565c0; }
+
+.section-head { font-size:15px; font-weight:700; margin:24px 0 10px; display:flex; align-items:center; gap:8px; }
+.badge { padding:2px 10px; border-radius:10px; font-size:11px; font-weight:700; }
+.b-ok  { background:#e8f5e9; color:#2e7d32; }
+.b-bad { background:#ffebee; color:#c62828; }
+.b-warn{ background:#fff8e1; color:#e65100; }
+.b-grey{ background:#f5f5f0; color:#888; }
+
+table.audit { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:24px; }
+.audit th { text-align:left; padding:9px 12px; border-bottom:2px solid var(--border); font-size:11px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
+.audit td { padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+.audit tr:hover td { background:#fafaf8; }
+.audit tr.row-ok   td:first-child { border-left:3px solid #2e7d32; }
+.audit tr.row-bad  td:first-child { border-left:3px solid #c62828; }
+.audit tr.row-warn td:first-child { border-left:3px solid #e65100; }
+.audit tr.row-grey td:first-child { border-left:3px solid #ccc; }
+.mono { font-family:ui-monospace,monospace; font-size:11px; color:var(--text-light); }
+.issue { font-size:11px; color:#c62828; margin-top:3px; }
+.suggest { font-size:11px; color:#1565c0; margin-top:3px; }
+.inactive-label { font-size:10px; color:#bbb; font-weight:600; text-transform:uppercase; }
+.stock-n { font-weight:700; color:var(--accent); }
+.stock-zero { color:#bbb; }
+
+.alert { padding:14px 18px; border-radius:8px; font-size:13px; margin-bottom:18px; }
+.alert-err { background:#fff5f5; border:1px solid #fca5a5; color:#c62828; }
+.alert-ok  { background:#e8f5e9; border:1px solid #a5d6a7; color:#1b5e20; }
+</style>
+</head>
+<body class="inv-page">
+<div class="header">
+  <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+  <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Ripe — SKU Mapping Audit</p></div>
+  <div class="header-right" style="display:flex;gap:8px;">
+    <a href="/ripe-products" class="header-btn">Products</a>
+    <a href="/ripe-orders" class="header-btn">Orders</a>
+    <button class="header-btn" onclick="window.location='/'">← Dashboard</button>
+  </div>
+</div>
+
+<div class="wrap">
+{% if error %}
+<div class="alert alert-err">⚠ Audit failed: {{ error }}</div>
+{% elif not audit %}
+<div class="alert alert-err">No audit data returned.</div>
+{% else %}
+
+{% set s = audit.summary %}
+
+{% if s.broken == 0 and s.no_key == 0 and s.dirty_names == 0 %}
+<div class="alert alert-ok">✓ All {{ s.matched }} Ripe products are correctly linked to Soma FG inventory.</div>
+{% else %}
+<div class="alert alert-err">
+  ⚠ {{ s.broken + s.no_key }} issue(s) found —
+  {% if s.broken %}<strong>{{ s.broken }} broken link{% if s.broken != 1 %}s{% endif %}</strong>{% endif %}
+  {% if s.broken and s.no_key %}, {% endif %}
+  {% if s.no_key %}<strong>{{ s.no_key }} unmapped product{% if s.no_key != 1 %}s{% endif %}</strong>{% endif %}
+  {% if s.dirty_names %}, {{ s.dirty_names }} dirty recipe name{% if s.dirty_names != 1 %}s{% endif %}{% endif %}.
+  Affected products will show — for stock on the Ripe order form.
+</div>
+{% endif %}
+
+<!-- Summary stats -->
+<div class="stat-row">
+  <div class="stat"><div class="stat-n n-blue">{{ s.ripe_products }}</div><div class="stat-l">Ripe Products</div></div>
+  <div class="stat"><div class="stat-n n-blue">{{ s.soma_recipes }}</div><div class="stat-l">Soma Recipes</div></div>
+  <div class="stat"><div class="stat-n n-green">{{ s.matched }}</div><div class="stat-l">Matched</div></div>
+  <div class="stat"><div class="stat-n n-red">{{ s.broken }}</div><div class="stat-l">Broken Link</div></div>
+  <div class="stat"><div class="stat-n n-amber">{{ s.no_key }}</div><div class="stat-l">No Key Set</div></div>
+  <div class="stat"><div class="stat-n n-amber">{{ s.dirty_names }}</div><div class="stat-l">Dirty Names</div></div>
+  <div class="stat"><div class="stat-n n-grey" style="color:#888;">{{ s.unlinked_soma_recipes }}</div><div class="stat-l">Soma Only</div></div>
+</div>
+
+<!-- Ripe product audit table -->
+<div class="section-head">
+  Ripe Products
+  {% if s.broken > 0 %}<span class="badge b-bad">{{ s.broken }} broken</span>{% endif %}
+  {% if s.no_key > 0 %}<span class="badge b-warn">{{ s.no_key }} unmapped</span>{% endif %}
+  {% if s.matched - s.dirty_names > 0 %}<span class="badge b-ok">{{ s.matched - s.dirty_names }} ok</span>{% endif %}
+</div>
+
+<table class="audit">
+  <thead><tr>
+    <th>Ripe Product</th>
+    <th>Format</th>
+    <th>soma_sku_key</th>
+    <th>Soma Recipe</th>
+    <th class="num">Stock</th>
+    <th>Status</th>
+  </tr></thead>
+  <tbody>
+  {% for p in audit.ripe_products %}
+  {% set row_class = 'row-ok' if p.status == 'matched' else ('row-warn' if p.status in ['matched_dirty_name','no_key'] else ('row-grey' if not p.active else 'row-bad')) %}
+  <tr class="{{ row_class }}">
+    <td>
+      <strong>{{ p.ripe_name }}</strong>
+      {% if not p.active %}<span class="inactive-label">inactive</span>{% endif %}
+    </td>
+    <td>{{ p.ripe_format }}</td>
+    <td class="mono">
+      {{ p.soma_sku_key or '—' }}
+      {% if p.status == 'broken' and p.suggestions is defined %}
+      <div class="suggest">Did you mean: {{ p.suggestions[0] }}?</div>
+      {% endif %}
+    </td>
+    <td>
+      {% if p.soma_recipe is defined %}
+        {{ p.soma_recipe.recipe_name }}
+        {% if p.soma_recipe.has_format_in_name %}
+        <div class="issue">Name contains format suffix — clean in recipe cards</div>
+        {% endif %}
+      {% else %}
+        <span style="color:#bbb;">—</span>
+        {% if p.issue %}<div class="issue">{{ p.issue }}</div>{% endif %}
+      {% endif %}
+    </td>
+    <td class="num">
+      {% if p.fg_cases is defined %}
+        {% if p.fg_cases > 0 %}
+          <span class="stock-n">{{ p.fg_cases }} cases</span>
+          <div style="font-size:11px;color:var(--text-light);">{{ p.fg_units }} units</div>
+        {% else %}
+          <span class="stock-zero">0</span>
+        {% endif %}
+      {% else %}
+        <span class="stock-zero">—</span>
+      {% endif %}
+    </td>
+    <td>
+      {% if p.status == 'matched' %}<span class="badge b-ok">✓ Matched</span>
+      {% elif p.status == 'matched_dirty_name' %}<span class="badge b-warn">⚠ Dirty name</span>
+      {% elif p.status == 'no_key' %}<span class="badge b-warn">No key</span>
+      {% elif p.status == 'broken' %}<span class="badge b-bad">Broken</span>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<!-- Soma recipes not mapped to any Ripe product -->
+{% if audit.unlinked_soma_recipes %}
+<div class="section-head">
+  Soma Recipes Not Linked to Any Ripe Product
+  <span class="badge b-grey">{{ audit.unlinked_soma_recipes|length }}</span>
+</div>
+<p style="font-size:13px;color:var(--text-light);margin-bottom:10px;">These are active Soma recipes with no Ripe product pointing at them. May be intentional (internal products, test recipes) or an oversight.</p>
+<table class="audit">
+  <thead><tr>
+    <th>Recipe</th><th>Brand</th><th>Format</th><th>Soma SKU Key</th><th class="num">FG Stock</th><th>Notes</th>
+  </tr></thead>
+  <tbody>
+  {% for r in audit.unlinked_soma_recipes %}
+  <tr class="row-grey">
+    <td><strong>{{ r.recipe_name }}</strong></td>
+    <td>{{ r.brand }}</td>
+    <td>{{ r.format }}</td>
+    <td class="mono">{{ r.sku_key }}</td>
+    <td class="num">{% if r.fg_units > 0 %}<span class="stock-n">{{ r.fg_units // 12 }} cases</span>{% else %}<span class="stock-zero">0</span>{% endif %}</td>
+    <td>{% if r.has_format_in_name %}<span class="badge b-warn">Dirty name</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if audit.ripe_error %}
+<div class="alert alert-err" style="margin-top:16px;">Ripe portal unreachable during audit: {{ audit.ripe_error }}</div>
+{% endif %}
+
+{% endif %}
+
+<div style="font-size:12px;color:var(--text-light);margin-top:24px;">
+  <strong>How to fix broken links:</strong> Go to <a href="/ripe-products">Products &amp; Pricing</a> and set the Soma SKU Key field to exactly <code>Brand|Recipe Name|FORMAT</code> — copy from the FG inventory page where keys are shown in monospace below each SKU.
+  Dirty recipe names should be cleaned in <a href="/recipes">Recipe Cards</a> — remove the format from the recipe name and ensure it is set in the Format field instead.
+</div>
+</div>
+</body>
+</html>
