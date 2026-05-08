@@ -74,16 +74,25 @@
                 </span>
                 <span class="sublabel">Manage incoming wholesale orders</span>
             </a>
-<a href="/ripe-analytics" class="dash-btn" style="border-color:#1565c0;">
+            <a href="/ripe-contract" class="dash-btn" style="border-color:#1565c0;">
+                <span class="icon">&#128196;</span>
+                <span class="label">Wholesale Contract</span>
+                <span class="sublabel">View &amp; print agreement</span>
+            </a>
+        </div>
+        <div class="section-label">Analytics</div>
+        <div class="dash-row">
+            <a href="/analytics" class="dash-btn">
                 <span class="icon">&#128200;</span>
-                <span class="label">Sales Analytics</span>
-                <span class="sublabel">Revenue, orders, locations</span>
+                <span class="label">Production &amp; Sales</span>
+                <span class="sublabel">Output by week, sales by buyer</span>
             </a>
         </div>
         <details id="resources-section" style="margin-top:4px;">
-          <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;margin-bottom:4px;">
+          <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;margin-bottom:4px;" onclick="handleResourcesClick(event)">
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:1px;">Resources</span>
+              <span id="res-lock" style="font-size:12px;color:var(--text-light);">🔒</span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
               <span style="font-size:11px;color:var(--text-light);">Recipes, checklists, inventory & more</span>
@@ -93,8 +102,7 @@
         <div class="dash-row">
             <a href="/recipes" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Recipe Cards</span><span class="sublabel">View and manage recipes</span></a>
             <a href="/ccp-master" class="dash-btn"><span class="icon">&#9989;</span><span class="label">CCP Checklist</span><span class="sublabel">Master reference</span></a>
-            <a href="/production-tracker" class="dash-btn"><span class="icon">&#128200;</span><span class="label">Production Tracker</span><span class="sublabel">Weekly output charts</span></a>
-            <a href="/traceability" class="dash-btn"><span class="icon">&#128451;</span><span class="label">Completed Production</span><span class="sublabel">Review and sign off weekly records</span></a>
+<a href="/traceability" class="dash-btn"><span class="icon">&#128451;</span><span class="label">Production Record</span><span class="sublabel">Review and sign off weekly records</span></a>
             <a href="/organic" class="dash-btn highlight" style="border-color:#2e7d32;"><span class="icon">&#128230;</span><span class="label">Manage Inventory</span><span class="sublabel">Raw materials, finished goods &amp; traceability</span></a>
             <a href="/contacts" class="dash-btn"><span class="icon">&#128101;</span><span class="label">Buyers &amp; Suppliers</span><span class="sublabel">Suppliers, buyers, company info</span></a>
             <div class="dash-btn disabled"><span class="icon">&#128295;</span><span class="label">Equipment &amp; Maintenance</span><span class="sublabel">Coming soon</span></div>
@@ -103,18 +111,80 @@
         </details>
     </div>
 </div>
+
+<!-- Manager password modal -->
+<div class="dash-modal-overlay" id="mgr-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;" >
+  <div style="background:#fff;border-radius:14px;width:100%;max-width:360px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,.2);margin:16px;">
+    <div style="font-size:17px;font-weight:700;margin-bottom:6px;">🔒 Manager Access</div>
+    <div style="font-size:13px;color:var(--text-light);margin-bottom:18px;">Enter the manager password to access Resources.</div>
+    <input type="password" id="mgr-pw" placeholder="Manager password" style="width:100%;box-sizing:border-box;padding:12px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;outline:none;margin-bottom:10px;">
+    <div id="mgr-msg" style="font-size:12px;min-height:16px;margin-bottom:10px;"></div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="document.getElementById('mgr-modal').style.display='none'" style="flex:1;padding:12px;border:1.5px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;font-size:14px;font-weight:600;">Cancel</button>
+      <button id="mgr-submit" onclick="submitManagerPw()" style="flex:1;padding:12px;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-size:14px;font-weight:600;">Unlock</button>
+    </div>
+  </div>
+</div>
+
 <script>
 var DAYNAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 async function doLogout(){await fetch('/api/logout',{method:'POST'});window.location.href='/login';}
 
-// Resources section toggle caret
-var _resSection = document.getElementById('resources-section');
-if(_resSection){
-    _resSection.addEventListener('toggle', function(){
-        var c = document.getElementById('res-caret');
-        if(c) c.textContent = this.open ? '▼' : '▶';
-    });
+// Resources section — manager password lock
+var _resUnlocked = false;
+
+function handleResourcesClick(ev) {
+    var section = document.getElementById('resources-section');
+    if (_resUnlocked) {
+        // Already unlocked — let default toggle proceed, just update caret
+        setTimeout(function(){
+            var c = document.getElementById('res-caret');
+            if(c) c.textContent = section.open ? '▼' : '▶';
+        }, 0);
+        return;
+    }
+    // Locked — prevent toggle and show password prompt
+    ev.preventDefault();
+    var _mo=document.getElementById('mgr-modal'); _mo.style.display='flex';
+    setTimeout(function(){ var i=document.getElementById('mgr-pw'); if(i){i.value='';i.focus();} }, 50);
 }
+
+async function submitManagerPw() {
+    var pw = document.getElementById('mgr-pw').value;
+    var msg = document.getElementById('mgr-msg');
+    var btn = document.getElementById('mgr-submit');
+    btn.disabled = true; btn.textContent = 'Checking…';
+    try {
+        var res = await fetch('/api/verify-manager', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({password: pw})
+        });
+        var data = await res.json();
+        if (data.ok) {
+            _resUnlocked = true;
+            document.getElementById('mgr-modal').style.display='none';
+            var lock = document.getElementById('res-lock');
+            if(lock) lock.textContent = '🔓';
+            // Open the section
+            var section = document.getElementById('resources-section');
+            if(section) section.open = true;
+            var c = document.getElementById('res-caret');
+            if(c) c.textContent = '▼';
+        } else {
+            msg.textContent = 'Incorrect password.';
+            msg.style.color = '#c62828';
+        }
+    } catch(e) {
+        msg.textContent = 'Error — try again.';
+    }
+    btn.disabled = false; btn.textContent = 'Unlock';
+}
+
+document.addEventListener('keydown', function(e) {
+    if(e.key === 'Escape') document.getElementById('mgr-modal').style.display='none';
+    if(e.key === 'Enter' && document.getElementById('mgr-modal').style.display==='flex') submitManagerPw();
+});
 
 // Ripe Orders pending badge
 (async function loadRipeBadge() {

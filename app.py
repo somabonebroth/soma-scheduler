@@ -20,6 +20,7 @@ app.secret_key = os.environ.get("SECRET_KEY", "soma-bone-broth-2026-change-me")
 app.register_blueprint(ripe_orders_bp)
 
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "soma2026")
+MANAGER_PASSWORD = os.environ.get("MANAGER_PASSWORD", "")  # empty = feature disabled
 VESSELS = ["K1", "K2", "K3", "115L"]
 DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
@@ -824,6 +825,87 @@ def recipes_page():
 @login_required
 def contacts_page():
     return render_template("contacts.html")
+
+@app.route("/api/verify-manager", methods=["POST"])
+@login_required
+def verify_manager():
+    """Verify manager password for unlocking the Resources section.
+    Returns {ok: true} if correct, {ok: false} if wrong or not set.
+    """
+    if not MANAGER_PASSWORD:
+        return jsonify({"ok": False, "reason": "MANAGER_PASSWORD not configured"})
+    data = request.get_json() or {}
+    submitted = (data.get("password") or "").strip()
+    import hmac as _hmac
+    ok = bool(submitted) and _hmac.compare_digest(submitted.encode(), MANAGER_PASSWORD.encode())
+    return jsonify({"ok": ok})
+
+@app.route("/analytics")
+@login_required
+def analytics_page():
+    """Combined Production & Sales Analytics page.
+    Tabs: Production Tracker + Sales by Buyer.
+    """
+    buyers = _load_buyers()
+    buyer_names = [b["name"] for b in buyers]
+    return render_template("analytics.html", buyer_names=buyer_names)
+
+@app.route("/api/analytics/sales-by-buyer", methods=["GET"])
+@login_required
+def api_sales_by_buyer():
+    """Aggregate sales.json by buyer, date range, and SKU."""
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    buyers_q = request.args.get("buyer", "").strip()
+    period   = request.args.get("period", "all")  # all / ytd / 90d / 30d
+
+    from datetime import datetime as _dt, timedelta as _td
+    now = _dt.now().date()
+    if period == "30d":
+        cutoff = now - _td(days=30)
+    elif period == "90d":
+        cutoff = now - _td(days=90)
+    elif period == "ytd":
+        cutoff = now.replace(month=1, day=1)
+    else:
+        cutoff = None
+
+    # Aggregate
+    by_buyer = {}
+    for sale in sales:
+        buyer = (sale.get("buyer") or "Unknown").strip()
+        if buyers_q and buyer.lower() != buyers_q.lower():
+            continue
+        sale_date = (sale.get("sale_date") or "")[:10]
+        if cutoff and sale_date and sale_date < cutoff.isoformat():
+            continue
+        if buyer not in by_buyer:
+            by_buyer[buyer] = {"buyer": buyer, "orders": set(), "units": 0, "revenue": 0.0, "by_sku": {}}
+        qty   = int(sale.get("quantity") or 0)
+        price = float(sale.get("unit_price") or 0) or 0.0
+        sku   = sale.get("sku_key") or sale.get("recipe") or "Unknown"
+        order_id = sale.get("order_id") or sale.get("id")
+        by_buyer[buyer]["orders"].add(order_id)
+        by_buyer[buyer]["units"]   += qty
+        by_buyer[buyer]["revenue"] += qty * price
+        if sku not in by_buyer[buyer]["by_sku"]:
+            by_buyer[buyer]["by_sku"][sku] = {"sku": sku,
+                "recipe": sale.get("recipe",""), "format": sale.get("format",""),
+                "units": 0, "revenue": 0.0}
+        by_buyer[buyer]["by_sku"][sku]["units"]   += qty
+        by_buyer[buyer]["by_sku"][sku]["revenue"] += qty * price
+
+    result = []
+    for b_data in sorted(by_buyer.values(), key=lambda x: -x["revenue"]):
+        skus = sorted(b_data["by_sku"].values(), key=lambda s: -s["units"])
+        result.append({
+            "buyer":   b_data["buyer"],
+            "orders":  len(b_data["orders"]),
+            "units":   b_data["units"],
+            "cases":   b_data["units"] // 12,
+            "revenue": round(b_data["revenue"], 2),
+            "by_sku":  [{**s, "revenue": round(s["revenue"],2)} for s in skus],
+        })
+    return jsonify({"buyers": result, "period": period})
 
 @app.route("/buyers/<bid>/edit")
 @login_required

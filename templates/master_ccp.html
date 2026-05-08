@@ -31,13 +31,25 @@
 .edit-area label { font-size: 12px; font-weight: 600; color: var(--text-light); margin-bottom: 4px; display: block; }
 .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .warning-banner { background: var(--warning); border: 1px solid #ffc107; border-radius: 6px; padding: 12px 16px; font-size: 13px; font-weight: 600; margin-bottom: 16px; }
+@media print {
+  .header, .no-print { display: none !important; }
+  body { background: white; }
+  .ccp-section { break-inside: avoid; box-shadow: none !important; border: 1px solid #ccc; margin-bottom: 8px; }
+  .ccp-header { background: #2e4a2e !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .ccp-item.callout { background: #fff8e1 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .edit-btn, .edit-area, .ccp-edit-controls { display: none !important; }
+  .main { padding: 0 !important; max-width: 100% !important; }
+}
 </style>
 </head>
 <body>
 <div class="header">
     <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
     <div class="header-text"><h1>CCP Checklist</h1><p>Master Reference & Training Document</p></div>
-    <div class="header-right"><a href="/" class="header-btn">Back to Dashboard</a></div>
+    <div class="header-right" style="display:flex;gap:8px;align-items:center;">
+        <button class="header-btn no-print" onclick="window.print()">🖨 Print / PDF</button>
+        <a href="/" class="header-btn no-print">← Dashboard</a>
+    </div>
 </div>
 <div class="main">
     <div class="warning-banner">

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ripe Wholesale Contract · Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+body.cp { background:var(--bg); }
+.cp .main { max-width:860px; margin:0 auto; padding:24px 20px 60px; }
+.card { background:#fff; border:1px solid var(--border); border-radius:12px; padding:22px 24px; margin-bottom:16px; }
+h1 { font-size:24px; font-weight:700; margin-bottom:4px; }
+h2 { font-size:17px; font-weight:700; margin-bottom:12px; }
+table { width:100%; border-collapse:collapse; font-size:14px; }
+th { text-align:left; padding:10px 12px; border-bottom:2px solid var(--border); font-size:11px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
+td { padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+tr:last-child td { border-bottom:none; }
+.num { text-align:right; }
+tr.section-header td { background:#f5f5f0; border-top:2px solid var(--border); border-bottom:1px solid var(--border); font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:.05em; padding:9px 12px; }
+.subhead { color:var(--text-light); font-size:14px; margin-bottom:0; }
+@media print {
+  .header, .header-right, .no-print { display:none !important; }
+  .card { break-inside:avoid; box-shadow:none !important; border:1px solid #ccc; }
+  body { background:white; }
+}
+</style>
+</head>
+<body class="cp inv-page">
+<div class="header">
+  <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+  <div class="header-text"><h1 style="font-size:16px;margin:0;">SOMA BONE BROTH</h1><p>Ripe Wholesale Contract</p></div>
+  <div class="header-right no-print" style="display:flex;gap:8px;align-items:center;">
+    <button class="header-btn" onclick="window.print()">🖨 Print / PDF</button>
+    <button class="header-btn" onclick="window.location='/'">← Dashboard</button>
+  </div>
+</div>
+<div class="main">
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+  <div>
+    <h1>Wholesale Supply Agreement</h1>
+    <p class="subhead">Version {{ contract_version }}</p>
+  </div>
+</div>
+
+<div class="card" style="background:linear-gradient(135deg,#faf0dc 0%,#f4ead5 100%);border-color:#e6d2a8;">
+  <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+    <div style="flex:1;min-width:180px;">
+      <div style="font-size:11px;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;">Effective</div>
+      <div style="font-size:18px;font-weight:600;">{{ effective_date }}</div>
+    </div>
+    <div style="font-size:24px;color:var(--text-light);">→</div>
+    <div style="flex:1;min-width:180px;">
+      <div style="font-size:11px;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;">Expires</div>
+      <div style="font-size:18px;font-weight:600;">{{ expiry_date }}</div>
+    </div>
+    <div style="flex:1;min-width:180px;">
+      <div style="font-size:11px;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;">Term</div>
+      <div style="font-size:18px;font-weight:600;">12 months</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>1. Parties &amp; Term</h2>
+  <p>This Wholesale Supply Agreement (the "Agreement") is entered into between <strong>SOMA BONE BROTH CO LTD.</strong> (the "Supplier") and <strong>RIPE NUTRITION INC.</strong> (the "Purchaser"). The Agreement is effective from <strong>{{ effective_date }}</strong> and remains in force until <strong>{{ expiry_date }}</strong>, after which it may be renewed by mutual written agreement on revised pricing.</p>
+  <p style="margin-top:8px;">During the term, the prices and terms set out below are fixed; Supplier may not unilaterally change them.</p>
+</div>
+
+<div class="card">
+  <h2>2. Order Minimums</h2>
+  <p>One case contains <strong>{{ units_per_case }} units</strong>. Minimums depend on the delivery method:</p>
+  <ul style="margin:10px 0 0 22px;line-height:1.7;">
+    <li><strong>Delivery</strong> (Coco Market, Woodville, Summerhill Warehouse): minimum <strong>{{ min_ss_cases }} cases of Shelf-Stable (SS)</strong> per order. There is no minimum for Frozen (FZ) or Back Bar (BB) products — these may be added in any quantity.</li>
+    <li><strong>Pickup</strong> (Soma facility, 676 Pape Ave): no minimum. Any combination and quantity of products may be ordered for pickup.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>3. Delivery Locations</h2>
+  <p style="margin-bottom:10px;font-size:13px;color:var(--text-light);">Soma delivers directly to Ripe customers who order 40 or more cases, have warehouse receiving facilities, and are located in the Toronto, ON area.</p>
+  <table style="margin-top:8px;">
+    <thead><tr><th>Location</th><th>Address</th></tr></thead>
+    <tbody>
+      {% for d in delivery_locations %}
+      <tr><td><strong>{{ d.label }}</strong></td><td>{{ d.address }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>4. Payment Terms</h2>
+  <table style="margin-top:8px;">
+    <thead><tr><th>Method</th><th>Adjustment</th><th>Terms</th></tr></thead>
+    <tbody>
+      <tr><td><strong>E-Transfer</strong></td><td style="color:#2e7d32;font-weight:500;">−2.0% discount</td><td>Due on receipt of order</td></tr>
+      <tr><td><strong>Credit Card</strong></td><td style="color:#e65100;font-weight:500;">+2.9% surcharge</td><td>Net 14 days, Stripe-invoiced</td></tr>
+    </tbody>
+  </table>
+  <p style="margin-top:12px;font-size:13px;color:var(--text-light);">The credit-card processing fee is shown as a separate line item on every invoice.</p>
+</div>
+
+<div class="card">
+  <h2>5. Cancellation &amp; Refunds</h2>
+  <ul style="margin:0 0 0 22px;line-height:1.7;">
+    <li>Orders not yet invoiced: cancelled instantly with no charge.</li>
+    <li>Orders with a Stripe invoice sent but unpaid: invoice is voided automatically on cancellation.</li>
+    <li>Orders that have been paid: refund must be issued through the Stripe Dashboard before the order can be marked cancelled in the portal.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>6. Order Edits</h2>
+  <p>Ripe may edit any order while it is still pending Soma's approval. Once Soma approves an order, edits are no longer permitted — changes after approval require cancellation and re-submission.</p>
+</div>
+
+<div class="card">
+  <h2>7. Missed Pickup &amp; Re-packing Fee</h2>
+  <p>If Ripe fails to collect a pickup order on the agreed date, Soma may charge a flat <strong>$100 re-packing fee</strong> invoiced separately via Stripe, due on receipt.</p>
+</div>
+
+<div class="card">
+  <h2>8. Pricing Schedule</h2>
+  <p style="margin-bottom:12px;">The following per-unit prices are in effect for the term of this Agreement and may not be changed without a written amendment signed by both parties.</p>
+
+  {% set groups = {'SS': [], 'FZ': [], 'BB': [], 'Other': []} %}
+  {% set labels = {'SS': 'Shelf Stable (SS)', 'FZ': 'Frozen (FZ)', 'BB': 'Back Bar (BB)', 'Other': 'Other'} %}
+  {% for p in products %}
+    {% set fmt = (p.format or '')|upper %}
+    {% if fmt.startswith('SS') %}{% set _ = groups['SS'].append(p) %}
+    {% elif fmt.startswith('FZ') %}{% set _ = groups['FZ'].append(p) %}
+    {% elif fmt.startswith('BB') %}{% set _ = groups['BB'].append(p) %}
+    {% else %}{% set _ = groups['Other'].append(p) %}
+    {% endif %}
+  {% endfor %}
+
+  <table>
+    <thead>
+      <tr><th>Product</th><th>Format</th><th>SKU</th><th class="num">Price / Unit</th><th class="num">Case Price</th></tr>
+    </thead>
+    <tbody>
+      {% for key in ['SS', 'FZ', 'BB', 'Other'] %}
+        {% if groups[key] %}
+        <tr class="section-header"><td colspan="5">{{ labels[key] }}</td></tr>
+        {% for p in groups[key] %}
+        <tr>
+          <td>{{ p.name }}</td>
+          <td>{{ p.format }}</td>
+          <td style="font-family:monospace;font-size:12px;">{{ p.sku or '—' }}</td>
+          <td class="num">${{ "%.2f"|format(p.price) }}</td>
+          <td class="num" style="font-weight:500;">${{ "%.2f"|format(p.price * 12) }}</td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>9. Signatures</h2>
+  <p style="color:var(--text-light);font-size:13px;margin-bottom:20px;">Both parties acknowledge agreement by use of the platform. A signed copy may be printed and retained by both parties.</p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:8px;">
+    <div>
+      <div style="font-weight:700;margin-bottom:8px;font-size:13px;">For SOMA BONE BROTH CO LTD.</div>
+      <div style="border-bottom:1px solid var(--border);margin-top:48px;padding-bottom:4px;font-size:11px;color:var(--text-light);">Authorized signature &amp; date</div>
+      <div style="border-bottom:1px solid var(--border);margin-top:24px;padding-bottom:4px;font-size:11px;color:var(--text-light);">Print name &amp; title</div>
+    </div>
+    <div>
+      <div style="font-weight:700;margin-bottom:8px;font-size:13px;">For RIPE NUTRITION INC.</div>
+      <div style="border-bottom:1px solid var(--border);margin-top:48px;padding-bottom:4px;font-size:11px;color:var(--text-light);">Authorized signature &amp; date</div>
+      <div style="border-bottom:1px solid var(--border);margin-top:24px;padding-bottom:4px;font-size:11px;color:var(--text-light);">Print name &amp; title</div>
+    </div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

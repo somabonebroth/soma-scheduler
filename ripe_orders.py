@@ -395,3 +395,68 @@ def ripe_sku_audit_page():
             error = str(e2)
 
     return render_template("ripe_sku_audit.html", audit=audit, error=error)
+
+@ripe_orders_bp.route("/ripe-contract")
+@_soma_login_required
+def ripe_contract_page():
+    """Render the Ripe wholesale contract using live Soma data.
+    Pricing sourced directly from the Ripe buyer record in Soma.
+    Same document Ripe sees — single source of truth.
+    """
+    from datetime import date
+    from app import (
+        _load_buyers, _sku_display, _load_json,
+        ORGANIC_FG_PATH, SKU_META_PATH
+    )
+
+    # Contract constants (keep in sync with Ripe app)
+    CONTRACT_EFFECTIVE_DATE = date(2026, 8, 1)
+    CONTRACT_EXPIRY_DATE    = date(2027, 7, 31)
+    CONTRACT_VERSION        = "1.0 — Aug 2026"
+    UNITS_PER_CASE          = 12
+    MIN_SS_CASES_DELIVERY   = 40
+    DELIVERY_LOCATIONS = [
+        {"label": "Coco Market",          "address": "2549 Yonge St, Toronto, ON M4P 2H9"},
+        {"label": "Woodville",            "address": "155 Woodville Ave, East York, ON M4J 2R4"},
+        {"label": "Summerhill Warehouse", "address": "244 Bartley Dr, North York, ON M4A 1G1"},
+        {"label": "Soma (Pickup)",        "address": "676 Pape Ave, Toronto, ON"},
+    ]
+
+    # Build products list from the Ripe buyer record in Soma
+    # (same data the Ripe portal gets via /api/internal/catalogue)
+    buyers = _load_buyers()
+    ripe_buyer = next(
+        (b for b in buyers if b["name"].lower() == "ripe"),
+        None
+    )
+
+    products = []
+    if ripe_buyer:
+        for sku in (ripe_buyer.get("skus") or []):
+            if not sku.get("active", True):
+                continue
+            price = sku.get("price") or 0.0
+            products.append({
+                "name":   sku.get("recipe", ""),
+                "format": sku.get("format", ""),
+                "sku":    sku.get("buyer_sku", ""),
+                "price":  price,
+            })
+        # Sort: SS → FZ → BB, then by name
+        fmt_order = {"SS": 0, "FZ": 1, "BB": 2}
+        products.sort(key=lambda p: (
+            fmt_order.get((p["format"] or "")[:2].upper(), 9),
+            p["name"].lower()
+        ))
+
+    return render_template(
+        "ripe_contract.html",
+        products=products,
+        effective_date=CONTRACT_EFFECTIVE_DATE.strftime("%B %d, %Y"),
+        expiry_date=CONTRACT_EXPIRY_DATE.strftime("%B %d, %Y"),
+        contract_version=CONTRACT_VERSION,
+        units_per_case=UNITS_PER_CASE,
+        min_ss_cases=MIN_SS_CASES_DELIVERY,
+        delivery_locations=DELIVERY_LOCATIONS,
+    )
+
