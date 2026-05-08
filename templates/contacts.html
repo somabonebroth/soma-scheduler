@@ -217,7 +217,10 @@ body.cp { background: var(--bg); }
           <input id="b-sku-q" type="text" placeholder="Filter products…" oninput="rSkuList()" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:8px;">
           <div id="b-sku-list" style="max-height:240px;overflow-y:auto;border:1.5px solid var(--border);border-radius:10px;background:#fff;"></div>
           <div style="display:flex;justify-content:flex-end;margin-top:10px;">
-            <button class="btn btn-p" onclick="goOrder()" style="background:#0288d1;border:none;font-size:13px;">Set Display Order →</button>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-p" onclick="goOrder()" style="background:#0288d1;border:none;font-size:13px;">Set Display Order →</button>
+              <button class="btn btn-p" onclick="goOrder();goPricingStep();" style="background:#2e7d32;border:none;font-size:13px;">Set Pricing →</button>
+            </div>
           </div>
         </div>
       </div>
@@ -411,11 +414,12 @@ function goOrder(){
 }
 function goAssign(){G('b-step-b').style.display='none';G('b-step-a').style.display='';}
 
-function goAssign(){G('b-step-b').style.display='none';G('b-step-a').style.display='';}
-
 function goOrderStep(){G('b-step-c').style.display='none';G('b-step-b').style.display='';}
 
 function goPricingStep(){
+    // Ensure order positions are initialised (in case coming directly from step A)
+    var any=Object.keys(_bOrd).some(function(k){return _bOrd[k]!==999;});
+    if(!any){ var ci=_skus.filter(function(s){return _bCk[s.sku_key];}); ci.forEach(function(s,i){_bOrd[s.sku_key]=i+1;}); }
     // Build pricing UI from current checked SKUs with their order positions
     var checked=_skus.filter(function(s){return _bCk[s.sku_key];});
     checked.sort(function(a,b){return (_bOrd[a.sku_key]||999)-(_bOrd[b.sku_key]||999);});
