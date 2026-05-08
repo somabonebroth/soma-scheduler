@@ -4563,8 +4563,6 @@ async function loadFinishedGoods(){
                 ? '<span style="font-size:9px;font-weight:700;background:#fff3cd;color:#856404;border:1px solid #ffe082;padding:1px 6px;border-radius:8px;margin-left:6px;vertical-align:middle;">BELOW PAR</span>'
                 : '';
 
-            // Price
-            var priceVal = (s.price !== null && s.price !== undefined) ? s.price.toFixed(2) : '';
 
             // PAR progress bar (0% when no PAR, filled green/amber/red)
                   var parBar = ''; // removed for UI simplicity
@@ -4595,15 +4593,7 @@ async function loadFinishedGoods(){
             // parBar removed for UI simplicity
             html+='</div>';
 
-            // Price block
-            html+='<div style="min-width:90px;">';
-            html+='<div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">Sale Price</div>';
-            html+='<div style="display:flex;align-items:center;background:#f9f9f7;border:1px solid var(--border);border-radius:6px;overflow:hidden;">';
-            html+='<span style="font-size:12px;color:var(--text-light);padding:0 5px 0 8px;font-weight:500;">$</span>';
-            html+='<input type="number" class="sku-price-input" data-sku-key="'+keyAttr+'" min="0" step="0.01" value="'+escHtml(String(priceVal))+'" placeholder="0.00" style="width:60px;padding:6px 8px 6px 0;border:none;font-size:13px;font-weight:600;background:transparent;outline:none;">';
-            html+='</div>';
-            if(priceVal) html+='<div style="font-size:10px;color:var(--text-light);margin-top:3px;">$'+(parseFloat(priceVal)*12).toFixed(2)+'/case</div>';
-            html+='</div>';
+
 
             // Lots toggle
             html+='<div style="flex-shrink:0;">'+expandBtn+'</div>';
@@ -4649,11 +4639,7 @@ function attachSkuMetaListeners(){
             var val = el.value.trim();
             saveSkuMeta(skuKey, {par: val === '' ? null : parseInt(val)});
         }
-        if(el.classList.contains('sku-price-input')){
-            clearTimeout(_skuMetaTimers[skuKey+'_price']);
-            var val = el.value.trim();
-            saveSkuMeta(skuKey, {price: val === '' ? null : parseFloat(val)});
-        }
+
         if(el.classList.contains('sku-nopar-cb')){
             var parInput = container.querySelector('.sku-par-input[data-sku-key="'+rawKey+'"]');
             if(el.checked){
@@ -4680,13 +4666,7 @@ function attachSkuMetaListeners(){
                 saveSkuMeta(skuKey, {par: val === '' ? null : parseInt(val)});
             }, 700);
         }
-        if(el.classList.contains('sku-price-input')){
-            clearTimeout(_skuMetaTimers[skuKey+'_price']);
-            _skuMetaTimers[skuKey+'_price'] = setTimeout(function(){
-                var val = el.value.trim();
-                saveSkuMeta(skuKey, {price: val === '' ? null : parseFloat(val)});
-            }, 700);
-        }
+
     });
 }
 

@@ -89,7 +89,7 @@
         <details id="resources-section" style="margin-top:4px;">
           <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;margin-bottom:4px;" onclick="handleResourcesClick(event)">
             <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:1px;">Resources</span>
+              <span style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:1px;">Management</span>
               <span id="res-lock" style="font-size:12px;color:var(--text-light);">🔒</span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
@@ -104,7 +104,8 @@
             <a href="/organic" class="dash-btn"><span class="icon">&#128230;</span><span class="label">Manage Inventory</span><span class="sublabel">Raw materials, finished goods &amp; traceability</span></a>
             <a href="/contacts" class="dash-btn"><span class="icon">&#128101;</span><span class="label">Buyers &amp; Suppliers</span><span class="sublabel">Suppliers, buyers, company info</span></a>
             <a href="/ripe-contract" class="dash-btn"><span class="icon">&#128196;</span><span class="label">Wholesale Contract</span><span class="sublabel">Ripe supply agreement</span></a>
-            <a href="/certifications" class="dash-btn"><span class="icon">&#127881;</span><span class="label">Certifications</span><span class="sublabel">Organic &amp; compliance documents</span></a>
+            <a href="/certifications" class="dash-btn"><span class="icon">&#128196;</span><span class="label">Certifications</span><span class="sublabel">Organic &amp; compliance documents</span></a>
+            <a href="/contacts?tab=settings" class="dash-btn"><span class="icon">&#9881;</span><span class="label">Company Settings</span><span class="sublabel">Info, address, Ripe buffer</span></a>
             <div class="dash-btn disabled"><span class="icon">&#128295;</span><span class="label">Equipment &amp; Maintenance</span><span class="sublabel">Coming soon</span></div>
         </div>
         </details>
@@ -130,7 +131,16 @@ var DAYNAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Satur
 async function doLogout(){await fetch('/api/logout',{method:'POST'});window.location.href='/login';}
 
 // Resources section — manager password lock
-var _resUnlocked = false;
+// Persist unlock state in sessionStorage so navigating away and back
+// doesn't re-lock. Clears automatically when the browser tab is closed.
+var _resUnlocked = (function(){
+    try { return sessionStorage.getItem('soma_mgmt_unlocked') === '1'; } catch(e){ return false; }
+})();
+// If already unlocked, show the open lock immediately
+if(_resUnlocked){
+    var _lockEl = document.getElementById('res-lock');
+    if(_lockEl) _lockEl.textContent = '🔓';
+}
 
 function handleResourcesClick(ev) {
     var section = document.getElementById('resources-section');
@@ -162,6 +172,7 @@ async function submitManagerPw() {
         var data = await res.json();
         if (data.ok) {
             _resUnlocked = true;
+            try { sessionStorage.setItem('soma_mgmt_unlocked', '1'); } catch(e){}
             document.getElementById('mgr-modal').style.display='none';
             var lock = document.getElementById('res-lock');
             if(lock) lock.textContent = '🔓';

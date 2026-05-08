@@ -460,3 +460,24 @@ def ripe_contract_page():
         delivery_locations=DELIVERY_LOCATIONS,
     )
 
+@ripe_orders_bp.route("/api/ripe-contract/sign", methods=["POST"])
+@_soma_login_required
+def ripe_contract_sign():
+    """Proxy signature submission to Ripe — Soma signing on their side."""
+    from flask import request as _req
+    body = _req.get_json() or {}
+    # Soma's role is 'soma' — pass that explicitly
+    body["role_override"] = "soma"
+    status, data = _ripe_request("POST", "/api/contract/sign", body)
+    from flask import jsonify
+    return jsonify(data), status
+
+
+@ripe_orders_bp.route("/api/ripe-contract/signatures", methods=["GET"])
+@_soma_login_required
+def ripe_contract_signatures():
+    """Proxy — get current signatures from Ripe."""
+    status, data = _ripe_request("GET", "/api/contract/signatures")
+    from flask import jsonify
+    return jsonify(data), status
+

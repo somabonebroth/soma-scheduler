@@ -4882,9 +4882,10 @@ def internal_fg_stock():
 @app.route("/api/sku-meta/<path:sku_key>", methods=["PATCH"])
 @login_required
 def update_sku_meta(sku_key):
-    """Update PAR level and/or price for a SKU.
-    Body: { par: int|null, price: float|null }
-    null = remove the field (no PAR / no price set).
+    """Update PAR level for a SKU.
+    Body: { par: int|null }
+    null = remove the field (No PAR).
+    Price is no longer stored here — it lives in the buyer catalogue.
     """
     data = request.get_json() or {}
     meta = _load_json(SKU_META_PATH, {})
@@ -4898,14 +4899,7 @@ def update_sku_meta(sku_key):
                 meta[sku_key]["par"] = int(data["par"])
             except (ValueError, TypeError):
                 return jsonify({"error": "par must be an integer or null"}), 400
-    if "price" in data:
-        if data["price"] is None:
-            meta[sku_key].pop("price", None)
-        else:
-            try:
-                meta[sku_key]["price"] = round(float(data["price"]), 2)
-            except (ValueError, TypeError):
-                return jsonify({"error": "price must be a number or null"}), 400
+    # Silently ignore any price field — price lives in buyer catalogue now
     # Clean up empty entries
     if not meta[sku_key]:
         del meta[sku_key]
