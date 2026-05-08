@@ -248,43 +248,18 @@ def ripe_order_action(order_id):
 @ripe_orders_bp.route("/ripe-products")
 @_soma_login_required
 def ripe_products_page():
-    """Product catalog management with live stock — calls Ripe internal API."""
-    status, data = _ripe_request("GET", "/api/internal/products-with-stock")
-    if status == 200 and isinstance(data, dict):
-        products = data.get("products", [])
-        stock = data.get("stock", {})
-    elif status == 200 and isinstance(data, list):
-        products = data
-        stock = {}
-    else:
-        products = []
-        stock = {}
-    configured = _configured()
-    error = None if status == 200 else (data.get("error") if isinstance(data, dict) else "Could not reach Ripe portal")
-    return render_template("ripe_products.html", products=products, stock=stock, configured=configured, error=error)
+    """Products & pricing are now managed via the Buyer edit page.
+    Redirect to the Buyers & Suppliers page with a hint.
+    """
+    from flask import redirect, url_for, flash
+    flash("Products and pricing are managed in Buyers & Suppliers → Edit Buyer → Catalogue & Pricing.", "info")
+    return redirect("/contacts?tab=buyers")
 
 
-@ripe_orders_bp.route("/api/ripe-products", methods=["POST"])
-@_soma_login_required
-def ripe_product_create():
-    body = request.get_json() or {}
-    status, data = _ripe_request("POST", "/api/internal/products", body)
-    return jsonify(data), status
 
 
-@ripe_orders_bp.route("/api/ripe-products/<int:pid>", methods=["PUT"])
-@_soma_login_required
-def ripe_product_update(pid):
-    body = request.get_json() or {}
-    status, data = _ripe_request("PUT", f"/api/internal/products/{pid}", body)
-    return jsonify(data), status
 
 
-@ripe_orders_bp.route("/api/ripe-products/<int:pid>", methods=["DELETE"])
-@_soma_login_required
-def ripe_product_delete(pid):
-    status, data = _ripe_request("DELETE", f"/api/internal/products/{pid}")
-    return jsonify(data), status
 
 
 @ripe_orders_bp.route("/ripe-analytics")

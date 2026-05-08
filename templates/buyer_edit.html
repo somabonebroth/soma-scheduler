@@ -153,8 +153,9 @@ body.be-page { background:var(--bg); }
 
       {% for group in sku_catalog %}
       <div class="fmt-group-hdr fmt-pill-{{ group.format_prefix|lower }}">
+        <span style="color:var(--text-light);font-weight:400;margin-right:4px;">{{ group.brand }}</span>
         {{ group.format_label }}
-        <span style="font-size:10px;color:var(--text-light);font-weight:400;">{{ group.skus|length }} product{{ 's' if group.skus|length != 1 else '' }}</span>
+        <span style="font-size:10px;color:var(--text-light);font-weight:400;margin-left:auto;">{{ group.skus|length }} product{{ 's' if group.skus|length != 1 else '' }}</span>
       </div>
       {% for sku in group.skus %}
         {% set assigned = sku_map.get(sku.sku_key, {}) %}

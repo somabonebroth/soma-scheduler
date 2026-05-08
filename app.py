@@ -833,27 +833,36 @@ def buyer_edit_page(bid):
     if not buyer:
         return "Buyer not found", 404
 
-    # Group flat catalog by format (SS / FZ / BB / Other) so the template
-    # can render format-section headers
+    # Group catalog by Brand → Format (SS → FZ → BB → Other) → Recipe name
     flat = _all_sku_catalog()
-    format_order = ["SS", "FZ", "BB"]
-    groups_dict = {}
+    FORMAT_ORDER = ["SS", "FZ", "BB"]
+    FORMAT_LABELS = {"SS": "Shelf Stable", "FZ": "Frozen", "BB": "Back Bar"}
+
+    # Collect brands in sorted order
+    brand_fmt_dict = {}  # {brand: {fmt_prefix: [skus]}}
     for sku in flat:
-        fmt = _normalize_format(sku.get("format") or "")
-        prefix = fmt[:2] if fmt else "Other"
-        prefix = prefix if prefix in format_order else "Other"
-        if prefix not in groups_dict:
-            groups_dict[prefix] = []
-        groups_dict[prefix].append(sku)
+        brand = (sku.get("brand") or "Other").strip() or "Other"
+        fmt   = _normalize_format(sku.get("format") or "")
+        prefix = fmt[:2].upper() if fmt else "Other"
+        prefix = prefix if prefix in FORMAT_ORDER else "Other"
+        if brand not in brand_fmt_dict:
+            brand_fmt_dict[brand] = {}
+        if prefix not in brand_fmt_dict[brand]:
+            brand_fmt_dict[brand][prefix] = []
+        brand_fmt_dict[brand][prefix].append(sku)
 
     sku_catalog = []
-    for prefix in format_order + ["Other"]:
-        if prefix in groups_dict:
-            skus = sorted(groups_dict[prefix], key=lambda s: s.get("recipe","").lower())
+    for brand in sorted(brand_fmt_dict.keys()):
+        for prefix in FORMAT_ORDER + ["Other"]:
+            skus_in = brand_fmt_dict[brand].get(prefix)
+            if not skus_in:
+                continue
+            skus_sorted = sorted(skus_in, key=lambda s: s.get("recipe","").lower())
             sku_catalog.append({
                 "format_prefix": prefix,
-                "format_label": {"SS":"Shelf Stable","FZ":"Frozen","BB":"Back Bar"}.get(prefix,"Other"),
-                "skus": skus,
+                "format_label":  FORMAT_LABELS.get(prefix, "Other"),
+                "brand":         brand,
+                "skus":          skus_sorted,
             })
 
     return render_template("buyer_edit.html", buyer=buyer, sku_catalog=sku_catalog)
