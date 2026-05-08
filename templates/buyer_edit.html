@@ -152,53 +152,52 @@ body.be-page { background:var(--bg); }
       </div>
 
       {% for group in sku_catalog %}
-        {% set fmt_prefix = group.brand + ' · ' + group.skus[0].format if group.skus else group.brand %}
-        {% for sku in group.skus %}
-          {% set fmt = sku.format|upper %}
-          {% set assigned = sku_map.get(sku.sku_key, {}) %}
-          {% set is_assigned = sku.sku_key in sku_map %}
-          {% set price = assigned.get('price') %}
-          {% set cogs = assigned.get('cogs') %}
-          {% set margin = assigned.get('margin_pct') %}
-          {% set is_active = assigned.get('active', True) if is_assigned else True %}
+      <div class="fmt-group-hdr fmt-pill-{{ group.format_prefix|lower }}">
+        {{ group.format_label }}
+        <span style="font-size:10px;color:var(--text-light);font-weight:400;">{{ group.skus|length }} product{{ 's' if group.skus|length != 1 else '' }}</span>
+      </div>
+      {% for sku in group.skus %}
+        {% set assigned = sku_map.get(sku.sku_key, {}) %}
+        {% set is_assigned = sku.sku_key in sku_map %}
+        {% set price = assigned.get('price') %}
+        {% set cogs = assigned.get('cogs') %}
+        {% set margin = assigned.get('margin_pct') %}
+        {% set is_active = assigned.get('active', True) if is_assigned else True %}
 
-          {% if loop.first %}
-          <div class="fmt-group-hdr fmt-pill-{{ 'ss' if fmt.startswith('SS') else 'fz' if fmt.startswith('FZ') else 'bb' if fmt.startswith('BB') else 'ot' }}">
-            {{ group.brand }} — {{ sku.format }}
-            <span style="font-size:10px;color:var(--text-light);font-weight:400;">{{ group.skus|length }} product{{ 's' if group.skus|length != 1 else '' }}</span>
+        <div class="sku-row {% if is_assigned %}assigned{% endif %}" data-sku="{{ sku.sku_key|e }}">
+          <input type="checkbox" class="sku-check" {% if is_assigned %}checked{% endif %}
+            onchange="toggleSku('{{ sku.sku_key|e }}', this.checked)">
+          <div>
+            <div class="sku-name">{{ sku.recipe }}</div>
+            <div class="sku-fmt" style="font-family:ui-monospace,monospace;font-size:10px;">{{ sku.sku_key }}</div>
           </div>
-          {% endif %}
-
-          <div class="sku-row {% if is_assigned %}assigned{% endif %}" data-sku="{{ sku.sku_key|e }}">
-            <input type="checkbox" class="sku-check" {% if is_assigned %}checked{% endif %}
-              onchange="toggleSku('{{ sku.sku_key|e }}', this.checked)">
-            <div>
-              <div class="sku-name">{{ sku.recipe }}</div>
-              <div class="sku-fmt">{{ sku.sku_key }}</div>
-            </div>
-            <div>
-              <input type="number" class="p-input price-input" step="0.01" min="0" placeholder="—"
-                value="{{ '%.2f'|format(price) if price is not none else '' }}"
-                data-sku="{{ sku.sku_key|e }}" data-field="price"
-                {% if not is_assigned %}disabled{% endif %}>
-            </div>
-            <div>
-              <input type="number" class="p-input cogs-input" step="0.01" min="0" placeholder="—"
-                value="{{ '%.2f'|format(cogs) if cogs is not none else '' }}"
-                data-sku="{{ sku.sku_key|e }}" data-field="cogs"
-                {% if not is_assigned %}disabled{% endif %}>
-            </div>
-            <div class="p-margin" data-sku-margin="{{ sku.sku_key|e }}">
-              {{ '%.1f'|format(margin) + '%' if margin is not none else '—' }}
-            </div>
-            <div>
-              <button class="p-active-tog {% if is_active %}on{% else %}off{% endif %}"
-                data-sku="{{ sku.sku_key|e }}"
-                {% if not is_assigned %}disabled style="opacity:.4;"{% endif %}
-                onclick="toggleActive('{{ sku.sku_key|e }}', this)"></button>
-            </div>
+          <div>
+            <input type="number" class="p-input price-input" step="0.01" min="0" placeholder="—"
+              value="{{ '%.2f'|format(price) if price is not none else '' }}"
+              data-sku="{{ sku.sku_key|e }}" data-field="price"
+              {% if not is_assigned %}disabled{% endif %}>
           </div>
-        {% endfor %}
+          <div>
+            <input type="number" class="p-input cogs-input" step="0.01" min="0" placeholder="—"
+              value="{{ '%.2f'|format(cogs) if cogs is not none else '' }}"
+              data-sku="{{ sku.sku_key|e }}" data-field="cogs"
+              {% if not is_assigned %}disabled{% endif %}>
+          </div>
+          <div class="p-margin" data-sku-margin="{{ sku.sku_key|e }}">
+            {{ '%.1f'|format(margin) + '%' if margin is not none else '—' }}
+          </div>
+          <div>
+            <button class="p-active-tog {% if is_active %}on{% else %}off{% endif %}"
+              data-sku="{{ sku.sku_key|e }}"
+              {% if not is_assigned %}disabled style="opacity:.4;"{% endif %}
+              onclick="toggleActive('{{ sku.sku_key|e }}', this)"></button>
+          </div>
+        </div>
+      {% endfor %}
+      {% else %}
+      <div style="padding:32px;text-align:center;color:var(--text-light);font-size:13px;">
+        No recipes found. Add recipes in Recipe Cards first.
+      </div>
       {% endfor %}
     </div>
   </div>

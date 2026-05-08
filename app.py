@@ -832,7 +832,30 @@ def buyer_edit_page(bid):
     buyer = next((b for b in buyers if b["id"] == bid), None)
     if not buyer:
         return "Buyer not found", 404
-    sku_catalog = _all_sku_catalog()
+
+    # Group flat catalog by format (SS / FZ / BB / Other) so the template
+    # can render format-section headers
+    flat = _all_sku_catalog()
+    format_order = ["SS", "FZ", "BB"]
+    groups_dict = {}
+    for sku in flat:
+        fmt = _normalize_format(sku.get("format") or "")
+        prefix = fmt[:2] if fmt else "Other"
+        prefix = prefix if prefix in format_order else "Other"
+        if prefix not in groups_dict:
+            groups_dict[prefix] = []
+        groups_dict[prefix].append(sku)
+
+    sku_catalog = []
+    for prefix in format_order + ["Other"]:
+        if prefix in groups_dict:
+            skus = sorted(groups_dict[prefix], key=lambda s: s.get("recipe","").lower())
+            sku_catalog.append({
+                "format_prefix": prefix,
+                "format_label": {"SS":"Shelf Stable","FZ":"Frozen","BB":"Back Bar"}.get(prefix,"Other"),
+                "skus": skus,
+            })
+
     return render_template("buyer_edit.html", buyer=buyer, sku_catalog=sku_catalog)
 
 @app.route("/ccp-master")

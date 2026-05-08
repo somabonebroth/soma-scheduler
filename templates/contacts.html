@@ -286,22 +286,35 @@ async function loadSups(){
     if(s.contact_name)m.push(e(s.contact_name));
     if(s.phone)m.push('<a href="tel:'+e(s.phone)+'">'+e(s.phone)+'</a>');
     if(s.email)m.push('<a href="mailto:'+e(s.email)+'">'+e(s.email)+'</a>');
-    if(s.website)m.push('<a href="'+e(s.website)+'" target="_blank">Website ↗</a>');
+    if(s.website)m.push('<a href="'+e(s.website)+'" target="_blank">Website</a>');
     var n=(s.ingredients||[]).length;
-    var p=(s.ingredients||[]).slice(0,4).map(function(i){return i.name;}).join(', ')+(n>4?' +more':'');
-    return '<div class="cc">'
-      +'<div style="flex:1;min-width:0;">'
-      +'<div class="cc-name">'+e(s.name)+'</div>'
-      +(m.length?'<div class="cc-sub">'+m.join(' · ')+'</div>':'')
-      +(s.address?'<div class="cc-sub">'+e(s.address)+'</div>':'')
-      +'<div class="cc-sub" style="margin-top:4px;">'+n+' ingredient'+(n===1?'':'s')+(p?' — '+p:'')+'</div>'
-      +(s.certifications?'<span class="cc-badge bg-g">'+e(s.certifications)+'</span>':'')
-      +(s.notes?'<div class="cc-sub" style="font-style:italic;margin-top:4px;">'+e(s.notes)+'</div>':'')
-      +'</div>'
-      +'<div class="cc-actions">'
-      +'<button class="btn btn-o" style="font-size:12px;padding:8px 14px;" onclick="openEditSup(\''+sid+'\')">Edit</button>'
-      +'<button class="btn-r" onclick="delSup(\''+sid+'\',\''+e(s.name)+'\')">Delete</button>'
-      +'</div></div>';
+    var prev=(s.ingredients||[]).slice(0,4).map(function(i){return e(i.name);}).join(', ')+(n>4?' +'+(n-4)+' more':'');
+    var h='<div class="cc">';
+    h+='<div style="flex:1;min-width:0;">';
+    h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">';
+    h+='<div class="cc-name" style="font-size:17px;">'+e(s.name)+'</div>';
+    if(n) h+='<span class="cc-badge bg-g">'+n+' ingredient'+(n===1?'':'s')+'</span>';
+    if(s.certifications) h+='<span class="cc-badge bg-b">'+e(s.certifications)+'</span>';
+    h+='</div>';
+    if(m.length) h+='<div class="cc-sub">'+m.join(' &middot; ')+'</div>';
+    if(s.address) h+='<div class="cc-sub">'+e(s.address)+'</div>';
+    if(n) h+='<div class="cc-sub" style="margin-top:6px;font-size:11px;">'+prev+'</div>';
+    if(s.notes) h+='<div class="cc-sub" style="font-style:italic;margin-top:4px;color:#999;">'+e(s.notes)+'</div>';
+    h+='</div><div class="cc-actions">';
+    var editBtn=document.createElement('button');
+    editBtn.className='btn btn-p';
+    editBtn.style.cssText='font-size:12px;padding:8px 16px;background:#2e7d32;border:none;';
+    editBtn.textContent='Edit';
+    editBtn.onclick=(function(id){return function(){openEditSup(id);};})(sid);
+    var delBtn=document.createElement('button');
+    delBtn.className='btn-r';
+    delBtn.textContent='Delete';
+    delBtn.onclick=(function(id,nm){return function(){delSup(id,nm);};})(sid,s.name);
+    var tmp=document.createElement('div');
+    tmp.innerHTML=h+'</div></div>';
+    tmp.querySelector('.cc-actions').appendChild(editBtn);
+    tmp.querySelector('.cc-actions').appendChild(delBtn);
+    return tmp.outerHTML;
   }).join('');
 }
 async function _fIng(){try{_ing=await(await fetch('/api/organic/ingredients')).json();}catch(ex){_ing=[];}}
@@ -591,6 +604,8 @@ async function saveCI(){
 /* ════════ INIT ════════ */
 loadSups();
 (function(){var t=new URLSearchParams(window.location.search).get('tab');if(t&&['suppliers','buyers','settings'].includes(t))showTab(t);})();
+
 </script>
 </body>
+
 </html>
