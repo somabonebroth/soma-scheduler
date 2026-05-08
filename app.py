@@ -840,6 +840,83 @@ def verify_manager():
     ok = bool(submitted) and _hmac.compare_digest(submitted.encode(), MANAGER_PASSWORD.encode())
     return jsonify({"ok": ok})
 
+@app.route("/certifications")
+@login_required
+def certifications_page():
+    """Organic & compliance document storage page."""
+    return render_template("certifications.html")
+
+@app.route("/api/certifications", methods=["GET"])
+@login_required
+def list_certifications():
+    cert_dir = os.path.join(DATA_DIR, "certifications")
+    os.makedirs(cert_dir, exist_ok=True)
+    meta_path = os.path.join(cert_dir, "meta.json")
+    meta = _load_json(meta_path, [])
+    return jsonify(meta)
+
+@app.route("/api/certifications/upload", methods=["POST"])
+@login_required
+def upload_certification():
+    import werkzeug.utils
+    cert_dir = os.path.join(DATA_DIR, "certifications")
+    os.makedirs(cert_dir, exist_ok=True)
+    meta_path = os.path.join(cert_dir, "meta.json")
+    if "file" not in request.files:
+        return jsonify({"error": "No file"}), 400
+    f = request.files["file"]
+    if not f.filename:
+        return jsonify({"error": "Empty filename"}), 400
+    label = (request.form.get("label") or "").strip()
+    category = (request.form.get("category") or "General").strip()
+    safe_name = werkzeug.utils.secure_filename(f.filename)
+    file_id = datetime.now().strftime("%Y%m%d%H%M%S%f") + "_" + safe_name
+    f.save(os.path.join(cert_dir, file_id))
+    meta = _load_json(meta_path, [])
+    meta.append({
+        "id": file_id,
+        "filename": safe_name,
+        "label": label or safe_name,
+        "category": category,
+        "uploaded_at": datetime.now().isoformat(),
+        "size": os.path.getsize(os.path.join(cert_dir, file_id)),
+    })
+    _save_json(meta_path, meta)
+    return jsonify({"ok": True, "id": file_id})
+
+@app.route("/api/certifications/<file_id>", methods=["DELETE"])
+@login_required
+def delete_certification(file_id):
+    cert_dir = os.path.join(DATA_DIR, "certifications")
+    meta_path = os.path.join(cert_dir, "meta.json")
+    meta = _load_json(meta_path, [])
+    entry = next((m for m in meta if m["id"] == file_id), None)
+    if not entry:
+        return jsonify({"error": "Not found"}), 404
+    try:
+        os.remove(os.path.join(cert_dir, file_id))
+    except FileNotFoundError:
+        pass
+    meta = [m for m in meta if m["id"] != file_id]
+    _save_json(meta_path, meta)
+    return jsonify({"ok": True})
+
+@app.route("/api/certifications/<file_id>/download")
+@login_required
+def download_certification(file_id):
+    from flask import send_file
+    cert_dir = os.path.join(DATA_DIR, "certifications")
+    meta_path = os.path.join(cert_dir, "meta.json")
+    meta = _load_json(meta_path, [])
+    entry = next((m for m in meta if m["id"] == file_id), None)
+    if not entry:
+        return jsonify({"error": "Not found"}), 404
+    return send_file(
+        os.path.join(cert_dir, file_id),
+        download_name=entry["filename"],
+        as_attachment=True,
+    )
+
 @app.route("/analytics")
 @login_required
 def analytics_page():

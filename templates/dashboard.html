@@ -53,31 +53,29 @@
         </div>
         <div class="section-label">Quick Actions</div>
         <div class="dash-row">
-            <div class="dash-btn" onclick="openReceiveModal()" style="background:#2e7d32;border-color:#2e7d32;cursor:pointer;">
+            <div class="dash-btn" onclick="openReceiveModal()" style="background:var(--action-green);border-color:var(--action-green);cursor:pointer;">
                 <span class="icon" style="color:#fff;">&#128230;</span>
                 <span class="label" style="color:#fff;">Receive Inventory</span>
                 <span class="sublabel" style="color:rgba(255,255,255,0.75);">Record a supplier delivery</span>
             </div>
-            <div class="dash-btn" onclick="openDashSaleModal()" style="background:#0288d1;border-color:#0288d1;cursor:pointer;">
+            <div class="dash-btn" onclick="openDashSaleModal()" style="background:var(--action-blue);border-color:var(--action-blue);cursor:pointer;">
                 <span class="icon" style="color:#fff;">&#128176;</span>
                 <span class="label" style="color:#fff;">Record Sale</span>
                 <span class="sublabel" style="color:rgba(255,255,255,0.75);">Select buyer and date</span>
             </div>
         </div>
         <div class="section-label">Ripe Wholesale</div>
-        <div class="dash-row">
-            <a href="/ripe-orders" class="dash-btn" id="ripe-orders-btn" style="position:relative;">
-                <span class="icon">&#128203;</span>
-                <span class="label" style="display:flex;align-items:center;gap:8px;">
-                    Ripe Orders
-                    <span id="ripe-badge" style="display:none;background:#c62828;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
-                </span>
-                <span class="sublabel">Manage incoming wholesale orders</span>
-            </a>
-            <a href="/ripe-contract" class="dash-btn" style="border-color:#1565c0;">
-                <span class="icon">&#128196;</span>
-                <span class="label">Wholesale Contract</span>
-                <span class="sublabel">View &amp; print agreement</span>
+        <div class="dash-row" style="grid-template-columns:1fr;">
+            <a href="/ripe-orders" class="dash-btn" id="ripe-orders-btn"
+               style="flex-direction:row;justify-content:flex-start;gap:16px;padding:20px 24px;position:relative;">
+                <span class="icon" style="font-size:24px;flex-shrink:0;">&#128203;</span>
+                <div style="text-align:left;">
+                    <div class="label" style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+                        Ripe Orders
+                        <span id="ripe-badge" style="display:none;background:#c62828;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
+                    </div>
+                    <div class="sublabel">Manage incoming wholesale orders</div>
+                </div>
             </a>
         </div>
         <div class="section-label">Analytics</div>
@@ -102,11 +100,12 @@
         <div class="dash-row">
             <a href="/recipes" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Recipe Cards</span><span class="sublabel">View and manage recipes</span></a>
             <a href="/ccp-master" class="dash-btn"><span class="icon">&#9989;</span><span class="label">CCP Checklist</span><span class="sublabel">Master reference</span></a>
-<a href="/traceability" class="dash-btn"><span class="icon">&#128451;</span><span class="label">Production Record</span><span class="sublabel">Review and sign off weekly records</span></a>
-            <a href="/organic" class="dash-btn highlight" style="border-color:#2e7d32;"><span class="icon">&#128230;</span><span class="label">Manage Inventory</span><span class="sublabel">Raw materials, finished goods &amp; traceability</span></a>
+            <a href="/traceability" class="dash-btn"><span class="icon">&#128451;</span><span class="label">Production Record</span><span class="sublabel">Review and sign off weekly records</span></a>
+            <a href="/organic" class="dash-btn"><span class="icon">&#128230;</span><span class="label">Manage Inventory</span><span class="sublabel">Raw materials, finished goods &amp; traceability</span></a>
             <a href="/contacts" class="dash-btn"><span class="icon">&#128101;</span><span class="label">Buyers &amp; Suppliers</span><span class="sublabel">Suppliers, buyers, company info</span></a>
+            <a href="/ripe-contract" class="dash-btn"><span class="icon">&#128196;</span><span class="label">Wholesale Contract</span><span class="sublabel">Ripe supply agreement</span></a>
+            <a href="/certifications" class="dash-btn"><span class="icon">&#127881;</span><span class="label">Certifications</span><span class="sublabel">Organic &amp; compliance documents</span></a>
             <div class="dash-btn disabled"><span class="icon">&#128295;</span><span class="label">Equipment &amp; Maintenance</span><span class="sublabel">Coming soon</span></div>
-            <div class="dash-btn disabled"><span class="icon">&#128196;</span><span class="label">Organic Certification Documents</span><span class="sublabel">Coming soon</span></div>
         </div>
         </details>
     </div>

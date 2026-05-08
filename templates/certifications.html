@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Certifications · Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.cert-wrap { max-width:860px; margin:0 auto; padding:24px 16px 60px; }
+.cert-grid { display:grid; gap:10px; }
+.cert-card { background:#fff; border:1px solid var(--border); border-radius:var(--r-lg); padding:16px 18px; display:flex; align-items:center; gap:14px; transition:box-shadow .15s; }
+.cert-card:hover { box-shadow:0 2px 10px rgba(0,0,0,.07); }
+.cert-icon { font-size:28px; flex-shrink:0; }
+.cert-info { flex:1; min-width:0; }
+.cert-label { font-size:14px; font-weight:700; color:var(--dark); margin-bottom:2px; }
+.cert-meta { font-size:12px; color:var(--text-light); }
+.cert-cat { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; background:var(--bg); color:var(--text-light); border:1px solid var(--border); margin-right:6px; }
+.cert-actions { display:flex; gap:8px; flex-shrink:0; }
+.upload-zone { border:2px dashed var(--border); border-radius:var(--r-lg); padding:40px 24px; text-align:center; cursor:pointer; transition:all .2s; background:#fff; margin-bottom:20px; }
+.upload-zone:hover,.upload-zone.drag { border-color:var(--accent); background:var(--row-alt); }
+.upload-zone .uz-icon { font-size:40px; margin-bottom:10px; }
+.upload-zone .uz-text { font-size:14px; font-weight:600; color:var(--dark); margin-bottom:4px; }
+.upload-zone .uz-sub { font-size:12px; color:var(--text-light); }
+.mo { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200; align-items:center; justify-content:center; padding:16px; }
+.mo.open { display:flex; }
+.mo-box { background:#fff; border-radius:var(--r-xl); width:100%; max-width:440px; padding:28px 24px; box-shadow:0 20px 60px rgba(0,0,0,.18); }
+.mo-box h2 { margin:0 0 18px; font-size:17px; font-weight:700; }
+.ff { margin-bottom:14px; }
+.ff label { display:block; font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.05em; margin-bottom:5px; }
+.ff input,.ff select { width:100%; box-sizing:border-box; padding:10px 12px; border:1.5px solid var(--border); border-radius:var(--r-md); font-size:14px; outline:none; }
+.ff input:focus,.ff select:focus { border-color:var(--accent); }
+.mo-foot { display:flex; gap:10px; margin-top:16px; padding-top:14px; border-top:1px solid var(--border); }
+.mo-foot button { flex:1; padding:12px; font-size:14px; font-weight:600; border-radius:var(--r-md); cursor:pointer; }
+.cat-group { margin-bottom:24px; }
+.cat-heading { font-size:11px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.06em; border-left:3px solid var(--accent); padding-left:8px; margin-bottom:10px; }
+.empty { text-align:center; padding:48px 24px; color:var(--text-light); font-size:14px; border:2px dashed var(--border); border-radius:var(--r-lg); background:#fff; }
+</style>
+</head>
+<body class="inv-page">
+<div class="header">
+  <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+  <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Certifications &amp; Compliance Documents</p></div>
+  <div class="header-right"><button class="header-btn" onclick="window.location='/'">← Dashboard</button></div>
+</div>
+<div class="cert-wrap">
+
+  <!-- Upload zone -->
+  <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()"
+       ondragover="event.preventDefault();this.classList.add('drag')"
+       ondragleave="this.classList.remove('drag')"
+       ondrop="handleDrop(event)">
+    <div class="uz-icon">📂</div>
+    <div class="uz-text">Click to upload or drag &amp; drop</div>
+    <div class="uz-sub">PDF, JPG, PNG — any certification or compliance document</div>
+  </div>
+  <input type="file" id="file-input" style="display:none" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="startUpload(this.files[0])">
+
+  <!-- Document list -->
+  <div id="cert-list"><div class="empty">Loading…</div></div>
+</div>
+
+<!-- Upload detail modal -->
+<div class="mo" id="upload-mo">
+  <div class="mo-box">
+    <h2>Add Document</h2>
+    <div class="ff"><label>Document Label</label><input id="u-label" type="text" placeholder="e.g. Organic Cert 2026 — Pro-Cert"></div>
+    <div class="ff">
+      <label>Category</label>
+      <select id="u-cat">
+        <option>Organic Certification</option>
+        <option>Food Safety</option>
+        <option>Supplier Certificate</option>
+        <option>Insurance</option>
+        <option>Business Registration</option>
+        <option>Other</option>
+      </select>
+    </div>
+    <div style="font-size:12px;color:var(--text-light);margin-bottom:12px;">File: <strong id="u-fname"></strong></div>
+    <div id="u-msg" style="font-size:13px;color:var(--action-red);min-height:16px;margin-bottom:8px;"></div>
+    <div class="mo-foot">
+      <button style="background:#fff;border:1.5px solid var(--border);" onclick="cancelUpload()">Cancel</button>
+      <button id="u-save" style="background:var(--accent);color:#fff;border:none;" onclick="confirmUpload()">Upload</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var _pendingFile = null;
+var CATEGORIES = ['Organic Certification','Food Safety','Supplier Certificate','Insurance','Business Registration','Other'];
+var CAT_ICONS = {'Organic Certification':'🌿','Food Safety':'✅','Supplier Certificate':'📋','Insurance':'🛡️','Business Registration':'🏢','Other':'📄'};
+
+async function loadDocs() {
+  try {
+    var res = await fetch('/api/certifications');
+    var docs = await res.json();
+    renderDocs(docs);
+  } catch(e) {
+    document.getElementById('cert-list').innerHTML = '<div class="empty">Could not load documents.</div>';
+  }
+}
+
+function renderDocs(docs) {
+  if (!docs.length) {
+    document.getElementById('cert-list').innerHTML = '<div class="empty">No documents uploaded yet. Drag and drop or click to add your first certification.</div>';
+    return;
+  }
+  // Group by category
+  var groups = {};
+  docs.forEach(function(d) {
+    var cat = d.category || 'Other';
+    if(!groups[cat]) groups[cat] = [];
+    groups[cat].push(d);
+  });
+  var html = '';
+  CATEGORIES.forEach(function(cat) {
+    if(!groups[cat]) return;
+    html += '<div class="cat-group">';
+    html += '<div class="cat-heading">'+(CAT_ICONS[cat]||'📄')+' '+cat+'</div>';
+    html += '<div class="cert-grid">';
+    groups[cat].forEach(function(d) {
+      var kb = Math.round(d.size / 1024);
+      var date = (d.uploaded_at||'').slice(0,10);
+      var ext = (d.filename||'').split('.').pop().toUpperCase();
+      html += '<div class="cert-card">';
+      html += '<div class="cert-icon">'+(ext==='PDF'?'📄':ext==='PNG'||ext==='JPG'||ext==='JPEG'?'🖼️':'📁')+'</div>';
+      html += '<div class="cert-info">';
+      html += '<div class="cert-label">'+e(d.label||d.filename)+'</div>';
+      html += '<div class="cert-meta"><span class="cert-cat">'+e(ext)+'</span>'+kb+'KB · Uploaded '+date+'</div>';
+      html += '</div>';
+      html += '<div class="cert-actions">';
+      html += '<a href="/api/certifications/'+e(d.id)+'/download" class="btn btn-sm" style="text-decoration:none;">↓ Download</a>';
+      html += '<button class="btn btn-sm" style="border-color:#fca5a5;color:var(--action-red);" onclick="deleteDoc(\''+e(d.id)+'\',\''+e(d.label||d.filename)+'\')">Delete</button>';
+      html += '</div></div>';
+    });
+    html += '</div></div>';
+  });
+  document.getElementById('cert-list').innerHTML = html;
+}
+
+function handleDrop(ev) {
+  ev.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag');
+  var file = ev.dataTransfer.files[0];
+  if (file) startUpload(file);
+}
+
+function startUpload(file) {
+  if (!file) return;
+  _pendingFile = file;
+  document.getElementById('u-fname').textContent = file.name;
+  document.getElementById('u-label').value = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g,' ');
+  document.getElementById('u-msg').textContent = '';
+  document.getElementById('upload-mo').classList.add('open');
+  setTimeout(function(){ document.getElementById('u-label').select(); }, 50);
+}
+
+function cancelUpload() {
+  _pendingFile = null;
+  document.getElementById('upload-mo').classList.remove('open');
+  document.getElementById('file-input').value = '';
+}
+
+async function confirmUpload() {
+  if (!_pendingFile) return;
+  var btn = document.getElementById('u-save');
+  btn.disabled = true; btn.textContent = 'Uploading…';
+  var fd = new FormData();
+  fd.append('file', _pendingFile);
+  fd.append('label', document.getElementById('u-label').value.trim());
+  fd.append('category', document.getElementById('u-cat').value);
+  try {
+    var res = await fetch('/api/certifications/upload', {method:'POST', body:fd});
+    var data = await res.json();
+    if (res.ok) {
+      cancelUpload();
+      loadDocs();
+    } else {
+      document.getElementById('u-msg').textContent = data.error || 'Upload failed.';
+    }
+  } catch(e) {
+    document.getElementById('u-msg').textContent = 'Network error.';
+  }
+  btn.disabled = false; btn.textContent = 'Upload';
+}
+
+async function deleteDoc(id, name) {
+  if (!confirm('Delete "'+name+'"?')) return;
+  var res = await fetch('/api/certifications/'+id, {method:'DELETE'});
+  if (res.ok) loadDocs();
+}
+
+function e(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.getElementById('upload-mo').addEventListener('click', function(ev) {
+  if(ev.target === this) cancelUpload();
+});
+
+loadDocs();
+</script>
+</body>
+</html>
