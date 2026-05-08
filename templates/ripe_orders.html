@@ -69,7 +69,11 @@
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
   <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Ripe Orders</p></div>
-  <div class="header-right"><button class="header-btn" onclick="window.location='/'">← Dashboard</button></div>
+  <div class="header-right" style="display:flex;gap:8px;align-items:center;">
+    <a href="/ripe-analytics" class="header-btn">Analytics</a>
+    <a href="/ripe-products" class="header-btn">Products</a>
+    <button class="header-btn" onclick="window.location='/'">← Dashboard</button>
+</div>
 </div>
 <div class="main">
 
@@ -151,6 +155,9 @@
             {% endif %}
             {% if o.status == 'approved' %}
             <button class="btn-fulfill" onclick="doFulfill('{{ o.id }}',event)">📦 Mark Fulfilled</button>
+            {% endif %}
+            {% if o.status in ['approved','approved-for-production','fulfilled'] %}
+            <a href="/ripe-orders/{{ o.id }}/packing-slip" target="_blank" class="btn-fulfill" style="text-decoration:none;background:#455a64;border-color:#455a64;">🖨 Packing Slip</a>
             {% endif %}
           </div>
           {% if o.status == 'approved' and o.payment_key == 'cc_net14' %}

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Packing Slip · {{ order.id }}</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+main { max-width:800px !important; padding:32px !important; }
+body { background:#f0eee8; }
+.ps-ctrl { margin-bottom:16px; display:flex; gap:8px; }
+.ps-head { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid var(--dark); padding-bottom:16px; margin-bottom:24px; }
+.ps-brand { font-size:22px; font-weight:700; }
+.ps-meta { text-align:right; font-size:13px; }
+.ps-meta .lbl { color:var(--text-light); font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+.ps-meta .val { font-weight:600; font-size:15px; }
+.ps-info { display:grid; grid-template-columns:1fr 1fr; gap:20px; padding:16px; background:#faf9f6; border-radius:8px; margin-bottom:24px; }
+.ps-info .lbl { font-size:11px; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; margin-bottom:3px; }
+.ps-info .val { font-size:14px; line-height:1.5; }
+table.ps-tbl { width:100%; border-collapse:collapse; margin-bottom:24px; }
+table.ps-tbl th { text-align:left; padding:10px 8px; border-bottom:2px solid var(--dark); font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-light); }
+table.ps-tbl td { padding:11px 8px; border-bottom:1px solid #e5e3dd; font-size:14px; vertical-align:top; }
+table.ps-tbl th.r, table.ps-tbl td.r { text-align:right; }
+.grp-hdr td { background:#f3f1eb; border-top:2px solid var(--dark); border-bottom:1px solid var(--dark); font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:.05em; padding:9px 8px; }
+.grp-ss td:first-child { border-left:5px solid #2c5a8a; padding-left:11px; }
+.grp-fz td:first-child { border-left:5px solid #2d7a3e; padding-left:11px; }
+.grp-bb td:first-child { border-left:5px solid #a66b1e; padding-left:11px; }
+.totals td { border-bottom:none; border-top:2px solid var(--dark); padding-top:13px; font-weight:600; }
+.sig { display:grid; grid-template-columns:1fr 1fr; gap:32px; margin-top:32px; padding-top:16px; }
+.sig-block { border-top:1px solid var(--dark); padding-top:6px; font-size:11px; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
+.sig-block div { height:48px; }
+@media print { @page{size:letter;margin:.5in;} body{background:#fff;} main{box-shadow:none!important;padding:0!important;} .ps-ctrl,.topbar,.nav,.flash{display:none!important;} }
+</style>
+</head>
+<body class="inv-page">
+{% include 'header_partial.html' ignore missing %}
+<main>
+<div class="ps-ctrl">
+  <button onclick="window.print()" class="btn btn-primary">🖨 Print</button>
+  <a href="/ripe-orders" class="btn btn-outline">← Back to Orders</a>
+</div>
+<div class="ps-head">
+  <div>
+    <img src="/static/logo.jpg" alt="Soma" style="height:48px;width:auto;margin-bottom:4px;display:block;">
+    <div style="color:var(--text-light);font-size:13px;">Packing Slip</div>
+  </div>
+  <div class="ps-meta">
+    <div class="lbl">Order Number</div><div class="val" style="font-family:ui-monospace,monospace;">{{ order.id }}</div>
+    <div class="lbl" style="margin-top:8px;">Printed</div><div class="val" style="font-size:13px;">{{ today }}</div>
+  </div>
+</div>
+<div class="ps-info">
+  <div><div class="lbl">Order Placed</div><div class="val">{{ order.created_at[:10] }}</div></div>
+  <div><div class="lbl">Requested Date</div><div class="val">{{ order.requested_date or '—' }}{% if order.requested_time %} · {{ order.requested_time }}{% endif %}</div></div>
+  <div><div class="lbl">Deliver To</div><div class="val"><strong>{{ order.delivery_label }}</strong><br>{{ order.delivery_address }}</div></div>
+  <div><div class="lbl">Payment</div><div class="val">{{ order.payment_label }}<br><span style="font-size:12px;color:var(--text-light);">{{ order.payment_status or '' }}</span></div></div>
+</div>
+{% if order.notes %}
+<div style="background:#faf0dc;border:1px solid #e6d2a8;border-radius:8px;padding:12px 14px;margin-bottom:20px;font-size:13px;"><strong>Notes:</strong> {{ order.notes }}</div>
+{% endif %}
+<table class="ps-tbl">
+  <thead><tr><th style="width:40%;">Product</th><th>SKU</th><th class="r">Cases</th><th class="r">Units</th><th class="r">Per Unit</th><th class="r">Total</th></tr></thead>
+  <tbody>
+  {% set groups = {'SS':{'n':'SHELF STABLE','items':[],'c':0,'u':0},'FZ':{'n':'FROZEN','items':[],'c':0,'u':0},'BB':{'n':'BACK BAR','items':[],'c':0,'u':0},'OT':{'n':'OTHER','items':[],'c':0,'u':0}} %}
+  {% set ns = namespace(tc=0,tu=0) %}
+  {% for li in order.items %}
+    {% set ns.tc = ns.tc + li.cases %}{% set ns.tu = ns.tu + li.units %}
+    {% set fmt = (li.format or '')|upper %}
+    {% if fmt.startswith('SS') %}{% set _ = groups['SS']['items'].append(li) %}{% set _ = groups['SS'].update({'c':groups['SS']['c']+li.cases,'u':groups['SS']['u']+li.units}) %}
+    {% elif fmt.startswith('FZ') %}{% set _ = groups['FZ']['items'].append(li) %}{% set _ = groups['FZ'].update({'c':groups['FZ']['c']+li.cases,'u':groups['FZ']['u']+li.units}) %}
+    {% elif fmt.startswith('BB') %}{% set _ = groups['BB']['items'].append(li) %}{% set _ = groups['BB'].update({'c':groups['BB']['c']+li.cases,'u':groups['BB']['u']+li.units}) %}
+    {% else %}{% set _ = groups['OT']['items'].append(li) %}{% set _ = groups['OT'].update({'c':groups['OT']['c']+li.cases,'u':groups['OT']['u']+li.units}) %}
+    {% endif %}
+  {% endfor %}
+  {% for key,cls in [('SS','ss'),('FZ','fz'),('BB','bb'),('OT','ot')] %}
+  {% if groups[key].items %}
+  <tr class="grp-hdr grp-{{ cls }}"><td colspan="4">{{ groups[key].n }}</td><td class="r">{{ groups[key].c }} cases</td><td class="r">{{ groups[key].u }} units</td></tr>
+  {% for li in groups[key].items %}
+  <tr><td><strong>{{ li.name }}</strong><br><span style="font-size:12px;color:var(--text-light);">{{ li.format }}</span></td><td style="font-family:ui-monospace,monospace;font-size:11px;color:var(--text-light);">{{ li.sku }}</td><td class="r">{{ li.cases }}</td><td class="r">{{ li.units }}</td><td class="r">${{ "%.2f"|format(li.unit_price) }}</td><td class="r">${{ "%.2f"|format(li.line_total) }}</td></tr>
+  {% endfor %}{% endif %}{% endfor %}
+  <tr class="totals"><td colspan="2">Totals</td><td class="r">{{ ns.tc }}</td><td class="r">{{ ns.tu }}</td><td class="r">Subtotal</td><td class="r">${{ "%.2f"|format(order.subtotal) }}</td></tr>
+  {% if order.surcharge %}<tr><td colspan="5" style="text-align:right;border-bottom:none;">{{ 'Surcharge' if order.surcharge > 0 else 'Discount' }} ({{ order.surcharge_pct }}%)</td><td class="r" style="border-bottom:none;">${{ "%.2f"|format(order.surcharge) }}</td></tr>{% endif %}
+  <tr style="font-weight:700;font-size:16px;"><td colspan="5" style="text-align:right;border-top:2px solid var(--dark);padding-top:13px;border-bottom:none;">TOTAL</td><td class="r" style="border-top:2px solid var(--dark);padding-top:13px;border-bottom:none;">${{ "%.2f"|format(order.total) }}</td></tr>
+  </tbody>
+</table>
+<div class="sig">
+  <div><div></div><div class="sig-block">Packed by — name &amp; date</div></div>
+  <div><div></div><div class="sig-block">Received by — signature &amp; date</div></div>
+</div>
+<div style="margin-top:28px;font-size:11px;color:var(--text-light);text-align:center;">SOMA BONE BROTH CO LTD · 676 Pape Ave, Toronto, ON · Order {{ order.id }}</div>
+</main>
+</body>
+</html>

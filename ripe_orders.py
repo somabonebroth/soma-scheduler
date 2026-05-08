@@ -243,3 +243,83 @@ def ripe_order_action(order_id):
         return jsonify(resp), status
 
     return jsonify({"error": f"Unknown action: {action}"}), 400
+
+
+@ripe_orders_bp.route("/ripe-products")
+@_soma_login_required
+def ripe_products_page():
+    """Product catalog management — calls Ripe internal API."""
+    status, data = _ripe_request("GET", "/api/internal/products")
+    products = data if isinstance(data, list) else []
+    configured = _configured()
+    error = None if status == 200 else (data.get("error") if isinstance(data, dict) else "Could not reach Ripe portal")
+    return render_template("ripe_products.html", products=products, configured=configured, error=error)
+
+
+@ripe_orders_bp.route("/api/ripe-products", methods=["POST"])
+@_soma_login_required
+def ripe_product_create():
+    body = request.get_json() or {}
+    status, data = _ripe_request("POST", "/api/internal/products", body)
+    return jsonify(data), status
+
+
+@ripe_orders_bp.route("/api/ripe-products/<int:pid>", methods=["PUT"])
+@_soma_login_required
+def ripe_product_update(pid):
+    body = request.get_json() or {}
+    status, data = _ripe_request("PUT", f"/api/internal/products/{pid}", body)
+    return jsonify(data), status
+
+
+@ripe_orders_bp.route("/api/ripe-products/<int:pid>", methods=["DELETE"])
+@_soma_login_required
+def ripe_product_delete(pid):
+    status, data = _ripe_request("DELETE", f"/api/internal/products/{pid}")
+    return jsonify(data), status
+
+
+@ripe_orders_bp.route("/ripe-analytics")
+@_soma_login_required
+def ripe_analytics_page():
+    """Sales analytics — calls Ripe internal API."""
+    status, data = _ripe_request("GET", "/api/internal/analytics")
+    configured = _configured()
+    error = None if status == 200 else (data.get("error") if isinstance(data, dict) else "Could not reach Ripe portal")
+    return render_template("ripe_analytics.html", analytics=data if status == 200 else {}, configured=configured, error=error)
+
+
+@ripe_orders_bp.route("/ripe-orders/<order_id>/packing-slip")
+@_soma_login_required
+def ripe_packing_slip(order_id):
+    """Fetch order detail from Ripe and render packing slip in Soma."""
+    status, data = _ripe_request("GET", f"/api/internal/order-detail/{order_id}")
+    if status != 200:
+        from flask import abort
+        abort(404)
+    from datetime import datetime as _dt
+    return render_template("ripe_packing_slip.html", order=data, today=_dt.now().strftime("%B %d, %Y"))
+
+
+@ripe_orders_bp.route("/ripe-orders/export.csv")
+@_soma_login_required
+def ripe_export_csv():
+    """Export all Ripe orders as CSV."""
+    import io, csv
+    status, data = _ripe_request("GET", "/api/internal/orders")
+    orders = data if isinstance(data, list) else []
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["Order ID","Status","Date","Delivery","Payment","Cases","Units","Subtotal","Total"])
+    for o in orders:
+        w.writerow([
+            o.get("id",""), o.get("status",""), o.get("created_at","")[:10],
+            o.get("delivery_label",""), o.get("payment_label",""),
+            sum(i.get("cases",0) for i in o.get("items",[])),
+            sum(i.get("units",0) for i in o.get("items",[])),
+            o.get("subtotal",""), o.get("total",""),
+        ])
+    from flask import Response
+    return Response(buf.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=ripe-orders.csv"})
+

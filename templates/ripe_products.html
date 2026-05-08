@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ripe Products · Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+body.inv-page .card { padding:24px; margin-bottom:16px; }
+.prod-grid { width:100%; border-collapse:collapse; font-size:13px; }
+.prod-grid th { text-align:left; padding:10px 12px; border-bottom:2px solid var(--border); font-size:11px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
+.prod-grid td { padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; }
+.prod-grid tr:hover td { background:#fafaf8; }
+.inactive td { opacity:.45; }
+.badge-active { background:#e8f5e9; color:#2e7d32; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+.badge-inactive { background:#f5f5f0; color:#888; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+.sku-mono { font-family:ui-monospace,monospace; font-size:11px; color:var(--text-light); }
+.btn-sm { padding:5px 12px; font-size:12px; font-weight:600; border-radius:6px; cursor:pointer; border:1.5px solid var(--border); background:#fff; }
+.btn-sm:hover { background:var(--bg); }
+.btn-danger-sm { border-color:#fca5a5; color:#c62828; }
+.mo { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200; align-items:center; justify-content:center; padding:16px; }
+.mo.open { display:flex; }
+.mo-box { background:#fff; border-radius:14px; width:100%; max-width:520px; max-height:90vh; overflow-y:auto; padding:24px; box-shadow:0 20px 60px rgba(0,0,0,.18); }
+.mo-box h2 { margin:0 0 18px; font-size:17px; }
+.ff { margin-bottom:13px; }
+.ff label { display:block; font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.05em; margin-bottom:5px; }
+.ff input, .ff select { width:100%; box-sizing:border-box; padding:10px 12px; border:1.5px solid var(--border); border-radius:8px; font-size:14px; }
+.g2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.mo-foot { display:flex; gap:10px; margin-top:16px; padding-top:14px; border-top:1px solid var(--border); }
+.mo-foot button { flex:1; padding:12px; font-size:14px; font-weight:600; border-radius:8px; cursor:pointer; }
+.err { color:#c62828; font-size:13px; margin-top:6px; }
+</style>
+</head>
+<body class="inv-page">
+<div class="header">
+  <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+  <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Ripe — Product Catalog</p></div>
+  <div class="header-right"><button class="header-btn" onclick="window.location='/ripe-orders'">← Ripe Orders</button></div>
+</div>
+<div class="main" style="max-width:1000px;margin:0 auto;padding:24px 16px;">
+{% if error %}
+<div style="background:#fff5f5;border:1px solid #fca5a5;border-radius:8px;padding:14px 18px;margin-bottom:16px;color:#c62828;font-size:13px;">
+  ⚠ Could not reach Ripe portal: {{ error }}
+</div>
+{% endif %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+  <div>
+    <div style="font-size:20px;font-weight:700;">Products &amp; Pricing</div>
+    <div style="font-size:12px;color:var(--text-light);margin-top:2px;">{{ products|length }} product{% if products|length != 1 %}s{% endif %} · Changes sync to the Ripe order form immediately</div>
+  </div>
+  <button class="btn btn-primary" onclick="openAdd()" style="background:#2e7d32;border:none;">+ Add Product</button>
+</div>
+<div class="card" style="padding:0;overflow:hidden;">
+<table class="prod-grid">
+  <thead><tr>
+    <th>Product</th><th>Format</th><th>SKU</th><th>Soma Key</th>
+    <th class="num">Price/unit</th><th class="num">Case (×12)</th>
+    <th class="num">COGS</th><th class="num">Margin</th>
+    <th>Status</th><th></th>
+  </tr></thead>
+  <tbody>
+  {% for p in products %}
+  <tr class="{% if not p.get('active', True) %}inactive{% endif %}">
+    <td style="font-weight:600;">{{ p.name }}</td>
+    <td>{{ p.format }}</td>
+    <td class="sku-mono">{{ p.sku }}</td>
+    <td class="sku-mono" style="font-size:10px;">{{ p.soma_sku_key or '—' }}</td>
+    <td class="num">${{ "%.2f"|format(p.price) }}</td>
+    <td class="num" style="font-weight:600;">${{ "%.2f"|format(p.price * 12) }}</td>
+    <td class="num" style="color:var(--text-light);">${{ "%.4f"|format(p.cogs or 0) }}</td>
+    <td class="num" style="color:var(--text-light);">{{ "%.1f"|format(p.margin_pct or 0) }}%</td>
+    <td><span class="{% if p.get('active', True) %}badge-active{% else %}badge-inactive{% endif %}">{{ 'Active' if p.get('active', True) else 'Inactive' }}</span></td>
+    <td style="white-space:nowrap;">
+      <button class="btn-sm" onclick="openEdit({{ p|tojson }})">Edit</button>
+      <button class="btn-sm btn-danger-sm" onclick="deleteProduct({{ p.id }}, '{{ p.name }}')">Del</button>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text-light);">No products yet. Add your first product above.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+</div>
+
+<!-- Modal -->
+<div class="mo" id="prod-mo">
+  <div class="mo-box">
+    <h2 id="mo-title">Add Product</h2>
+    <input type="hidden" id="mo-id">
+    <div class="g2">
+      <div class="ff" style="grid-column:1/-1"><label>Product Name *</label><input id="mo-name" type="text" placeholder="e.g. Beef Basil Rose"></div>
+      <div class="ff"><label>Format</label><input id="mo-format" type="text" placeholder="e.g. SS-876ML"></div>
+      <div class="ff"><label>SKU</label><input id="mo-sku" type="text" placeholder="e.g. SBB-SS-876"></div>
+      <div class="ff"><label>Price per unit ($)</label><input id="mo-price" type="number" step="0.01" min="0" placeholder="10.00"></div>
+      <div class="ff"><label>COGS per unit ($)</label><input id="mo-cogs" type="number" step="0.0001" min="0" placeholder="4.00"></div>
+      <div class="ff" style="grid-column:1/-1"><label>Soma SKU Key (copy from FG inventory)</label><input id="mo-soma-key" type="text" placeholder="Brand|Recipe Name|FORMAT" style="font-family:ui-monospace,monospace;font-size:12px;"></div>
+      <div class="ff"><label>Status</label><select id="mo-active"><option value="1">Active</option><option value="0">Inactive</option></select></div>
+      <div class="ff"><label>Notes</label><input id="mo-notes" type="text" placeholder="Optional"></div>
+    </div>
+    <div class="err" id="mo-err"></div>
+    <div class="mo-foot">
+      <button style="background:#fff;border:1.5px solid var(--border);border-radius:8px;" onclick="closeMo()">Cancel</button>
+      <button id="mo-save" style="background:#2e7d32;color:#fff;border:none;border-radius:8px;" onclick="saveProd()">Save Product</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var _editId = null;
+function openAdd(){ _editId=null; document.getElementById('mo-title').textContent='Add Product'; ['mo-id','mo-name','mo-format','mo-sku','mo-price','mo-cogs','mo-soma-key','mo-notes'].forEach(function(id){document.getElementById(id).value='';}); document.getElementById('mo-active').value='1'; document.getElementById('mo-err').textContent=''; document.getElementById('prod-mo').classList.add('open'); }
+function openEdit(p){ _editId=p.id; document.getElementById('mo-title').textContent='Edit Product'; document.getElementById('mo-id').value=p.id; document.getElementById('mo-name').value=p.name||''; document.getElementById('mo-format').value=p.format||''; document.getElementById('mo-sku').value=p.sku||''; document.getElementById('mo-price').value=p.price||''; document.getElementById('mo-cogs').value=p.cogs||''; document.getElementById('mo-soma-key').value=p.soma_sku_key||''; document.getElementById('mo-active').value=p.active!==false?'1':'0'; document.getElementById('mo-notes').value=p.notes||''; document.getElementById('mo-err').textContent=''; document.getElementById('prod-mo').classList.add('open'); }
+function closeMo(){ document.getElementById('prod-mo').classList.remove('open'); }
+async function saveProd(){
+  var btn=document.getElementById('mo-save'); btn.disabled=true; btn.textContent='Saving…';
+  var body={ name:document.getElementById('mo-name').value.trim(), format:document.getElementById('mo-format').value.trim(), sku:document.getElementById('mo-sku').value.trim(), price:parseFloat(document.getElementById('mo-price').value)||null, cogs:parseFloat(document.getElementById('mo-cogs').value)||null, soma_sku_key:document.getElementById('mo-soma-key').value.trim(), active:document.getElementById('mo-active').value==='1', notes:document.getElementById('mo-notes').value.trim() };
+  var url=_editId?'/api/ripe-products/'+_editId:'/api/ripe-products';
+  var method=_editId?'PUT':'POST';
+  var res=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  var d=await res.json(); btn.disabled=false; btn.textContent='Save Product';
+  if(res.ok){ location.reload(); } else { document.getElementById('mo-err').textContent=d.error||'Failed to save.'; }
+}
+async function deleteProduct(id, name){
+  if(!confirm('Delete "'+name+'"? This cannot be undone.')) return;
+  var res=await fetch('/api/ripe-products/'+id,{method:'DELETE'});
+  if(res.ok) location.reload(); else { var d=await res.json(); alert(d.error||'Failed.'); }
+}
+document.getElementById('prod-mo').addEventListener('click',function(e){ if(e.target===this) closeMo(); });
+</script>
+</body>
+</html>
