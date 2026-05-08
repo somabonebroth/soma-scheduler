@@ -1060,6 +1060,140 @@ def add_recipe():
     save_recipes(recipes)
     return jsonify({"success": True})
 
+@app.route("/api/recipes/clean-names", methods=["POST"])
+@login_required
+def clean_recipe_names():
+    """One-time migration: strip any format suffix that was baked into recipe names.
+    Renames 'Liquid Gold SS-876ML' → 'Liquid Gold' in recipes.json and cascades
+    the rename to all downstream records (FG, sales, runs, schedules, sku_meta, buyers).
+    Returns a report of what was changed.
+    """
+    recipes = load_recipes()
+    changed = []
+    errors = []
+
+    for name in list(recipes.keys()):
+        data = recipes[name]
+        if data.get("archived"):
+            continue
+        clean = _strip_format_suffix(name).strip()
+        if clean == name:
+            continue  # Already clean
+
+        # Check for collision
+        if clean in recipes and clean != name:
+            errors.append(f"Cannot rename '{name}' → '{clean}': name already exists")
+            continue
+
+        # Use the existing cascade rename endpoint logic inline
+        old_brand  = (data.get("brand") or "").strip()
+        old_format = _normalize_format((data.get("format") or "").strip())
+        old_key    = _sku_key(old_brand, name, old_format)
+
+        # If format field is empty, detect it from the name and set it
+        if not old_format:
+            detected = _detect_format_in_text(name)
+            if detected:
+                data["format"] = detected
+                old_format = detected
+                old_key = _sku_key(old_brand, name, old_format)
+
+        new_key = _sku_key(old_brand, clean, old_format)
+
+        # Rename in recipes dict
+        del recipes[name]
+        recipes[clean] = data
+
+        # Cascade downstream
+        fg = _load_json(ORGANIC_FG_PATH, [])
+        for e in fg:
+            if (e.get("recipe") or "").strip() == name:
+                e["recipe"] = clean
+        _save_json(ORGANIC_FG_PATH, fg)
+
+        sales = _load_json(ORGANIC_SALES_PATH, [])
+        for s in sales:
+            if (s.get("recipe") or "").strip() == name:
+                s["recipe"] = clean
+                s["sku_key"] = _sku_key(s.get("brand", old_brand), clean, s.get("format", old_format))
+        _save_json(ORGANIC_SALES_PATH, sales)
+
+        runs = _load_json(ORGANIC_RUNS_PATH, [])
+        for r in runs:
+            if (r.get("recipe") or "").strip() == name:
+                r["recipe"] = clean
+        _save_json(ORGANIC_RUNS_PATH, runs)
+
+        meta = _load_json(SKU_META_PATH, {})
+        if old_key in meta:
+            meta[new_key] = meta.pop(old_key)
+            _save_json(SKU_META_PATH, meta)
+
+        buyers = _load_buyers()
+        for buyer in buyers:
+            for sku in (buyer.get("skus") or []):
+                if sku.get("sku_key") == old_key:
+                    sku["sku_key"] = new_key
+                    sku["recipe"] = clean
+                    sku["display"] = _sku_display(sku.get("brand", old_brand), clean, sku.get("format", old_format))
+        _save_buyers(buyers)
+
+        # Schedules
+        import glob as _glob
+        for fpath in _glob.glob(os.path.join(SCHEDULES_DIR, "*.json")):
+            with open(fpath) as f:
+                sched = json.load(f)
+            dirty = False
+            def _walk(obj):
+                nonlocal dirty
+                if isinstance(obj, dict):
+                    for k, v in obj.items():
+                        if isinstance(v, str) and v == name:
+                            obj[k] = clean; dirty = True
+                        else: _walk(v)
+                elif isinstance(obj, list):
+                    for i, item in enumerate(obj):
+                        if isinstance(item, str) and item == name:
+                            obj[i] = clean; dirty = True
+                        else: _walk(item)
+            _walk(sched)
+            if dirty:
+                with open(fpath, "w") as f: json.dump(sched, f, indent=2)
+
+        changed.append({
+            "from": name, "to": clean,
+            "old_key": old_key, "new_key": new_key,
+            "format_detected": old_format,
+        })
+
+    if changed:
+        save_recipes(recipes)
+
+        # Notify Ripe
+        ripe_url = os.environ.get("RIPE_PORTAL_URL", "").rstrip("/")
+        ikey = os.environ.get("INTERNAL_API_KEY", "")
+        for c in changed:
+            if c["old_key"] != c["new_key"] and ripe_url and ikey:
+                try:
+                    import urllib.request as _ur
+                    req = _ur.Request(
+                        f"{ripe_url}/api/internal/rename-sku-key",
+                        data=json.dumps({"old_sku_key": c["old_key"], "new_sku_key": c["new_key"]}).encode(),
+                        headers={"X-Internal-Key": ikey, "Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with _ur.urlopen(req, timeout=6) as resp:
+                        c["ripe"] = json.loads(resp.read()).get("updated", 0)
+                except Exception as e:
+                    c["ripe"] = f"unreachable: {e}"
+
+    return jsonify({
+        "changed": len(changed),
+        "errors": errors,
+        "details": changed,
+    })
+
+
 @app.route("/api/recipes/<path:name>", methods=["GET"])
 @login_required
 def get_recipe(name):
@@ -1362,140 +1496,6 @@ def unarchive_recipe(name):
     recipes[name]["archived"] = False
     save_recipes(recipes)
     return jsonify({"success": True})
-
-
-@app.route("/api/recipes/clean-names", methods=["POST"])
-@login_required
-def clean_recipe_names():
-    """One-time migration: strip any format suffix that was baked into recipe names.
-    Renames 'Liquid Gold SS-876ML' → 'Liquid Gold' in recipes.json and cascades
-    the rename to all downstream records (FG, sales, runs, schedules, sku_meta, buyers).
-    Returns a report of what was changed.
-    """
-    recipes = load_recipes()
-    changed = []
-    errors = []
-
-    for name in list(recipes.keys()):
-        data = recipes[name]
-        if data.get("archived"):
-            continue
-        clean = _strip_format_suffix(name).strip()
-        if clean == name:
-            continue  # Already clean
-
-        # Check for collision
-        if clean in recipes and clean != name:
-            errors.append(f"Cannot rename '{name}' → '{clean}': name already exists")
-            continue
-
-        # Use the existing cascade rename endpoint logic inline
-        old_brand  = (data.get("brand") or "").strip()
-        old_format = _normalize_format((data.get("format") or "").strip())
-        old_key    = _sku_key(old_brand, name, old_format)
-
-        # If format field is empty, detect it from the name and set it
-        if not old_format:
-            detected = _detect_format_in_text(name)
-            if detected:
-                data["format"] = detected
-                old_format = detected
-                old_key = _sku_key(old_brand, name, old_format)
-
-        new_key = _sku_key(old_brand, clean, old_format)
-
-        # Rename in recipes dict
-        del recipes[name]
-        recipes[clean] = data
-
-        # Cascade downstream
-        fg = _load_json(ORGANIC_FG_PATH, [])
-        for e in fg:
-            if (e.get("recipe") or "").strip() == name:
-                e["recipe"] = clean
-        _save_json(ORGANIC_FG_PATH, fg)
-
-        sales = _load_json(ORGANIC_SALES_PATH, [])
-        for s in sales:
-            if (s.get("recipe") or "").strip() == name:
-                s["recipe"] = clean
-                s["sku_key"] = _sku_key(s.get("brand", old_brand), clean, s.get("format", old_format))
-        _save_json(ORGANIC_SALES_PATH, sales)
-
-        runs = _load_json(ORGANIC_RUNS_PATH, [])
-        for r in runs:
-            if (r.get("recipe") or "").strip() == name:
-                r["recipe"] = clean
-        _save_json(ORGANIC_RUNS_PATH, runs)
-
-        meta = _load_json(SKU_META_PATH, {})
-        if old_key in meta:
-            meta[new_key] = meta.pop(old_key)
-            _save_json(SKU_META_PATH, meta)
-
-        buyers = _load_buyers()
-        for buyer in buyers:
-            for sku in (buyer.get("skus") or []):
-                if sku.get("sku_key") == old_key:
-                    sku["sku_key"] = new_key
-                    sku["recipe"] = clean
-                    sku["display"] = _sku_display(sku.get("brand", old_brand), clean, sku.get("format", old_format))
-        _save_buyers(buyers)
-
-        # Schedules
-        import glob as _glob
-        for fpath in _glob.glob(os.path.join(SCHEDULES_DIR, "*.json")):
-            with open(fpath) as f:
-                sched = json.load(f)
-            dirty = False
-            def _walk(obj):
-                nonlocal dirty
-                if isinstance(obj, dict):
-                    for k, v in obj.items():
-                        if isinstance(v, str) and v == name:
-                            obj[k] = clean; dirty = True
-                        else: _walk(v)
-                elif isinstance(obj, list):
-                    for i, item in enumerate(obj):
-                        if isinstance(item, str) and item == name:
-                            obj[i] = clean; dirty = True
-                        else: _walk(item)
-            _walk(sched)
-            if dirty:
-                with open(fpath, "w") as f: json.dump(sched, f, indent=2)
-
-        changed.append({
-            "from": name, "to": clean,
-            "old_key": old_key, "new_key": new_key,
-            "format_detected": old_format,
-        })
-
-    if changed:
-        save_recipes(recipes)
-
-        # Notify Ripe
-        ripe_url = os.environ.get("RIPE_PORTAL_URL", "").rstrip("/")
-        ikey = os.environ.get("INTERNAL_API_KEY", "")
-        for c in changed:
-            if c["old_key"] != c["new_key"] and ripe_url and ikey:
-                try:
-                    import urllib.request as _ur
-                    req = _ur.Request(
-                        f"{ripe_url}/api/internal/rename-sku-key",
-                        data=json.dumps({"old_sku_key": c["old_key"], "new_sku_key": c["new_key"]}).encode(),
-                        headers={"X-Internal-Key": ikey, "Content-Type": "application/json"},
-                        method="POST",
-                    )
-                    with _ur.urlopen(req, timeout=6) as resp:
-                        c["ripe"] = json.loads(resp.read()).get("updated", 0)
-                except Exception as e:
-                    c["ripe"] = f"unreachable: {e}"
-
-    return jsonify({
-        "changed": len(changed),
-        "errors": errors,
-        "details": changed,
-    })
 
 
 @app.route("/api/recipes/migrate-all", methods=["POST"])
