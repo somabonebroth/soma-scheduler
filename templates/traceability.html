@@ -314,24 +314,30 @@ function renderSummary(data) {
   }
 
   // Total production
+  // Production by SKU with total at bottom
   if (data.total_produced && Object.keys(data.total_produced).length) {
-    html += '<div class="summary-section"><h3>Total Production This Week</h3>';
-    Object.entries(data.total_produced).forEach(function(kv) {
-      html += '<div class="prod-row"><span>' + escHtml(kv[0]) + '</span><strong>' + kv[1] + ' units (' + Math.floor(kv[1]/12) + ' cases)</strong></div>';
+    var entries = Object.entries(data.total_produced);
+    var grandUnits = entries.reduce(function(a, kv){ return a + kv[1]; }, 0);
+    html += '<div class="summary-section"><h3>Production by SKU</h3>';
+    entries.forEach(function(kv) {
+      html += '<div class="prod-row"><span>' + escHtml(kv[0]) + '</span><strong>' + kv[1] + ' units · ' + Math.floor(kv[1]/12) + ' cases</strong></div>';
     });
+    html += '<div class="prod-row" style="border-top:2px solid var(--border);margin-top:4px;font-weight:700;">'
+      + '<span>Total</span><strong>' + grandUnits + ' units · ' + Math.floor(grandUnits/12) + ' cases</strong></div>';
     html += '</div>';
   }
 
-  // Days overview
+  // Days completed — day name, CCP flag if any, kitchen sign-off name only
   if (data.days && data.days.length) {
     html += '<div class="summary-section"><h3>Days Completed</h3>';
     data.days.forEach(function(d) {
-      var recipes = (d.scheduled || []).join(', ') || '—';
-      var sigs = [d.kitchen_signoff, d.manager_signoff].filter(Boolean).join(', ') || 'Missing';
-      var ccpBadge = d.has_ccp_flags ? '<span style="background:#fff8e1;color:#b38b00;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:6px;">CCP FLAG</span>' : '';
-      html += '<div class="prod-row" style="flex-direction:column;gap:3px;">'
-        + '<div style="font-weight:600;">' + escHtml(d.day) + ccpBadge + '</div>'
-        + '<div style="font-size:11px;color:var(--text-light);">' + escHtml(recipes) + ' · Signed: ' + escHtml(sigs) + '</div>'
+      var sigs = d.kitchen_signoff || '<span style="color:#c62828;">Missing</span>';
+      var ccpBadge = d.has_ccp_flags
+        ? '<span style="background:#fff8e1;color:#b38b00;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:6px;">CCP FLAG</span>'
+        : '';
+      html += '<div class="prod-row">'
+        + '<span style="font-weight:600;">' + escHtml(d.day) + ccpBadge + '</span>'
+        + '<span style="font-size:13px;color:var(--text-light);">Signed: ' + sigs + '</span>'
         + '</div>';
     });
     html += '</div>';

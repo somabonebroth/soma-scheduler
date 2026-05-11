@@ -320,7 +320,17 @@ function renderItem() {
   var all   = items();
   var total = all.length;
 
-  if (!total) { showComplete([]); return; }
+  if (!total) {
+    document.getElementById('item-screen-body').innerHTML =
+      '<div style="padding:40px 24px;text-align:center;color:var(--text-light);">'
+      +'<div style="font-size:40px;margin-bottom:16px;">🔍</div>'
+      +'<div style="font-size:17px;font-weight:700;margin-bottom:8px;">No items found</div>'
+      +'<div style="font-size:14px;">No inventory with quantity on hand was found for the selected categories.'
+      +' Check that items are assigned to sections in Manage Inventory.</div>'
+      +'<a href="/organic" style="display:inline-block;margin-top:20px;padding:12px 24px;background:var(--accent);color:#fff;border-radius:10px;font-weight:700;text-decoration:none;">Go to Inventory</a>'
+      +'</div>';
+    return;
+  }
 
   document.getElementById('progress-text').textContent = 'Item '+(idx+1)+' of '+total;
   document.getElementById('progress-fill').style.width = Math.round((idx/total)*100)+'%';

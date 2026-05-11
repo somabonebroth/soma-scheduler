@@ -2184,7 +2184,7 @@ def _has_meaningful_data(checklist_data):
     for key, val in temps.items():
         if val and str(val).strip():
             return True
-    for field in ["signoff_kitchen", "signoff_manager", "kitchen_lead", "production_manager"]:
+    for field in ["signoff_kitchen"]:
         if checklist_data.get(field, "").strip():
             return True
     if checklist_data.get("notes", "").strip():
@@ -2289,7 +2289,6 @@ def get_week_summary(week_id):
     total_produced = {}
     all_notes = []
     ccp_flags = []
-    missing_temps = []
     missing_signoffs = []
 
     for d_idx in range(7):
@@ -2321,49 +2320,36 @@ def get_week_summary(week_id):
         if notes:
             all_notes.append({"day": day_name, "note": notes})
 
-        # Check temperatures recorded
-        temps = cl.get("temps", {}) or {}
-        temp_vals = {k: v for k, v in temps.items() if str(v).strip() and str(v).strip() != "0"}
-        if scheduled and not temp_vals:
-            missing_temps.append(day_name)
-
-        # Check CCP sections - look for any unchecked items
+        # Check CCP sections — look for any items explicitly marked No/False
         sections = cl.get("sections", {}) or {}
         day_ccp_issues = []
         for sec_key, sec_data in sections.items():
             if isinstance(sec_data, dict):
                 for item_key, item_val in sec_data.items():
-                    # A False or empty value on a CCP item is a potential flag
                     if item_val is False or item_val == "no" or item_val == "No":
                         day_ccp_issues.append(f"{sec_key}: {item_key}")
         if day_ccp_issues:
             ccp_flags.append({"day": day_name, "issues": day_ccp_issues})
 
-        # Check sign-offs
-        kitchen = (cl.get("signoff_kitchen") or cl.get("kitchen_lead") or "").strip()
-        manager = (cl.get("signoff_manager") or cl.get("production_manager") or "").strip()
+        # Check kitchen staff sign-off (the only required sign-off in current workflow)
+        kitchen = (cl.get("signoff_kitchen") or "").strip()
         if scheduled and not kitchen:
-            missing_signoffs.append(f"{day_name} (kitchen lead)")
-        if scheduled and not manager:
-            missing_signoffs.append(f"{day_name} (production manager)")
+            missing_signoffs.append(day_name)
 
         days_summary.append({
-            "day": day_name,
-            "day_idx": d_idx,
-            "scheduled": list(scheduled.values()),
-            "produced": day_prod,
-            "notes": notes,
+            "day":           day_name,
+            "day_idx":       d_idx,
+            "scheduled":     list(scheduled.values()),
+            "produced":      day_prod,
+            "notes":         notes,
             "kitchen_signoff": kitchen,
-            "manager_signoff": manager,
             "has_ccp_flags": len(day_ccp_issues) > 0,
         })
 
     # Build inconsistency flags
     flags = []
-    if missing_temps:
-        flags.append(f"Missing temperature records: {', '.join(missing_temps)}")
     if missing_signoffs:
-        flags.append(f"Missing sign-offs: {', '.join(missing_signoffs)}")
+        flags.append(f"Missing kitchen sign-off: {', '.join(missing_signoffs)}")
     if ccp_flags:
         for cf in ccp_flags:
             flags.append(f"{cf['day']} CCP issue: {'; '.join(cf['issues'][:3])}")
@@ -4865,7 +4851,7 @@ def _build_rm_audit_items(categories):
         if not item_name:
             continue
         section_id = assignments.get(item_name, "")
-        section_name = sections.get(section_id, "Unassigned")
+        section_name = sections.get(section_id, "") or "Unassigned"
         if categories and section_name not in categories:
             continue
         if item_name not in seen:
@@ -5107,7 +5093,29 @@ def audit_categories(kind):
     """Return available categories for category selection screen."""
     if kind == "rm":
         sections_data = _load_rm_sections()
-        cats = [s["name"] for s in sections_data.get("sections", [])]
+        sections = {s["id"]: s["name"] for s in sections_data.get("sections", [])}
+        assignments = sections_data.get("assignments", {})
+        materials = _load_json(ORGANIC_RAW_PATH, [])
+
+        # Find which section names actually have stock
+        active_sections = set()
+        has_unassigned = False
+        for mat in materials:
+            if float(mat.get("remaining") or 0) <= 0:
+                continue
+            item_name = (mat.get("item") or "").strip()
+            section_id = assignments.get(item_name, "")
+            section_name = sections.get(section_id, "")
+            if section_name:
+                active_sections.add(section_name)
+            else:
+                has_unassigned = True
+
+        # Return sections in defined order, only those with stock
+        cats = [s["name"] for s in sections_data.get("sections", [])
+                if s["name"] in active_sections]
+        if has_unassigned:
+            cats.append("Unassigned")
         if not cats:
             cats = ["All"]
         return jsonify(cats)
