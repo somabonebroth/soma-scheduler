@@ -257,7 +257,7 @@ async function loadSups(){
   if(cnt)cnt.textContent=_sups.length+' supplier'+(_sups.length===1?'':'s');
   if(!_sups.length){c.innerHTML='<div class="empty">No suppliers yet.</div>';return;}
   c.innerHTML=_sups.map(function(s){
-    var m=[],sid=e(s.id);
+    var m=[],sid=s.id,sidE=e(s.id);
     if(s.contact_name)m.push(e(s.contact_name));
     if(s.phone)m.push('<a href="tel:'+e(s.phone)+'">'+e(s.phone)+'</a>');
     if(s.email)m.push('<a href="mailto:'+e(s.email)+'">'+e(s.email)+'</a>');

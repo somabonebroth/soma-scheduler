@@ -45,6 +45,21 @@
 .filter-btn { padding: 6px 14px; border: 1px solid var(--border); border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; background: var(--card-bg); color: var(--text); }
 .filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
+/* Week Summary Modal */
+.summary-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:300; align-items:center; justify-content:center; padding:16px; }
+.summary-modal.open { display:flex; }
+.summary-box { background:#fff; border-radius:14px; width:100%; max-width:560px; max-height:85vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.2); }
+.summary-header { padding:20px 22px 14px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; background:#fff; z-index:1; }
+.summary-header h2 { margin:0; font-size:16px; font-weight:700; }
+.summary-body { padding:18px 22px; }
+.summary-section { margin-bottom:18px; }
+.summary-section h3 { font-size:11px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.05em; margin:0 0 8px; }
+.summary-flag { background:#fff8e1; border:1px solid #ffe082; border-radius:7px; padding:9px 12px; font-size:13px; color:#6d4c00; margin-bottom:6px; display:flex; gap:8px; }
+.summary-note { background:#f5f5f0; border-radius:7px; padding:9px 12px; font-size:13px; margin-bottom:6px; }
+.summary-note strong { color:var(--dark); }
+.summary-ok { background:#e8f5e9; border:1px solid #a5d6a7; border-radius:7px; padding:12px 16px; font-size:13px; color:#2e7d32; font-weight:600; display:flex; gap:8px; align-items:center; }
+.prod-row { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.prod-row:last-child { border-bottom:none; }
 /* HOO sign-off panel */
 .hoo-panel { padding: 14px 18px; background: #fafaf5; border-bottom: 1px solid var(--border); }
 .hoo-panel.confirmed { background: #ebf5ee; border-left: 4px solid #2d5f3f; }
@@ -182,7 +197,8 @@ function renderHooPanel(rec,statusClass){
     if(rec.completion_state==='all_complete'){
         return '<div class="hoo-panel ready">'+
                '<h4>Ready for Head of Operations sign-off</h4>'+
-               '<p style="font-size:12px;margin:0 0 10px 0;color:#555;">All scheduled days are complete. Review the days below, then sign to confirm the week.</p>'+
+               '<p style="font-size:12px;margin:0 0 10px 0;color:#555;">All scheduled days are complete. Review the production summary before signing.</p>'+
+               '<div style="margin-bottom:10px;"><button class="btn btn-outline" style="font-size:13px;" onclick="showWeekSummary(\''+weekId+'\')">📋 Review Week Summary</button></div>'+
                '<div class="hoo-form-row">'+
                  '<input type="text" id="hoo-name-'+weekId+'" placeholder="HOO name" autocomplete="off">'+
                  '<textarea id="hoo-notes-'+weekId+'" placeholder="Optional notes (e.g. Reviewed all CCPs, no issues)"></textarea>'+
@@ -246,6 +262,97 @@ document.addEventListener('DOMContentLoaded',function(){loadRecords('all',docume
     if(back) back.disabled = (window.history.length <= 1);
   });
 })();
+
+async function showWeekSummary(weekId) {
+  var modal = document.getElementById('week-summary-modal');
+  var body  = document.getElementById('summary-body');
+  var title = document.getElementById('summary-title');
+  title.textContent = 'Week of ' + weekId;
+  body.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-light);">Loading…</div>';
+  modal.classList.add('open');
+
+  try {
+    var res  = await fetch('/api/traceability/' + weekId + '/summary');
+    var data = await res.json();
+    renderSummary(data);
+  } catch(e) {
+    body.innerHTML = '<div style="padding:20px;color:#c62828;">Could not load summary: ' + e.message + '</div>';
+  }
+}
+
+function closeSummary() {
+  document.getElementById('week-summary-modal').classList.remove('open');
+}
+
+document.getElementById('week-summary-modal').addEventListener('click', function(ev) {
+  if (ev.target === this) closeSummary();
+});
+
+function renderSummary(data) {
+  var html = '';
+
+  // Status
+  if (data.all_clear && !data.notes.length) {
+    html += '<div class="summary-ok">✓ All clear — no flags, no notes. Ready to sign off.</div>';
+  } else {
+    // Flags
+    if (data.flags && data.flags.length) {
+      html += '<div class="summary-section"><h3>⚠ Flags &amp; Inconsistencies</h3>';
+      data.flags.forEach(function(f) {
+        html += '<div class="summary-flag"><span>⚠</span><span>' + escHtml(f) + '</span></div>';
+      });
+      html += '</div>';
+    }
+    // Notes
+    if (data.notes && data.notes.length) {
+      html += '<div class="summary-section"><h3>📝 Production Notes</h3>';
+      data.notes.forEach(function(n) {
+        html += '<div class="summary-note"><strong>' + escHtml(n.day) + ':</strong> ' + escHtml(n.note) + '</div>';
+      });
+      html += '</div>';
+    }
+  }
+
+  // Total production
+  if (data.total_produced && Object.keys(data.total_produced).length) {
+    html += '<div class="summary-section"><h3>Total Production This Week</h3>';
+    Object.entries(data.total_produced).forEach(function(kv) {
+      html += '<div class="prod-row"><span>' + escHtml(kv[0]) + '</span><strong>' + kv[1] + ' units (' + Math.floor(kv[1]/12) + ' cases)</strong></div>';
+    });
+    html += '</div>';
+  }
+
+  // Days overview
+  if (data.days && data.days.length) {
+    html += '<div class="summary-section"><h3>Days Completed</h3>';
+    data.days.forEach(function(d) {
+      var recipes = (d.scheduled || []).join(', ') || '—';
+      var sigs = [d.kitchen_signoff, d.manager_signoff].filter(Boolean).join(', ') || 'Missing';
+      var ccpBadge = d.has_ccp_flags ? '<span style="background:#fff8e1;color:#b38b00;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:6px;">CCP FLAG</span>' : '';
+      html += '<div class="prod-row" style="flex-direction:column;gap:3px;">'
+        + '<div style="font-weight:600;">' + escHtml(d.day) + ccpBadge + '</div>'
+        + '<div style="font-size:11px;color:var(--text-light);">' + escHtml(recipes) + ' · Signed: ' + escHtml(sigs) + '</div>'
+        + '</div>';
+    });
+    html += '</div>';
+  }
+
+  document.getElementById('summary-body').innerHTML = html;
+}
+
 </script>
+<!-- Week Summary Modal -->
+<div class="summary-modal" id="week-summary-modal">
+  <div class="summary-box">
+    <div class="summary-header">
+      <h2 id="summary-title">Week Summary</h2>
+      <button onclick="closeSummary()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-light);line-height:1;padding:0;">&times;</button>
+    </div>
+    <div class="summary-body" id="summary-body">
+      <div style="text-align:center;padding:32px;color:var(--text-light);">Loading…</div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

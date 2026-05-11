@@ -35,6 +35,11 @@
     100% { box-shadow: 0 0 0 0 rgba(21,101,192,0); }
 }
 #ripe-orders-btn.has-pending { animation: ripe-pulse 1.8s ease infinite; }
+@keyframes prod-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(176,141,0,.35); }
+  50%      { box-shadow: 0 0 0 8px rgba(176,141,0,0); }
+}
+#prod-record-btn.needs-signoff { animation: prod-pulse 2s ease infinite; }
 </style>
 </head>
 <body>
@@ -89,7 +94,7 @@
         <details id="resources-section" style="margin-top:4px;">
           <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;margin-bottom:4px;" onclick="handleResourcesClick(event)">
             <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:1px;">Management</span>
+              <span style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:1px;">Administration</span>
               <span id="res-lock" style="font-size:12px;color:var(--text-light);">🔒</span>
             </div>
             <div style="display:flex;align-items:center;gap:6px;">
@@ -100,9 +105,9 @@
         <div class="dash-row">
             <a href="/recipes" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Recipe Cards</span><span class="sublabel">View and manage recipes</span></a>
             <a href="/ccp-master" class="dash-btn"><span class="icon">&#9989;</span><span class="label">CCP Checklist</span><span class="sublabel">Master reference</span></a>
-            <a href="/traceability" class="dash-btn"><span class="icon">&#128451;</span><span class="label">Production Record</span><span class="sublabel">Review and sign off weekly records</span></a>
+            <a href="/traceability" class="dash-btn" id="prod-record-btn" style="position:relative;"><span class="icon">&#128451;</span><span class="label" style="display:flex;align-items:center;gap:8px;">Production Record<span id="prod-badge" style="display:none;background:#b38b00;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span></span><span class="sublabel">Review and sign off weekly records</span></a>
             <a href="/organic" class="dash-btn"><span class="icon">&#128230;</span><span class="label">Manage Inventory</span><span class="sublabel">Raw materials, finished goods &amp; traceability</span></a>
-            <a href="/contacts" class="dash-btn"><span class="icon">&#128101;</span><span class="label">Buyers &amp; Suppliers</span><span class="sublabel">Suppliers, buyers, company info</span></a>
+            <a href="/contacts" class="dash-btn"><span class="icon">&#128101;</span><span class="label">Buyers &amp; Suppliers</span><span class="sublabel">Manage suppliers and buyers</span></a>
             <a href="/ripe-contract" class="dash-btn"><span class="icon">&#128196;</span><span class="label">Wholesale Contract</span><span class="sublabel">Ripe supply agreement</span></a>
             <a href="/certifications" class="dash-btn"><span class="icon">&#128196;</span><span class="label">Certifications</span><span class="sublabel">Organic &amp; compliance documents</span></a>
             <a href="/contacts?tab=settings" class="dash-btn"><span class="icon">&#9881;</span><span class="label">Company Settings</span><span class="sublabel">Info, address, Ripe buffer</span></a>
@@ -116,7 +121,7 @@
 <div class="dash-modal-overlay" id="mgr-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;" >
   <div style="background:#fff;border-radius:14px;width:100%;max-width:360px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,.2);margin:16px;">
     <div style="font-size:17px;font-weight:700;margin-bottom:6px;">🔒 Manager Access</div>
-    <div style="font-size:13px;color:var(--text-light);margin-bottom:18px;">Enter the manager password to access Resources.</div>
+    <div style="font-size:13px;color:var(--text-light);margin-bottom:18px;">Enter the manager password to access Administration.</div>
     <input type="password" id="mgr-pw" placeholder="Manager password" style="width:100%;box-sizing:border-box;padding:12px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;outline:none;margin-bottom:10px;">
     <div id="mgr-msg" style="font-size:12px;min-height:16px;margin-bottom:10px;"></div>
     <div style="display:flex;gap:10px;">
@@ -202,6 +207,24 @@ document.addEventListener('keydown', function(e) {
     if(e.key === 'Escape') document.getElementById('mgr-modal').style.display='none';
     if(e.key === 'Enter' && document.getElementById('mgr-modal').style.display==='flex') submitManagerPw();
 });
+
+// Production Record — pending sign-off badge
+(async function loadProdBadge() {
+  try {
+    var r = await fetch('/api/traceability');
+    var weeks = await r.json();
+    // Find weeks that are all_complete but have no HOO sign-off
+    var needsSignoff = weeks.filter(function(w) {
+      return w.completion_state === 'all_complete' && !w.hoo_signoff;
+    });
+    if (needsSignoff.length > 0) {
+      var badge = document.getElementById('prod-badge');
+      var btn   = document.getElementById('prod-record-btn');
+      if (badge) { badge.textContent = needsSignoff.length; badge.style.display = 'inline-block'; }
+      if (btn)   btn.classList.add('needs-signoff');
+    }
+  } catch(e) {}
+})();
 
 // Ripe Orders pending badge
 (async function loadRipeBadge() {

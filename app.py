@@ -2274,6 +2274,111 @@ def _week_completion_state(week_id):
     return "partial", complete, incomplete
 
 
+@app.route("/api/traceability/<week_id>/summary", methods=["GET"])
+@login_required
+@require_valid_week
+def get_week_summary(week_id):
+    """Return a structured summary of a week's production for the HOO review modal.
+    Includes: total production, CCP completion, notes flagged, inconsistencies.
+    """
+    schedule_data = load_schedule(week_id) or {}
+    sched = (schedule_data.get("schedule") or {}) if schedule_data else {}
+    recipes_data = load_recipes()
+
+    days_summary = []
+    total_produced = {}
+    all_notes = []
+    ccp_flags = []
+    missing_temps = []
+    missing_signoffs = []
+
+    for d_idx in range(7):
+        cl = load_checklist(week_id, d_idx)
+        if not cl or not cl.get("completed"):
+            continue
+
+        day_info = sched.get(str(d_idx), {}) or {}
+        day_name = DAYS[d_idx]
+
+        # Scheduled vessels
+        scheduled = {v: day_info.get(v, "").strip() for v in VESSELS if day_info.get(v, "").strip()}
+
+        # Production recorded
+        produced = cl.get("produced", {}) or {}
+        bb_produced = cl.get("bb_produced", {}) or {}
+
+        # Aggregate production
+        day_prod = {}
+        for v, recipe in scheduled.items():
+            if recipe:
+                qty = int(produced.get(v) or 0)
+                if qty:
+                    day_prod[recipe] = day_prod.get(recipe, 0) + qty
+                    total_produced[recipe] = total_produced.get(recipe, 0) + qty
+
+        # Notes
+        notes = (cl.get("notes") or "").strip()
+        if notes:
+            all_notes.append({"day": day_name, "note": notes})
+
+        # Check temperatures recorded
+        temps = cl.get("temps", {}) or {}
+        temp_vals = {k: v for k, v in temps.items() if str(v).strip() and str(v).strip() != "0"}
+        if scheduled and not temp_vals:
+            missing_temps.append(day_name)
+
+        # Check CCP sections - look for any unchecked items
+        sections = cl.get("sections", {}) or {}
+        day_ccp_issues = []
+        for sec_key, sec_data in sections.items():
+            if isinstance(sec_data, dict):
+                for item_key, item_val in sec_data.items():
+                    # A False or empty value on a CCP item is a potential flag
+                    if item_val is False or item_val == "no" or item_val == "No":
+                        day_ccp_issues.append(f"{sec_key}: {item_key}")
+        if day_ccp_issues:
+            ccp_flags.append({"day": day_name, "issues": day_ccp_issues})
+
+        # Check sign-offs
+        kitchen = (cl.get("signoff_kitchen") or cl.get("kitchen_lead") or "").strip()
+        manager = (cl.get("signoff_manager") or cl.get("production_manager") or "").strip()
+        if scheduled and not kitchen:
+            missing_signoffs.append(f"{day_name} (kitchen lead)")
+        if scheduled and not manager:
+            missing_signoffs.append(f"{day_name} (production manager)")
+
+        days_summary.append({
+            "day": day_name,
+            "day_idx": d_idx,
+            "scheduled": list(scheduled.values()),
+            "produced": day_prod,
+            "notes": notes,
+            "kitchen_signoff": kitchen,
+            "manager_signoff": manager,
+            "has_ccp_flags": len(day_ccp_issues) > 0,
+        })
+
+    # Build inconsistency flags
+    flags = []
+    if missing_temps:
+        flags.append(f"Missing temperature records: {', '.join(missing_temps)}")
+    if missing_signoffs:
+        flags.append(f"Missing sign-offs: {', '.join(missing_signoffs)}")
+    if ccp_flags:
+        for cf in ccp_flags:
+            flags.append(f"{cf['day']} CCP issue: {'; '.join(cf['issues'][:3])}")
+
+    return jsonify({
+        "week_id": week_id,
+        "days": days_summary,
+        "total_produced": total_produced,
+        "notes": all_notes,
+        "flags": flags,
+        "ccp_flags": ccp_flags,
+        "all_clear": len(flags) == 0 and len(all_notes) == 0,
+    })
+
+
 @app.route("/api/traceability", methods=["GET"])
 @login_required
 def get_traceability():

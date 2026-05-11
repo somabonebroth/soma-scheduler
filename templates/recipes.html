@@ -392,7 +392,7 @@ function ingRowHTML(sectionId,idx,item){
     var proc=isObj?(item.process||''):'';
     var review=isObj&&item.needs_review?' needs-review':'';
     var unitOpts='<option value=""></option>';
-    UNITS.forEach(function(u){unitOpts+='<option value="'+u+'"'+(u===unit?' selected':'')+'>'+u+'</option>';});
+    UNITS.forEach(function(u){var lbl=u==='per L'?'g/L (per litre)':u;unitOpts+='<option value="'+u+'"'+(u===unit?' selected':'')+'>'+lbl+'</option>';});
     return '<div class="ing-row'+review+'" data-section="'+sectionId+'" data-idx="'+idx+'">'+
         '<input type="number" inputmode="decimal" step="any" class="ing-amount" value="'+esc(amt)+'" placeholder="Qty">'+
         '<select class="ing-unit">'+unitOpts+'</select>'+

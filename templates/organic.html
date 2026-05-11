@@ -1675,7 +1675,8 @@ async function loadIngredients(){
     var sel=document.getElementById('rm-item');
     sel.innerHTML='<option value="">-- Select ingredient --</option>';
     ingredientData.forEach(function(item,idx){
-        sel.innerHTML+='<option value="'+idx+'">'+item.name+' — '+(item.unit||'')+'</option>';
+        var dispUnit=(item.unit==='per L'?'g/L':item.unit)||'';
+            sel.innerHTML+='<option value="'+idx+'">'+item.name+(dispUnit?' — '+dispUnit:'')+'</option>';
     });
 }
 
@@ -1692,7 +1693,7 @@ function onIngredientSelect(){
     unitEl.value=item.unit||'';
     var note='';
     if(item.unit==='per L'){
-        note='per L — deducts '+(item.recipe_amount||'?')+' × batch liters (halved for 115L)';
+        note='g/L — deducts '+(item.recipe_amount||'?')+'g × batch litres (halved for 115L)';
     } else if(item.recipe_amount){
         note='Deducts '+item.recipe_amount+' '+(item.unit||'')+' per batch (halved for 115L)';
     } else {
@@ -2147,15 +2148,16 @@ async function addCustomIngredient(){
     if(!name) return;
 
     var validUnits = ['kg','g','L','ml','lbs','Bunch','Pack','Adjunct','per L'];
+    var unitLabels = {'per L': 'g/L (per litre of yield)'}; // display label override
     var unit = await mobilePrompt(
-        'Allowed units: '+validUnits.join(', '),
+        'Allowed units: '+validUnits.map(function(u){return u==="per L"?"g/L":u;}).join(', '),
         {
             title: 'New Ingredient — Unit',
             label: 'Unit (must match exactly)',
             defaultValue: 'g',
             validate: function(v){
                 if(!v) return 'Unit required.';
-                if(validUnits.indexOf(v) === -1) return 'Unit must be one of: '+validUnits.join(', ');
+                if(validUnits.indexOf(v) === -1) return 'Unit must be one of: '+validUnits.map(function(u){return u==="per L"?"g/L":u;}).join(', ');
                 return null;
             },
         }
