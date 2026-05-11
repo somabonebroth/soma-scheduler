@@ -752,7 +752,10 @@ body.inv-page .modal-actions {
 <div class="header">
     <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
     <div class="header-text"><h1>Inventory</h1><p>Raw materials, finished goods & traceability</p></div>
-    <div class="header-right"><a href="/" class="header-btn">Back to Dashboard</a></div>
+    <div class="header-right" style="display:flex;align-items:center;gap:8px;">
+    <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button><button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button></div>
+    <a href="/" class="header-btn">⌂ Dashboard</a>
+  </div>
 </div>
 <div class="main">
     <div class="tab-bar">
@@ -5613,5 +5616,19 @@ document.addEventListener('DOMContentLoaded',function(){
     </div>
   </div>
 </div>
+<script>
+(function(){
+  var back = document.getElementById('nav-back');
+  var fwd  = document.getElementById('nav-fwd');
+  // history.length==1 means no history to go back to
+  if(back) back.disabled = (window.history.length <= 1);
+  if(back) back.onclick = function(){ window.history.back(); };
+  if(fwd)  fwd.onclick  = function(){ window.history.forward(); };
+  // Update disabled state after navigation
+  window.addEventListener('popstate', function(){
+    if(back) back.disabled = (window.history.length <= 1);
+  });
+})();
+</script>
 </body>
 </html>

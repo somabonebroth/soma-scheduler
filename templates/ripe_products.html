@@ -88,10 +88,10 @@ body.inv-page .main-inner { max-width:1100px; margin:0 auto; padding:24px 16px 4
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
   <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Ripe — Products &amp; Pricing</p></div>
-  <div class="header-right" style="display:flex;gap:8px;align-items:center;">
-    <a href="/ripe-analytics" class="header-btn">Analytics</a>
-    <a href="/ripe-orders" class="header-btn">Orders</a>
-    <button class="header-btn" onclick="window.location='/'">← Dashboard</button>
+  <div class="header-right" style="display:flex;align-items:center;gap:8px;">
+    <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button><button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button></div>
+    <a href="/ripe-orders" class="header-btn">← Ripe Orders</a>
+    <a href="/ripe-analytics" class="header-btn">Analytics</a><a href="/" class="header-btn">⌂ Dashboard</a>
   </div>
 </div>
 
@@ -342,6 +342,20 @@ async function toggleActive(btn) {
         alert('Failed to update status.');
     }
 }
+</script>
+<script>
+(function(){
+  var back = document.getElementById('nav-back');
+  var fwd  = document.getElementById('nav-fwd');
+  // history.length==1 means no history to go back to
+  if(back) back.disabled = (window.history.length <= 1);
+  if(back) back.onclick = function(){ window.history.back(); };
+  if(fwd)  fwd.onclick  = function(){ window.history.forward(); };
+  // Update disabled state after navigation
+  window.addEventListener('popstate', function(){
+    if(back) back.disabled = (window.history.length <= 1);
+  });
+})();
 </script>
 </body>
 </html>

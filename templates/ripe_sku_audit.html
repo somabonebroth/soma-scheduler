@@ -44,10 +44,10 @@ table.audit { width:100%; border-collapse:collapse; font-size:13px; margin-botto
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
   <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Ripe — SKU Mapping Audit</p></div>
-  <div class="header-right" style="display:flex;gap:8px;">
-    <a href="/ripe-products" class="header-btn">Products</a>
-    <a href="/ripe-orders" class="header-btn">Orders</a>
-    <button class="header-btn" onclick="window.location='/'">← Dashboard</button>
+  <div class="header-right" style="display:flex;align-items:center;gap:8px;">
+    <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button><button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button></div>
+    <a href="/ripe-orders" class="header-btn">← Ripe Orders</a>
+    <a href="/" class="header-btn">⌂ Dashboard</a>
   </div>
 </div>
 
@@ -188,5 +188,19 @@ table.audit { width:100%; border-collapse:collapse; font-size:13px; margin-botto
   Dirty recipe names should be cleaned in <a href="/recipes">Recipe Cards</a> — remove the format from the recipe name and ensure it is set in the Format field instead.
 </div>
 </div>
+<script>
+(function(){
+  var back = document.getElementById('nav-back');
+  var fwd  = document.getElementById('nav-fwd');
+  // history.length==1 means no history to go back to
+  if(back) back.disabled = (window.history.length <= 1);
+  if(back) back.onclick = function(){ window.history.back(); };
+  if(fwd)  fwd.onclick  = function(){ window.history.forward(); };
+  // Update disabled state after navigation
+  window.addEventListener('popstate', function(){
+    if(back) back.disabled = (window.history.length <= 1);
+  });
+})();
+</script>
 </body>
 </html>

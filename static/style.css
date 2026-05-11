@@ -147,3 +147,14 @@ body {
     .main { padding: 16px 12px; }
     .modal { width: 95%; padding: 16px; }
 }
+
+/* ── Browser-style back/forward nav buttons ─────────────────────────────── */
+.nav-arrows { display:flex; gap:4px; align-items:center; }
+.nav-arrow-btn {
+    width:32px; height:32px; border-radius:50%; border:1.5px solid rgba(255,255,255,0.3);
+    background:rgba(255,255,255,0.1); color:#fff; font-size:15px; font-weight:700;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    transition:background .15s; line-height:1; padding:0;
+}
+.nav-arrow-btn:hover { background:rgba(255,255,255,0.25); }
+.nav-arrow-btn:disabled { opacity:0.3; cursor:default; }
