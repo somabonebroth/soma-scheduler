@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ buyer_name }} · Sales Analytics · Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+body.ba-page { background:var(--bg); }
+.ba-wrap { max-width:1040px; margin:0 auto; padding:24px 16px 60px; }
+
+/* KPI row */
+.kpi-row { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:24px; }
+.kpi { background:#fff; border:1px solid var(--border); border-radius:var(--r-lg); padding:16px 18px; }
+.kpi-val { font-size:22px; font-weight:800; color:var(--dark); margin-bottom:2px; }
+.kpi-lbl { font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.05em; }
+.kpi-sub { font-size:11px; color:var(--text-light); margin-top:4px; }
+
+/* Period selector */
+.seg-row { display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; align-items:center; }
+.seg-btn { padding:7px 14px; border:1.5px solid var(--border); border-radius:7px; font-size:12px; font-weight:600; background:#fff; cursor:pointer; color:var(--text-light); transition:all .15s; }
+.seg-btn.active { border-color:var(--accent); color:var(--accent); background:#f0f7f0; }
+
+/* Section card */
+.section { background:#fff; border:1px solid var(--border); border-radius:var(--r-lg); margin-bottom:20px; overflow:hidden; }
+.section-head { padding:14px 20px; border-bottom:1px solid var(--border); background:#fafaf7; display:flex; align-items:center; justify-content:space-between; }
+.section-head h2 { margin:0; font-size:14px; font-weight:700; color:var(--dark); }
+.section-body { padding:20px; }
+
+/* Bar chart */
+.chart-wrap { position:relative; }
+.chart-bars { display:flex; align-items:flex-end; gap:4px; height:160px; padding-bottom:24px; }
+.chart-bar-col { display:flex; flex-direction:column; align-items:center; flex:1; min-width:0; }
+.chart-bar { width:100%; background:var(--accent); border-radius:3px 3px 0 0; transition:height .3s; cursor:pointer; position:relative; }
+.chart-bar:hover { filter:brightness(1.1); }
+.chart-bar-tip { display:none; position:absolute; bottom:calc(100% + 4px); left:50%; transform:translateX(-50%); background:var(--dark); color:#fff; font-size:10px; padding:3px 7px; border-radius:4px; white-space:nowrap; z-index:10; }
+.chart-bar:hover .chart-bar-tip { display:block; }
+.chart-label { font-size:9px; color:var(--text-light); margin-top:4px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%; }
+.chart-zero { font-size:12px; color:var(--text-light); text-align:center; padding:48px 0; }
+
+/* SKU table */
+.sku-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.sku-tbl th { text-align:left; padding:9px 14px; background:#f5f5f0; font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; border-bottom:2px solid var(--border); }
+.sku-tbl td { padding:10px 14px; border-bottom:1px solid var(--border); }
+.sku-tbl tr:last-child td { border-bottom:none; }
+.sku-tbl td.r { text-align:right; font-weight:600; }
+.rev-bar { height:5px; background:var(--accent); border-radius:2px; margin-top:4px; }
+
+/* Predictive */
+.pred-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.pred-card { border:1px solid var(--border); border-radius:var(--r-md); padding:14px 16px; }
+.pred-val { font-size:20px; font-weight:700; color:var(--dark); }
+.pred-lbl { font-size:11px; color:var(--text-light); margin-bottom:6px; }
+.pred-note { font-size:11px; color:var(--text-light); margin-top:6px; font-style:italic; }
+.growth-pos { color:#2e7d32; font-weight:700; }
+.growth-neg { color:#c62828; font-weight:700; }
+.insufficient { background:#fff8e1; border:1px solid #ffe082; border-radius:var(--r-md); padding:14px 16px; font-size:13px; color:#6d4c00; }
+
+/* Year tabs */
+.year-tab { display:inline-block; padding:5px 12px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; color:var(--text-light); border:1.5px solid var(--border); margin-right:4px; }
+.year-tab.active { color:var(--accent); border-color:var(--accent); background:#f0f7f0; }
+
+@media(max-width:640px){
+  .kpi-row { grid-template-columns:1fr 1fr; }
+  .pred-grid { grid-template-columns:1fr; }
+  .chart-bars { height:120px; }
+}
+</style>
+</head>
+<body class="ba-page inv-page">
+<div class="header">
+  <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+  <div class="header-text"><h1>SOMA BONE BROTH</h1><p>{{ buyer_name }} · Sales Analytics</p></div>
+  <div class="header-right" style="display:flex;align-items:center;gap:8px;">
+    <div class="nav-arrows">
+      <button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button>
+      <button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button>
+    </div>
+    <a href="/analytics" class="header-btn">← Sales Analytics</a>
+    <a href="/" class="header-btn">⌂ Dashboard</a>
+  </div>
+</div>
+
+<div class="ba-wrap">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+    <h1 style="font-size:26px;font-weight:800;margin:0;">{{ buyer_name }}</h1>
+    <div class="seg-row" style="margin:0;">
+      <button class="seg-btn active" onclick="setSeg('all',this)">All time</button>
+      <button class="seg-btn" onclick="setSeg('ytd',this)">YTD</button>
+      <button class="seg-btn" onclick="setSeg('12m',this)">12 months</button>
+    </div>
+  </div>
+
+  <div id="loading" style="text-align:center;padding:48px;color:var(--text-light);">Loading…</div>
+  <div id="content" style="display:none;">
+
+    <!-- KPIs -->
+    <div class="kpi-row" id="kpi-row"></div>
+
+    <!-- Revenue chart -->
+    <div class="section">
+      <div class="section-head">
+        <h2>Revenue by Month</h2>
+        <div id="year-tabs"></div>
+      </div>
+      <div class="section-body">
+        <div class="chart-wrap"><div class="chart-bars" id="chart-bars"></div></div>
+      </div>
+    </div>
+
+    <!-- SKU breakdown -->
+    <div class="section">
+      <div class="section-head"><h2>Sales by Product</h2></div>
+      <div class="section-body" style="padding:0;">
+        <table class="sku-tbl" id="sku-table">
+          <thead><tr><th>Product</th><th>Format</th><th class="r">Units</th><th class="r">Cases</th><th class="r">Revenue</th><th class="r">Share</th></tr></thead>
+          <tbody id="sku-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Predictive -->
+    <div class="section">
+      <div class="section-head"><h2>Insights &amp; Forecast</h2></div>
+      <div class="section-body" id="predictive-body"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+var BUYER = {{ buyer_name | tojson }};
+var _seg = 'all';
+var _data = null;
+
+async function load() {
+  try {
+    var res = await fetch('/api/analytics/buyer/' + encodeURIComponent(BUYER));
+    _data = await res.json();
+    render();
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display = '';
+  } catch(e) {
+    document.getElementById('loading').textContent = 'Could not load data: ' + e.message;
+  }
+}
+
+function setSeg(seg, btn) {
+  _seg = seg;
+  document.querySelectorAll('.seg-btn').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  render();
+}
+
+function fmt$(n) { return '$' + (+n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+function fmtN(n) { return (+n).toLocaleString(); }
+
+function filterMonthly(monthly) {
+  if (_seg === 'all') return monthly;
+  var now = new Date();
+  if (_seg === 'ytd') {
+    var yr = now.getFullYear().toString();
+    return monthly.filter(function(m){ return m.month.startsWith(yr); });
+  }
+  if (_seg === '12m') {
+    var cutoff = new Date(now);
+    cutoff.setMonth(cutoff.getMonth() - 11);
+    var c = cutoff.getFullYear() + '-' + String(cutoff.getMonth()+1).padStart(2,'0');
+    return monthly.filter(function(m){ return m.month >= c; });
+  }
+  return monthly;
+}
+
+function render() {
+  if (!_data) return;
+  var monthly = filterMonthly(_data.monthly || []);
+  renderKPIs(monthly);
+  renderChart(monthly);
+  renderSkus(_data.by_sku || [], monthly);
+  renderPredictive(_data.predictive || {});
+}
+
+function renderKPIs(monthly) {
+  var rev   = monthly.reduce(function(a,m){ return a + m.revenue; }, 0);
+  var cases = monthly.reduce(function(a,m){ return a + m.cases; }, 0);
+  var orders= new Set(monthly.map(function(m){ return m.orders; })).size; // approx
+  var t = _data.totals;
+  var kpis = [
+    { val: fmt$(rev),       lbl: 'Revenue',       sub: _seg === 'all' ? 'All time' : _seg.toUpperCase() },
+    { val: fmtN(cases),     lbl: 'Cases',          sub: cases * 12 + ' units' },
+    { val: t.orders,        lbl: 'Orders',         sub: 'avg ' + fmt$(t.avg_order_revenue) + ' each' },
+    { val: fmt$(t.avg_order_revenue), lbl: 'Avg Order Value', sub: t.avg_order_cases + ' cases avg' },
+    { val: (_data.monthly||[]).length, lbl: 'Months Active', sub: (_data.predictive.months_of_data || 0) + ' months data' },
+  ];
+  document.getElementById('kpi-row').innerHTML = kpis.map(function(k){
+    return '<div class="kpi"><div class="kpi-val">'+k.val+'</div><div class="kpi-lbl">'+k.lbl+'</div><div class="kpi-sub">'+k.sub+'</div></div>';
+  }).join('');
+}
+
+function renderChart(monthly) {
+  var bars = document.getElementById('chart-bars');
+  if (!monthly.length) {
+    bars.innerHTML = '<div class="chart-zero">No sales data for this period.</div>';
+    return;
+  }
+  var maxRev = Math.max.apply(null, monthly.map(function(m){ return m.revenue; })) || 1;
+  bars.innerHTML = monthly.map(function(m) {
+    var h = Math.max(4, Math.round((m.revenue / maxRev) * 140));
+    return '<div class="chart-bar-col">'
+      + '<div class="chart-bar" style="height:'+h+'px;">'
+      + '<div class="chart-bar-tip">'+m.label+'<br>'+fmt$(m.revenue)+'<br>'+m.cases+' cases</div>'
+      + '</div>'
+      + '<div class="chart-label">'+m.label.replace(' ', '\n')+'</div>'
+      + '</div>';
+  }).join('');
+}
+
+function renderSkus(skus, monthly) {
+  // Filter skus to only show those active in current period months
+  var activeMonths = new Set(monthly.map(function(m){ return m.month; }));
+  var filtered = _seg === 'all' ? skus : skus.map(function(s) {
+    var units = Object.entries(s.monthly_cases || {})
+      .filter(function(e){ return activeMonths.has(e[0]); })
+      .reduce(function(a, e){ return a + e[1]; }, 0);
+    return Object.assign({}, s, {cases: units, units: units * 12,
+      revenue: units * 12 * (s.units ? s.revenue / s.units : 0)});
+  }).filter(function(s){ return s.cases > 0; })
+    .sort(function(a,b){ return b.revenue - a.revenue; });
+
+  var maxRev = Math.max.apply(null, filtered.map(function(s){ return s.revenue; })) || 1;
+  var totalRev = filtered.reduce(function(a,s){ return a + s.revenue; }, 0) || 1;
+  document.getElementById('sku-body').innerHTML = filtered.map(function(s) {
+    var share = Math.round(s.revenue / totalRev * 100);
+    var barW  = Math.round(s.revenue / maxRev * 100);
+    return '<tr>'
+      + '<td><strong>'+e(s.recipe||s.sku||'—')+'</strong></td>'
+      + '<td style="color:var(--text-light);font-size:12px;">'+e(s.format||'')+'</td>'
+      + '<td class="r">'+fmtN(s.units)+'</td>'
+      + '<td class="r">'+fmtN(s.cases)+'</td>'
+      + '<td class="r">'+fmt$(s.revenue)+'</td>'
+      + '<td class="r" style="min-width:80px;"><span>'+share+'%</span><div class="rev-bar" style="width:'+barW+'%"></div></td>'
+      + '</tr>';
+  }).join('') || '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-light);">No data for this period.</td></tr>';
+}
+
+function renderPredictive(pred) {
+  var body = document.getElementById('predictive-body');
+  if (!pred.has_sufficient_data) {
+    body.innerHTML = '<div class="insufficient">📊 Forecasting requires at least 3 months of sales data. '
+      + (pred.months_of_data || 0) + ' month' + ((pred.months_of_data||0)===1?'':'s') + ' recorded so far. '
+      + 'Forecasts will appear automatically as data accumulates.</div>';
+    return;
+  }
+
+  var cards = '';
+
+  // YoY comparison
+  if (pred.last_year_revenue > 0) {
+    var growthClass = pred.yoy_growth_pct >= 0 ? 'growth-pos' : 'growth-neg';
+    var growthStr   = (pred.yoy_growth_pct >= 0 ? '▲ ' : '▼ ') + Math.abs(pred.yoy_growth_pct) + '%';
+    cards += '<div class="pred-card">'
+      + '<div class="pred-lbl">Year-over-year revenue</div>'
+      + '<div class="pred-val">'+fmt$(pred.this_year_revenue)+'</div>'
+      + '<div class="pred-note"><span class="'+growthClass+'">'+growthStr+'</span> vs '+fmt$(pred.last_year_revenue)+' last year</div>'
+      + '</div>';
+  }
+
+  // Predicted annual
+  if (pred.predicted_annual_revenue) {
+    cards += '<div class="pred-card">'
+      + '<div class="pred-lbl">Projected annual revenue (YTD annualised)</div>'
+      + '<div class="pred-val">'+fmt$(pred.predicted_annual_revenue)+'</div>'
+      + '<div class="pred-note">Based on '+fmt$(pred.this_year_revenue)+' YTD revenue, extrapolated to 12 months. Estimate only.</div>'
+      + '</div>';
+  }
+
+  // Month comparison
+  if (pred.prior_year_month_revenue > 0) {
+    var mDiff = pred.this_month_revenue - pred.prior_year_month_revenue;
+    var mPct  = Math.round(mDiff / pred.prior_year_month_revenue * 100);
+    var mClass= mDiff >= 0 ? 'growth-pos' : 'growth-neg';
+    cards += '<div class="pred-card">'
+      + '<div class="pred-lbl">This month vs same month last year</div>'
+      + '<div class="pred-val">'+fmt$(pred.this_month_revenue)+'</div>'
+      + '<div class="pred-note"><span class="'+mClass+'">'+(mDiff>=0?'▲ ':'▼ ')+Math.abs(mPct)+'%</span> vs '+fmt$(pred.prior_year_month_revenue)+' prior year</div>'
+      + '</div>';
+  }
+
+  if (!cards) {
+    cards = '<div class="pred-note" style="color:var(--text-light);">More data needed for year-over-year comparisons.</div>';
+  }
+
+  body.innerHTML = '<div class="pred-grid">' + cards + '</div>';
+}
+
+function e(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Nav arrows
+(function(){
+  var back = document.getElementById('nav-back');
+  var fwd  = document.getElementById('nav-fwd');
+  if(back) { back.disabled = window.history.length <= 1; back.onclick = function(){ window.history.back(); }; }
+  if(fwd)  fwd.onclick = function(){ window.history.forward(); };
+})();
+
+load();
+</script>
+</body>
+</html>

@@ -2974,11 +2974,12 @@ async function submitRecordSale(){
             var skuKey = input.getAttribute('data-rs-sku');
             var skuInfo = (buyer && buyer.skus || []).find(function(s){ return s.sku_key === skuKey; }) || {};
             lines.push({
-                sku_key: skuKey,
-                brand:   skuInfo.brand   || '',
-                recipe:  skuInfo.recipe  || '',
-                format:  skuInfo.format  || '',
-                quantity: qty,
+                sku_key:    skuKey,
+                brand:      skuInfo.brand   || '',
+                recipe:     skuInfo.recipe  || '',
+                format:     skuInfo.format  || '',
+                quantity:   qty,
+                unit_price: (skuInfo.price != null ? parseFloat(skuInfo.price) : null),
             });
         }
     });

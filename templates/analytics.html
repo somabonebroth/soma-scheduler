@@ -7,42 +7,31 @@
 <link rel="stylesheet" href="/static/style.css">
 <style>
 body.an-page { background:var(--bg); }
-.an-wrap { max-width:1000px; margin:0 auto; padding:24px 16px 60px; }
+.an-wrap { max-width:1040px; margin:0 auto; padding:24px 16px 60px; }
 .tab-bar { display:flex; gap:0; background:#fff; border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:20px; }
 .tab-btn { flex:1; padding:13px 16px; font-size:13px; font-weight:600; border:none; background:none; cursor:pointer; color:var(--text-light); border-bottom:3px solid transparent; transition:all .15s; }
 .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); background:#f9faf7; }
 .tab-pane { display:none; }
 .tab-pane.active { display:block; }
-
-/* Sales by buyer */
 .period-row { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; align-items:center; }
 .period-btn { padding:7px 14px; border:1.5px solid var(--border); border-radius:7px; font-size:12px; font-weight:600; background:#fff; cursor:pointer; color:var(--text-light); transition:all .15s; }
 .period-btn.active { border-color:var(--accent); color:var(--accent); background:#f0f7f0; }
 .buyer-filter { padding:8px 12px; border:1.5px solid var(--border); border-radius:7px; font-size:13px; outline:none; }
 .buyer-filter:focus { border-color:var(--accent); }
-
-.buyer-card { background:#fff; border:1px solid var(--border); border-radius:12px; margin-bottom:14px; overflow:hidden; }
-.buyer-card-head { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; cursor:pointer; gap:12px; flex-wrap:wrap; }
-.buyer-card-head:hover { background:#fafaf8; }
-.bc-name { font-size:16px; font-weight:700; color:var(--dark); }
-.bc-stats { display:flex; gap:16px; flex-wrap:wrap; }
+.buyer-card { background:#fff; border:1px solid var(--border); border-radius:12px; margin-bottom:12px; overflow:hidden; cursor:pointer; transition:box-shadow .15s; }
+.buyer-card:hover { box-shadow:0 2px 12px rgba(0,0,0,.08); border-color:var(--accent); }
+.buyer-card-head { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; gap:12px; flex-wrap:wrap; }
+.bc-name { font-size:16px; font-weight:700; color:var(--dark); margin-bottom:4px; }
+.bc-hint { font-size:11px; color:var(--text-light); }
+.bc-stats { display:flex; gap:20px; flex-wrap:wrap; }
 .bc-stat { text-align:right; }
-.bc-stat-n { font-size:15px; font-weight:700; color:var(--dark); }
+.bc-stat-n { font-size:16px; font-weight:700; color:var(--dark); }
 .bc-stat-l { font-size:10px; font-weight:600; color:var(--text-light); text-transform:uppercase; letter-spacing:.05em; }
-.bc-body { display:none; border-top:1px solid var(--border); }
-.bc-body.open { display:block; }
-.sku-table { width:100%; border-collapse:collapse; font-size:13px; }
-.sku-table th { text-align:left; padding:8px 18px; background:#f7f7f5; font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--border); }
-.sku-table td { padding:9px 18px; border-bottom:1px solid var(--border); }
-.sku-table tr:last-child td { border-bottom:none; }
-.sku-table td.num { text-align:right; font-weight:600; }
-.bar-wrap { flex:1; background:#f0f0eb; border-radius:3px; height:6px; overflow:hidden; min-width:60px; }
-.bar-fill { height:100%; background:var(--accent); border-radius:3px; }
-
-.empty-state { text-align:center; padding:48px 24px; color:var(--text-light); font-size:14px; }
-.loading { text-align:center; padding:32px; color:var(--text-light); font-size:14px; }
-
-/* Embedded iframe for production tracker */
+.bc-arrow { font-size:18px; color:var(--text-light); flex-shrink:0; }
+.rev-bar-wrap { height:4px; background:#f0f0eb; border-radius:2px; margin-top:8px; width:140px; max-width:100%; }
+.rev-bar-fill { height:4px; background:var(--accent); border-radius:2px; }
+.empty-state { text-align:center; padding:48px 24px; color:var(--text-light); font-size:14px; border:2px dashed var(--border); border-radius:12px; background:#fff; }
+.loading { text-align:center; padding:32px; color:var(--text-light); }
 .tracker-frame { width:100%; height:80vh; border:none; border-radius:10px; background:#fff; }
 </style>
 </head>
@@ -51,7 +40,10 @@ body.an-page { background:var(--bg); }
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
   <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Production &amp; Sales Analytics</p></div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
-    <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button><button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button></div>
+    <div class="nav-arrows">
+      <button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button>
+      <button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button>
+    </div>
     <a href="/" class="header-btn">⌂ Dashboard</a>
   </div>
 </div>
@@ -62,8 +54,12 @@ body.an-page { background:var(--bg); }
     <button class="tab-btn" onclick="showTab('production')">Production Tracker</button>
   </div>
 
-  <!-- ── Sales by Buyer ─────────────────────────────────────────── -->
+  <!-- Sales by Buyer -->
   <div class="tab-pane active" id="tab-sales">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+      <div style="font-size:12px;color:var(--text-light);">Click any buyer for detailed analytics. Revenue requires prices set in buyer catalogue.</div>
+      <button id="backfill-btn" onclick="runBackfill()" class="btn btn-sm" style="font-size:11px;">🔄 Backfill missing prices</button>
+    </div>
     <div class="period-row">
       <div style="font-size:12px;font-weight:600;color:var(--text-light);margin-right:4px;">Period:</div>
       <button class="period-btn active" onclick="setPeriod('all',this)">All time</button>
@@ -80,7 +76,7 @@ body.an-page { background:var(--bg); }
     <div id="sales-list"><div class="loading">Loading…</div></div>
   </div>
 
-  <!-- ── Production Tracker ─────────────────────────────────────── -->
+  <!-- Production Tracker -->
   <div class="tab-pane" id="tab-production">
     <iframe id="tracker-frame" src="" style="width:100%;height:80vh;border:none;border-radius:10px;background:#fff;" title="Production Tracker"></iframe>
   </div>
@@ -90,19 +86,14 @@ body.an-page { background:var(--bg); }
 var _period = 'all';
 
 function showTab(id) {
-  document.querySelectorAll('.tab-btn').forEach(function(b,i) {
+  document.querySelectorAll('.tab-btn').forEach(function(b,i){
     b.classList.toggle('active', ['sales','production'][i] === id);
   });
-  document.querySelectorAll('.tab-pane').forEach(function(p) {
-    p.classList.remove('active');
-  });
+  document.querySelectorAll('.tab-pane').forEach(function(p){ p.classList.remove('active'); });
   document.getElementById('tab-'+id).classList.add('active');
-  // Lazy-load production tracker iframe on first click
-  if(id === 'production') {
+  if (id === 'production') {
     var frame = document.getElementById('tracker-frame');
-    if(frame && !frame.src.includes('production-tracker')) {
-      frame.src = '/production-tracker';
-    }
+    if (frame && !frame.src.includes('production-tracker')) frame.src = '/production-tracker';
   }
 }
 
@@ -135,70 +126,54 @@ function renderSales(buyers) {
     return;
   }
   var maxRev = Math.max.apply(null, buyers.map(function(b){ return b.revenue; })) || 1;
-  var html = buyers.map(function(b, bi) {
+  var html = buyers.map(function(b) {
     var pct = Math.round((b.revenue / maxRev) * 100);
-    var skuRows = (b.by_sku || []).map(function(s) {
-      var sp = Math.round((s.units / (b.units||1)) * 100);
-      return '<tr>'
-        +'<td>'+e(s.recipe||s.sku||'—')+'</td>'
-        +'<td>'+e(s.format||'')+'</td>'
-        +'<td class="num">'+fmtN(s.units)+'</td>'
-        +'<td class="num">'+fmtN(Math.floor(s.units/12))+'</td>'
-        +'<td class="num">'+fmt$(s.revenue)+'</td>'
-        +'<td style="width:80px;padding-right:18px;vertical-align:middle;">'
-        +'<div class="bar-wrap"><div class="bar-fill" style="width:'+sp+'%"></div></div>'
-        +'</td>'
-        +'</tr>';
-    }).join('');
-    return '<div class="buyer-card">'
-      +'<div class="buyer-card-head" onclick="toggleBuyer('+bi+')">'
-      +'<div>'
-      +'<div class="bc-name">'+e(b.buyer)+'</div>'
-      +'<div style="margin-top:4px;height:4px;border-radius:2px;background:#f0f0eb;width:120px;overflow:hidden;">'
-      +'<div style="height:4px;border-radius:2px;background:var(--accent);width:'+pct+'%;"></div>'
-      +'</div>'
-      +'</div>'
-      +'<div class="bc-stats">'
-      +'<div class="bc-stat"><div class="bc-stat-n">'+fmt$(b.revenue)+'</div><div class="bc-stat-l">Revenue</div></div>'
-      +'<div class="bc-stat"><div class="bc-stat-n">'+fmtN(b.cases)+'</div><div class="bc-stat-l">Cases</div></div>'
-      +'<div class="bc-stat"><div class="bc-stat-n">'+fmtN(b.orders)+'</div><div class="bc-stat-l">Orders</div></div>'
-      +'</div>'
-      +'</div>'
-      +'<div class="bc-body" id="bc-body-'+bi+'">'
-      +'<table class="sku-table">'
-      +'<thead><tr><th>Recipe</th><th>Format</th><th class="num">Units</th><th class="num">Cases</th><th class="num">Revenue</th><th></th></tr></thead>'
-      +'<tbody>'+skuRows+'</tbody>'
-      +'</table>'
-      +'</div>'
-      +'</div>';
+    var topSkus = (b.by_sku||[]).slice(0,3).map(function(s){ return s.recipe||s.sku; }).join(' · ');
+    return '<div class="buyer-card" onclick="window.location=\'/analytics/buyer/'+encodeURIComponent(b.buyer)+'\'">'
+      + '<div class="buyer-card-head">'
+      + '<div style="flex:1;min-width:0;">'
+      + '<div class="bc-name">'+e(b.buyer)+'</div>'
+      + (topSkus ? '<div class="bc-hint">'+e(topSkus)+'</div>' : '')
+      + '<div class="rev-bar-wrap"><div class="rev-bar-fill" style="width:'+pct+'%"></div></div>'
+      + '</div>'
+      + '<div class="bc-stats">'
+      + '<div class="bc-stat"><div class="bc-stat-n">'+fmt$(b.revenue)+'</div><div class="bc-stat-l">Revenue</div></div>'
+      + '<div class="bc-stat"><div class="bc-stat-n">'+fmtN(b.cases)+'</div><div class="bc-stat-l">Cases</div></div>'
+      + '<div class="bc-stat"><div class="bc-stat-n">'+fmtN(b.orders)+'</div><div class="bc-stat-l">Orders</div></div>'
+      + '</div>'
+      + '<div class="bc-arrow">›</div>'
+      + '</div>'
+      + '</div>';
   }).join('');
   document.getElementById('sales-list').innerHTML = html;
 }
 
-function toggleBuyer(i) {
-  var body = document.getElementById('bc-body-'+i);
-  if(body) body.classList.toggle('open');
+async function runBackfill() {
+  var btn = document.getElementById('backfill-btn');
+  if (!confirm('Fill in missing prices on historical sale records using current buyer catalogue prices. Continue?')) return;
+  btn.disabled = true; btn.textContent = '🔄 Running…';
+  try {
+    var res = await fetch('/api/analytics/backfill-sale-prices', {method:'POST'});
+    var data = await res.json();
+    alert(data.message || 'Done');
+    loadSales();
+  } catch(e) { alert('Error: ' + e.message); }
+  btn.disabled = false; btn.textContent = '🔄 Backfill missing prices';
 }
 
 function e(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-loadSales();
-</script>
-<script>
+// Nav arrows
 (function(){
   var back = document.getElementById('nav-back');
   var fwd  = document.getElementById('nav-fwd');
-  // history.length==1 means no history to go back to
-  if(back) back.disabled = (window.history.length <= 1);
-  if(back) back.onclick = function(){ window.history.back(); };
-  if(fwd)  fwd.onclick  = function(){ window.history.forward(); };
-  // Update disabled state after navigation
-  window.addEventListener('popstate', function(){
-    if(back) back.disabled = (window.history.length <= 1);
-  });
+  if(back) { back.disabled = window.history.length <= 1; back.onclick = function(){ window.history.back(); }; }
+  if(fwd)  fwd.onclick = function(){ window.history.forward(); };
 })();
+
+loadSales();
 </script>
 </body>
 </html>

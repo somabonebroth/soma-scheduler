@@ -935,6 +935,213 @@ def analytics_page():
     buyer_names = [b["name"] for b in buyers]
     return render_template("analytics.html", buyer_names=buyer_names)
 
+@app.route("/analytics/buyer/<path:buyer_name>")
+@login_required
+def buyer_analytics_page(buyer_name):
+    """Dedicated analytics page for a single buyer."""
+    buyers = _load_buyers()
+    buyer = next((b for b in buyers if b["name"].lower() == buyer_name.lower()), None)
+    display_name = buyer["name"] if buyer else buyer_name
+    return render_template("buyer_analytics.html",
+                           buyer_name=display_name,
+                           buyer_names=[b["name"] for b in buyers])
+
+
+@app.route("/api/analytics/buyer/<path:buyer_name>")
+@login_required
+def api_buyer_analytics(buyer_name):
+    """Full analytics for one buyer: totals, by-month, by-sku, recent orders."""
+    from datetime import datetime as _dt, timedelta as _td
+    from collections import defaultdict
+
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    buyer_sales = [
+        s for s in sales
+        if (s.get("buyer") or "").strip().lower() == buyer_name.lower()
+    ]
+
+    def _revenue(s):
+        lt = s.get("line_total")
+        if lt is not None:
+            return float(lt)
+        price = float(s.get("unit_price") or 0)
+        return float(s.get("quantity") or 0) * price
+
+    def _cases(s):
+        return int(s.get("quantity") or 0) // 12
+
+    # ── Totals ────────────────────────────────────────────────────────────────
+    total_revenue = sum(_revenue(s) for s in buyer_sales)
+    total_cases   = sum(_cases(s) for s in buyer_sales)
+    total_units   = sum(int(s.get("quantity") or 0) for s in buyer_sales)
+    order_ids     = {s.get("order_id") or s.get("id") for s in buyer_sales}
+    total_orders  = len(order_ids)
+    avg_order_rev = round(total_revenue / total_orders, 2) if total_orders else 0
+    avg_order_cases = round(total_cases / total_orders, 1) if total_orders else 0
+
+    # ── By month ──────────────────────────────────────────────────────────────
+    by_month = defaultdict(lambda: {"revenue": 0.0, "cases": 0, "units": 0, "orders": set()})
+    for s in buyer_sales:
+        d = (s.get("sale_date") or "")[:7]  # YYYY-MM
+        if not d:
+            continue
+        by_month[d]["revenue"] += _revenue(s)
+        by_month[d]["cases"]   += _cases(s)
+        by_month[d]["units"]   += int(s.get("quantity") or 0)
+        by_month[d]["orders"].add(s.get("order_id") or s.get("id"))
+
+    months_sorted = sorted(by_month.keys())
+    monthly = [
+        {
+            "month":   m,
+            "label":   _dt.strptime(m, "%Y-%m").strftime("%b %Y"),
+            "revenue": round(by_month[m]["revenue"], 2),
+            "cases":   by_month[m]["cases"],
+            "units":   by_month[m]["units"],
+            "orders":  len(by_month[m]["orders"]),
+        }
+        for m in months_sorted
+    ]
+
+    # ── By year ───────────────────────────────────────────────────────────────
+    by_year = defaultdict(lambda: {"revenue": 0.0, "cases": 0, "orders": set()})
+    for s in buyer_sales:
+        y = (s.get("sale_date") or "")[:4]
+        if not y:
+            continue
+        by_year[y]["revenue"] += _revenue(s)
+        by_year[y]["cases"]   += _cases(s)
+        by_year[y]["orders"].add(s.get("order_id") or s.get("id"))
+    yearly = [
+        {"year": y, "revenue": round(by_year[y]["revenue"], 2),
+         "cases": by_year[y]["cases"], "orders": len(by_year[y]["orders"])}
+        for y in sorted(by_year.keys())
+    ]
+
+    # ── By SKU ────────────────────────────────────────────────────────────────
+    by_sku = defaultdict(lambda: {"recipe": "", "format": "", "units": 0,
+                                   "cases": 0, "revenue": 0.0, "months": defaultdict(int)})
+    for s in buyer_sales:
+        sk = s.get("sku_key") or s.get("recipe") or "Unknown"
+        by_sku[sk]["recipe"]  = s.get("recipe", "")
+        by_sku[sk]["format"]  = s.get("format", "")
+        by_sku[sk]["units"]  += int(s.get("quantity") or 0)
+        by_sku[sk]["cases"]  += _cases(s)
+        by_sku[sk]["revenue"]+= _revenue(s)
+        m = (s.get("sale_date") or "")[:7]
+        if m:
+            by_sku[sk]["months"][m] += _cases(s)
+
+    skus = sorted(
+        [{"sku": k, **{kk: vv for kk, vv in v.items() if kk != "months"},
+          "revenue": round(v["revenue"], 2),
+          "monthly_cases": dict(v["months"])}
+         for k, v in by_sku.items()],
+        key=lambda x: -x["revenue"]
+    )
+
+    # ── YoY comparison ────────────────────────────────────────────────────────
+    now = _dt.now().date()
+    this_year  = str(now.year)
+    last_year  = str(now.year - 1)
+    ty_rev = by_year.get(this_year, {}).get("revenue", 0.0)
+    ly_rev = by_year.get(last_year, {}).get("revenue", 0.0)
+    yoy_growth = round(((ty_rev - ly_rev) / ly_rev * 100), 1) if ly_rev else None
+
+    # Month-over-prior-year: same calendar months
+    this_month = now.strftime("%Y-%m")
+    prior_yr_month = (now.replace(year=now.year-1)).strftime("%Y-%m")
+    tm_rev = by_month.get(this_month, {}).get("revenue", 0.0)
+    pm_rev = by_month.get(prior_yr_month, {}).get("revenue", 0.0)
+
+    # Predictive: annualise YTD using months elapsed
+    months_elapsed = now.month
+    ytd_rev = sum(
+        by_month.get(f"{this_year}-{str(m).zfill(2)}", {}).get("revenue", 0.0)
+        for m in range(1, now.month + 1)
+    )
+    predicted_annual = round((ytd_rev / months_elapsed * 12), 2) if months_elapsed and ytd_rev else None
+
+    # Sufficient data flag: need at least 3 months of sales
+    has_sufficient_data = len(months_sorted) >= 3
+
+    return jsonify({
+        "buyer": buyer_name,
+        "totals": {
+            "revenue":          round(total_revenue, 2),
+            "cases":            total_cases,
+            "units":            total_units,
+            "orders":           total_orders,
+            "avg_order_revenue": avg_order_rev,
+            "avg_order_cases":   avg_order_cases,
+        },
+        "monthly":  monthly,
+        "yearly":   yearly,
+        "by_sku":   skus,
+        "predictive": {
+            "has_sufficient_data": has_sufficient_data,
+            "yoy_growth_pct":      yoy_growth,
+            "this_year_revenue":   round(ty_rev, 2),
+            "last_year_revenue":   round(ly_rev, 2),
+            "this_month_revenue":  round(tm_rev, 2),
+            "prior_year_month_revenue": round(pm_rev, 2),
+            "predicted_annual_revenue": predicted_annual,
+            "months_of_data":      len(months_sorted),
+        },
+    })
+
+
+@app.route("/api/analytics/backfill-sale-prices", methods=["POST"])
+@login_required
+def backfill_sale_prices():
+    """One-time backfill: add unit_price and line_total to historical sale
+    records that were created before pricing was stored on sale records.
+    Looks up the current price from the buyer catalogue in buyers.json.
+    Returns a summary of how many records were updated.
+    """
+    sales   = _load_json(ORGANIC_SALES_PATH, [])
+    buyers  = _load_buyers()
+
+    # Build a lookup: (buyer_name.lower(), sku_key) → price
+    price_map = {}
+    for b in buyers:
+        bname = (b.get("name") or "").strip().lower()
+        for sku in (b.get("skus") or []):
+            sk = sku.get("sku_key", "")
+            price = sku.get("price")
+            if sk and price is not None:
+                price_map[(bname, sk)] = round(float(price), 2)
+
+    updated = 0
+    no_price = 0
+    for sale in sales:
+        if sale.get("unit_price") is not None:
+            continue  # already has a price
+        buyer_key = (sale.get("buyer") or "").strip().lower()
+        sku_key   = sale.get("sku_key", "")
+        price = price_map.get((buyer_key, sku_key))
+        if price is None:
+            no_price += 1
+            continue
+        qty = int(sale.get("quantity") or 0)
+        sale["unit_price"] = price
+        sale["line_total"]  = round(price * qty, 2)
+        if "cases" not in sale:
+            sale["cases"] = qty // 12
+        updated += 1
+
+    if updated:
+        _save_json(ORGANIC_SALES_PATH, sales)
+
+    return jsonify({
+        "ok": True,
+        "updated": updated,
+        "skipped_no_price": no_price,
+        "message": f"Updated {updated} records. {no_price} records had no matching buyer price and were left unchanged.",
+    })
+
+
+
 @app.route("/api/analytics/sales-by-buyer", methods=["GET"])
 @login_required
 def api_sales_by_buyer():
@@ -966,18 +1173,22 @@ def api_sales_by_buyer():
         if buyer not in by_buyer:
             by_buyer[buyer] = {"buyer": buyer, "orders": set(), "units": 0, "revenue": 0.0, "by_sku": {}}
         qty   = int(sale.get("quantity") or 0)
+        # unit_price may be None for pre-catalogue records — fall back to 0
         price = float(sale.get("unit_price") or sale.get("price") or sale.get("unit_selling_price") or 0)
+        # Use stored line_total if available (more accurate), else compute from price * qty
+        line_total_stored = sale.get("line_total")
         sku   = sale.get("sku_key") or sale.get("recipe") or "Unknown"
         order_id = sale.get("order_id") or sale.get("id")
         by_buyer[buyer]["orders"].add(order_id)
         by_buyer[buyer]["units"]   += qty
-        by_buyer[buyer]["revenue"] += qty * price
+        revenue_this = float(line_total_stored) if line_total_stored is not None else qty * price
+        by_buyer[buyer]["revenue"] += revenue_this
         if sku not in by_buyer[buyer]["by_sku"]:
             by_buyer[buyer]["by_sku"][sku] = {"sku": sku,
                 "recipe": sale.get("recipe",""), "format": sale.get("format",""),
                 "units": 0, "revenue": 0.0}
         by_buyer[buyer]["by_sku"][sku]["units"]   += qty
-        by_buyer[buyer]["by_sku"][sku]["revenue"] += qty * price
+        by_buyer[buyer]["by_sku"][sku]["revenue"] += revenue_this
 
     result = []
     for b_data in sorted(by_buyer.values(), key=lambda x: -x["revenue"]):
@@ -5240,10 +5451,16 @@ def add_sale_order():
         if quantity <= 0:
             continue
 
-        sku_key = (line.get("sku_key") or "").strip()
-        brand   = (line.get("brand")   or "").strip()
-        recipe  = (line.get("recipe")  or "").strip()
-        fmt     = (line.get("format")  or "").strip()
+        sku_key    = (line.get("sku_key") or "").strip()
+        brand      = (line.get("brand")   or "").strip()
+        recipe     = (line.get("recipe")  or "").strip()
+        fmt        = (line.get("format")  or "").strip()
+        unit_price = line.get("unit_price")
+        if unit_price is not None:
+            try:
+                unit_price = round(float(unit_price), 2)
+            except (TypeError, ValueError):
+                unit_price = None
 
         if not sku_key:
             if recipe:
@@ -5313,6 +5530,7 @@ def add_sale_order():
         recipe  = first.get("recipe",  recipe)
         fmt     = first.get("format",  fmt)
 
+        line_total = round(unit_price * quantity, 2) if unit_price is not None else None
         sale = {
             "id":          "SL-" + datetime.now().strftime("%Y%m%d%H%M%S%f"),
             "order_id":    order_id,
@@ -5322,6 +5540,7 @@ def add_sale_order():
             "format":      fmt,
             "certification": sale_cert,
             "quantity":    quantity,
+            "cases":       quantity // 12,
             "lots":        sale_lots,
             "fg_lot":      (sale_lots[0]["lot"] if len(sale_lots) == 1 else ""),
             "fg_id":       (sale_lots[0]["fg_ids"][0] if len(sale_lots) == 1 and sale_lots[0]["fg_ids"] else ""),
@@ -5331,6 +5550,8 @@ def add_sale_order():
             "po_number":   po_number,
             "location_name":    location_name,
             "location_address": location_address,
+            "unit_price":  unit_price,
+            "line_total":  line_total,
             "created_at":  datetime.now().isoformat(),
         }
         saved_ids.append(sale["id"])
