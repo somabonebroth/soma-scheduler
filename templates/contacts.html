@@ -147,11 +147,36 @@ body.cp { background: var(--bg); }
   </div>
   <div class="scard">
     <h3>Ripe Portal</h3>
-    <div class="ff" style="max-width:320px;">
+    <div class="ff" style="max-width:320px;margin-bottom:18px;">
       <label>Inventory Buffer — units withheld from Ripe per SKU</label>
       <div style="display:flex;align-items:center;gap:12px;margin-top:6px;">
         <input id="ci-buf" type="number" min="0" step="1" placeholder="12" oninput="dCI()" style="width:80px;font-size:20px;font-weight:700;text-align:center;padding:8px;">
         <span style="font-size:13px;color:var(--text-light);line-height:1.4;">units per SKU<br><span style="font-size:11px;">Keeps a safety buffer so Ripe can't order your last cases</span></span>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px;">
+      <div style="font-size:12px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">Order Rules</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:480px;">
+        <div class="ff">
+          <label>SS min cases (delivery)</label>
+          <input id="ci-ss-min" type="number" min="0" step="1" placeholder="40" oninput="dCI()" style="width:100%;padding:8px 10px;font-size:15px;font-weight:600;text-align:center;">
+          <div style="font-size:11px;color:var(--text-light);margin-top:3px;">Cases of SS required for delivery orders</div>
+        </div>
+        <div class="ff">
+          <label>FZ/BB lead time threshold</label>
+          <input id="ci-fzbb-thresh" type="number" min="1" step="1" placeholder="8" oninput="dCI()" style="width:100%;padding:8px 10px;font-size:15px;font-weight:600;text-align:center;">
+          <div style="font-size:11px;color:var(--text-light);margin-top:3px;">Cases at which longer lead time applies</div>
+        </div>
+        <div class="ff">
+          <label>FZ/BB small order lead (days)</label>
+          <input id="ci-fzbb-small" type="number" min="1" step="1" placeholder="3" oninput="dCI()" style="width:100%;padding:8px 10px;font-size:15px;font-weight:600;text-align:center;">
+          <div style="font-size:11px;color:var(--text-light);margin-top:3px;">Min days notice for orders below threshold</div>
+        </div>
+        <div class="ff">
+          <label>FZ/BB large order lead (days)</label>
+          <input id="ci-fzbb-large" type="number" min="1" step="1" placeholder="7" oninput="dCI()" style="width:100%;padding:8px 10px;font-size:15px;font-weight:600;text-align:center;">
+          <div style="font-size:11px;color:var(--text-light);margin-top:3px;">Min days notice for orders at/above threshold</div>
+        </div>
       </div>
     </div>
   </div>
@@ -590,10 +615,14 @@ async function loadCI(){
   var d=await(await fetch('/api/company-info')).json();
   G('ci-name').value=d.name||'';G('ci-phone').value=d.phone||'';G('ci-email').value=d.email||'';G('ci-website').value=d.website||'';G('ci-address').value=d.address||'';G('ci-city').value=d.city||'';G('ci-reg').value=d.registration||'';G('ci-notes').value=d.notes||'';
   G('ci-buf').value=(d.ripe_inventory_buffer!==undefined?d.ripe_inventory_buffer:12);
+  G('ci-ss-min').value=(d.ss_min_cases_delivery!==undefined?d.ss_min_cases_delivery:40);
+  G('ci-fzbb-thresh').value=(d.fzbb_large_threshold!==undefined?d.fzbb_large_threshold:8);
+  G('ci-fzbb-small').value=(d.fzbb_small_lead_days!==undefined?d.fzbb_small_lead_days:3);
+  G('ci-fzbb-large').value=(d.fzbb_large_lead_days!==undefined?d.fzbb_large_lead_days:7);
 }
 function dCI(){clearTimeout(_ciT);_ciT=setTimeout(saveCI,800);}
 async function saveCI(){
-  var p={name:G('ci-name').value,phone:G('ci-phone').value,email:G('ci-email').value,website:G('ci-website').value,address:G('ci-address').value,city:G('ci-city').value,registration:G('ci-reg').value,notes:G('ci-notes').value,ripe_inventory_buffer:parseInt(G('ci-buf').value)||0};
+  var p={name:G('ci-name').value,phone:G('ci-phone').value,email:G('ci-email').value,website:G('ci-website').value,address:G('ci-address').value,city:G('ci-city').value,registration:G('ci-reg').value,notes:G('ci-notes').value,ripe_inventory_buffer:parseInt(G('ci-buf').value)||0,ss_min_cases_delivery:parseInt(G('ci-ss-min').value)||40,fzbb_large_threshold:parseInt(G('ci-fzbb-thresh').value)||8,fzbb_small_lead_days:parseInt(G('ci-fzbb-small').value)||3,fzbb_large_lead_days:parseInt(G('ci-fzbb-large').value)||7};
   var res=await fetch('/api/company-info',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
   if(res.ok){var m=G('ci-ok');m.style.display='block';setTimeout(function(){m.style.display='none';},2000);}
 }

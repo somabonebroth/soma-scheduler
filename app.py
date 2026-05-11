@@ -2630,7 +2630,12 @@ _DEFAULT_COMPANY_INFO = {
     "website": "",
     "registration": "",
     "notes": "",
-    "ripe_inventory_buffer": 12,  # units withheld from Ripe's visible stock
+    "ripe_inventory_buffer": 12,   # units withheld from Ripe's visible stock
+    # Ripe order rules — editable in Company Settings
+    "ss_min_cases_delivery": 40,   # min SS cases for delivery orders
+    "fzbb_small_lead_days":  3,    # min days notice for FZ/BB ≤ threshold
+    "fzbb_large_lead_days":  7,    # min days notice for FZ/BB ≥ threshold
+    "fzbb_large_threshold":  8,    # cases at which large lead time applies
 }
 SKU_META_PATH = os.path.join(INVENTORY_DIR, "sku_meta.json")  # PAR levels + prices
 # Manual inventory adjustments log (additions and subtractions outside of
@@ -4834,6 +4839,13 @@ def internal_buyer_catalogue():
         "catalogue": catalogue,
         "units_per_case": 12,
         "buffer_units": buffer_units,
+        # Order rules — sourced from Soma company settings
+        "rules": {
+            "ss_min_cases_delivery": int(company.get("ss_min_cases_delivery") or 40),
+            "fzbb_small_lead_days":  int(company.get("fzbb_small_lead_days")  or 3),
+            "fzbb_large_lead_days":  int(company.get("fzbb_large_lead_days")  or 7),
+            "fzbb_large_threshold":  int(company.get("fzbb_large_threshold")  or 8),
+        },
     })
 
 

@@ -201,6 +201,48 @@ def ripe_order_action(order_id):
         if not delivery_date:
             return jsonify({"error": "delivery_date is required to approve"}), 400
 
+        # Enforce order rules from Soma company settings before approving
+        from app import _load_company_info
+        from datetime import datetime as _dt, timedelta as _td
+        _company  = _load_company_info()
+        _ss_min      = int(_company.get("ss_min_cases_delivery") or 40)
+        _fzbb_small  = int(_company.get("fzbb_small_lead_days")  or 3)
+        _fzbb_large  = int(_company.get("fzbb_large_lead_days")  or 7)
+        _fzbb_thresh = int(_company.get("fzbb_large_threshold")  or 8)
+
+        # We need the order details to validate — fetch it
+        _get_status, _order_data = _ripe_request("GET", "/api/internal/orders")
+        if _get_status == 200 and isinstance(_order_data, list):
+            _order_obj = next((o for o in _order_data if o["id"] == order_id), None)
+            if _order_obj:
+                _items      = _order_obj.get("items", [])
+                _ss_cases   = sum(i.get("cases",0) for i in _items if (i.get("format","") or "").upper().startswith("SS"))
+                _fzbb_cases = sum(i.get("cases",0) for i in _items if (i.get("format","") or "").upper().startswith(("FZ","BB")))
+                _delivery   = _order_obj.get("delivery_key","")
+                _req_date   = _order_obj.get("requested_date","")
+
+                if _delivery != "pickup" and _ss_cases < _ss_min:
+                    return jsonify({
+                        "error": f"Cannot approve: delivery orders require at least {_ss_min} SS cases (order has {_ss_cases})."
+                    }), 400
+
+                if _fzbb_cases > 0 and _req_date:
+                    try:
+                        _req   = _dt.strptime(_req_date, "%Y-%m-%d").date()
+                        _today = _dt.utcnow().date()
+                        _lead_req = _fzbb_large if _fzbb_cases >= _fzbb_thresh else _fzbb_small
+                        _lead_act = (_req - _today).days
+                        if _lead_act < _lead_req:
+                            return jsonify({
+                                "error": (
+                                    f"Cannot approve: {_fzbb_cases} FZ/BB cases require "
+                                    f"{_lead_req} days notice. Earliest approvable date: "
+                                    f"{(_today + _td(days=_lead_req)).strftime('%B %d, %Y')}."
+                                )
+                            }), 400
+                    except ValueError:
+                        pass
+
         # Fetch the order from Ripe
         get_status, order_data = _ripe_request("GET", "/api/internal/orders")
         if get_status != 200 or not isinstance(order_data, list):
