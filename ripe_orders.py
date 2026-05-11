@@ -508,15 +508,17 @@ def ripe_contract_page():
     from datetime import date
     from app import (
         _load_buyers, _sku_display, _load_json,
+        _load_company_info,
         ORGANIC_FG_PATH, SKU_META_PATH
     )
+    company = _load_company_info()
 
     # Contract constants (keep in sync with Ripe app)
     CONTRACT_EFFECTIVE_DATE = date(2026, 7, 1)
     CONTRACT_EXPIRY_DATE    = date(2027, 6, 30)
     CONTRACT_VERSION        = "1.0 — Jul 2026"
     UNITS_PER_CASE          = 12
-    MIN_SS_CASES_DELIVERY   = 40
+    MIN_SS_CASES_DELIVERY   = int(company.get("ss_min_cases_delivery") or 40)
     DELIVERY_LOCATIONS = [
         {"label": "Coco Market",          "address": "2549 Yonge St, Toronto, ON M4P 2H9"},
         {"label": "Woodville",            "address": "155 Woodville Ave, East York, ON M4J 2R4"},
@@ -557,6 +559,9 @@ def ripe_contract_page():
         effective_date=CONTRACT_EFFECTIVE_DATE.strftime("%B %d, %Y"),
         expiry_date=CONTRACT_EXPIRY_DATE.strftime("%B %d, %Y"),
         contract_version=CONTRACT_VERSION,
+        fzbb_small_lead=int(company.get("fzbb_small_lead_days") or 3),
+        fzbb_large_lead=int(company.get("fzbb_large_lead_days") or 7),
+        fzbb_threshold=int(company.get("fzbb_large_threshold") or 8),
         units_per_case=UNITS_PER_CASE,
         min_ss_cases=MIN_SS_CASES_DELIVERY,
         delivery_locations=DELIVERY_LOCATIONS,
