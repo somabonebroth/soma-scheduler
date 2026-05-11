@@ -2832,6 +2832,7 @@ SKU_META_PATH = os.path.join(INVENTORY_DIR, "sku_meta.json")  # PAR levels + pri
 # production runs and sales). Each entry records what changed, why, and
 # which LOT(s) were drained or created. Used for audit traceability.
 ADJUSTMENTS_PATH = os.path.join(INVENTORY_DIR, "adjustments.json")
+AUDITS_PATH      = os.path.join(INVENTORY_DIR, "audits.json")
 # Camera-scan request log: per-day rolling counter for daily-limit enforcement
 # plus an audit trail of every scan (success or failure).
 SUPPLIERS_PATH = os.path.join(INVENTORY_DIR, "suppliers.json")
@@ -4780,6 +4781,341 @@ def manual_subtract_finished_good():
         "drained": drained,
         "remaining_total": available - qty,
     })
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# INVENTORY AUDIT ROUTES
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _load_audits():
+    return _load_json(AUDITS_PATH, [])
+
+def _save_audits(data):
+    _save_json(AUDITS_PATH, data)
+
+def _active_audit(kind):
+    """Return the current in-progress audit of the given kind, or None."""
+    return next((a for a in _load_audits()
+                 if a.get("kind") == kind and a.get("status") == "in_progress"), None)
+
+
+@app.route("/audit/<kind>")
+@login_required
+def audit_page(kind):
+    """Render the audit page for 'rm' or 'fg'."""
+    if kind not in ("rm", "fg"):
+        return "Invalid audit type", 400
+    return render_template("audit.html", kind=kind)
+
+
+@app.route("/api/audit/start", methods=["POST"])
+@login_required
+def start_audit():
+    """Start a new audit or return the existing in-progress one.
+    Body: { kind: 'rm'|'fg', categories: [str] }
+    """
+    data = request.get_json() or {}
+    kind = data.get("kind")
+    if kind not in ("rm", "fg"):
+        return jsonify({"error": "kind must be rm or fg"}), 400
+
+    audits = _load_audits()
+
+    # Abandon any previous in-progress audit of the same kind
+    audits = [a for a in audits
+              if not (a.get("kind") == kind and a.get("status") == "in_progress")]
+
+    categories = data.get("categories", [])
+
+    # Build the items list
+    if kind == "rm":
+        items = _build_rm_audit_items(categories)
+    else:
+        items = _build_fg_audit_items(categories)
+
+    audit = {
+        "id":         "audit_" + datetime.now().strftime("%Y%m%d%H%M%S"),
+        "kind":       kind,
+        "status":     "in_progress",
+        "categories": categories,
+        "started_at": datetime.now().isoformat(),
+        "items":      items,
+        "current_idx": 0,
+        "results":    {},  # {item_id: {counted, system_qty, ...}}
+    }
+    audits.append(audit)
+    _save_audits(audits)
+    return jsonify({"ok": True, "audit": audit})
+
+
+def _build_rm_audit_items(categories):
+    """Build ordered list of RM items for the audit, filtered by section categories."""
+    materials = _load_json(ORGANIC_RAW_PATH, [])
+    sections_data = _load_rm_sections()
+    assignments = sections_data.get("assignments", {})
+    sections = {s["id"]: s["name"] for s in sections_data.get("sections", [])}
+
+    # Group by ingredient name, filter by selected categories
+    seen = {}  # item_name -> {total_remaining, lots, unit, section}
+    for mat in materials:
+        remaining = float(mat.get("remaining") or 0)
+        if remaining <= 0:
+            continue
+        item_name = (mat.get("item") or "").strip()
+        if not item_name:
+            continue
+        section_id = assignments.get(item_name, "")
+        section_name = sections.get(section_id, "Unassigned")
+        if categories and section_name not in categories:
+            continue
+        if item_name not in seen:
+            seen[item_name] = {
+                "id":      item_name,
+                "name":    item_name,
+                "unit":    mat.get("unit", ""),
+                "section": section_name,
+                "system_qty": 0,
+                "lots":    [],
+            }
+        seen[item_name]["system_qty"] = round(seen[item_name]["system_qty"] + remaining, 4)
+        seen[item_name]["lots"].append({
+            "id":           mat.get("id"),
+            "supplier_lot": mat.get("supplier_lot", ""),
+            "date_received": mat.get("date_received", ""),
+            "remaining":    remaining,
+        })
+
+    # Sort by section then name
+    items = sorted(seen.values(), key=lambda x: (x["section"], x["name"]))
+    return items
+
+
+def _build_fg_audit_items(categories):
+    """Build ordered list of FG lots for the audit, filtered by brand."""
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    items = []
+    for entry in fg:
+        if int(entry.get("quantity_remaining") or 0) <= 0:
+            continue
+        brand = (entry.get("brand") or "Unknown").strip()
+        if categories and brand not in categories:
+            continue
+        recipe  = (entry.get("recipe") or "").strip()
+        fmt     = (entry.get("format") or "").strip()
+        lot     = (entry.get("lot") or "").strip()
+        items.append({
+            "id":         entry["id"],
+            "recipe":     recipe,
+            "brand":      brand,
+            "format":     fmt,
+            "lot":        lot,
+            "sku":        f"{recipe} · {fmt}",
+            "system_qty": int(entry.get("quantity_remaining") or 0),
+            "created_at": entry.get("created_at", ""),
+        })
+    # Sort: brand → format (SS/FZ/BB) → recipe → lot date
+    fmt_order = {"SS": 0, "FZ": 1, "BB": 2}
+    items.sort(key=lambda x: (
+        x["brand"],
+        fmt_order.get((x["format"] or "")[:2].upper(), 9),
+        x["recipe"],
+        x.get("created_at", ""),
+    ))
+    return items
+
+
+@app.route("/api/audit/active/<kind>", methods=["GET"])
+@login_required
+def get_active_audit(kind):
+    """Return the current in-progress audit for rm or fg, or null."""
+    audit = _active_audit(kind)
+    return jsonify({"audit": audit})
+
+
+@app.route("/api/audit/<audit_id>/save", methods=["POST"])
+@login_required
+def save_audit_progress(audit_id):
+    """Save progress on an in-progress audit without completing it.
+    Body: { current_idx: int, results: {item_id: {counted}} }
+    """
+    data = request.get_json() or {}
+    audits = _load_audits()
+    audit = next((a for a in audits if a["id"] == audit_id), None)
+    if not audit:
+        return jsonify({"error": "Audit not found"}), 404
+    audit["current_idx"] = data.get("current_idx", audit["current_idx"])
+    audit["results"].update(data.get("results", {}))
+    audit["last_saved_at"] = datetime.now().isoformat()
+    _save_audits(audits)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/audit/<audit_id>/complete", methods=["POST"])
+@login_required
+def complete_audit(audit_id):
+    """Complete an audit — apply all counted adjustments to inventory.
+    Body: { results: {item_id: {counted}} }
+    """
+    data = request.get_json() or {}
+    audits = _load_audits()
+    audit = next((a for a in audits if a["id"] == audit_id), None)
+    if not audit:
+        return jsonify({"error": "Audit not found"}), 404
+
+    # Merge final results
+    audit["results"].update(data.get("results", {}))
+    kind = audit["kind"]
+    adjustments = []
+
+    if kind == "rm":
+        adjustments = _apply_rm_audit(audit)
+    else:
+        adjustments = _apply_fg_audit(audit)
+
+    audit["status"]       = "completed"
+    audit["completed_at"] = datetime.now().isoformat()
+    audit["adjustments"]  = adjustments
+    _save_audits(audits)
+    return jsonify({"ok": True, "adjustments": len(adjustments), "audit": audit})
+
+
+def _apply_rm_audit(audit):
+    """Apply RM audit results — adjust remaining on individual lots."""
+    materials = _load_json(ORGANIC_RAW_PATH, [])
+    adjustments = []
+
+    for item_name, result in audit["results"].items():
+        counted = result.get("counted")
+        if counted is None:
+            continue  # skipped
+
+        counted = round(float(counted), 4)
+        # Find all non-depleted lots for this item
+        lots = sorted(
+            [m for m in materials if (m.get("item") or "").strip() == item_name
+             and float(m.get("remaining") or 0) > 0],
+            key=lambda m: m.get("date_received", "")
+        )
+        if not lots:
+            continue
+
+        system_total = round(sum(float(m.get("remaining") or 0) for m in lots), 4)
+        diff = round(counted - system_total, 4)
+        if diff == 0:
+            continue
+
+        if diff < 0:
+            # Decrease: take from oldest lots first (FIFO)
+            to_remove = abs(diff)
+            for lot in lots:
+                if to_remove <= 0:
+                    break
+                avail = float(lot.get("remaining") or 0)
+                take = min(avail, to_remove)
+                lot["remaining"] = round(avail - take, 4)
+                to_remove = round(to_remove - take, 4)
+        else:
+            # Increase: add to most recent lot
+            lots[-1]["remaining"] = round(float(lots[-1].get("remaining") or 0) + diff, 4)
+
+        adjustments.append({
+            "item": item_name,
+            "system_qty": system_total,
+            "counted": counted,
+            "diff": diff,
+        })
+
+    _save_json(ORGANIC_RAW_PATH, materials)
+
+    # Record in adjustments log
+    for adj in adjustments:
+        _record_adjustment({
+            "id":         "audit_rm_" + datetime.now().strftime("%Y%m%d%H%M%S") + str(abs(int(adj["diff"]*100))),
+            "kind":       "audit_rm",
+            "item":       adj["item"],
+            "system_qty": adj["system_qty"],
+            "counted":    adj["counted"],
+            "diff":       adj["diff"],
+            "audit_id":   audit["id"],
+            "created_at": datetime.now().isoformat(),
+        })
+
+    return adjustments
+
+
+def _apply_fg_audit(audit):
+    """Apply FG audit results — direct per-lot overwrite."""
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    adjustments = []
+
+    for fg_id, result in audit["results"].items():
+        counted = result.get("counted")
+        if counted is None:
+            continue
+        counted = int(counted)
+        entry = next((f for f in fg if f.get("id") == fg_id), None)
+        if not entry:
+            continue
+        system_qty = int(entry.get("quantity_remaining") or 0)
+        if counted == system_qty:
+            continue
+        entry["quantity_remaining"] = counted
+        entry["last_adjusted_at"]   = datetime.now().isoformat()
+        adjustments.append({
+            "fg_id":      fg_id,
+            "recipe":     entry.get("recipe", ""),
+            "lot":        entry.get("lot", ""),
+            "system_qty": system_qty,
+            "counted":    counted,
+            "diff":       counted - system_qty,
+        })
+
+    _save_json(ORGANIC_FG_PATH, fg)
+
+    for adj in adjustments:
+        _record_adjustment({
+            "id":         "audit_fg_" + datetime.now().strftime("%Y%m%d%H%M%S") + str(abs(adj["diff"])),
+            "kind":       "audit_fg",
+            "recipe":     adj["recipe"],
+            "lot":        adj["lot"],
+            "system_qty": adj["system_qty"],
+            "counted":    adj["counted"],
+            "diff":       adj["diff"],
+            "audit_id":   audit["id"],
+            "created_at": datetime.now().isoformat(),
+        })
+
+    return adjustments
+
+
+@app.route("/api/audit/history", methods=["GET"])
+@login_required
+def audit_history():
+    """Return completed audits, most recent first."""
+    kind = request.args.get("kind")
+    audits = _load_audits()
+    completed = [a for a in audits if a.get("status") == "completed"]
+    if kind:
+        completed = [a for a in completed if a.get("kind") == kind]
+    completed.sort(key=lambda a: a.get("completed_at", ""), reverse=True)
+    return jsonify(completed)
+
+
+@app.route("/api/audit/categories/<kind>", methods=["GET"])
+@login_required
+def audit_categories(kind):
+    """Return available categories for category selection screen."""
+    if kind == "rm":
+        sections_data = _load_rm_sections()
+        cats = [s["name"] for s in sections_data.get("sections", [])]
+        if not cats:
+            cats = ["All"]
+        return jsonify(cats)
+    else:
+        fg = _load_json(ORGANIC_FG_PATH, [])
+        brands = sorted({(f.get("brand") or "Unknown").strip()
+                         for f in fg if int(f.get("quantity_remaining") or 0) > 0})
+        return jsonify(brands or ["All"])
 
 
 @app.route("/api/organic/adjustments", methods=["GET"])

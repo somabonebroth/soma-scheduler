@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Inventory Audit · Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+* { box-sizing: border-box; }
+body.audit-page { background: var(--bg); overflow-x: hidden; }
+
+/* ── Screens ─────────────────────────────────────────────────────── */
+.screen { display: none; min-height: 100vh; flex-direction: column; }
+.screen.active { display: flex; }
+
+/* ── Header ──────────────────────────────────────────────────────── */
+.audit-header {
+  background: var(--dark);
+  color: #fff;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.audit-header h1 { font-size: 16px; font-weight: 700; margin: 0; }
+.audit-header .sub { font-size: 12px; opacity: .7; margin-top: 2px; }
+.header-exit { background: rgba(255,255,255,.15); border: none; color: #fff;
+  border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.header-exit:hover { background: rgba(255,255,255,.25); }
+
+/* ── Category selection ──────────────────────────────────────────── */
+.cat-screen { padding: 24px 20px; flex: 1; overflow-y: auto; }
+.cat-title { font-size: 22px; font-weight: 800; margin-bottom: 6px; color: var(--dark); }
+.cat-sub { font-size: 14px; color: var(--text-light); margin-bottom: 24px; }
+.cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 32px; }
+.cat-chip {
+  background: #fff; border: 2.5px solid var(--border); border-radius: 12px;
+  padding: 16px 14px; display: flex; align-items: center; gap: 12px;
+  cursor: pointer; transition: all .15s; user-select: none;
+}
+.cat-chip.selected { border-color: var(--accent); background: #f0f7f0; }
+.cat-chip .check {
+  width: 24px; height: 24px; border-radius: 6px; border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  font-size: 14px; font-weight: 800; color: #fff; transition: all .15s;
+}
+.cat-chip.selected .check { background: var(--accent); border-color: var(--accent); }
+.cat-chip .cat-name { font-size: 14px; font-weight: 600; color: var(--dark); line-height: 1.3; }
+.start-btn {
+  width: 100%; padding: 18px; background: var(--accent); color: #fff;
+  border: none; border-radius: 12px; font-size: 17px; font-weight: 700;
+  cursor: pointer; letter-spacing: .01em;
+}
+.start-btn:disabled { background: #ccc; }
+
+/* ── Progress bar ────────────────────────────────────────────────── */
+.progress-wrap { background: #e0e0d8; height: 4px; flex-shrink: 0; }
+.progress-fill { height: 4px; background: var(--accent); transition: width .3s; }
+
+/* ── Item screen ─────────────────────────────────────────────────── */
+.item-screen { flex: 1; overflow-y: auto; padding: 0 0 120px; }
+.item-meta {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--border);
+  background: #fff;
+}
+.item-counter { font-size: 11px; font-weight: 700; color: var(--text-light);
+  text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+.item-name { font-size: 26px; font-weight: 800; color: var(--dark); margin-bottom: 4px; line-height: 1.2; }
+.item-detail { font-size: 14px; color: var(--text-light); }
+.item-section-badge {
+  display: inline-block; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 3px 10px; font-size: 11px; font-weight: 600;
+  color: var(--text-light); margin-top: 6px;
+}
+.lot-badge {
+  display: inline-block; background: #e3f2fd; border: 1px solid #90caf9;
+  border-radius: 6px; padding: 3px 10px; font-size: 11px; font-weight: 700;
+  color: #0277bd; margin-top: 6px;
+}
+
+/* System qty card */
+.system-card {
+  margin: 16px 20px; background: #fff; border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px 18px;
+}
+.system-label { font-size: 11px; font-weight: 700; color: var(--text-light);
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+.system-qty { font-size: 28px; font-weight: 800; color: var(--dark); }
+.system-unit { font-size: 14px; color: var(--text-light); margin-left: 4px; font-weight: 500; }
+
+/* Count input */
+.count-section { margin: 0 20px 16px; }
+.count-label { font-size: 13px; font-weight: 700; color: var(--dark); margin-bottom: 10px; }
+
+/* FG: cases + units layout */
+.fg-count-row { display: flex; gap: 12px; align-items: flex-end; }
+.fg-count-field { flex: 1; }
+.fg-count-field label { display: block; font-size: 11px; font-weight: 700; color: var(--text-light);
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+.big-input {
+  width: 100%; padding: 20px 16px; font-size: 32px; font-weight: 800;
+  border: 2.5px solid var(--border); border-radius: 12px; text-align: center;
+  outline: none; background: #fff; color: var(--dark);
+  -webkit-appearance: none; appearance: none;
+}
+.big-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(74,103,65,.12); }
+.fg-total { font-size: 13px; color: var(--text-light); text-align: center; margin-top: 8px; }
+.fg-total strong { color: var(--accent); font-size: 15px; }
+
+/* Diff indicator */
+.diff-indicator {
+  margin: 0 20px 16px; padding: 12px 16px; border-radius: 10px;
+  font-size: 14px; font-weight: 600; display: none;
+}
+.diff-indicator.over  { background: #e8f5e9; color: #2e7d32; }
+.diff-indicator.under { background: #ffebee; color: #c62828; }
+.diff-indicator.exact { background: #e8f5e9; color: #2e7d32; }
+
+/* Bottom nav */
+.item-nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: #fff; border-top: 1px solid var(--border);
+  padding: 12px 20px 20px;
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px; z-index: 50;
+  box-shadow: 0 -4px 16px rgba(0,0,0,.07);
+}
+.nav-btn {
+  padding: 16px 8px; border-radius: 10px; border: 2px solid var(--border);
+  font-size: 14px; font-weight: 700; cursor: pointer; background: #fff;
+  color: var(--text-light); transition: all .15s; text-align: center;
+}
+.nav-btn:active { transform: scale(.97); }
+.nav-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.nav-btn.skip-btn { font-size: 13px; }
+.nav-btn:disabled { opacity: .4; cursor: default; }
+
+/* ── Complete screen ─────────────────────────────────────────────── */
+.complete-screen { padding: 32px 24px; flex: 1; }
+.complete-icon { font-size: 64px; text-align: center; margin-bottom: 16px; }
+.complete-title { font-size: 26px; font-weight: 800; color: var(--dark); text-align: center; margin-bottom: 8px; }
+.complete-sub { font-size: 15px; color: var(--text-light); text-align: center; margin-bottom: 32px; }
+.adj-list { background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 24px; }
+.adj-row { display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 14px; }
+.adj-row:last-child { border-bottom: none; }
+.adj-name { font-weight: 600; color: var(--dark); }
+.adj-diff { font-weight: 700; }
+.adj-diff.pos { color: #2e7d32; }
+.adj-diff.neg { color: #c62828; }
+.adj-diff.zero { color: var(--text-light); }
+.done-btn {
+  width: 100%; padding: 18px; background: var(--accent); color: #fff;
+  border: none; border-radius: 12px; font-size: 17px; font-weight: 700; cursor: pointer;
+}
+
+/* ── Resume banner ───────────────────────────────────────────────── */
+.resume-banner {
+  margin: 20px; background: #fff8e1; border: 1px solid #ffe082;
+  border-radius: 12px; padding: 16px 18px;
+}
+.resume-banner h3 { font-size: 15px; font-weight: 700; margin: 0 0 6px; color: var(--dark); }
+.resume-banner p { font-size: 13px; color: #6d4c00; margin: 0 0 12px; }
+.resume-btns { display: flex; gap: 10px; }
+.resume-btn { flex: 1; padding: 12px; border-radius: 8px; font-size: 14px; font-weight: 600;
+  cursor: pointer; border: 1.5px solid var(--border); background: #fff; }
+.resume-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+@media (min-width: 600px) {
+  .cat-grid { grid-template-columns: 1fr 1fr 1fr; }
+  .item-name { font-size: 30px; }
+}
+</style>
+</head>
+<body class="audit-page">
+
+<!-- ── Category selection ── -->
+<div class="screen active" id="screen-cats">
+  <div class="audit-header">
+    <div>
+      <div class="audit-header h1" id="audit-title">Inventory Audit</div>
+      <div class="sub" id="audit-sub">Select categories to count</div>
+    </div>
+    <button class="header-exit" onclick="exitAudit()">✕ Exit</button>
+  </div>
+  <div id="resume-area"></div>
+  <div class="cat-screen">
+    <div class="cat-title">What are you auditing today?</div>
+    <div class="cat-sub" id="cat-sub-text">Select the categories to include. Tap to toggle.</div>
+    <div class="cat-grid" id="cat-grid"></div>
+    <button class="start-btn" id="start-btn" onclick="startAudit()">Start Audit</button>
+  </div>
+</div>
+
+<!-- ── Item counting ── -->
+<div class="screen" id="screen-item">
+  <div class="audit-header">
+    <div>
+      <div class="audit-header h1" id="item-audit-title">Audit</div>
+      <div class="sub" id="progress-text">Item 1 of 1</div>
+    </div>
+    <button class="header-exit" onclick="saveAndExit()">Save &amp; Exit</button>
+  </div>
+  <div class="progress-wrap"><div class="progress-fill" id="progress-fill"></div></div>
+  <div class="item-screen" id="item-screen-body"></div>
+  <div class="item-nav">
+    <button class="nav-btn" id="btn-prev" onclick="goPrev()">← Back</button>
+    <button class="nav-btn skip-btn" onclick="skipItem()">Skip</button>
+    <button class="nav-btn primary" id="btn-next" onclick="goNext()">Next →</button>
+  </div>
+</div>
+
+<!-- ── Complete ── -->
+<div class="screen" id="screen-complete">
+  <div class="audit-header">
+    <div><div class="audit-header h1">Audit Complete</div></div>
+    <button class="header-exit" onclick="window.location='/'">⌂ Dashboard</button>
+  </div>
+  <div class="complete-screen" id="complete-body"></div>
+</div>
+
+<script>
+var KIND = '{{ kind }}';
+var _audit = null;
+var _cats  = [];
+var _selectedCats = new Set();
+var _results = {};  // item_id → {counted}
+
+// ── Init ─────────────────────────────────────────────────────────────
+async function init() {
+  document.getElementById('audit-title').textContent =
+    KIND === 'rm' ? 'Raw Materials Audit' : 'Finished Goods Audit';
+  document.getElementById('item-audit-title').textContent =
+    KIND === 'rm' ? 'Raw Materials Audit' : 'Finished Goods Audit';
+
+  // Load categories
+  var res = await fetch('/api/audit/categories/' + KIND);
+  _cats = await res.json();
+  _cats.forEach(function(c){ _selectedCats.add(c); });
+  renderCats();
+
+  // Check for in-progress audit
+  var r2 = await fetch('/api/audit/active/' + KIND);
+  var d  = await r2.json();
+  if (d.audit) showResumeBanner(d.audit);
+}
+
+function renderCats() {
+  var grid = document.getElementById('cat-grid');
+  grid.innerHTML = _cats.map(function(c) {
+    var sel = _selectedCats.has(c);
+    return '<div class="cat-chip'+(sel?' selected':'')+'" onclick="toggleCat(\''+e(c)+'\')">'
+      +'<div class="check">'+(sel?'✓':'')+'</div>'
+      +'<div class="cat-name">'+e(c)+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function toggleCat(name) {
+  if (_selectedCats.has(name)) _selectedCats.delete(name);
+  else _selectedCats.add(name);
+  renderCats();
+  document.getElementById('start-btn').disabled = _selectedCats.size === 0;
+}
+
+function showResumeBanner(audit) {
+  var saved = audit.last_saved_at || audit.started_at;
+  var date  = saved ? saved.replace('T',' ').substring(0,16) : '';
+  var done  = Object.keys(audit.results || {}).length;
+  var total = (audit.items || []).length;
+  var area  = document.getElementById('resume-area');
+  area.innerHTML = '<div class="resume-banner">'
+    +'<h3>Resume previous audit?</h3>'
+    +'<p>Started '+date+' · '+done+' of '+total+' items counted</p>'
+    +'<div class="resume-btns">'
+    +'<button class="resume-btn" onclick="document.getElementById(\'resume-area\').innerHTML=\'\'">Start Fresh</button>'
+    +'<button class="resume-btn primary" onclick="resumeAudit(\''+audit.id+'\')">Resume →</button>'
+    +'</div></div>';
+}
+
+async function resumeAudit(auditId) {
+  var r = await fetch('/api/audit/active/' + KIND);
+  var d = await r.json();
+  if (!d.audit) return;
+  _audit   = d.audit;
+  _results = Object.assign({}, _audit.results || {});
+  showItemScreen();
+}
+
+// ── Start audit ───────────────────────────────────────────────────────
+async function startAudit() {
+  var btn = document.getElementById('start-btn');
+  btn.disabled = true; btn.textContent = 'Building audit…';
+  var res = await fetch('/api/audit/start', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({kind: KIND, categories: Array.from(_selectedCats)}),
+  });
+  var d = await res.json();
+  if (!d.ok) { alert('Failed to start audit'); btn.disabled=false; btn.textContent='Start Audit'; return; }
+  _audit   = d.audit;
+  _results = {};
+  showItemScreen();
+}
+
+// ── Item screen ───────────────────────────────────────────────────────
+function showItemScreen() {
+  document.getElementById('screen-cats').classList.remove('active');
+  document.getElementById('screen-item').classList.add('active');
+  renderItem();
+}
+
+function currentIdx() { return _audit.current_idx || 0; }
+function items()      { return _audit.items || []; }
+
+function renderItem() {
+  var idx   = currentIdx();
+  var all   = items();
+  var total = all.length;
+
+  if (!total) { showComplete([]); return; }
+
+  document.getElementById('progress-text').textContent = 'Item '+(idx+1)+' of '+total;
+  document.getElementById('progress-fill').style.width = Math.round((idx/total)*100)+'%';
+  document.getElementById('btn-prev').disabled = idx === 0;
+  document.getElementById('btn-next').textContent = idx === total-1 ? 'Complete ✓' : 'Next →';
+
+  var item = all[idx];
+  var existing = _results[item.id];
+
+  var body = document.getElementById('item-screen-body');
+
+  if (KIND === 'rm') {
+    renderRMItem(item, existing, body);
+  } else {
+    renderFGItem(item, existing, body);
+  }
+}
+
+function renderRMItem(item, existing, body) {
+  var val = existing !== undefined ? existing.counted : '';
+  body.innerHTML =
+    '<div class="item-meta">'
+    +'<div class="item-counter">Raw Material</div>'
+    +'<div class="item-name">'+e(item.name)+'</div>'
+    +(item.section?'<div class="item-section-badge">'+e(item.section)+'</div>':'')
+    +'</div>'
+    +'<div class="system-card">'
+    +'<div class="system-label">System quantity</div>'
+    +'<div><span class="system-qty">'+fmtQty(item.system_qty)+'</span>'
+    +'<span class="system-unit">'+e(item.unit||'')+'</span></div>'
+    +(item.lots&&item.lots.length>1?'<div style="font-size:11px;color:var(--text-light);margin-top:4px;">'+item.lots.length+' lots on hand</div>':'')
+    +'</div>'
+    +'<div class="count-section">'
+    +'<div class="count-label">Physical count ('+e(item.unit||'units')+')</div>'
+    +'<input class="big-input" id="count-input" type="number" inputmode="decimal" min="0" step="0.01"'
+    +' placeholder="Enter count…" value="'+(val!==undefined&&val!==null?val:'')+'"'
+    +' oninput="updateDiff(\'rm\')" onfocus="this.select()">'
+    +'</div>'
+    +'<div class="diff-indicator" id="diff-indicator"></div>';
+
+  setTimeout(function(){
+    var inp = document.getElementById('count-input');
+    if(inp){ inp.focus(); if(val!==undefined) updateDiff('rm'); }
+  }, 50);
+}
+
+function renderFGItem(item, existing, body) {
+  var sysQty = item.system_qty;
+  var existCases = existing !== undefined ? Math.floor(existing.counted/12) : '';
+  var existUnits = existing !== undefined ? existing.counted%12 : '';
+  var caseVal = existCases !== '' ? existCases : '';
+  var unitVal = existUnits !== '' ? existUnits : '';
+
+  body.innerHTML =
+    '<div class="item-meta">'
+    +'<div class="item-counter">Finished Goods</div>'
+    +'<div class="item-name">'+e(item.recipe)+'</div>'
+    +'<div class="item-detail">'+e(item.format)+'</div>'
+    +'<div class="lot-badge">LOT '+e(item.lot||'—')+'</div>'
+    +'</div>'
+    +'<div class="system-card">'
+    +'<div class="system-label">System quantity</div>'
+    +'<div><span class="system-qty">'+sysQty+'</span><span class="system-unit">units</span></div>'
+    +'<div style="font-size:13px;color:var(--text-light);margin-top:4px;">'
+    +Math.floor(sysQty/12)+' cases + '+(sysQty%12)+' units'
+    +'</div>'
+    +'</div>'
+    +'<div class="count-section">'
+    +'<div class="count-label">Physical count</div>'
+    +'<div class="fg-count-row">'
+    +'<div class="fg-count-field"><label>Cases</label>'
+    +'<input class="big-input" id="count-cases" type="number" inputmode="numeric" min="0" step="1"'
+    +' placeholder="0" value="'+caseVal+'" oninput="updateDiff(\'fg\')" onfocus="this.select()"></div>'
+    +'<div style="font-size:24px;color:var(--text-light);padding-bottom:16px;flex-shrink:0;">+</div>'
+    +'<div class="fg-count-field"><label>Units</label>'
+    +'<input class="big-input" id="count-units" type="number" inputmode="numeric" min="0" step="1" max="11"'
+    +' placeholder="0" value="'+unitVal+'" oninput="updateDiff(\'fg\')" onfocus="this.select()"></div>'
+    +'</div>'
+    +'<div class="fg-total" id="fg-total">Total: <strong>'+(existing!==undefined?existing.counted+'':'-')+'</strong> units</div>'
+    +'</div>'
+    +'<div class="diff-indicator" id="diff-indicator"></div>';
+
+  setTimeout(function(){
+    var c = document.getElementById('count-cases');
+    if(c){ c.focus(); if(existing!==undefined) updateDiff('fg'); }
+  }, 50);
+}
+
+function updateDiff(kind) {
+  var item = items()[currentIdx()];
+  var counted, valid;
+
+  if (kind === 'rm') {
+    var val = parseFloat(document.getElementById('count-input').value);
+    valid   = !isNaN(val) && val >= 0;
+    counted = valid ? val : null;
+  } else {
+    var cases = parseInt(document.getElementById('count-cases').value)||0;
+    var units = parseInt(document.getElementById('count-units').value)||0;
+    counted = cases*12 + units;
+    valid   = true;
+    document.getElementById('fg-total').innerHTML =
+      'Total: <strong>'+counted+'</strong> units ('
+      +Math.floor(counted/12)+' cases + '+(counted%12)+' units)';
+  }
+
+  var el = document.getElementById('diff-indicator');
+  if (!valid || counted === null) { el.style.display='none'; return; }
+
+  var sys  = item.system_qty;
+  var diff = Math.round((counted - sys)*100)/100;
+  el.style.display = 'block';
+  if (diff === 0) {
+    el.className = 'diff-indicator exact';
+    el.textContent = '✓ Matches system';
+  } else if (diff > 0) {
+    el.className = 'diff-indicator over';
+    el.textContent = '▲ +'+diff+' '+(kind==='fg'?'units':(item.unit||'')) + ' over system';
+  } else {
+    el.className = 'diff-indicator under';
+    el.textContent = '▼ '+diff+' '+(kind==='fg'?'units':(item.unit||'')) + ' under system';
+  }
+}
+
+function getCountedValue() {
+  if (KIND === 'rm') {
+    var v = document.getElementById('count-input').value;
+    return v !== '' ? parseFloat(v) : null;
+  } else {
+    var c = parseInt(document.getElementById('count-cases').value)||0;
+    var u = parseInt(document.getElementById('count-units').value)||0;
+    return c*12 + u;
+  }
+}
+
+function saveCurrentCount() {
+  var counted = getCountedValue();
+  var item    = items()[currentIdx()];
+  if (counted !== null && counted !== undefined && !isNaN(counted)) {
+    _results[item.id] = {counted: counted, system_qty: item.system_qty};
+  }
+}
+
+async function goPrev() {
+  saveCurrentCount();
+  if (_audit.current_idx > 0) {
+    _audit.current_idx--;
+    renderItem();
+  }
+}
+
+async function goNext() {
+  saveCurrentCount();
+  var total = items().length;
+  if (_audit.current_idx >= total - 1) {
+    await completeAudit();
+  } else {
+    _audit.current_idx++;
+    renderItem();
+    await autoSave();
+  }
+}
+
+function skipItem() {
+  // Don't record a result for this item — leave existing or no entry
+  var total = items().length;
+  if (_audit.current_idx >= total - 1) {
+    completeAudit();
+  } else {
+    _audit.current_idx++;
+    renderItem();
+    autoSave();
+  }
+}
+
+async function autoSave() {
+  try {
+    await fetch('/api/audit/'+_audit.id+'/save', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({current_idx: _audit.current_idx, results: _results}),
+    });
+  } catch(e) {}
+}
+
+async function saveAndExit() {
+  saveCurrentCount();
+  await fetch('/api/audit/'+_audit.id+'/save', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({current_idx: _audit.current_idx, results: _results}),
+  });
+  alert('Audit saved. You can resume it from the Audit button next time.');
+  window.location = KIND === 'rm' ? '/organic?tab=raw' : '/organic?tab=fg';
+}
+
+async function completeAudit() {
+  saveCurrentCount();
+  var res = await fetch('/api/audit/'+_audit.id+'/complete', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({results: _results}),
+  });
+  var d = await res.json();
+  showComplete(d.adjustments || 0, d.audit);
+}
+
+function showComplete(adjCount, audit) {
+  document.getElementById('screen-item').classList.remove('active');
+  document.getElementById('screen-complete').classList.add('active');
+
+  var adjs = (audit && audit.adjustments) ? audit.adjustments : [];
+  var html =
+    '<div class="complete-icon">✅</div>'
+    +'<div class="complete-title">Audit Complete</div>'
+    +'<div class="complete-sub">'+(adjs.length||0)+' adjustment'+(adjs.length===1?'':'s')+' applied to inventory</div>';
+
+  if (adjs.length) {
+    html += '<div class="adj-list">';
+    adjs.forEach(function(a) {
+      var diff = a.diff;
+      var cls  = diff > 0 ? 'pos' : diff < 0 ? 'neg' : 'zero';
+      var name = a.item || a.recipe || '—';
+      var lot  = a.lot ? ' · LOT '+a.lot : '';
+      html += '<div class="adj-row">'
+        +'<div><div class="adj-name">'+e(name)+'</div>'
+        +'<div style="font-size:11px;color:var(--text-light);">System: '+a.system_qty+' → Counted: '+a.counted+lot+'</div>'
+        +'</div>'
+        +'<div class="adj-diff '+cls+'">'+(diff>0?'+':'')+diff+'</div>'
+        +'</div>';
+    });
+    html += '</div>';
+  } else {
+    html += '<div style="background:#e8f5e9;border-radius:12px;padding:20px;text-align:center;color:#2e7d32;font-weight:600;font-size:15px;margin-bottom:24px;">✓ All counts matched — no adjustments needed</div>';
+  }
+
+  html += '<button class="done-btn" onclick="window.location=\''+(KIND==='rm'?'/organic?tab=raw':'/organic?tab=fg')+'\'">Done — Back to Inventory</button>';
+  document.getElementById('complete-body').innerHTML = html;
+}
+
+function exitAudit() {
+  if (confirm('Exit audit? Progress will not be saved.')) {
+    window.location = KIND === 'rm' ? '/organic?tab=raw' : '/organic?tab=fg';
+  }
+}
+
+function fmtQty(n) {
+  var f = parseFloat(n);
+  return isNaN(f) ? '0' : (f % 1 === 0 ? f.toString() : f.toFixed(2));
+}
+
+function e(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+init();
+</script>
+</body>
+</html>
