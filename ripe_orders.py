@@ -101,15 +101,25 @@ def create_ripe_sale_records(order, delivery_date, payment_key):
         product_name = (item.get("name") or "").strip()
         fmt   = (item.get("format") or "").upper()
         units = int(item.get("units") or 0)
+        unit_price = float(item.get("unit_price") or 0)
+        line_total = float(item.get("line_total") or 0)
         if units <= 0:
             continue
 
-        # Match FG entry for canonical recipe/brand/format/cert
+        # Match FG entry — exact name match first, substring fallback
+        fmt_prefix = fmt.split("-")[0]
         match = next((
             f for f in fg_all
-            if product_name.lower() in (f.get("recipe") or "").lower()
-            and (f.get("format") or "").upper().startswith(fmt.split("-")[0])
+            if (f.get("recipe") or "").lower() == product_name.lower()
+            and (f.get("format") or "").upper().startswith(fmt_prefix)
         ), None)
+        if not match:
+            # Substring fallback for legacy name mismatches
+            match = next((
+                f for f in fg_all
+                if product_name.lower() in (f.get("recipe") or "").lower()
+                and (f.get("format") or "").upper().startswith(fmt_prefix)
+            ), None)
 
         recipe_name = match.get("recipe", product_name) if match else product_name
         brand       = match.get("brand", "")             if match else ""
@@ -185,6 +195,9 @@ def create_ripe_sale_records(order, delivery_date, payment_key):
             "location_address":   order.get("delivery_address", ""),
             "po_number":          order.get("id", ""),
             "case_lot":           "",
+            "unit_price":         unit_price,
+            "line_total":         line_total,
+            "cases":              units // 12 if units else 0,
             "created_at":         datetime.now().isoformat(),
         }
         if shortfall > 0:
@@ -313,13 +326,6 @@ def ripe_order_action(order_id):
         ok, err = create_ripe_sale_records(order, delivery_date, payment_key)
         if not ok:
             return jsonify({"error": err or "Could not create sale records"}), 500
-
-        # Run deductions in case delivery date is today or past
-        try:
-            from app import _run_scheduled_deductions
-            _run_scheduled_deductions()
-        except Exception:
-            pass  # non-fatal — will run on next startup
 
         # Push approve to Ripe (fires Stripe invoice for Net14 there)
         ripe_status, ripe_resp = _ripe_request(
