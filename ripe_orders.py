@@ -506,9 +506,9 @@ def ripe_contract_page():
     )
 
     # Contract constants (keep in sync with Ripe app)
-    CONTRACT_EFFECTIVE_DATE = date(2026, 8, 1)
-    CONTRACT_EXPIRY_DATE    = date(2027, 7, 31)
-    CONTRACT_VERSION        = "1.0 — Aug 2026"
+    CONTRACT_EFFECTIVE_DATE = date(2026, 7, 1)
+    CONTRACT_EXPIRY_DATE    = date(2027, 6, 30)
+    CONTRACT_VERSION        = "1.0 — Jul 2026"
     UNITS_PER_CASE          = 12
     MIN_SS_CASES_DELIVERY   = 40
     DELIVERY_LOCATIONS = [

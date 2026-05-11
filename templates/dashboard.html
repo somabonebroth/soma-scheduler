@@ -140,6 +140,13 @@ var _resUnlocked = (function(){
 if(_resUnlocked){
     var _lockEl = document.getElementById('res-lock');
     if(_lockEl) _lockEl.textContent = '🔓';
+    // Re-open automatically since it was open before navigation
+    document.addEventListener('DOMContentLoaded', function(){
+        var _sec = document.getElementById('resources-section');
+        if(_sec) { _sec.open = true; _sec.setAttribute('open',''); }
+        var _car = document.getElementById('res-caret');
+        if(_car) _car.textContent = '▼';
+    });
 }
 
 function handleResourcesClick(ev) {
@@ -176,9 +183,9 @@ async function submitManagerPw() {
             document.getElementById('mgr-modal').style.display='none';
             var lock = document.getElementById('res-lock');
             if(lock) lock.textContent = '🔓';
-            // Open the section
+            // Open the section and keep it open
             var section = document.getElementById('resources-section');
-            if(section) section.open = true;
+            if(section) { section.open = true; section.setAttribute('open',''); }
             var c = document.getElementById('res-caret');
             if(c) c.textContent = '▼';
         } else {

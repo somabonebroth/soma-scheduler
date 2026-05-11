@@ -83,11 +83,7 @@
         <div class="add-btns" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
             <button class="btn btn-primary" onclick="openAddManual()">Add Recipe Manually</button>
             <span style="color:var(--text-light);font-size:13px;">or upload PDF below</span>
-            <button class="btn btn-outline" id="clean-names-btn" onclick="cleanRecipeNames()"
-                style="margin-left:auto;font-size:12px;border-color:#f57f17;color:#e65100;"
-                title="Strips format codes (SS-876ML etc.) from recipe names that have them baked in">
-                🧹 Clean Recipe Names
-            </button>
+
         </div>
         <div class="upload-zone" id="upload-zone"><p>Upload recipe card PDF</p><input type="file" id="recipe-upload" accept=".pdf"></div>
         <div id="upload-status" class="status" style="margin-top:12px;"></div>
@@ -499,33 +495,6 @@ async function saveEdit(){
     closeModal('edit-modal');recipes=await(await fetch('/api/recipes')).json();await loadOrder();renderList();checkMigration();
     // Show cascade summary if a rename/rebrand updated downstream records
 
-async function cleanRecipeNames(){
-    var btn = document.getElementById('clean-names-btn');
-    if(!confirm('This will rename any recipe whose name contains a format code (e.g. "Liquid Gold SS-876ML" → "Liquid Gold"). The format code will be moved to the Format field. All downstream records will update. Continue?')) return;
-    btn.disabled = true; btn.textContent = '🧹 Cleaning…';
-    try {
-        var res = await fetch('/api/recipes/clean-names', {method:'POST'});
-        var data = await res.json();
-        btn.disabled = false; btn.textContent = '🧹 Clean Recipe Names';
-        if(data.changed === 0 && !data.errors.length){
-            alert('✓ All recipe names are already clean. No changes needed.');
-        } else {
-            var msg = '✓ Cleaned ' + data.changed + ' recipe name' + (data.changed===1?'':'s') + '.';
-            if(data.errors.length) msg += '\n⚠ ' + data.errors.length + ' could not be renamed:\n' + data.errors.join('\n');
-            if(data.details.length){
-                msg += '\n\nRenamed:';
-                data.details.forEach(function(d){ msg += '\n  "' + d.from + '" → "' + d.to + '"'; });
-            }
-            alert(msg);
-            recipes = await (await fetch('/api/recipes')).json();
-            await loadOrder();
-            renderList();
-        }
-    } catch(e) {
-        btn.disabled = false; btn.textContent = '🧹 Clean Recipe Names';
-        alert('Error: ' + e.message);
-    }
-}
 
     if(resData.cascade && Object.keys(resData.cascade).length > 0){
         var c = resData.cascade;

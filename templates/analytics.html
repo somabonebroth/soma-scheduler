@@ -79,7 +79,12 @@ body.an-page { background:var(--bg); }
 
   <!-- ── Production Tracker ─────────────────────────────────────── -->
   <div class="tab-pane" id="tab-production">
-    <iframe class="tracker-frame" id="tracker-frame" src="/production-tracker" title="Production Tracker"></iframe>
+    <div style="text-align:center;padding:32px 16px;background:#fff;border:1px solid var(--border);border-radius:var(--r-lg);">
+      <div style="font-size:32px;margin-bottom:12px;">📈</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:8px;">Production Tracker</div>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:16px;">Opens the full Production Tracker in its own page.</p>
+      <a href="/production-tracker" target="_blank" class="btn btn-primary" style="text-decoration:none;">Open Production Tracker ↗</a>
+    </div>
   </div>
 </div>
 
@@ -112,7 +117,7 @@ async function loadSales() {
     var data = await res.json();
     renderSales(data.buyers || []);
   } catch(e) {
-    document.getElementById('sales-list').innerHTML = '<div class="empty-state">Could not load sales data.</div>';
+    document.getElementById('sales-list').innerHTML = '<div class="empty-state">Could not load sales data: ' + e.message + '</div>';
   }
 }
 
@@ -121,7 +126,7 @@ function fmtN(n) { return (+n).toLocaleString(); }
 
 function renderSales(buyers) {
   if (!buyers.length) {
-    document.getElementById('sales-list').innerHTML = '<div class="empty-state">No sales found for this period.</div>';
+    document.getElementById('sales-list').innerHTML = '<div class="empty-state">No sales recorded yet for this period.</div>';
     return;
   }
   var maxRev = Math.max.apply(null, buyers.map(function(b){ return b.revenue; })) || 1;

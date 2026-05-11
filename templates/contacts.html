@@ -103,14 +103,13 @@ body.cp { background: var(--bg); }
   <div class="header-right"><button class="header-btn" onclick="window.location='/'">← Dashboard</button></div>
 </div>
 <div class="tab-bar">
-  <button class="tab-btn active" onclick="showTab('suppliers')">Suppliers</button>
-  <button class="tab-btn" onclick="showTab('buyers')">Buyers</button>
-  <button class="tab-btn" onclick="showTab('settings')">Company Settings</button>
+  <button class="tab-btn" onclick="showTab('suppliers')">Suppliers</button>
+  <button class="tab-btn active" onclick="showTab('buyers')">Buyers</button>
 </div>
 <div class="main">
 
 <!-- Suppliers -->
-<div class="tab-content active" id="tab-suppliers">
+<div class="tab-content" id="tab-suppliers">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
     <div><div style="font-size:20px;font-weight:700;color:var(--dark);">Suppliers</div><div id="sup-count" style="font-size:12px;color:var(--text-light);margin-top:2px;"></div></div>
     <button class="btn btn-p" onclick="openAddSup()" style="background:#2e7d32;border:none;">+ Add Supplier</button>
@@ -119,7 +118,7 @@ body.cp { background: var(--bg); }
 </div>
 
 <!-- Buyers -->
-<div class="tab-content" id="tab-buyers">
+<div class="tab-content active" id="tab-buyers">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
     <div><div style="font-size:20px;font-weight:700;color:var(--dark);">Buyers</div><div id="buy-count" style="font-size:12px;color:var(--text-light);margin-top:2px;"></div></div>
     <button class="btn btn-p" onclick="openAddBuy()" style="background:#0288d1;border:none;">+ Add Buyer</button>
@@ -128,59 +127,7 @@ body.cp { background: var(--bg); }
 </div>
 
 <!-- Settings -->
-<div class="tab-content" id="tab-settings">
-  <div style="font-size:20px;font-weight:700;color:var(--dark);margin-bottom:6px;">Company Settings</div>
-  <div style="font-size:13px;color:var(--text-light);margin-bottom:20px;">Used on packing slips. Changes save automatically.</div>
-  <div class="scard">
-    <h3>Company Information</h3>
-    <div class="g2">
-      <div class="ff"><label>Company Name</label><input id="ci-name" type="text" placeholder="Soma Bone Broth" oninput="dCI()"></div>
-      <div class="ff"><label>Phone</label><input id="ci-phone" type="tel" placeholder="416-555-0100" oninput="dCI()"></div>
-      <div class="ff"><label>Email</label><input id="ci-email" type="email" placeholder="hello@somabonebroth.com" oninput="dCI()"></div>
-      <div class="ff"><label>Website</label><input id="ci-website" type="url" placeholder="https://" oninput="dCI()"></div>
-    </div>
-    <div class="ff"><label>Street Address</label><input id="ci-address" type="text" placeholder="123 Main St" oninput="dCI()"></div>
-    <div class="ff"><label>City / Province / Postal</label><input id="ci-city" type="text" placeholder="Toronto, ON M5V 1A1" oninput="dCI()"></div>
-    <div class="ff"><label>Business Registration / Tax #</label><input id="ci-reg" type="text" placeholder="BN 123456789 RT0001" oninput="dCI()"></div>
-    <div class="ff"><label>Footer Note (appears on packing slips)</label><input id="ci-notes" type="text" placeholder="e.g. All products made in Canada" oninput="dCI()"></div>
-    <div class="sflash" id="ci-ok">&#10003; Saved</div>
-  </div>
-  <div class="scard">
-    <h3>Ripe Portal</h3>
-    <div class="ff" style="max-width:320px;margin-bottom:18px;">
-      <label>Inventory Buffer — units withheld from Ripe per SKU</label>
-      <div style="display:flex;align-items:center;gap:12px;margin-top:6px;">
-        <input id="ci-buf" type="number" min="0" step="1" placeholder="12" oninput="dCI()" style="width:80px;font-size:20px;font-weight:700;text-align:center;padding:8px;">
-        <span style="font-size:13px;color:var(--text-light);line-height:1.4;">units per SKU<br><span style="font-size:11px;">Keeps a safety buffer so Ripe can't order your last cases</span></span>
-      </div>
-    </div>
-    <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px;">
-      <div style="font-size:12px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">Order Rules</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:480px;">
-        <div class="ff">
-          <label>SS min cases (delivery)</label>
-          <input id="ci-ss-min" type="number" min="0" step="1" placeholder="40" oninput="dCI()" style="width:100%;padding:8px 10px;font-size:15px;font-weight:600;text-align:center;">
-          <div style="font-size:11px;color:var(--text-light);margin-top:3px;">Cases of SS required for delivery orders</div>
-        </div>
-        <div class="ff">
-          <label>FZ/BB lead time threshold</label>
-          <input id="ci-fzbb-thresh" type="number" min="1" step="1" placeholder="8" oninput="dCI()" style="width:100%;padding:8px 10px;font-size:15px;font-weight:600;text-align:center;">
-          <div style="font-size:11px;color:var(--text-light);margin-top:3px;">Cases at which longer lead time applies</div>
-        </div>
-        <div class="ff">
-          <label>FZ/BB small order lead (days)</label>
-          <input id="ci-fzbb-small" type="number" min="1" step="1" placeholder="3" oninput="dCI()" style="width:100%;padding:8px 10px;font-size:15px;font-weight:600;text-align:center;">
-          <div style="font-size:11px;color:var(--text-light);margin-top:3px;">Min days notice for orders below threshold</div>
-        </div>
-        <div class="ff">
-          <label>FZ/BB large order lead (days)</label>
-          <input id="ci-fzbb-large" type="number" min="1" step="1" placeholder="7" oninput="dCI()" style="width:100%;padding:8px 10px;font-size:15px;font-weight:600;text-align:center;">
-          <div style="font-size:11px;color:var(--text-light);margin-top:3px;">Min days notice for orders at/above threshold</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+
 
 </div>
 
@@ -292,7 +239,7 @@ function showTab(t){
   document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});
   document.querySelectorAll('.tab-content').forEach(function(x){x.classList.remove('active');});
   G('tab-'+t).classList.add('active');
-  ['suppliers','buyers','settings'].forEach(function(n,i){if(n===t)document.querySelectorAll('.tab-btn')[i].classList.add('active');});
+  ['suppliers','buyers'].forEach(function(n,i){if(n===t)document.querySelectorAll('.tab-btn')[i].classList.add('active');});
   if(t==='suppliers')loadSups();
   if(t==='buyers')loadBuys();
   if(t==='settings')loadCI();
@@ -632,7 +579,7 @@ async function saveCI(){
 
 /* ════════ INIT ════════ */
 loadSups();
-(function(){var t=new URLSearchParams(window.location.search).get('tab');if(t&&['suppliers','buyers','settings'].includes(t))showTab(t);})();
+(function(){var t=new URLSearchParams(window.location.search).get('tab');if(t&&['suppliers','buyers'].includes(t))showTab(t);})();
 
 </script>
 </body>
