@@ -578,8 +578,14 @@ async function saveCI(){
 ['sup-mo','buy-mo'].forEach(function(id){G(id).addEventListener('click',function(ev){if(ev.target===this)this.classList.remove('open');});});
 
 /* ════════ INIT ════════ */
+// Load both tabs' data upfront so switching is instant
 loadSups();
-(function(){var t=new URLSearchParams(window.location.search).get('tab');if(t&&['suppliers','buyers'].includes(t))showTab(t);})();
+loadBuys();
+// Default to buyers tab; restore from URL param if present
+(function(){
+  var t=new URLSearchParams(window.location.search).get('tab');
+  showTab((t&&['suppliers','buyers'].includes(t))?t:'buyers');
+})();
 
 </script>
 </body>

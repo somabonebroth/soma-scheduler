@@ -79,12 +79,7 @@ body.an-page { background:var(--bg); }
 
   <!-- ── Production Tracker ─────────────────────────────────────── -->
   <div class="tab-pane" id="tab-production">
-    <div style="text-align:center;padding:32px 16px;background:#fff;border:1px solid var(--border);border-radius:var(--r-lg);">
-      <div style="font-size:32px;margin-bottom:12px;">📈</div>
-      <div style="font-size:15px;font-weight:600;margin-bottom:8px;">Production Tracker</div>
-      <p style="font-size:13px;color:var(--text-light);margin-bottom:16px;">Opens the full Production Tracker in its own page.</p>
-      <a href="/production-tracker" target="_blank" class="btn btn-primary" style="text-decoration:none;">Open Production Tracker ↗</a>
-    </div>
+    <iframe id="tracker-frame" src="" style="width:100%;height:80vh;border:none;border-radius:10px;background:#fff;" title="Production Tracker"></iframe>
   </div>
 </div>
 
@@ -99,6 +94,13 @@ function showTab(id) {
     p.classList.remove('active');
   });
   document.getElementById('tab-'+id).classList.add('active');
+  // Lazy-load production tracker iframe on first click
+  if(id === 'production') {
+    var frame = document.getElementById('tracker-frame');
+    if(frame && !frame.src.includes('production-tracker')) {
+      frame.src = '/production-tracker';
+    }
+  }
 }
 
 function setPeriod(p, btn) {
