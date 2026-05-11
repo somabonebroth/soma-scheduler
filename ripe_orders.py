@@ -81,23 +81,30 @@ def _save(path, data):
 
 
 def create_ripe_sale_records(order, delivery_date, payment_key):
-    """Write scheduled sale records for each line item in a Ripe order.
-    Called on approval. FG is NOT deducted here — deduction_date controls when.
+    """Write sale records for each line item and immediately FIFO-deduct FG inventory.
+
+    On approval the stock is physically committed — units are moved to the front
+    of the warehouse awaiting delivery/pickup. We deduct immediately so FG
+    inventory reflects reality from the moment of approval.
+
     Returns (ok: bool, error: str|None).
     """
-    sales = _load(_SALES_PATH, [])
+    from app import _sku_key as _make_sku_key, timedelta
+
+    sales  = _load(_SALES_PATH, [])
     fg_all = _load(_FG_PATH, [])
     payment_pending = (payment_key == "cc_net14")
     created = []
+    shortfalls = []
 
     for item in order.get("items", []):
         product_name = (item.get("name") or "").strip()
-        fmt = (item.get("format") or "").upper()
+        fmt   = (item.get("format") or "").upper()
         units = int(item.get("units") or 0)
         if units <= 0:
             continue
 
-        # Match a FG entry to get canonical recipe/brand/format/cert
+        # Match FG entry for canonical recipe/brand/format/cert
         match = next((
             f for f in fg_all
             if product_name.lower() in (f.get("recipe") or "").lower()
@@ -105,46 +112,93 @@ def create_ripe_sale_records(order, delivery_date, payment_key):
         ), None)
 
         recipe_name = match.get("recipe", product_name) if match else product_name
-        brand = match.get("brand", "") if match else ""
-        recipe_fmt = match.get("format", fmt) if match else fmt
-        cert = match.get("certification", "") if match else ""
-        # Use the same _sku_key() function Soma uses everywhere — preserves original
-        # casing so keys match what internal_fg_stock returns
-        from app import _sku_key as _make_sku_key
+        brand       = match.get("brand", "")             if match else ""
+        recipe_fmt  = match.get("format", fmt)           if match else fmt
+        cert        = match.get("certification", "")     if match else ""
         try:
             sku = _make_sku_key(brand, recipe_name, recipe_fmt)
         except Exception:
             sku = "|".join([brand, recipe_name, recipe_fmt.upper()])
 
+        # ── Immediate FIFO deduction ──────────────────────────────────────────
+        candidates = [
+            f for f in fg_all
+            if (f.get("recipe") or "") == recipe_name
+            and (f.get("format") or "").upper() == recipe_fmt.upper()
+            and int(f.get("quantity_remaining") or 0) > 0
+        ]
+
+        def _prod_date(e):
+            wid   = e.get("week_id")
+            d_idx = e.get("day_idx")
+            if wid and d_idx is not None:
+                try:
+                    return (datetime.strptime(wid, "%Y-%m-%d") +
+                            timedelta(days=int(d_idx))).strftime("%Y-%m-%d")
+                except Exception:
+                    pass
+            return (e.get("created_at") or "")[:10]
+
+        candidates.sort(key=lambda e: (_prod_date(e), e.get("lot", ""), e.get("id", "")))
+
+        remaining   = units
+        lot_summary = {}
+        for entry in candidates:
+            if remaining <= 0:
+                break
+            avail = int(entry.get("quantity_remaining") or 0)
+            take  = min(avail, remaining)
+            entry["quantity_remaining"] = avail - take
+            remaining -= take
+            lot = entry.get("lot", "")
+            if lot not in lot_summary:
+                lot_summary[lot] = {"lot": lot, "quantity": 0,
+                                    "fg_ids": [], "breakdown": []}
+            lot_summary[lot]["quantity"]  += take
+            lot_summary[lot]["fg_ids"].append(entry["id"])
+            lot_summary[lot]["breakdown"].append({"fg_id": entry["id"], "quantity": take})
+
+        lots_list = list(lot_summary.values())
+        shortfall = remaining  # > 0 if insufficient stock (e.g. FZ/BB made-to-order)
+
         sale = {
-            "id": datetime.now().strftime("%Y%m%d%H%M%S%f") + str(len(sales) + len(created)),
-            "sku_key": sku,
-            "brand": brand,
-            "recipe": recipe_name,
-            "format": recipe_fmt,
-            "certification": cert,
-            "quantity": units,
-            "lots": [],
-            "fg_lot": "",
-            "fg_id": "",
-            "buyer": "Ripe",
-            "sale_date": delivery_date,
+            "id":             datetime.now().strftime("%Y%m%d%H%M%S%f") + str(len(sales) + len(created)),
+            "sku_key":        sku,
+            "brand":          brand,
+            "recipe":         recipe_name,
+            "format":         recipe_fmt,
+            "certification":  cert,
+            "quantity":       units,
+            "lots":           lots_list,
+            "fg_lot":         lots_list[0]["lot"] if len(lots_list) == 1 else "",
+            "fg_id":          lots_list[0]["fg_ids"][0] if len(lots_list) == 1 and lots_list[0]["fg_ids"] else "",
+            "buyer":          "Ripe",
+            "sale_date":      delivery_date,
             "deduction_date": delivery_date,
-            "deducted": False,
-            "payment_pending": payment_pending,
-            "payment_method": payment_key,
-            "ripe_order_id": order.get("id", ""),
-            "delivery_label": order.get("delivery_label", ""),
-            "location_name":  order.get("delivery_label", ""),
-            "location_address": order.get("delivery_address", ""),
-            "po_number": order.get("id", ""),
-            "case_lot": "",
-            "created_at": datetime.now().isoformat(),
+            "deducted":       True,          # immediate — no longer waiting for delivery date
+            "deducted_at":    datetime.now().isoformat(),
+            "payment_pending":    payment_pending,
+            "payment_method":     payment_key,
+            "ripe_order_id":      order.get("id", ""),
+            "delivery_label":     order.get("delivery_label", ""),
+            "location_name":      order.get("delivery_label", ""),
+            "location_address":   order.get("delivery_address", ""),
+            "po_number":          order.get("id", ""),
+            "case_lot":           "",
+            "created_at":         datetime.now().isoformat(),
         }
+        if shortfall > 0:
+            sale["shortfall"] = shortfall   # FZ/BB pre-orders may have partial stock
+            shortfalls.append(f"{recipe_name} ({recipe_fmt}): {shortfall} units short")
         created.append(sale)
 
     sales.extend(created)
     _save(_SALES_PATH, sales)
+    _save(_FG_PATH, fg_all)   # save FG with deducted quantity_remaining values
+
+    if shortfalls:
+        logger.warning("Ripe order approval: partial deductions — %s", "; ".join(shortfalls))
+
     return True, None
 
 
