@@ -19,6 +19,12 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ.get("SECRET_KEY", "soma-bone-broth-2026-change-me")
 app.register_blueprint(ripe_orders_bp)
 
+# Session lifetime — 4 hours. After this the user must log in again.
+from datetime import timedelta as _timedelta
+app.config["PERMANENT_SESSION_LIFETIME"] = _timedelta(hours=4)
+app.config["SESSION_COOKIE_HTTPONLY"] = True   # JS can't read the cookie
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # CSRF mitigation
+
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "soma2026")
 MANAGER_PASSWORD = os.environ.get("MANAGER_PASSWORD", "")  # empty = feature disabled
 VESSELS = ["K1", "K2", "K3", "115L"]
@@ -770,7 +776,9 @@ def login_page():
 def login():
     data = request.json
     if data.get("password") == APP_PASSWORD:
+        session.permanent = True   # enables PERMANENT_SESSION_LIFETIME
         session["authenticated"] = True
+        session["logged_in_at"] = datetime.now().isoformat()
         return jsonify({"success": True})
     return jsonify({"error": "Invalid password"}), 401
 
