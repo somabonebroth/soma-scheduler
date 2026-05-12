@@ -5154,11 +5154,42 @@ _COGS_SEED = {
 }
 
 
+COGS_SCHEMA_VERSION = 2  # increment when seed structure changes
+
 def _load_cogs():
+    """Load COGS data, migrating to current seed if schema version is outdated."""
     if not os.path.exists(COGS_PATH):
-        _save_json(COGS_PATH, _COGS_SEED)
-        return _COGS_SEED
-    return _load_json(COGS_PATH, _COGS_SEED)
+        seed = dict(_COGS_SEED, schema_version=COGS_SCHEMA_VERSION)
+        _save_json(COGS_PATH, seed)
+        return seed
+
+    data = _load_json(COGS_PATH, {})
+
+    # Migrate if on old schema — missing new fields means it needs reseed
+    needs_migration = (
+        data.get("schema_version", 1) < COGS_SCHEMA_VERSION
+        or "overhead_fixed" not in data        # new split overhead structure
+        or "slow_kettles_per_day" not in data  # new production volume field
+        or "supplies" not in data              # new supplies list
+    )
+
+    if needs_migration:
+        # Preserve any user-edited values that exist in both old and new schema
+        migrated = dict(_COGS_SEED)
+        # Carry over top-level scalar edits if they exist in old data
+        for key in ("maintenance_monthly", "debt_repayment_monthly",
+                    "mushroom_price_per_kg", "other_ingredients_per_batch",
+                    "minor_ingredients_per_batch"):
+            if key in data and data[key]:
+                migrated[key] = data[key]
+        # Carry over equipment if it looks like the new schema
+        if data.get("equipment") and any("life_years" in e for e in data["equipment"]):
+            migrated["equipment"] = data["equipment"]
+        migrated["schema_version"] = COGS_SCHEMA_VERSION
+        _save_json(COGS_PATH, migrated)
+        return migrated
+
+    return data
 
 
 def _compute_cogs_matrix(c, recipe_overrides=None):
@@ -5450,6 +5481,17 @@ def get_recipe_cogs(recipe_name):
         "breakdown":    breakdown,
         "ingredient_kg": kg,
     })
+
+
+@app.route("/api/cogs/reset", methods=["POST"])
+@login_required
+def reset_cogs():
+    """Force-reset cogs.json to the current seed values. Used for migration."""
+    seed = dict(_COGS_SEED, schema_version=COGS_SCHEMA_VERSION)
+    _save_json(COGS_PATH, seed)
+    matrix, cost_per_run, avg_runs = _compute_cogs_matrix(seed)
+    return jsonify({"ok": True, "cost_per_run": cost_per_run,
+                    "avg_runs": avg_runs, "matrix": matrix})
 
 
 @app.route("/api/cogs/compute", methods=["POST"])

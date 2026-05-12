@@ -197,7 +197,7 @@ function renderLocTabs(data) {
   if (!data.has_locations) { wrap.style.display = 'none'; return; }
   wrap.style.display = '';
   var locs = data.locations || [];
-  var html = '<button class="loc-tab'+(_loc==='all'?' active':'')+'" onclick="setLoc('all',this)">All Locations</button>';
+  var html = '<button class="loc-tab'+(_loc==='all'?' active':'')+'" onclick="setLoc(&quot;all&quot;,this)">All Locations</button>';
   locs.forEach(function(l) {
     var active = _loc === l.name ? ' active' : '';
     html += '<button class="loc-tab'+active+'" onclick="setLoc('+JSON.stringify(l.name)+',this)">'+e(l.name)+'</button>';
