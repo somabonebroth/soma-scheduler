@@ -30,11 +30,11 @@ body.be-page { background:var(--bg); }
 
 /* SKU assignment table */
 .sku-section-hdr { font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.06em; padding:8px 14px 6px; background:#f5f5f0; border-bottom:1px solid var(--border); }
-.sku-row { display:grid; grid-template-columns:32px 1fr 90px 110px 80px 50px; gap:8px; align-items:center; padding:9px 14px; border-bottom:1px solid var(--border); background:#fff; }
+.sku-row { display:grid; grid-template-columns:32px 1fr 100px 90px 76px 90px 44px; gap:10px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--border); background:#fff; }
 .sku-row:last-child { border-bottom:none; }
 .sku-row:hover { background:#f9faf7; }
 .sku-row.assigned { background:#f0f7f0; }
-.sku-hdr { display:grid; grid-template-columns:32px 1fr 90px 110px 80px 50px; gap:8px; padding:8px 14px; background:#f5f5f0; border-bottom:2px solid var(--border); font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
+.sku-hdr { display:grid; grid-template-columns:32px 1fr 100px 90px 76px 90px 44px; gap:10px; padding:8px 16px; background:#f5f5f0; border-bottom:2px solid var(--border); font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
 .sku-hdr span, .sku-row span.hdr { text-align:right; }
 .sku-hdr span:nth-child(2), .sku-row .sku-name { text-align:left; }
 .sku-check { width:17px; height:17px; accent-color:var(--accent); cursor:pointer; }
@@ -44,6 +44,8 @@ body.be-page { background:var(--bg); }
 .p-input:focus { border-color:var(--accent); box-shadow:0 0 0 2px rgba(74,103,65,.1); }
 .p-input:disabled { background:#f5f5f0; opacity:.5; }
 .p-margin { font-size:12px; color:var(--text-light); text-align:right; }
+.price-display { cursor:default; }
+.cost-display  { cursor:help; }
 .p-active-tog { width:34px; height:18px; border-radius:9px; border:none; cursor:pointer; transition:background .2s; position:relative; flex-shrink:0; }
 .p-active-tog::after { content:''; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; transition:transform .2s; }
 .p-active-tog.on { background:var(--accent); }
@@ -64,9 +66,9 @@ body.be-page { background:var(--bg); }
 
 @media(max-width:640px){
   .g2,.g3 { grid-template-columns:1fr; }
-  .sku-row,.sku-hdr { grid-template-columns:28px 1fr 70px 70px 0 0; }
-  .sku-row>:nth-child(5),.sku-row>:nth-child(6),
-  .sku-hdr>:nth-child(5),.sku-hdr>:nth-child(6) { display:none; }
+  .sku-row,.sku-hdr { grid-template-columns:28px 1fr 80px 0 60px 0 0; }
+  .sku-row>:nth-child(4),.sku-row>:nth-child(6),.sku-row>:nth-child(7),
+  .sku-hdr>:nth-child(4),.sku-hdr>:nth-child(6),.sku-hdr>:nth-child(7) { display:none; }
 }
 </style>
 </head>
@@ -136,7 +138,7 @@ body.be-page { background:var(--bg); }
   <div class="be-card">
     <div class="be-card-head">
       <h2>Catalogue &amp; Pricing</h2>
-      <div style="font-size:12px;color:var(--text-light);">Tick to assign · Enter price per unit · Cost auto-calculated · Margin % updates price</div>
+      <div style="font-size:12px;color:var(--text-light);">Cost (COGS model) → Label by buyer → Margin % → Price</div>
     </div>
 
     {% set ns = namespace(cur_fmt='') %}
@@ -147,9 +149,10 @@ body.be-page { background:var(--bg); }
       <div class="sku-hdr">
         <span></span>
         <span style="text-align:left;">Product</span>
-        <span>Price/unit</span>
-        <span>Cost (auto)</span>
+        <span>Cost</span>
+        <span>Label by buyer</span>
         <span>Margin %</span>
+        <span>Price / unit</span>
         <span>Active</span>
       </div>
 
@@ -168,47 +171,59 @@ body.be-page { background:var(--bg); }
         {% set is_active = assigned.get('active', True) if is_assigned else True %}
 
         <div class="sku-row {% if is_assigned %}assigned{% endif %}" data-sku="{{ sku.sku_key|e }}" data-recipe="{{ sku.recipe|e }}">
+
+          <!-- Col 1: Assign checkbox -->
           <input type="checkbox" class="sku-check" {% if is_assigned %}checked{% endif %}
             onchange="toggleSku('{{ sku.sku_key|e }}', this.checked)">
+
+          <!-- Col 2: Product name + SKU key -->
           <div>
             <div class="sku-name">{{ sku.recipe }}</div>
-            <div class="sku-fmt" style="font-family:ui-monospace,monospace;font-size:10px;">{{ sku.sku_key }}</div>
-            <label style="font-size:10px;color:var(--text-light);display:flex;align-items:center;gap:3px;cursor:pointer;margin-top:3px;">
+            <div class="sku-fmt" style="font-family:ui-monospace,monospace;font-size:10px;color:var(--text-light);margin-top:2px;">{{ sku.sku_key }}</div>
+          </div>
+
+          <!-- Col 3: Cost — read-only, from COGS model -->
+          <div class="cost-display" data-sku="{{ sku.sku_key|e }}"
+            style="background:#f5f5f0;border:1.5px solid var(--border);border-radius:7px;padding:6px 8px;font-size:13px;font-weight:600;text-align:right;color:var(--dark);min-height:32px;font-family:'JetBrains Mono',monospace;">
+            {{ '%.2f'|format(cogs) if cogs is not none else '—' }}
+          </div>
+
+          <!-- Col 4: Label supplied checkbox -->
+          <div style="display:flex;align-items:center;justify-content:center;">
+            <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
               <input type="checkbox" class="label-supplied-tog" data-sku="{{ sku.sku_key|e }}"
                 {% if assigned.get('label_supplied') %}checked{% endif %}
                 onchange="onLabelSuppliedChange(this)"
-                style="width:11px;height:11px;accent-color:var(--accent);">
-              Label by buyer
+                style="width:16px;height:16px;accent-color:var(--accent);">
+              <span style="font-size:9px;color:var(--text-light);text-align:center;line-height:1.2;">Buyer<br>supplies</span>
             </label>
           </div>
+
+          <!-- Col 5: Margin % — only manual input -->
           <div>
-            <input type="number" class="p-input price-input" step="0.01" min="0" placeholder="—"
-              value="{{ '%.2f'|format(price) if price is not none else '' }}"
-              data-sku="{{ sku.sku_key|e }}" data-field="price"
-              {% if not is_assigned %}disabled{% endif %}>
-          </div>
-          <!-- Cost — read-only, computed from COGS model -->
-          <div>
-            <div style="background:#f5f5f0;border:1.5px solid var(--border);border-radius:7px;padding:6px 8px;font-size:13px;font-weight:600;text-align:right;color:var(--dark);min-height:32px;"
-              class="cost-display" data-sku="{{ sku.sku_key|e }}">
-              {{ '%.2f'|format(cogs) if cogs is not none else '—' }}
+            <div style="position:relative;">
+              <input type="number" class="p-input margin-input" step="0.1" min="0" max="99.9" placeholder="—"
+                value="{{ '%.1f'|format(margin) if margin is not none else '' }}"
+                data-sku="{{ sku.sku_key|e }}"
+                {% if not is_assigned %}disabled{% endif %}>
+              <span style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-light);pointer-events:none;">%</span>
             </div>
           </div>
-          <!-- Margin — editable, recalculates price -->
-          <div>
-            <input type="number" class="p-input margin-input" step="0.1" min="0" max="100" placeholder="—"
-              value="{{ '%.1f'|format(margin) if margin is not none else '' }}"
-              data-sku="{{ sku.sku_key|e }}"
-              {% if not is_assigned %}disabled{% endif %}
-              oninput="onMarginChange(this)">
-            <div style="font-size:10px;color:var(--text-light);margin-top:2px;">%</div>
+
+          <!-- Col 6: Price — calculated output, read-only -->
+          <div class="price-display" data-sku="{{ sku.sku_key|e }}"
+            style="background:#e8f5e9;border:1.5px solid #a5d6a7;border-radius:7px;padding:6px 8px;font-size:13px;font-weight:700;text-align:right;color:#1b5e20;min-height:32px;font-family:'JetBrains Mono',monospace;">
+            {{ '%.2f'|format(price) if price is not none else '—' }}
           </div>
-          <div>
+
+          <!-- Col 7: Active toggle -->
+          <div style="display:flex;justify-content:center;">
             <button class="p-active-tog {% if is_active %}on{% else %}off{% endif %}"
               data-sku="{{ sku.sku_key|e }}"
               {% if not is_assigned %}disabled style="opacity:.4;"{% endif %}
               onclick="toggleActive('{{ sku.sku_key|e }}', this)"></button>
           </div>
+
         </div>
       {% endfor %}
       {% else %}
@@ -235,19 +250,20 @@ var _locs = {{ (buyer.locations or [])|tojson }};
 var _skuData = {};  // sku_key -> {price, cogs, margin_pct, active, assigned}
 
 // Init _skuData from server-rendered state
+// Price is read from the price-display div (green box) — calculated output
 document.querySelectorAll('.sku-row').forEach(function(row) {
   var sk = row.dataset.sku;
-  var chk = row.querySelector('.sku-check');
-  var priceEl = row.querySelector('.price-input');
-  var togEl = row.querySelector('.p-active-tog');
+  var chk    = row.querySelector('.sku-check');
+  var togEl  = row.querySelector('.p-active-tog');
   var lblTog = row.querySelector('.label-supplied-tog');
-  var price0  = priceEl && priceEl.value ? parseFloat(priceEl.value) : null;
-  var cogs0   = null;  // populated by loadComputedCogs()
-  var margin0 = null;
+  var priceBox = row.querySelector('.price-display[data-sku="'+sk+'"]');
+  var marginEl = row.querySelector('.margin-input[data-sku="'+sk+'"]');
+  var price0   = priceBox  ? parseFloat(priceBox.textContent)  || null : null;
+  var margin0  = marginEl  ? parseFloat(marginEl.value) || null : null;
   _skuData[sk] = {
     assigned:       chk ? chk.checked : false,
     price:          price0,
-    cogs:           cogs0,
+    cogs:           null,  // populated by loadComputedCogs()
     margin_pct:     margin0,
     active:         togEl ? togEl.classList.contains('on') : true,
     label_supplied: lblTog ? lblTog.checked : false,
@@ -292,7 +308,16 @@ document.querySelectorAll('.sku-row').forEach(function(row) {
             }
             if(_skuData[sk]) {
               _skuData[sk].cogs = d.unit_cogs;
-              updateMarginFromPrice(sk);
+              // If we have a stored price, back-calculate margin from it
+              // Then recalculate price from that margin going forward
+              var storedPrice = _skuData[sk].price;
+              if(storedPrice && storedPrice > 0 && !_skuData[sk].margin_pct) {
+                var backcalcMargin = Math.round(((storedPrice - d.unit_cogs) / storedPrice) * 1000) / 10;
+                _skuData[sk].margin_pct = backcalcMargin;
+                var mEl = document.querySelector('.margin-input[data-sku="'+sk+'"]');
+                if(mEl) mEl.value = backcalcMargin.toFixed(1);
+              }
+              updatePriceFromMargin(sk);
             }
           } else {
             var costElErr = row.querySelector('.cost-display[data-sku="'+sk+'"]');
@@ -309,13 +334,12 @@ document.querySelectorAll('.sku-row').forEach(function(row) {
 
 function formatCogsBreakdown(b){
   if(!b) return '';
-  return 'Fixed: $'+b.fixed.toFixed(2)
-    +' | Bones: $'+b.bones.toFixed(2)
-    +' | Mirepoix: $'+b.mirepoix.toFixed(2)
-    +' | Mushroom: $'+b.mushroom.toFixed(2)
-    +' | Minor: $'+b.minor_ingredients.toFixed(2)
-    +' | Pack: $'+b.packaging.toFixed(2)
-    +' | Label: $'+b.label.toFixed(2);
+  return 'Fixed: $'+(b.fixed||0).toFixed(2)
+    +' | Bones: $'+(b.bones||0).toFixed(2)
+    +' | Mushroom: $'+(b.mushroom||0).toFixed(2)
+    +' | Other: $'+(b.other_ingredients||0).toFixed(2)
+    +' | Packaging: $'+(b.packaging||0).toFixed(2)
+    +' | Label: $'+(b.label||0).toFixed(2);
 }
 
 function onLabelSuppliedChange(el){
@@ -335,7 +359,7 @@ function onLabelSuppliedChange(el){
           costEl2.textContent = d.unit_cogs.toFixed(2);
           costEl2.title = formatCogsBreakdown(d.breakdown);
         }
-        if(_skuData[sk]){ _skuData[sk].cogs=d.unit_cogs; updateMarginFromPrice(sk); }
+        if(_skuData[sk]){ _skuData[sk].cogs=d.unit_cogs; updatePriceFromMargin(sk); }
       }
     }).catch(function(){});
 }
@@ -345,8 +369,8 @@ function toggleSku(sk, checked) {
   if(!row) return;
   _skuData[sk] = _skuData[sk] || {};
   _skuData[sk].assigned = checked;
-  // Enable/disable inputs
-  row.querySelectorAll('.p-input').forEach(function(inp){ inp.disabled = !checked; });
+  // Enable/disable margin input only
+  row.querySelectorAll('.margin-input').forEach(function(inp){ inp.disabled = !checked; });
   var tog = row.querySelector('.p-active-tog');
   if(tog){ tog.disabled = !checked; tog.style.opacity = checked ? '' : '.4'; }
   row.classList.toggle('assigned', checked);
@@ -361,59 +385,32 @@ function toggleActive(sk, btn) {
   _skuData[sk].active = !isOn;
 }
 
-// Delegated input listener for price and margin
+// Delegated input listener — margin is the only manual input
 document.getElementById('sku-table').addEventListener('input', function(ev) {
   var el = ev.target;
   var sk = el.getAttribute('data-sku');
-  if(!sk) return;
+  if(!sk || !el.classList.contains('margin-input')) return;
   _skuData[sk] = _skuData[sk] || {};
-
-  if(el.classList.contains('price-input')) {
-    var price = el.value.trim() ? parseFloat(el.value) : null;
-    _skuData[sk].price = price;
-    _skuData[sk]['field'] = 'price';
-    updateMarginFromPrice(sk);
-  } else if(el.classList.contains('margin-input')) {
-    var margin = el.value.trim() ? parseFloat(el.value) : null;
-    _skuData[sk].margin_pct = margin;
-    if(margin != null && margin < 100) {
-      // Use cogs from state, or fall back to what's displayed in the cost box
-      var cost = _skuData[sk].cogs;
-      if(cost == null) {
-        var costBox = document.querySelector('.cost-display[data-sku="'+sk+'"]');
-        if(costBox) cost = parseFloat(costBox.textContent) || null;
-      }
-      if(cost != null && cost > 0) {
-        var price2 = Math.round(cost / (1 - margin/100) * 100) / 100;
-        _skuData[sk].price = price2;
-        _skuData[sk].cogs  = cost;
-        var pEl = document.querySelector('.price-input[data-sku="'+sk+'"]');
-        if(pEl) pEl.value = price2.toFixed(2);
-      }
-    }
-  }
+  var margin = el.value.trim() ? parseFloat(el.value) : null;
+  _skuData[sk].margin_pct = margin;
+  updatePriceFromMargin(sk);
 });
 
-function updateMarginFromPrice(sk) {
+// Calculate price from cost × margin, write to green price-display box
+function updatePriceFromMargin(sk) {
   var d = _skuData[sk];
   if(!d) return;
-  var cost  = d.cogs;
-  var price = d.price;
-  // Fallback: read from DOM if not yet in state
+  var cost = d.cogs;
   if(cost == null) {
     var costBox = document.querySelector('.cost-display[data-sku="'+sk+'"]');
     if(costBox) cost = parseFloat(costBox.textContent) || null;
   }
-  if(price == null) {
-    var pEl = document.querySelector('.price-input[data-sku="'+sk+'"]');
-    if(pEl) price = parseFloat(pEl.value) || null;
-  }
-  if(cost != null && cost > 0 && price != null && price > 0) {
-    var margin = Math.round(((price - cost) / price) * 1000) / 10;
-    d.margin_pct = margin;
-    var mEl = document.querySelector('.margin-input[data-sku="'+sk+'"]');
-    if(mEl) mEl.value = margin.toFixed(1);
-  }
+  var margin = d.margin_pct;
+  if(cost == null || cost <= 0 || margin == null || margin >= 100) return;
+  var price = Math.round(cost / (1 - margin / 100) * 100) / 100;
+  d.price = price;
+  var pBox = document.querySelector('.price-display[data-sku="'+sk+'"]');
+  if(pBox) pBox.textContent = price.toFixed(2);
 }
 
 function onMarginChange(el) {}  // handled by delegated listener above
@@ -462,12 +459,12 @@ async function saveBuyer() {
     if(d.assigned) {
       skus.push({
         sku_key:        sk,
-        recipe:         (document.querySelector('.sku-row[data-sku="'+sk+'"]')||{}).dataset&&(document.querySelector('.sku-row[data-sku="'+sk+'"]').dataset.recipe||'').trim()||'',
+        recipe:         (document.querySelector('.sku-row[data-sku="'+sk+'"'+(']'||'')).dataset||{}).recipe||'',
         display:        (document.querySelector('.sku-row[data-sku="'+sk+'"] .sku-name')||{}).textContent||'',
         position:       idx + 1,
-        price:          d.price,
-        cogs:           d.cogs,       // computed from COGS model, stored for display
-        margin_pct:     d.margin_pct,
+        price:          d.price,          // calculated: cost / (1 - margin/100)
+        cogs:           d.cogs,           // from COGS model — display cache only
+        margin_pct:     d.margin_pct,     // the one manual input
         active:         d.active !== false,
         label_supplied: d.label_supplied || false,
       });
