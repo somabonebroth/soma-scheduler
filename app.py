@@ -1018,24 +1018,109 @@ def api_buyer_analytics(buyer_name):
         for y in sorted(by_year.keys())
     ]
 
-    # ── By SKU ────────────────────────────────────────────────────────────────
-    by_sku = defaultdict(lambda: {"recipe": "", "format": "", "units": 0,
-                                   "cases": 0, "revenue": 0.0, "months": defaultdict(int)})
+    # ── By location ──────────────────────────────────────────────────────────
+    # Get registered locations from buyer record
+    buyers_list = _load_buyers()
+    buyer_rec   = next((b for b in buyers_list
+                        if (b.get("name") or "").strip().lower() == buyer_name.lower()), None)
+    registered_locs = [l.get("name","").strip() for l in (buyer_rec or {}).get("locations", []) if l.get("name","").strip()]
+
+    # Build per-location sales breakdown
+    by_location = defaultdict(lambda: {"revenue": 0.0, "cases": 0, "units": 0, "orders": set()})
     for s in buyer_sales:
-        sk = s.get("sku_key") or s.get("recipe") or "Unknown"
+        loc = (s.get("location_name") or s.get("delivery_label") or "").strip() or "Pickup / Other"
+        by_location[loc]["revenue"] += _revenue(s)
+        by_location[loc]["cases"]   += _cases(s)
+        by_location[loc]["units"]   += int(s.get("quantity") or 0)
+        by_location[loc]["orders"].add(s.get("order_id") or s.get("id"))
+
+    # Order locations: registered ones first (in their defined order), then any others
+    loc_names_ordered = []
+    for rl in registered_locs:
+        if rl in by_location:
+            loc_names_ordered.append(rl)
+    for loc in by_location:
+        if loc not in loc_names_ordered:
+            loc_names_ordered.append(loc)
+
+    locations = [
+        {
+            "name":    loc,
+            "revenue": round(by_location[loc]["revenue"], 2),
+            "cases":   by_location[loc]["cases"],
+            "units":   by_location[loc]["units"],
+            "orders":  len(by_location[loc]["orders"]),
+        }
+        for loc in loc_names_ordered
+    ]
+    has_locations = len(locations) > 1  # only show tabs if >1 location
+
+    # ── By month (also per-location) ──────────────────────────────────────────
+    # Store location on each monthly entry so JS can filter
+    by_month_loc = defaultdict(lambda: defaultdict(lambda: {"revenue": 0.0, "cases": 0, "units": 0, "orders": set()}))
+    for s in buyer_sales:
+        d   = (s.get("sale_date") or "")[:7]
+        loc = (s.get("location_name") or s.get("delivery_label") or "").strip() or "Pickup / Other"
+        if not d:
+            continue
+        by_month_loc[d][loc]["revenue"] += _revenue(s)
+        by_month_loc[d][loc]["cases"]   += _cases(s)
+        by_month_loc[d][loc]["units"]   += int(s.get("quantity") or 0)
+        by_month_loc[d][loc]["orders"].add(s.get("order_id") or s.get("id"))
+
+    # Build monthly with per-location breakdown embedded
+    monthly = []
+    for m in months_sorted:
+        entry = {
+            "month":   m,
+            "label":   _dt.strptime(m, "%Y-%m").strftime("%b %Y"),
+            "revenue": round(by_month[m]["revenue"], 2),
+            "cases":   by_month[m]["cases"],
+            "units":   by_month[m]["units"],
+            "orders":  len(by_month[m]["orders"]),
+            "by_location": {
+                loc: {
+                    "revenue": round(by_month_loc[m][loc]["revenue"], 2),
+                    "cases":   by_month_loc[m][loc]["cases"],
+                    "units":   by_month_loc[m][loc]["units"],
+                    "orders":  len(by_month_loc[m][loc]["orders"]),
+                }
+                for loc in by_month_loc[m]
+            }
+        }
+        monthly.append(entry)
+
+    # ── By SKU (also per-location) ────────────────────────────────────────────
+    by_sku = defaultdict(lambda: {"recipe": "", "format": "", "units": 0,
+                                   "cases": 0, "revenue": 0.0, "months": defaultdict(int),
+                                   "by_location": defaultdict(lambda: {"units": 0, "cases": 0, "revenue": 0.0})})
+    for s in buyer_sales:
+        sk  = s.get("sku_key") or s.get("recipe") or "Unknown"
+        loc = (s.get("location_name") or s.get("delivery_label") or "").strip() or "Pickup / Other"
         by_sku[sk]["recipe"]  = s.get("recipe", "")
         by_sku[sk]["format"]  = s.get("format", "")
         by_sku[sk]["units"]  += int(s.get("quantity") or 0)
         by_sku[sk]["cases"]  += _cases(s)
         by_sku[sk]["revenue"]+= _revenue(s)
+        by_sku[sk]["by_location"][loc]["units"]   += int(s.get("quantity") or 0)
+        by_sku[sk]["by_location"][loc]["cases"]   += _cases(s)
+        by_sku[sk]["by_location"][loc]["revenue"] += _revenue(s)
         m = (s.get("sale_date") or "")[:7]
         if m:
             by_sku[sk]["months"][m] += _cases(s)
 
     skus = sorted(
-        [{"sku": k, **{kk: vv for kk, vv in v.items() if kk != "months"},
+        [{"sku": k,
+          "recipe":  v["recipe"],
+          "format":  v["format"],
+          "units":   v["units"],
+          "cases":   v["cases"],
           "revenue": round(v["revenue"], 2),
-          "monthly_cases": dict(v["months"])}
+          "monthly_cases": dict(v["months"]),
+          "by_location": {loc: {kk: round(vv,2) if kk=="revenue" else vv
+                                for kk,vv in ldata.items()}
+                          for loc, ldata in v["by_location"].items()},
+         }
          for k, v in by_sku.items()],
         key=lambda x: -x["revenue"]
     )
@@ -1067,6 +1152,8 @@ def api_buyer_analytics(buyer_name):
 
     return jsonify({
         "buyer": buyer_name,
+        "locations":     locations,
+        "has_locations": has_locations,
         "totals": {
             "revenue":          round(total_revenue, 2),
             "cases":            total_cases,
@@ -3042,10 +3129,10 @@ def organic_ingredients():
 # Default section list seeded on first load. User can rename/reorder/add/
 # delete after that — these are just a starting point.
 DEFAULT_RM_SECTIONS = [
-    {"id": "bones", "name": "Bones"},
-    {"id": "mirepoix", "name": "Mirepoix"},
-    {"id": "herbs", "name": "Herbs"},
-    {"id": "adjuncts", "name": "Adjuncts & Pre-Packs"},
+    {"id": "bones",     "name": "Bones"},
+    {"id": "fresh_veg", "name": "Fresh Vegetables"},
+    {"id": "herbs",     "name": "Herbs"},
+    {"id": "adjuncts",  "name": "Adjuncts, Packs, & Juice"},
     {"id": "mushrooms", "name": "Mushrooms"},
     {"id": "spices_other", "name": "Spices & Other"},
 ]
@@ -3107,6 +3194,144 @@ def _section_for_ingredient(name, unit, sections_data):
     if not any(s.get("id") == section_id for s in sections_data.get("sections", [])):
         return None
     return section_id
+
+
+# Bone broth domain keyword → section_id mapping for auto-assignment
+# Keys are section NAMES (not IDs) — matched case-insensitively against live sections.
+# This makes the mapping robust regardless of what section IDs were used when
+# the sections were first created in the UI on Render.
+_RM_KEYWORD_MAP = {
+    "Bones": [
+        "bone", "knuckle", "neck", "back", "foot", "feet", "marrow", "oxtail",
+        "chicken carcass", "carcass", "beef", "bison", "pork", "lamb",
+        "drumstick", "wing", "frame", "rib", "femur", "tibia",
+    ],
+    "Fresh Vegetables": [
+        "onion", "carrot", "celery", "leek", "parsnip", "turnip",
+        "fennel", "shallot", "garlic", "tomato", "potato",
+        "cabbage", "kale", "spinach", "zucchini", "squash",
+        "beet", "beetroot", "capsicum", "celeriac",
+        "vegetable", "veg",
+    ],
+    "Herbs": [
+        "thyme", "rosemary", "parsley", "bay leaf", "bay leaves", "sage",
+        "oregano", "tarragon", "chive", "basil", "dill", "mint",
+        "herb", "bouquet garni", "savory", "marjoram", "lovage",
+    ],
+    "Mushrooms": [
+        "mushroom", "shiitake", "porcini", "portobello", "cremini",
+        "reishi", "chaga", "lion's mane", "oyster mushroom",
+        "maitake", "enoki", "chanterelle",
+    ],
+    "Adjuncts, Packs, & Juice": [
+        "apple cider vinegar", "vinegar", "kombu", "seaweed", "kelp",
+        "miso", "tamari", "soy", "coconut aminos", "fish sauce",
+        "nutritional yeast", "yeast", "salt", "peppercorn",
+        "adjunct", "pre-pack", "pack", "pouch", "sachet", "juice",
+        "turmeric", "ginger", "lemon", "lime", "citrus",
+        "pink himalayan", "sea salt", "black salt", "apple juice",
+        "coconut water", "broth concentrate", "gelatin",
+    ],
+    "Spices & Other": [
+        "spice", "cinnamon", "clove", "star anise", "cardamom",
+        "cumin", "coriander", "paprika", "chili", "chilli",
+        "allspice", "nutmeg", "mace", "juniper", "fennel seed",
+        "mustard seed", "fenugreek", "curry", "sumac",
+        "black pepper", "white pepper", "cayenne", "smoked paprika",
+    ],
+}
+
+
+def _infer_section_for_ingredient(name):
+    """Infer the best-match section NAME for an ingredient name using keyword mapping.
+    Returns a section name string (e.g. 'Bones', 'Fresh Vegetables') or None.
+    """
+    name_lower = (name or "").lower()
+    for section_name, keywords in _RM_KEYWORD_MAP.items():
+        for kw in keywords:
+            if kw in name_lower:
+                return section_name
+    return None
+
+
+@app.route("/api/organic/raw-materials/auto-assign-sections", methods=["POST"])
+@login_required
+def auto_assign_rm_sections():
+    """Auto-assign RM ingredients to sections based on ingredient name keywords.
+    Only assigns ingredients that are currently Unassigned — does not overwrite
+    existing manual assignments.
+    Body: { overwrite: bool } — if true, reassigns everything including already-assigned.
+    Returns a summary of what was assigned.
+    """
+    overwrite = (request.get_json() or {}).get("overwrite", False)
+    sections_data = _load_rm_sections()
+    assignments   = sections_data.get("assignments", {})
+    sections_list = sections_data.get("sections", [])
+
+    # Get all known ingredients from raw materials
+    materials = _load_json(ORGANIC_RAW_PATH, [])
+    seen = set()
+    for mat in materials:
+        name = (mat.get("item") or "").strip()
+        unit = (mat.get("unit") or "").strip()
+        if name and unit:
+            seen.add((name, unit))
+
+    # Also include custom items
+    custom = _load_json(ORGANIC_CUSTOM_ITEMS_PATH, [])
+    for c in custom:
+        name = c.get("name","").strip()
+        unit = c.get("unit","").strip()
+        if name and unit:
+            seen.add((name, unit))
+
+    # Verify all sections exist
+    valid_section_ids = {s["id"] for s in sections_list}
+
+    assigned   = []
+    skipped    = []
+    unresolved = []
+
+    for name, unit in sorted(seen):
+        key = _ingredient_section_key(name, unit)
+        existing = assignments.get(key)
+
+        # Skip if already assigned and not overwriting
+        if existing and existing in valid_section_ids and not overwrite:
+            skipped.append({"name": name, "unit": unit, "section": existing})
+            continue
+
+        inferred_name = _infer_section_for_ingredient(name)
+        if inferred_name:
+            # Find section ID by matching name case-insensitively against live sections
+            matched = next(
+                (s for s in sections_list
+                 if s.get("name","").strip().lower() == inferred_name.lower()),
+                None
+            )
+            if matched:
+                assignments[key] = matched["id"]
+                assigned.append({"name": name, "unit": unit, "section": matched["name"]})
+            else:
+                # Section name from keyword map doesn't exist on Render — unresolved
+                unresolved.append({"name": name, "unit": unit,
+                                   "note": f"Section '{inferred_name}' not found"})
+        else:
+            unresolved.append({"name": name, "unit": unit})
+
+    sections_data["assignments"] = assignments
+    _save_json(RM_SECTIONS_PATH, sections_data)
+
+    return jsonify({
+        "ok":         True,
+        "assigned":   len(assigned),
+        "skipped":    len(skipped),
+        "unresolved": len(unresolved),
+        "details": {
+            "assigned":   assigned,
+            "unresolved": unresolved,
+        },
+    })
 
 
 @app.route("/api/organic/raw-materials/sections", methods=["GET"])
@@ -4779,6 +5004,12 @@ def _load_equipment():
 
 def _save_equipment(data):
     _save_json(EQUIPMENT_PATH, data)
+
+
+@app.route("/company-settings")
+@login_required
+def company_settings_page():
+    return render_template("company_settings.html")
 
 
 @app.route("/important-documents")

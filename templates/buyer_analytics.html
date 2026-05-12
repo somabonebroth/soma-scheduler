@@ -20,6 +20,10 @@ body.ba-page { background:var(--bg); }
 .seg-row { display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; align-items:center; }
 .seg-btn { padding:7px 14px; border:1.5px solid var(--border); border-radius:7px; font-size:12px; font-weight:600; background:#fff; cursor:pointer; color:var(--text-light); transition:all .15s; }
 .seg-btn.active { border-color:var(--accent); color:var(--accent); background:#f0f7f0; }
+/* Location tabs */
+.loc-tabs { display:flex; gap:0; background:#fff; border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:20px; }
+.loc-tab { flex:1; padding:12px 14px; font-size:13px; font-weight:600; border:none; background:none; cursor:pointer; color:var(--text-light); border-bottom:3px solid transparent; transition:all .15s; white-space:nowrap; }
+.loc-tab.active { color:var(--accent); border-bottom-color:var(--accent); background:#f9faf7; }
 
 /* Section card */
 .section { background:#fff; border:1px solid var(--border); border-radius:var(--r-lg); margin-bottom:20px; overflow:hidden; }
@@ -91,6 +95,11 @@ body.ba-page { background:var(--bg); }
     </div>
   </div>
 
+  <!-- Location tabs — shown only when buyer has multiple locations -->
+  <div id="loc-tabs-wrap" style="display:none;">
+    <div class="loc-tabs" id="loc-tabs"></div>
+  </div>
+
   <div id="loading" style="text-align:center;padding:48px;color:var(--text-light);">Loading…</div>
   <div id="content" style="display:none;">
 
@@ -131,6 +140,7 @@ body.ba-page { background:var(--bg); }
 <script>
 var BUYER = {{ buyer_name | tojson }};
 var _seg = 'all';
+var _loc = 'all';  // 'all' or a location name
 var _data = null;
 
 async function load() {
@@ -173,11 +183,57 @@ function filterMonthly(monthly) {
 
 function render() {
   if (!_data) return;
-  var monthly = filterMonthly(_data.monthly || []);
+  renderLocTabs(_data);
+  var monthly = filterMonthly(filterByLoc(_data.monthly || []));
   renderKPIs(monthly);
   renderChart(monthly);
-  renderSkus(_data.by_sku || [], monthly);
+  renderSkus(filterSkusByLoc(_data.by_sku || []), monthly);
   renderPredictive(_data.predictive || {});
+}
+
+function renderLocTabs(data) {
+  var wrap = document.getElementById('loc-tabs-wrap');
+  var tabs = document.getElementById('loc-tabs');
+  if (!data.has_locations) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  var locs = data.locations || [];
+  var html = '<button class="loc-tab'+(_loc==='all'?' active':'')+'" onclick="setLoc('all',this)">All Locations</button>';
+  locs.forEach(function(l) {
+    var active = _loc === l.name ? ' active' : '';
+    html += '<button class="loc-tab'+active+'" onclick="setLoc('+JSON.stringify(l.name)+',this)">'+e(l.name)+'</button>';
+  });
+  tabs.innerHTML = html;
+}
+
+function setLoc(loc, btn) {
+  _loc = loc;
+  render();
+}
+
+function filterByLoc(monthly) {
+  if (_loc === 'all') return monthly;
+  return monthly.map(function(m) {
+    var locData = (m.by_location || {})[_loc] || {revenue:0, cases:0, units:0, orders:0};
+    return Object.assign({}, m, {
+      revenue: locData.revenue,
+      cases:   locData.cases,
+      units:   locData.units,
+      orders:  locData.orders || 0,
+    });
+  }).filter(function(m){ return m.cases > 0 || m.revenue > 0; });
+}
+
+function filterSkusByLoc(skus) {
+  if (_loc === 'all') return skus;
+  return skus.map(function(s) {
+    var locData = (s.by_location || {})[_loc] || {units:0, cases:0, revenue:0};
+    return Object.assign({}, s, {
+      units:   locData.units,
+      cases:   locData.cases,
+      revenue: locData.revenue,
+    });
+  }).filter(function(s){ return s.cases > 0 || s.revenue > 0; })
+    .sort(function(a,b){ return b.revenue - a.revenue; });
 }
 
 function renderKPIs(monthly) {
@@ -186,7 +242,7 @@ function renderKPIs(monthly) {
   var orders= new Set(monthly.map(function(m){ return m.orders; })).size; // approx
   var t = _data.totals;
   var kpis = [
-    { val: fmt$(rev),       lbl: 'Revenue',       sub: _seg === 'all' ? 'All time' : _seg.toUpperCase() },
+    { val: fmt$(rev),       lbl: 'Revenue',       sub: (_loc !== 'all' ? _loc+' · ' : '') + (_seg === 'all' ? 'All time' : _seg.toUpperCase()) },
     { val: fmtN(cases),     lbl: 'Cases',          sub: cases * 12 + ' units' },
     { val: t.orders,        lbl: 'Orders',         sub: 'avg ' + fmt$(t.avg_order_revenue) + ' each' },
     { val: fmt$(t.avg_order_revenue), lbl: 'Avg Order Value', sub: t.avg_order_cases + ' cases avg' },

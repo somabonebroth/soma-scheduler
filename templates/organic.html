@@ -773,6 +773,7 @@ body.inv-page .modal-actions {
                 <button class="btn btn-primary" onclick="openAddInventoryModal()" style="background:#2e7d32;border-color:#2e7d32;">&#128230; Add Inventory</button>
                 <button class="btn-outline" onclick="openAdjustmentModal()" style="font-size:13px;">&#9881; Adjust Inventory</button>
                 <button class="btn-outline" onclick="addCustomIngredient()" style="font-size:13px;">+ New Ingredient</button>
+                <button class="btn btn-outline" onclick="autoAssignSections()" style="font-size:13px;">🔧 Auto-Assign Sections</button>
                 <a href="/audit/rm" class="btn btn-outline" style="font-size:13px;text-decoration:none;margin-left:auto;">📋 Audit Inventory</a>
             </div>
             <div id="rm-status" class="status" style="margin-top:8px;"></div>
@@ -1782,6 +1783,24 @@ function toggleRMSection(sectionId){
     state[sectionId] = !state[sectionId];
     _setCollapsedSections(state);
     loadRawMaterials();
+}
+
+async function autoAssignSections(){
+  if(!confirm('Auto-assign all unassigned ingredients to sections based on ingredient name? Already-assigned ingredients will not be changed.')) return;
+  try {
+    var res  = await fetch('/api/organic/raw-materials/auto-assign-sections', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({overwrite:false})});
+    var data = await res.json();
+    var msg  = '\u2713 Assigned '+data.assigned+' ingredient'+(data.assigned===1?'':'s')+' to sections.';
+    if(data.skipped)    msg += '\n'+data.skipped+' already assigned (skipped).';
+    if(data.unresolved) msg += '\n'+data.unresolved+' could not be auto-assigned \u2014 assign these manually in Edit Sections.';
+    if(data.details && data.details.unresolved && data.details.unresolved.length){
+      msg += '\nUnresolved: '+data.details.unresolved.map(function(u){return u.name;}).join(', ');
+    }
+    alert(msg);
+    await loadRawMaterials();
+  } catch(e) {
+    alert('Error: '+e.message);
+  }
 }
 
 async function loadRawMaterials(){

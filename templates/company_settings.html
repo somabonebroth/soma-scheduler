@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Company Settings · Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.cs-wrap { max-width:760px; margin:0 auto; padding:24px 16px 60px; }
+.scard { background:#fff; border:1px solid var(--border); border-radius:12px; padding:22px 24px; margin-bottom:14px; }
+.scard h3 { font-size:14px; font-weight:700; margin:0 0 16px; color:var(--dark); }
+.ff { display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
+.ff label { font-size:11px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
+.ff input, .ff textarea { padding:9px 11px; border:1.5px solid var(--border); border-radius:8px; font-size:14px; font-family:inherit; outline:none; }
+.ff input:focus, .ff textarea:focus { border-color:var(--accent); }
+.ff-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.save-indicator { font-size:12px; color:var(--accent); display:none; margin-left:10px; }
+.rule-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; max-width:480px; }
+.tog { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--bg); border-radius:8px; cursor:pointer; }
+.tog-knob { width:38px; height:22px; border-radius:11px; background:#ccc; position:relative; transition:background .2s; flex-shrink:0; }
+.tog-knob::after { content:''; position:absolute; left:3px; top:3px; width:16px; height:16px; border-radius:50%; background:#fff; transition:left .2s; }
+.tog-knob.on { background:var(--accent); }
+.tog-knob.on::after { left:19px; }
+</style>
+</head>
+<body class="inv-page">
+<div class="header">
+  <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+  <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Company Settings</p></div>
+  <div class="header-right" style="display:flex;align-items:center;gap:8px;">
+    <div class="nav-arrows">
+      <button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button>
+      <button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button>
+    </div>
+    <span class="save-indicator" id="save-indicator">✓ Saved</span>
+    <a href="/" class="header-btn">⌂ Dashboard</a>
+  </div>
+</div>
+
+<div class="cs-wrap">
+  <h1 style="font-size:24px;font-weight:800;margin:0 0 20px;">Company Settings</h1>
+
+  <!-- Company Info -->
+  <div class="scard">
+    <h3>Company Information</h3>
+    <div class="ff-row">
+      <div class="ff"><label>Company Name</label><input id="ci-name" type="text" oninput="dCI()"></div>
+      <div class="ff"><label>Phone</label><input id="ci-phone" type="text" oninput="dCI()"></div>
+    </div>
+    <div class="ff-row">
+      <div class="ff"><label>Email</label><input id="ci-email" type="email" oninput="dCI()"></div>
+      <div class="ff"><label>Website</label><input id="ci-website" type="text" oninput="dCI()"></div>
+    </div>
+    <div class="ff"><label>Address</label><input id="ci-address" type="text" oninput="dCI()"></div>
+    <div class="ff-row">
+      <div class="ff"><label>City / Province</label><input id="ci-city" type="text" oninput="dCI()"></div>
+      <div class="ff"><label>Business Registration #</label><input id="ci-reg" type="text" oninput="dCI()"></div>
+    </div>
+    <div class="ff"><label>Notes</label><textarea id="ci-notes" rows="2" oninput="dCI()" style="resize:vertical;"></textarea></div>
+  </div>
+
+  <!-- Ripe Portal -->
+  <div class="scard">
+    <h3>Ripe Portal</h3>
+    <div class="ff" style="max-width:320px;margin-bottom:18px;">
+      <label>Inventory Buffer — units withheld from Ripe per SKU</label>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:6px;">
+        <input id="ci-buf" type="number" min="0" step="1" placeholder="12" oninput="dCI()" style="width:80px;font-size:20px;font-weight:700;text-align:center;padding:8px;">
+        <span style="font-size:13px;color:var(--text-light);line-height:1.4;">units per SKU<br><span style="font-size:11px;">Keeps a safety buffer so Ripe can't order your last cases</span></span>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:16px;">
+      <div style="font-size:12px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">Order Rules</div>
+      <div class="rule-grid">
+        <div class="ff"><label>SS min cases (delivery)</label>
+          <input id="ci-ss-min" type="number" min="0" step="1" placeholder="40" oninput="dCI()" style="padding:8px 10px;font-size:15px;font-weight:600;text-align:center;">
+          <div style="font-size:11px;color:var(--text-light);margin-top:3px;">Cases of SS required for delivery orders</div>
+        </div>
+        <div class="ff"><label>FZ/BB lead time threshold</label>
+          <input id="ci-fzbb-thresh" type="number" min="1" step="1" placeholder="8" oninput="dCI()" style="padding:8px 10px;font-size:15px;font-weight:600;text-align:center;">
+          <div style="font-size:11px;color:var(--text-light);margin-top:3px;">Cases at which longer lead time applies</div>
+        </div>
+        <div class="ff"><label>FZ/BB small order lead (days)</label>
+          <input id="ci-fzbb-small" type="number" min="1" step="1" placeholder="3" oninput="dCI()" style="padding:8px 10px;font-size:15px;font-weight:600;text-align:center;">
+          <div style="font-size:11px;color:var(--text-light);margin-top:3px;">Min days notice for orders below threshold</div>
+        </div>
+        <div class="ff"><label>FZ/BB large order lead (days)</label>
+          <input id="ci-fzbb-large" type="number" min="1" step="1" placeholder="7" oninput="dCI()" style="padding:8px 10px;font-size:15px;font-weight:600;text-align:center;">
+          <div style="font-size:11px;color:var(--text-light);margin-top:3px;">Min days notice for orders at/above threshold</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function G(id){ return document.getElementById(id); }
+var _ciT = null;
+
+async function loadCI() {
+  var d = await (await fetch('/api/company-info')).json();
+  G('ci-name').value    = d.name    || '';
+  G('ci-phone').value   = d.phone   || '';
+  G('ci-email').value   = d.email   || '';
+  G('ci-website').value = d.website || '';
+  G('ci-address').value = d.address || '';
+  G('ci-city').value    = d.city    || '';
+  G('ci-reg').value     = d.registration || '';
+  G('ci-notes').value   = d.notes   || '';
+  G('ci-buf').value     = d.ripe_inventory_buffer !== undefined ? d.ripe_inventory_buffer : 12;
+  G('ci-ss-min').value      = d.ss_min_cases_delivery !== undefined ? d.ss_min_cases_delivery : 40;
+  G('ci-fzbb-thresh').value = d.fzbb_large_threshold  !== undefined ? d.fzbb_large_threshold  : 8;
+  G('ci-fzbb-small').value  = d.fzbb_small_lead_days  !== undefined ? d.fzbb_small_lead_days  : 3;
+  G('ci-fzbb-large').value  = d.fzbb_large_lead_days  !== undefined ? d.fzbb_large_lead_days  : 7;
+}
+
+function dCI() { clearTimeout(_ciT); _ciT = setTimeout(saveCI, 800); }
+
+async function saveCI() {
+  var p = {
+    name: G('ci-name').value, phone: G('ci-phone').value,
+    email: G('ci-email').value, website: G('ci-website').value,
+    address: G('ci-address').value, city: G('ci-city').value,
+    registration: G('ci-reg').value, notes: G('ci-notes').value,
+    ripe_inventory_buffer:    parseInt(G('ci-buf').value)       || 0,
+    ss_min_cases_delivery:    parseInt(G('ci-ss-min').value)    || 40,
+    fzbb_large_threshold:     parseInt(G('ci-fzbb-thresh').value)|| 8,
+    fzbb_small_lead_days:     parseInt(G('ci-fzbb-small').value) || 3,
+    fzbb_large_lead_days:     parseInt(G('ci-fzbb-large').value) || 7,
+  };
+  var res = await fetch('/api/company-info', {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(p)});
+  if (res.ok) {
+    var ind = G('save-indicator');
+    ind.style.display = 'inline';
+    setTimeout(function(){ ind.style.display='none'; }, 2000);
+  }
+}
+
+(function(){
+  var back = document.getElementById('nav-back');
+  var fwd  = document.getElementById('nav-fwd');
+  if(back){ back.disabled=window.history.length<=1; back.onclick=function(){window.history.back();}; }
+  if(fwd)  fwd.onclick=function(){window.history.forward();};
+})();
+
+loadCI();
+</script>
+</body>
+</html>
