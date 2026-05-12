@@ -263,8 +263,6 @@ document.querySelectorAll('.sku-row').forEach(function(row) {
       var sk = row.dataset.sku;
       var recipeName = (row.dataset.recipe || '').trim();
       var format = (sk.split('|')[2]||'').trim().toUpperCase();
-      var el = row.querySelector('.cogs-computed[data-sku="'+sk+'"]');
-      if(!el) return;
       var labelSupplied = _skuData[sk] && _skuData[sk].label_supplied;
       // Find recipe
       var recipe = recipes[recipeName];

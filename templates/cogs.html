@@ -551,152 +551,60 @@ body { padding-top: 0; }
 <!-- ============ SUMMARY TAB ============ -->
 <div id="tab-summary" class="tab-content active">
 
-  <!-- Quick stats row -->
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;">
+  <!-- Key numbers -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px;">
     <div style="background:var(--bg-card);border:1px solid var(--rule);border-radius:4px;padding:14px 16px;">
       <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-muted);margin-bottom:6px;">Annual Kettle Runs</div>
-      <div style="font-size:22px;font-weight:600;font-family:'Fraunces',serif;" id="sum-annual-runs">—</div>
+      <div style="font-size:22px;font-weight:600;font-family:'Fraunces',serif;" data-output="kettleRuns">—</div>
     </div>
     <div style="background:var(--bg-card);border:1px solid var(--rule);border-radius:4px;padding:14px 16px;">
       <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-muted);margin-bottom:6px;">Fixed Cost / Run</div>
       <div style="font-size:22px;font-weight:600;font-family:'Fraunces',serif;" id="sum-cost-per-run">—</div>
     </div>
     <div style="background:var(--bg-card);border:1px solid var(--rule);border-radius:4px;padding:14px 16px;">
-      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-muted);margin-bottom:6px;">Total Annual Cost</div>
-      <div style="font-size:22px;font-weight:600;font-family:'Fraunces',serif;" id="sum-annual-total">—</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-muted);margin-bottom:6px;">Weekly Labour</div>
+      <div style="font-size:22px;font-weight:600;font-family:'Fraunces',serif;" data-output="weeklyLabour">—</div>
     </div>
     <div style="background:var(--bg-card);border:1px solid var(--rule);border-radius:4px;padding:14px 16px;">
-      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-muted);margin-bottom:6px;">Weekly Labour</div>
-      <div style="font-size:22px;font-weight:600;font-family:'Fraunces',serif;" id="sum-weekly-labour">—</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-muted);margin-bottom:6px;">Mushroom Blended $/kg</div>
+      <div style="font-size:22px;font-weight:600;font-family:'Fraunces',serif;" id="sum-mush-rate">—</div>
     </div>
   </div>
 
-  <!-- How a unit cost is built -->
+  <!-- COGS matrix -->
   <div class="section" style="margin-bottom:16px;">
-    <div class="section-header"><span>How Unit Cost Is Calculated</span></div>
+    <div class="section-header"><span>Unit COGS by Broth & Format</span></div>
     <div class="section-body">
-      <div style="font-family:'Fraunces',serif;font-size:12.5px;color:var(--ink-muted);line-height:1.8;margin-bottom:14px;">
-        Every SKU cost starts from the same fixed cost per unit — derived from total annual overhead, labour, supplies, maintenance, depreciation, and debt, divided by annual kettle runs, then divided by units per kettle for that format. On top of this, each recipe adds its own ingredient costs read from the recipe card.
+      <div style="font-family:'Fraunces',serif;font-size:12px;color:var(--ink-muted);margin-bottom:12px;">
+        Base matrix uses standard batch bone amounts. Per-recipe costs in the buyer catalogue use actual kg from the recipe card.
       </div>
-      <div style="background:var(--total-bg);border-radius:4px;padding:14px 16px;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:2.2;color:var(--ink);">
-        <div>Fixed $/unit &nbsp;&nbsp;&nbsp;Overhead + Labour + Supplies + Maintenance + Depreciation + Debt</div>
-        <div style="color:var(--ink-muted);">+ Bones $/unit &nbsp;&nbsp;&nbsp;Recipe card kg × $/kg per bone type (chicken, beef, turkey priced separately)</div>
-        <div style="color:var(--ink-muted);">+ Mirepoix $/unit &nbsp;Recipe card kg × $/kg (onion, carrot, celery)</div>
-        <div style="color:var(--ink-muted);">+ Mushroom $/unit &nbsp;Recipe card kg × blended $/kg (mushroom broth only)</div>
-        <div style="color:var(--ink-muted);">+ Other $/unit &nbsp;&nbsp;&nbsp;Flat $/batch (salt, spices) ÷ units per kettle</div>
-        <div style="color:var(--ink-muted);">+ Packaging $/unit &nbsp;Container + Lid + Box</div>
-        <div style="color:var(--ink-muted);">+ Label $/unit &nbsp;&nbsp;&nbsp;Base label + hand-application surcharge (waived if label supplied by buyer)</div>
-        <div style="border-top:1px solid var(--rule-strong);margin-top:4px;padding-top:4px;font-weight:600;">= Unit COGS</div>
-      </div>
-      <div style="margin-top:12px;font-family:'Fraunces',serif;font-size:12px;color:var(--ink-muted);">
-        This cost auto-populates in the <strong style="color:var(--ink);">Cost (auto)</strong> column of each buyer's SKU catalogue under Buyers &amp; Suppliers. Setting a price alongside it immediately shows margin. Margin can also be set directly to back-calculate a price.
+      <div style="overflow-x:auto;">
+        <table id="cogs-summary-table">
+          <thead><tr>
+            <th>Broth</th><th>475ml</th><th>735ml</th><th>876ml</th>
+            <th>780ml FZ</th><th>780ml BB</th><th>780ml Pouch</th>
+          </tr></thead>
+          <tbody id="cogs-summary-body"></tbody>
+        </table>
       </div>
     </div>
   </div>
 
-  <!-- Input summary -->
-  <div class="section" style="margin-bottom:16px;">
-    <div class="section-header"><span>Input Summary — Current Values</span></div>
-    <div class="section-body">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-        <div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-muted);margin-bottom:8px;">Fixed Costs / Month</div>
-          <div style="font-size:13px;" id="sum-fixed-breakdown">—</div>
-        </div>
-        <div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-muted);margin-bottom:8px;">Ingredient Prices</div>
-          <div style="font-size:13px;" id="sum-ingredient-prices">—</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Full COGS matrix -->
+  <!-- Fixed cost per unit -->
   <div class="section">
-    <div class="section-header">
-      <span><span class="section-num">00</span>Full COGS by Broth & SKU</span>
-    </div>
+    <div class="section-header"><span>Fixed Cost Allocation per Unit</span></div>
     <div class="section-body">
-      <table id="cogs-summary-table">
-        <thead>
-          <tr>
-            <th>Broth</th>
-            <th>475ml</th>
-            <th>735ml</th>
-            <th>876ml</th>
-            <th>780ml FZ</th>
-            <th>780ml BB</th>
-            <th>780ml Pouch</th>
-          </tr>
-        </thead>
-        <tbody id="cogs-summary-body"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-header">
-      <span><span class="section-num">01</span>Fixed Cost Allocation per Unit</span>
-    </div>
-    <div class="section-body">
-      <div class="note" style="margin-bottom:12px; font-family:'Fraunces',serif; font-size:12px; color:var(--ink-muted);">
-        These costs are universal — the same for every recipe of the same format. They are derived from total annual fixed costs
-        divided by total annual kettle runs, then divided by units per kettle for each format.
-        Changing rent, labour, or any fixed input above recalculates all values immediately.
-      </div>
-      <table id="fixed-cost-table">
-        <thead>
-          <tr>
-            <th>Cost Component</th>
-            <th>475ml</th>
-            <th>735ml</th>
-            <th>876ml</th>
-            <th>780ml FZ</th>
-            <th>780ml BB</th>
-            <th>780ml Pouch</th>
-          </tr>
-        </thead>
-        <tbody id="fixed-cost-body"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-header">
-      <span><span class="section-num">02</span>Ingredient Cost Note</span>
-    </div>
-    <div class="section-body">
-      <div class="note" style="font-family:'Fraunces',serif; font-size:12px; color:var(--ink-muted); line-height:1.7;">
-        <p style="margin-bottom:10px;">
-          <strong style="color:var(--ink);">Bones & Mushroom</strong> — costs are calculated from the actual kg amounts on each recipe card,
-          multiplied by the $/kg prices set in the Ingredients tab. Each bone type (chicken, beef, turkey) is priced individually,
-          so mixed-bone recipes are costed accurately. Mushroom uses a blended rate computed from fresh and specialty proportions.
-        </p>
-        <p style="margin-bottom:10px;">
-          <strong style="color:var(--ink);">Mirepoix</strong> — onion, carrot, and celery kg are read directly from the recipe card
-          and multiplied by their individual $/kg prices set in the Ingredients tab.
-        </p>
-        <p>
-          <strong style="color:var(--ink);">Other ingredients</strong> — salt, spices, and minor adjuncts are costed as a flat $/batch
-          amount (set in the Ingredients tab) divided by units per kettle. This covers everything not individually tracked.
-        </p>
-      </div>
-      <div style="margin-top:14px; background:var(--total-bg); border-radius:4px; padding:12px 16px; font-size:12px;">
-        <strong>How a SKU cost is assembled:</strong>
-        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; margin-top:8px; line-height:2;">
-          Fixed $/unit (overhead + labour + supplies + maintenance + depreciation + debt)<br>
-          + Bones $/unit (recipe kg × $/kg per bone type)<br>
-          + Mirepoix $/unit (onion kg × $/kg + carrot kg × $/kg + celery kg × $/kg)<br>
-          + Mushroom $/unit (recipe kg × blended $/kg) — mushroom broth only<br>
-          + Other ingredients $/unit (flat $/batch ÷ units per kettle)<br>
-          + Packaging $/unit (container + lid + box)<br>
-          + Label $/unit (base + hand-application surcharge if applicable)<br>
-          <strong>= Unit COGS</strong>
-        </div>
+      <div style="overflow-x:auto;">
+        <table id="fixed-cost-table">
+          <thead><tr>
+            <th>Component</th><th>475ml</th><th>735ml</th><th>876ml</th>
+            <th>780ml FZ</th><th>780ml BB</th><th>780ml Pouch</th>
+          </tr></thead>
+          <tbody id="fixed-cost-body"></tbody>
+        </table>
       </div>
     </div>
   </div>
-</div>
 
 <!-- ============ PRODUCTION TAB ============ -->
 <div id="tab-production" class="tab-content">
@@ -1910,39 +1818,10 @@ function renderCogsSummary(r) {
   const annualRuns = r.kettleRuns;
   const costPerRun = (r.overheadPerKettle + r.labourPerKettle + r.suppliesPerKettle + r.maintPerKettle + r.depPerKettle + r.debtPerKettle) * annualRuns / 12;
   setOutput('sum-annual-runs', fmtNum(annualRuns));
-  const el_cpr = document.getElementById('sum-cost-per-run');
-  const el_wl  = document.getElementById('sum-weekly-labour');
-  const el_at  = document.getElementById('sum-annual-total');
-  const el_fb  = document.getElementById('sum-fixed-breakdown');
-  const el_ip  = document.getElementById('sum-ingredient-prices');
-  if(el_cpr) el_cpr.textContent = fmt$((r.overheadPerKettle + r.labourPerKettle + r.suppliesPerKettle + r.maintPerKettle + r.depPerKettle + r.debtPerKettle));
-  if(el_wl)  el_wl.textContent  = fmt$(r.weeklyLabour);
-  const totalAnnual = (r.overheadMonthly + r.suppliesTotal + (state.maintenance||0)) * 12 + r.annualLabour + r.depTotalAnnual + (state.debtMonthly||0)*12;
-  if(el_at)  el_at.textContent  = '$' + Math.round(totalAnnual).toLocaleString();
-  // Fixed breakdown summary
-  if(el_fb) {
-    el_fb.innerHTML = [
-      ['Overhead', fmt$(r.overheadMonthly) + '/mo'],
-      ['Labour',   fmt$(r.annualLabour/12) + '/mo'],
-      ['Supplies', fmt$(r.suppliesTotal) + '/mo'],
-      ['Maintenance', fmt$(state.maintenance||0) + '/mo'],
-      ['Depreciation', fmt$(r.depTotalAnnual/12) + '/mo'],
-      ['Debt', fmt$(state.debtMonthly||0) + '/mo'],
-    ].map(function(row){ return '<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--rule);padding:3px 0;"><span style="color:var(--ink-muted);">'+row[0]+'</span><span style="font-weight:600;">'+row[1]+'</span></div>'; }).join('');
-  }
-  // Ingredient prices summary
-  if(el_ip) {
-    el_ip.innerHTML = [
-      ['Chicken bones', fmt$(state.chickenKg||0) + '/kg'],
-      ['Beef bones',    fmt$(state.beefKg||0) + '/kg'],
-      ['Turkey bones',  fmt$(state.turkeyKg||0) + '/kg'],
-      ['Mushroom (blended)', fmt$(r.mushBlendedRate||0) + '/kg'],
-      ['Onion',  fmt$(state.onionKg||0) + '/kg'],
-      ['Carrot', fmt$(state.carrotKg||0) + '/kg'],
-      ['Celery', fmt$(state.celeryKg||0) + '/kg'],
-      ['Other ingredients', fmt$(r.otherTotal||0) + '/batch'],
-    ].map(function(row){ return '<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--rule);padding:3px 0;"><span style="color:var(--ink-muted);">'+row[0]+'</span><span style="font-weight:600;">'+row[1]+'</span></div>'; }).join('');
-  }
+  var el_cpr = document.getElementById('sum-cost-per-run');
+  var el_mr  = document.getElementById('sum-mush-rate');
+  if(el_cpr) el_cpr.textContent = fmt$(r.overheadPerKettle + r.labourPerKettle + r.suppliesPerKettle + r.maintPerKettle + r.depPerKettle + r.debtPerKettle);
+  if(el_mr)  el_mr.textContent  = fmt$(r.mushBlendedRate||0) + '/kg';
 
   const broths = [['Chicken', 'chicken'], ['Beef', 'beef'], ['Turkey', 'turkey'], ['Mushroom', 'mushroom']];
   let html = '';
