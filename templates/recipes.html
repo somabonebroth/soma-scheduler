@@ -445,9 +445,14 @@ function buildEditForm(name,r){
     html+='<div class="edit-field"><label>Recipe Name</label><input id="e-name" value="'+esc(name||'')+'" placeholder="e.g. Liquid Gold"></div>';
     html+='<div class="edit-field"><label>Format</label><input id="e-format" value="'+esc((r&&r.format)||'')+'" placeholder="SS-876ML, FZ-750ML, SS-750ML"></div>';
     html+='<div class="edit-field"><label>Target Yield</label><input type="number" id="e-yield" inputmode="numeric" value="'+((r&&r.yield)||'')+'" placeholder="150"></div>';
-    html+='<div class="edit-field"><label>Broth Type <span style="font-size:10px;color:var(--text-light);font-weight:400;">(for COGS)</span></label><select id="e-broth-type"><option value="">— Not set —</option><option value="Chicken">Chicken</option><option value="Beef">Beef</option><option value="Turkey">Turkey</option><option value="Mushroom">Mushroom</option></select></div>';
     var brothCurrent=(r&&r.broth_type)||'';
-    document.getElementById('e-broth-type').value=brothCurrent;
+    html+='<div class="edit-field"><label>Broth Type <span style="font-size:10px;color:var(--text-light);font-weight:400;">(for COGS)</span></label><select id="e-broth-type">'
+      +'<option value=""'+(brothCurrent===''?' selected':'')+'>— Not set —</option>'
+      +'<option value="Chicken"'+(brothCurrent==='Chicken'?' selected':'')+'>Chicken</option>'
+      +'<option value="Beef"'+(brothCurrent==='Beef'?' selected':'')+'>Beef</option>'
+      +'<option value="Turkey"'+(brothCurrent==='Turkey'?' selected':'')+'>Turkey</option>'
+      +'<option value="Mushroom"'+(brothCurrent==='Mushroom'?' selected':'')+'>Mushroom</option>'
+      +'</select></div>';
     html+='<div class="edit-field"><label>Certification</label><select id="e-cert">';
     var certCurrent=(r&&r.certification)||'';
     var certOpts=['','Organic','Pasture Raised','Conventional'];

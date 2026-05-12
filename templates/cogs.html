@@ -1384,10 +1384,19 @@ async function loadState() {
     }
     // Bones
     if (c.bones) {
-      if (c.bones.chicken) state.chickenKg  = c.bones.chicken.price_per_kg;
-      if (c.bones.beef)    state.beefKg     = c.bones.beef.price_per_kg;
+      if (c.bones.chicken) {
+        state.chickenKg    = c.bones.chicken.price_per_kg;
+        if (c.bones.chicken.base_kg)  state.chickenBase  = c.bones.chicken.base_kg;
+        if (c.bones.chicken.extra_kg) state.chickenExtra = c.bones.chicken.extra_kg;
+      }
+      if (c.bones.beef) {
+        state.beefKg       = c.bones.beef.price_per_kg;
+        if (c.bones.beef.base_kg)  state.beefBase  = c.bones.beef.base_kg;
+        if (c.bones.beef.extra_kg) state.beefExtra = c.bones.beef.extra_kg;
+      }
       if (c.bones.turkey)  {
         state.turkeyKg     = c.bones.turkey.price_per_kg;
+        if (c.bones.turkey.base_kg) state.turkeyBase = c.bones.turkey.base_kg;
         state.wholeTurkey  = c.bones.turkey.whole_turkey_cost_per_batch || 180;
       }
     }
@@ -1452,9 +1461,9 @@ async function flushSave() {
     }),
     equipment: DEP_ITEMS.map(it => ({name:it.name, cost:state['dep.'+it.id+'.price']||0, life_years:state['dep.'+it.id+'.life']||1})),
     bones: {
-      chicken: {price_per_kg: state.chickenKg},
-      beef:    {price_per_kg: state.beefKg},
-      turkey:  {price_per_kg: state.turkeyKg, whole_turkey_cost_per_batch: state.wholeTurkey},
+      chicken: {price_per_kg: state.chickenKg, base_kg: state.chickenBase, extra_kg: state.chickenExtra},
+      beef:    {price_per_kg: state.beefKg,    base_kg: state.beefBase,    extra_kg: state.beefExtra},
+      turkey:  {price_per_kg: state.turkeyKg,  base_kg: state.turkeyBase,  whole_turkey_cost_per_batch: state.wholeTurkey},
     },
     mushroom_fresh:     {price_per_kg: state.mushFreshKg, kg_per_batch: state.mushFreshAmt},
     mushroom_specialty: {price_per_kg: state.mushSpecKg,  kg_per_batch: state.mushSpecAmt},

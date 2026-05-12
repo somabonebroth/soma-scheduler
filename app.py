@@ -5112,9 +5112,9 @@ _COGS_SEED = {
 
     # ── Bones $/kg — actual recipe kg read from recipe card ───────────────────
     "bones": {
-        "chicken": {"price_per_kg": 2.20},
-        "beef":    {"price_per_kg": 3.50},
-        "turkey":  {"price_per_kg": 4.40,
+        "chicken": {"price_per_kg": 2.20, "base_kg": 50, "extra_kg": 25},
+        "beef":    {"price_per_kg": 3.50, "base_kg": 60, "extra_kg": 15},
+        "turkey":  {"price_per_kg": 4.40, "base_kg": 50,
                     "whole_turkey_cost_per_batch": 180.00},  # 2 whole turkeys
     },
 
@@ -5295,10 +5295,11 @@ def _compute_cogs_matrix(c, recipe_overrides=None):
             else:
                 # Base matrix (no recipe): use spreadsheet's known bone amounts for reference
                 # These are the base kg from the spreadsheet
-                BASE_BONES_KG = {"chicken": 50, "beef": 60, "turkey": 50, "mushroom": 0}
                 bone_prices = c.get("bones", {})
                 bp          = bone_prices.get(bt_key, {})
-                base_kg     = BASE_BONES_KG.get(bt_key, 0)
+                # Read base_kg from cogs data if present, else use spreadsheet defaults
+                _DEFAULT_BASE_KG = {"chicken": 50, "beef": 60, "turkey": 50, "mushroom": 0}
+                base_kg     = float(bp.get("base_kg", _DEFAULT_BASE_KG.get(bt_key, 0)))
                 bone_price  = float(bp.get("price_per_kg", 0))
                 bone_pu     = (base_kg * bone_price) / units
                 if bt_key == "turkey":
