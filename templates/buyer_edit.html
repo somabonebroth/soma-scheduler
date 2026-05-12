@@ -323,8 +323,7 @@ function onLabelSuppliedChange(el){
   var row = document.querySelector('.sku-row[data-sku="'+sk+'"]');
   if(!row) return;
   var recipeName = (row.dataset.recipe || '').trim();
-  var dispEl = row.querySelector('.cogs-computed[data-sku="'+sk+'"]');
-  if(!dispEl) return;
+
   fetch('/api/cogs/recipe/'+encodeURIComponent(recipeName)+(el.checked?'?label_supplied=true':''))
     .then(function(r){return r.json();})
     .then(function(d){
