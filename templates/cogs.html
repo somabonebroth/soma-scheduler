@@ -1490,6 +1490,15 @@ async function loadState() {
   } catch(e) {
     console.warn('Could not load from server, using defaults:', e);
   }
+
+  // Also populate _inputs (server format) for add/delete row operations
+  try {
+    var ir = await fetch('/api/cogs');
+    var id = await ir.json();
+    _inputs = id.inputs || {};
+  } catch(e) {
+    _inputs = {};
+  }
 }
 
 let _saveTimer = null;
@@ -2110,6 +2119,7 @@ function toggleEditMode() {
 
 // ── Add-row helpers ────────────────────────────────────────────────────────────
 function addFixedOverheadRow() {
+  if(!_inputs) _inputs = {};
   if(!_inputs.overhead_fixed) _inputs.overhead_fixed = [];
   _inputs.overhead_fixed.push({name:'New item', monthly:0});
   renderLineTable('fixed-overhead-body', _inputs.overhead_fixed, renderOverheadRow);
@@ -2117,6 +2127,7 @@ function addFixedOverheadRow() {
   debounceSave();
 }
 function addVarOverheadRow() {
+  if(!_inputs) _inputs = {};
   if(!_inputs.overhead_variable) _inputs.overhead_variable = [];
   _inputs.overhead_variable.push({name:'New item', monthly:0});
   renderLineTable('var-overhead-body', _inputs.overhead_variable, renderOverheadVarRow);
@@ -2124,6 +2135,7 @@ function addVarOverheadRow() {
   debounceSave();
 }
 function addSupplyRow() {
+  if(!_inputs) _inputs = {};
   if(!_inputs.supplies) _inputs.supplies = [];
   _inputs.supplies.push({name:'New supply', monthly:0});
   renderLineTable('supplies-body', _inputs.supplies, renderOverheadRow);
@@ -2131,6 +2143,7 @@ function addSupplyRow() {
   debounceSave();
 }
 function addDepRow() {
+  if(!_inputs) _inputs = {};
   if(!_inputs.equipment) _inputs.equipment = [];
   _inputs.equipment.push({name:'New equipment', cost:0, life_years:10});
   renderLineTable('dep-body', _inputs.equipment, renderEquipRow);
@@ -2138,6 +2151,7 @@ function addDepRow() {
   debounceSave();
 }
 function addLabourRow() {
+  if(!_inputs) _inputs = {};
   if(!_inputs.labour) _inputs.labour = [];
   _inputs.labour.push({role:'New employee', type:'hourly', base_hourly:0, uplift_pct:8, weekday_hours:0, weekend_hours:0});
   renderLineTable('labour-body', _inputs.labour, renderLabourRow);
@@ -2194,8 +2208,9 @@ function exportCSV() {
 // ============================================================================
 // INIT
 // ============================================================================
+var _inputs = null;  // populated from server in loadState
+
 (async function init() {
-  // Start in read-only mode
   document.body.classList.add('readonly-mode');
   await loadState();
   renderDynamicTables();

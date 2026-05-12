@@ -269,12 +269,12 @@ document.querySelectorAll('.sku-row').forEach(function(row) {
       if(!recipe || !recipe.broth_type) {
         // Show hint in cost box instead
         var hintEl = row.querySelector('.cost-display[data-sku="'+sk+'"]');
-        if(hintEl && !hintEl.textContent.trim()) {
+        if(hintEl) {
           hintEl.textContent = 'Set broth type';
           hintEl.style.color = '#b38b00';
-          hintEl.title = 'Edit this recipe card and set the Broth Type to enable cost calculation';
-          hintEl.style.fontSize = '10px';
+          hintEl.style.fontSize = '11px';
           hintEl.style.fontWeight = '500';
+          hintEl.title = 'Edit this recipe card and set the Broth Type to enable cost calculation';
         }
         return;
       }
