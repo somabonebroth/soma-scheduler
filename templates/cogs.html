@@ -5,62 +5,463 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>COGS Calculator · Soma</title>
 <link rel="stylesheet" href="/static/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-.cogs-wrap { max-width:1100px; margin:0 auto; padding:24px 16px 80px; }
-/* Section cards */
-.cogs-section { background:#fff; border:1px solid var(--border); border-radius:var(--r-lg); margin-bottom:14px; overflow:hidden; }
-.cogs-section-head { padding:13px 18px; background:#fafaf7; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; cursor:pointer; user-select:none; }
-.cogs-section-head h3 { margin:0; font-size:13px; font-weight:700; color:var(--dark); }
-.cogs-section-head .subtotal { font-size:12px; color:var(--accent); font-weight:700; }
-.cogs-section-body { padding:16px 18px; }
-/* Inputs */
-.input-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-.input-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
-.inp-field { display:flex; flex-direction:column; gap:4px; }
-.inp-field label { font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
-.inp-field input { padding:8px 10px; border:1.5px solid var(--border); border-radius:7px; font-size:14px; font-weight:600; outline:none; }
-.inp-field input:focus { border-color:var(--accent); }
-/* Line item tables */
-.line-table { width:100%; border-collapse:collapse; font-size:13px; }
-.line-table th { text-align:left; padding:7px 10px; border-bottom:2px solid var(--border); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-light); }
-.line-table td { padding:7px 10px; border-bottom:1px solid var(--border); }
-.line-table tr:last-child td { border-bottom:none; }
-.line-table input { width:100%; box-sizing:border-box; padding:5px 8px; border:1px solid var(--border); border-radius:5px; font-size:13px; font-weight:500; }
-.line-table input:focus { border-color:var(--accent); outline:none; }
-.line-table .del-btn { background:none; border:none; color:var(--text-light); cursor:pointer; font-size:14px; padding:2px 6px; }
-.line-table .del-btn:hover { color:#c62828; }
-.add-line-btn { font-size:12px; margin-top:8px; }
-/* Matrix */
-.matrix-wrap { background:#fff; border:1px solid var(--border); border-radius:var(--r-lg); margin-bottom:20px; overflow:hidden; }
-.matrix-head { padding:14px 18px; background:var(--dark); color:#fff; display:flex; justify-content:space-between; align-items:center; }
-.matrix-head h2 { margin:0; font-size:15px; font-weight:700; }
-.matrix-head .cost-per-run { font-size:13px; opacity:.8; }
-.matrix-table { width:100%; border-collapse:collapse; font-size:13px; }
-.matrix-table th { background:#f5f5f0; padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-light); border-bottom:2px solid var(--border); }
-.matrix-table th:first-child { text-align:left; }
-.matrix-table td { padding:12px 14px; text-align:center; border-bottom:1px solid var(--border); font-weight:600; color:var(--dark); cursor:pointer; }
-.matrix-table td:first-child { text-align:left; font-weight:700; color:var(--text-light); font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
-.matrix-table tr:last-child td { border-bottom:none; }
-.matrix-table td:not(:first-child):hover { background:#f0f7f0; color:var(--accent); }
-/* Breakdown popover */
-.breakdown-pop { position:fixed; background:#fff; border:1px solid var(--border); border-radius:10px; padding:14px 16px; box-shadow:0 8px 32px rgba(0,0,0,.12); z-index:100; max-width:280px; display:none; }
-.breakdown-pop h4 { margin:0 0 10px; font-size:13px; font-weight:700; color:var(--dark); }
-.breakdown-row { display:flex; justify-content:space-between; font-size:12px; padding:3px 0; border-bottom:1px solid var(--border); }
-.breakdown-row:last-child { border-bottom:none; }
-.breakdown-row.total { font-weight:700; font-size:13px; color:var(--accent); }
-/* Scenario tab */
-.tab-bar { display:flex; gap:0; background:#fff; border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:18px; }
-.tab-btn { flex:1; padding:12px; font-size:13px; font-weight:600; border:none; background:none; cursor:pointer; color:var(--text-light); border-bottom:3px solid transparent; transition:all .15s; }
-.tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); background:#f9faf7; }
-.tab-pane { display:none; }
-.tab-pane.active { display:block; }
-.scenario-banner { background:#fff8e1; border:1px solid #ffe082; border-radius:10px; padding:12px 16px; font-size:13px; color:#6d4c00; margin-bottom:16px; display:flex; align-items:center; gap:10px; }
-.save-indicator { font-size:12px; color:var(--accent); display:none; }
-@media(max-width:640px) {
-  .input-grid, .input-grid-3 { grid-template-columns:1fr; }
-  .matrix-table { font-size:11px; }
-  .matrix-table th, .matrix-table td { padding:8px 8px; }
+
+:root {
+  --bg: #faf8f4;
+  --bg-card: #ffffff;
+  --bg-section: #f4f1eb;
+  --ink: #1a1a1a;
+  --ink-muted: #6b6b6b;
+  --ink-faint: #a0a0a0;
+  --accent: #b8472a;
+  --accent-dark: #8b3520;
+  --input-bg: #fff8e8;
+  --input-border: #d4b896;
+  --total-bg: #f5ecd9;
+  --rule: #e5e0d5;
+  --rule-strong: #c9c2b3;
+  --header-bg: #1a1a1a;
+  --header-ink: #faf8f4;
+  --green: #4a6b3a;
+  --red: #a83a2a;
 }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  padding: 24px 32px 80px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* HEADER */
+.app-header {
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 16px;
+  margin-bottom: 28px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.app-header h1 {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+}
+
+.app-header .subtitle {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.legend {
+  display: flex;
+  gap: 18px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* TABS */
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 24px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.tab {
+  padding: 12px 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.tab:hover { color: var(--ink); }
+
+.tab.active {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+/* SECTIONS */
+.section {
+  background: var(--bg-card);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+.section-header {
+  background: var(--header-bg);
+  color: var(--header-ink);
+  padding: 12px 18px;
+  font-family: 'Fraunces', serif;
+  font-weight: 500;
+  font-size: 15px;
+  letter-spacing: -0.005em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.section-header .section-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  opacity: 0.6;
+  margin-right: 12px;
+}
+
+.section-body { padding: 18px; }
+
+.subsection-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-muted);
+  font-weight: 500;
+  padding: 14px 0 10px;
+  border-top: 1px solid var(--rule);
+  margin-top: 14px;
+}
+
+.subsection-label:first-child {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+/* TABLES */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+th, td {
+  padding: 7px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--rule);
+  font-variant-numeric: tabular-nums;
+}
+
+th:first-child, td:first-child { text-align: left; }
+
+th {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+  padding-top: 10px;
+  padding-bottom: 10px;
+  background: var(--bg-section);
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+td.label { font-weight: 500; }
+
+tr.total-row td {
+  background: var(--total-bg);
+  font-weight: 600;
+  border-top: 1px solid var(--rule-strong);
+}
+
+tr.grand-total td {
+  background: var(--ink);
+  color: var(--bg);
+  font-weight: 600;
+  font-family: 'Fraunces', serif;
+  font-size: 14px;
+  border-top: 2px solid var(--ink);
+  border-bottom: none;
+  padding: 10px;
+}
+
+/* INPUTS */
+input[type="number"], input[type="text"] {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  width: 100%;
+  max-width: 90px;
+  padding: 4px 8px;
+  text-align: right;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--accent-dark);
+  font-weight: 500;
+  border-radius: 2px;
+  transition: all 0.15s ease;
+  font-variant-numeric: tabular-nums;
+}
+
+input.text-input {
+  text-align: left;
+  max-width: 200px;
+}
+
+input[type="number"]:focus, input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(184, 71, 42, 0.1);
+}
+
+.formula-cell {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.note {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-size: 11.5px;
+  color: var(--ink-muted);
+  font-weight: 400;
+}
+
+/* COGS SUMMARY CARDS */
+.cogs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.cogs-card {
+  background: var(--bg-card);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 16px;
+}
+
+.cogs-card-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-muted);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.cogs-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 0;
+  font-size: 12.5px;
+}
+
+.cogs-row .sku { color: var(--ink-muted); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+.cogs-row .price { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* MARGIN CONTROLS */
+.margin-controls {
+  background: var(--bg-section);
+  border: 1px solid var(--rule);
+  padding: 16px 20px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.margin-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.margin-control label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+}
+
+.margin-control .input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.margin-control input[type="range"] {
+  width: 140px;
+}
+
+.margin-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: var(--accent);
+  font-size: 14px;
+  min-width: 44px;
+}
+
+/* COMPARISON BARS */
+.bar-comparison {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bar-track {
+  width: 60px;
+  height: 4px;
+  background: var(--rule);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+/* DEPRECIATION TABLE */
+.dep-table input { max-width: 100px; }
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  body { padding: 16px; }
+  .app-header h1 { font-size: 22px; }
+  table { font-size: 11px; }
+  th, td { padding: 5px 6px; }
+  input[type="number"] { max-width: 70px; font-size: 11px; }
+}
+
+/* HIDE TABS BY DEFAULT */
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* HEADER ACTIONS */
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 14px;
+  background: var(--ink);
+  color: var(--bg);
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn:hover {
+  background: var(--accent-dark);
+}
+
+.btn.secondary {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--ink);
+}
+
+.btn.secondary:hover {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+/* PERSISTENT INDICATOR */
+.save-indicator {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--ink);
+  color: var(--bg);
+  padding: 8px 14px;
+  border-radius: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.save-indicator.visible {
+  opacity: 1;
+}
+
+.flag {
+  display: inline-block;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-left: 6px;
+}
+
+.delta-up { color: var(--red); }
+.delta-down { color: var(--green); }
+
+/* Soma integration overrides */
+body { padding-top: 0; }
+.cogs-body { padding: 24px 32px 80px; max-width: 1400px; margin: 0 auto; }
 </style>
 </head>
 <body class="inv-page">
@@ -72,673 +473,1517 @@
       <button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button>
       <button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button>
     </div>
-    <span class="save-indicator" id="save-ind">✓ Saved</span>
     <a href="/" class="header-btn">⌂ Dashboard</a>
   </div>
 </div>
 
-<div class="cogs-wrap">
-  <div class="tab-bar">
-    <button class="tab-btn active" onclick="showTab('model')">Base Model</button>
-    <button class="tab-btn" onclick="showTab('scenario')">R&amp;D Scenario</button>
+<div class="cogs-body">
+  <div style="border-bottom: 2px solid #1a1a1a; padding-bottom: 16px; margin-bottom: 24px; display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:16px;">
+    <div>
+      <h2 style="font-family:'Fraunces',serif; font-weight:600; font-size:24px; letter-spacing:-0.02em;">COGS Master — Live Model</h2>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#6b6b6b; text-transform:uppercase; letter-spacing:0.08em; margin-top:4px;">Change inputs · Watch downstream values recalculate</div>
+    </div>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <div style="display:flex; gap:18px; font-family:'JetBrains Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:#6b6b6b; margin-right:8px;">
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#b8472a;margin-right:6px;vertical-align:middle;"></span>Input</span>
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a1a1a;margin-right:6px;vertical-align:middle;"></span>Formula</span>
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f5ecd9;border:1px solid #c9c2b3;margin-right:6px;vertical-align:middle;"></span>Total</span>
+      </div>
+      <button class="btn secondary" onclick="exportCSV()">Export CSV</button>
+      <button class="btn secondary" onclick="resetDefaults()">Reset</button>
+    </div>
   </div>
 
-  <!-- ── BASE MODEL TAB ── -->
-  <div class="tab-pane active" id="tab-model">
 
-    <!-- Matrix always at top -->
-    <div class="matrix-wrap">
-      <div class="matrix-head">
-        <h2>COGS Matrix — Unit Cost by Broth Type × Format</h2>
-        <div class="cost-per-run" id="cost-per-run-display">Loading…</div>
-      </div>
-      <div style="overflow-x:auto;">
-        <table class="matrix-table" id="matrix-table">
-          <thead><tr>
-            <th>Broth Type</th>
-            <th>475ml SS</th><th>750ml SS</th><th>876ml SS</th>
-            <th>750ml FZ</th><th>750ml BB</th><th>750ml Pouch</th>
-          </tr></thead>
-          <tbody id="matrix-body">
-            <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-light);">Loading…</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div style="padding:10px 18px;font-size:11px;color:var(--text-light);">
-        Click any cell to see cost breakdown. Matrix uses base fixed costs only — recipe-specific ingredient costs are computed when a recipe has Broth Type set.
-      </div>
-    </div>
-
-    <!-- Production Volume -->
-    <div class="cogs-section">
-      <div class="cogs-section-head" onclick="toggleSection('prod')">
-        <h3>📊 Production Volume</h3>
-        <span id="prod-sub" class="subtotal"></span>
-        <span id="prod-caret">▼</span>
-      </div>
-      <div class="cogs-section-body" id="prod-body">
-        <div class="input-grid">
-          <div class="inp-field"><label>Kettles per Day</label><input type="number" id="kettles-per-day" min="1" step="1" oninput="debounceSave()"></div>
-          <div class="inp-field"><label>Production Days per Month</label><input type="number" id="prod-days" min="1" max="31" step="1" oninput="debounceSave()"></div>
-          <div class="inp-field"><label>Slow Months per Year</label><input type="number" id="slow-months" min="0" max="12" step="1" oninput="debounceSave()"></div>
-          <div class="inp-field"><label>Slow Month Kettles/Day</label><input type="number" id="slow-kettles" min="0.5" max="10" step="0.5" oninput="debounceSave()"></div>
-        </div>
-        <div style="margin-top:14px;">
-          <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Units per Kettle by Format</div>
-          <div class="input-grid-3">
-            <div class="inp-field"><label>475ml SS</label><input type="number" id="upk-475ml" min="1" oninput="debounceSave()"></div>
-            <div class="inp-field"><label>750ml SS</label><input type="number" id="upk-750ml_ss" min="1" oninput="debounceSave()"></div>
-            <div class="inp-field"><label>876ml SS</label><input type="number" id="upk-876ml" min="1" oninput="debounceSave()"></div>
-            <div class="inp-field"><label>750ml FZ</label><input type="number" id="upk-750ml_fz" min="1" oninput="debounceSave()"></div>
-            <div class="inp-field"><label>750ml BB</label><input type="number" id="upk-750ml_bb" min="1" oninput="debounceSave()"></div>
-            <div class="inp-field"><label>750ml Pouch</label><input type="number" id="upk-750ml_pouch" min="1" oninput="debounceSave()"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Overhead -->
-    <div class="cogs-section">
-      <div class="cogs-section-head" onclick="toggleSection('overhead')">
-        <h3>🏢 Overhead</h3>
-        <span id="overhead-sub" class="subtotal"></span>
-        <span id="overhead-caret">▼</span>
-      </div>
-      <div class="cogs-section-body" id="overhead-body">
-        <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Fixed (bills regardless of production)</div>
-        <table class="line-table">
-          <thead><tr><th>Item</th><th>Monthly $</th><th></th></tr></thead>
-          <tbody id="overhead-fixed-rows"></tbody>
-        </table>
-        <button class="btn btn-outline add-line-btn" onclick="addLine('overhead_fixed')">+ Add Fixed</button>
-        <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin:14px 0 6px;">Variable (scales with production)</div>
-        <table class="line-table">
-          <thead><tr><th>Item</th><th>Monthly $</th><th></th></tr></thead>
-          <tbody id="overhead-var-rows"></tbody>
-        </table>
-        <button class="btn btn-outline add-line-btn" onclick="addLine('overhead_variable')">+ Add Variable</button>
-      </div>
-    </div>
-
-    <!-- Labour -->
-    <div class="cogs-section">
-      <div class="cogs-section-head" onclick="toggleSection('labour')">
-        <h3>👷 Labour</h3>
-        <span id="labour-sub" class="subtotal"></span>
-        <span id="labour-caret">▼</span>
-      </div>
-      <div class="cogs-section-body" id="labour-body">
-        <table class="line-table">
-          <thead><tr><th>Role</th><th>$/hr</th><th>hrs/wk</th><th>Vacation wks</th><th>Monthly $</th><th></th></tr></thead>
-          <tbody id="labour-rows"></tbody>
-        </table>
-        <button class="btn btn-outline add-line-btn" onclick="addLine('labour')">+ Add Role</button>
-      </div>
-    </div>
-
-    <!-- Supplies, Maintenance, Debt -->
-    <div class="cogs-section">
-      <div class="cogs-section-head" onclick="toggleSection('fixed')">
-        <h3>📦 Supplies, Maintenance &amp; Debt</h3>
-        <span id="fixed-sub" class="subtotal"></span>
-        <span id="fixed-caret">▼</span>
-      </div>
-      <div class="cogs-section-body" id="fixed-body">
-        <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Supplies</div>
-        <table class="line-table">
-          <thead><tr><th>Item</th><th>Monthly $</th><th></th></tr></thead>
-          <tbody id="supplies-rows"></tbody>
-        </table>
-        <button class="btn btn-outline add-line-btn" onclick="addLine('supplies')">+ Add Supply</button>
-        <div style="margin-top:14px;">
-        <div class="input-grid">
-          <div class="inp-field"><label>Maintenance / Month ($)</label><input type="number" id="maint-mo" step="0.01" oninput="debounceSave()"></div>
-          <div class="inp-field"><label>Debt Repayment / Month ($)</label><input type="number" id="debt-mo" step="0.01" oninput="debounceSave()"></div>
-        </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Equipment Depreciation -->
-    <div class="cogs-section">
-      <div class="cogs-section-head" onclick="toggleSection('equip')">
-        <h3>⚙️ Equipment Depreciation</h3>
-        <span id="equip-sub" class="subtotal"></span>
-        <span id="equip-caret">▼</span>
-      </div>
-      <div class="cogs-section-body" id="equip-body">
-        <table class="line-table">
-          <thead><tr><th>Equipment</th><th>Purchase Cost ($)</th><th>Useful Life (yrs)</th><th>$/month</th><th></th></tr></thead>
-          <tbody id="equip-rows"></tbody>
-        </table>
-        <button class="btn btn-outline add-line-btn" onclick="addLine('equip')">+ Add Equipment</button>
-      </div>
-    </div>
-
-    <!-- Ingredient Prices -->
-    <div class="cogs-section">
-      <div class="cogs-section-head" onclick="toggleSection('ingredients')">
-        <h3>🦴 Ingredient Prices</h3>
-        <span id="ingredients-sub" class="subtotal"></span>
-        <span id="ingredients-caret">▼</span>
-      </div>
-      <div class="cogs-section-body" id="ingredients-body">
-        <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px;">Bones ($/kg)</div>
-        <div class="input-grid-3" style="margin-bottom:16px;">
-          <div class="inp-field"><label>Chicken</label><input type="number" id="bones-chicken" step="0.01" min="0" oninput="debounceSave()"></div>
-          <div class="inp-field"><label>Beef</label><input type="number" id="bones-beef" step="0.01" min="0" oninput="debounceSave()"></div>
-          <div class="inp-field"><label>Turkey</label><input type="number" id="bones-turkey" step="0.01" min="0" oninput="debounceSave()"></div>
-        </div>
-        <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px;">Mirepoix ($/kg)</div>
-        <div class="input-grid-3" style="margin-bottom:16px;">
-          <div class="inp-field"><label>Onion</label><input type="number" id="mirepoix-onion" step="0.01" min="0" oninput="debounceSave()"></div>
-          <div class="inp-field"><label>Carrot</label><input type="number" id="mirepoix-carrot" step="0.01" min="0" oninput="debounceSave()"></div>
-          <div class="inp-field"><label>Celery</label><input type="number" id="mirepoix-celery" step="0.01" min="0" oninput="debounceSave()"></div>
-        </div>
-        <div class="input-grid" style="margin-bottom:0;">
-          <div class="inp-field"><label>Mushroom ($/kg)</label><input type="number" id="mushroom-price" step="0.01" min="0" oninput="debounceSave()"></div>
-          <div class="inp-field"><label>Other Ingredients $/batch (mirepoix, salt, spices)</label><input type="number" id="other-ingredients" step="0.01" min="0" oninput="debounceSave()"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Packaging -->
-    <div class="cogs-section">
-      <div class="cogs-section-head" onclick="toggleSection('packaging')">
-        <h3>📦 Packaging &amp; Labels</h3>
-        <span id="packaging-sub" class="subtotal"></span>
-        <span id="packaging-caret">▼</span>
-      </div>
-      <div class="cogs-section-body" id="packaging-body">
-        <table class="line-table">
-          <thead><tr><th>Format</th><th>Container ($)</th><th>Lid ($)</th><th>Box ($)</th><th>Label ($)</th><th>Hand-apply ($)</th><th>Total/unit</th></tr></thead>
-          <tbody id="packaging-rows"></tbody>
-        </table>
-        <div style="font-size:11px;color:var(--text-light);margin-top:8px;">Hand-application surcharge is added to label cost for formats requiring manual labelling.</div>
-      </div>
-    </div>
-
-  </div><!-- end tab-model -->
-
-  <!-- ── SCENARIO TAB ── -->
-  <div class="tab-pane" id="tab-scenario">
-    <div class="scenario-banner">
-      <span style="font-size:20px;">🧪</span>
-      <div>
-        <strong>R&amp;D Scenario Explorer</strong> — Changes here are never saved. Adjust any input to see the impact on unit COGS across all SKUs. Reset to live model at any time.
-      </div>
-    </div>
-    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
-      <button class="btn btn-outline" onclick="resetScenario()">↺ Reset to Live Model</button>
-      <div id="scenario-note" style="font-size:12px;color:var(--text-light);align-self:center;"></div>
-    </div>
-
-    <div class="matrix-wrap">
-      <div class="matrix-head" style="background:#0277bd;">
-        <h2>Scenario Matrix</h2>
-        <div class="cost-per-run" id="scenario-cost-per-run">—</div>
-      </div>
-      <div style="overflow-x:auto;">
-        <table class="matrix-table" id="scenario-matrix-table">
-          <thead><tr>
-            <th>Broth Type</th>
-            <th>475ml SS</th><th>750ml SS</th><th>876ml SS</th>
-            <th>750ml FZ</th><th>750ml BB</th><th>750ml BB</th>
-          </tr></thead>
-          <tbody id="scenario-matrix-body">
-            <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-light);">Load the base model first.</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Scenario overrides - simplified -->
-    <div class="cogs-section">
-      <div class="cogs-section-head"><h3>Adjust Any Input</h3></div>
-      <div class="cogs-section-body">
-        <div class="input-grid" style="margin-bottom:16px;">
-          <div class="inp-field"><label>Overhead Total / Month ($)</label><input type="number" id="sc-overhead" step="0.01" oninput="runScenario()"></div>
-          <div class="inp-field"><label>Labour Total / Month ($)</label><input type="number" id="sc-labour" step="0.01" oninput="runScenario()"></div>
-          <div class="inp-field"><label>Supplies / Month ($)</label><input type="number" id="sc-supplies" step="0.01" oninput="runScenario()"></div>
-          <div class="inp-field"><label>Maintenance / Month ($)</label><input type="number" id="sc-maint" step="0.01" oninput="runScenario()"></div>
-          <div class="inp-field"><label>Debt Repayment / Month ($)</label><input type="number" id="sc-debt" step="0.01" oninput="runScenario()"></div>
-          <div class="inp-field"><label>Kettles / Day</label><input type="number" id="sc-kettles" step="1" oninput="runScenario()"></div>
-        </div>
-        <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Bone Prices ($/kg)</div>
-        <div class="input-grid-3" style="margin-bottom:16px;">
-          <div class="inp-field"><label>Chicken</label><input type="number" id="sc-bones-chicken" step="0.01" oninput="runScenario()"></div>
-          <div class="inp-field"><label>Beef</label><input type="number" id="sc-bones-beef" step="0.01" oninput="runScenario()"></div>
-          <div class="inp-field"><label>Turkey</label><input type="number" id="sc-bones-turkey" step="0.01" oninput="runScenario()"></div>
-        </div>
-        <div class="input-grid">
-          <div class="inp-field"><label>Mushroom ($/kg)</label><input type="number" id="sc-mushroom" step="0.01" oninput="runScenario()"></div>
-          <div class="inp-field"><label>Minor Ingredients ($/batch)</label><input type="number" id="sc-minor" step="0.01" oninput="runScenario()"></div>
-        </div>
-      </div>
-    </div>
-  </div><!-- end tab-scenario -->
+<div class="app-header" style="display:none;">
+  <div>
+    <h1>COGS Master — Live Model</h1>
+    <div class="subtitle">Change inputs · Watch downstream values recalculate</div>
+  </div>
+  <div class="legend">
+    <span><span class="legend-dot" style="background: var(--accent);"></span>Input</span>
+    <span><span class="legend-dot" style="background: var(--ink);"></span>Formula</span>
+    <span><span class="legend-dot" style="background: var(--total-bg); border: 1px solid var(--rule-strong);"></span>Total</span>
+  </div>
+  <div class="actions">
+    <button class="btn secondary" onclick="exportCSV()">Export CSV</button>
+    <button class="btn secondary" onclick="resetDefaults()">Reset</button>
+  </div>
 </div>
 
-<!-- Breakdown popover -->
-<div class="breakdown-pop" id="breakdown-pop">
-  <h4 id="bp-title">—</h4>
-  <div id="bp-rows"></div>
+<div class="tabs">
+  <button class="tab active" onclick="showTab('summary')">Summary</button>
+  <button class="tab" onclick="showTab('production')">Production</button>
+  <button class="tab" onclick="showTab('overhead')">Overhead</button>
+  <button class="tab" onclick="showTab('labour')">Labour</button>
+  <button class="tab" onclick="showTab('supplies')">Supplies & Maint</button>
+  <button class="tab" onclick="showTab('depreciation')">Depreciation</button>
+  <button class="tab" onclick="showTab('debt')">Debt</button>
+  <button class="tab" onclick="showTab('ingredients')">Ingredients</button>
+  <button class="tab" onclick="showTab('packaging')">Packaging & Labels</button>
+  <button class="tab" onclick="showTab('pricing')">Pricing</button>
+</div>
+
+<!-- ============ SUMMARY TAB ============ -->
+<div id="tab-summary" class="tab-content active">
+  <div class="section">
+    <div class="section-header">
+      <span><span class="section-num">00</span>Full COGS by Broth & SKU</span>
+    </div>
+    <div class="section-body">
+      <table id="cogs-summary-table">
+        <thead>
+          <tr>
+            <th>Broth</th>
+            <th>475ml</th>
+            <th>735ml</th>
+            <th>876ml</th>
+            <th>780ml FZ</th>
+            <th>780ml BB</th>
+            <th>780ml Pouch</th>
+          </tr>
+        </thead>
+        <tbody id="cogs-summary-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span><span class="section-num">01</span>Fixed Cost Allocation per Unit</span>
+    </div>
+    <div class="section-body">
+      <table id="fixed-cost-table">
+        <thead>
+          <tr>
+            <th>Cost Component</th>
+            <th>475ml</th>
+            <th>735ml</th>
+            <th>876ml</th>
+            <th>780ml FZ</th>
+            <th>780ml BB</th>
+            <th>780ml Pouch</th>
+          </tr>
+        </thead>
+        <tbody id="fixed-cost-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PRODUCTION TAB ============ -->
+<div id="tab-production" class="tab-content">
+  <div class="section">
+    <div class="section-header"><span><span class="section-num">01</span>Production Inputs & Volumes</span></div>
+    <div class="section-body">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>475ml</th>
+            <th>735ml</th>
+            <th>876ml</th>
+            <th>780ml FZ</th>
+            <th>780ml BB</th>
+            <th>780ml Pouch</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="label">Units per kettle</td>
+            <td><input type="number" data-input="units.475ml" value="290" step="1"></td>
+            <td><input type="number" data-input="units.735ml" value="190" step="1"></td>
+            <td><input type="number" data-input="units.876ml" value="144" step="1"></td>
+            <td><input type="number" data-input="units.780fz" value="180" step="1"></td>
+            <td><input type="number" data-input="units.780bb" value="180" step="1"></td>
+            <td><input type="number" data-input="units.780p" value="180" step="1"></td>
+          </tr>
+          <tr>
+            <td class="label">Units per day (× kettles)</td>
+            <td class="formula-cell" data-output="perday.475ml"></td>
+            <td class="formula-cell" data-output="perday.735ml"></td>
+            <td class="formula-cell" data-output="perday.876ml"></td>
+            <td class="formula-cell" data-output="perday.780fz"></td>
+            <td class="formula-cell" data-output="perday.780bb"></td>
+            <td class="formula-cell" data-output="perday.780p"></td>
+          </tr>
+          <tr>
+            <td class="label">Units per 28-day month</td>
+            <td class="formula-cell" data-output="permonth.475ml"></td>
+            <td class="formula-cell" data-output="permonth.735ml"></td>
+            <td class="formula-cell" data-output="permonth.876ml"></td>
+            <td class="formula-cell" data-output="permonth.780fz"></td>
+            <td class="formula-cell" data-output="permonth.780bb"></td>
+            <td class="formula-cell" data-output="permonth.780p"></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="subsection-label">Production Parameters</div>
+      <table>
+        <tbody>
+          <tr>
+            <td class="label">Kettles per day (full)</td>
+            <td><input type="number" data-input="kettlesPerDay" value="3" step="0.5"></td>
+            <td class="note">Standard production day</td>
+          </tr>
+          <tr>
+            <td class="label">Production days per month</td>
+            <td><input type="number" data-input="prodDaysPerMonth" value="28" step="1"></td>
+            <td class="note">28-day production month</td>
+          </tr>
+          <tr>
+            <td class="label">Slow months per year</td>
+            <td><input type="number" data-input="slowMonths" value="4" step="1"></td>
+            <td class="note">Months at reduced output</td>
+          </tr>
+          <tr>
+            <td class="label">Full months per year</td>
+            <td><input type="number" data-input="fullMonths" value="8" step="1"></td>
+            <td class="note">Months at full output</td>
+          </tr>
+          <tr>
+            <td class="label">Slow-month kettles/day</td>
+            <td><input type="number" data-input="slowKettles" value="1.5" step="0.5"></td>
+            <td class="note">Reduced production rate</td>
+          </tr>
+          <tr class="total-row">
+            <td class="label">Annual kettle runs (realistic)</td>
+            <td class="formula-cell" data-output="kettleRuns"></td>
+            <td class="note">Drives per-unit allocation of all fixed costs</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ OVERHEAD TAB ============ -->
+<div id="tab-overhead" class="tab-content">
+  <div class="section">
+    <div class="section-header"><span><span class="section-num">02</span>Overhead — Fixed + Variable</span></div>
+    <div class="section-body">
+      <div class="subsection-label">Fixed Overhead (monthly)</div>
+      <table id="fixed-overhead-table">
+        <tbody id="fixed-overhead-body"></tbody>
+        <tr class="total-row">
+          <td class="label">Total Fixed</td>
+          <td class="formula-cell" data-output="fixedTotal"></td>
+        </tr>
+      </table>
+
+      <div class="subsection-label">Variable Overhead (monthly)</div>
+      <table id="var-overhead-table">
+        <tbody id="var-overhead-body"></tbody>
+        <tr class="total-row">
+          <td class="label">Total Variable</td>
+          <td class="formula-cell" data-output="varTotal"></td>
+        </tr>
+      </table>
+
+      <div class="subsection-label">Allocation</div>
+      <table>
+        <tr class="total-row">
+          <td class="label">Total Overhead (monthly)</td>
+          <td class="formula-cell" data-output="overheadMonthly"></td>
+        </tr>
+        <tr class="total-row">
+          <td class="label">Per kettle run</td>
+          <td class="formula-cell" data-output="overheadPerKettle"></td>
+        </tr>
+      </table>
+
+      <div class="subsection-label">Overhead per Unit by SKU</div>
+      <table>
+        <thead>
+          <tr><th></th><th>475ml</th><th>735ml</th><th>876ml</th><th>780ml FZ</th><th>780ml BB</th><th>Pouch</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="label">Overhead $/unit</td>
+            <td class="formula-cell" data-output="overheadUnit.475ml"></td>
+            <td class="formula-cell" data-output="overheadUnit.735ml"></td>
+            <td class="formula-cell" data-output="overheadUnit.876ml"></td>
+            <td class="formula-cell" data-output="overheadUnit.780fz"></td>
+            <td class="formula-cell" data-output="overheadUnit.780bb"></td>
+            <td class="formula-cell" data-output="overheadUnit.780p"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ LABOUR TAB ============ -->
+<div id="tab-labour" class="tab-content">
+  <div class="section">
+    <div class="section-header"><span><span class="section-num">03</span>Labour</span></div>
+    <div class="section-body">
+      <div class="subsection-label">Staff Breakdown</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Role</th>
+            <th>Base Wage</th>
+            <th>Uplift</th>
+            <th>Wkday hrs</th>
+            <th>Wknd hrs</th>
+            <th>Weekly Cost</th>
+          </tr>
+        </thead>
+        <tbody id="labour-body"></tbody>
+        <tr class="total-row">
+          <td class="label">Weekly Labour Total</td>
+          <td></td><td></td><td></td><td></td>
+          <td class="formula-cell" data-output="weeklyLabour"></td>
+        </tr>
+        <tr class="total-row">
+          <td class="label">Annual Labour</td>
+          <td></td><td></td><td></td><td></td>
+          <td class="formula-cell" data-output="annualLabour"></td>
+        </tr>
+        <tr class="total-row">
+          <td class="label">Per kettle run</td>
+          <td></td><td></td><td></td><td></td>
+          <td class="formula-cell" data-output="labourPerKettle"></td>
+        </tr>
+      </table>
+
+      <div class="subsection-label">Uplift Rate</div>
+      <table>
+        <tr>
+          <td class="label">Vacation / Tax / WSIB uplift</td>
+          <td><input type="number" data-input="uplift" value="8" step="0.5"> %</td>
+        </tr>
+      </table>
+
+      <div class="subsection-label">Labour per Unit</div>
+      <table>
+        <thead><tr><th></th><th>475ml</th><th>735ml</th><th>876ml</th><th>780ml FZ</th><th>780ml BB</th><th>Pouch</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="label">Labour $/unit</td>
+            <td class="formula-cell" data-output="labourUnit.475ml"></td>
+            <td class="formula-cell" data-output="labourUnit.735ml"></td>
+            <td class="formula-cell" data-output="labourUnit.876ml"></td>
+            <td class="formula-cell" data-output="labourUnit.780fz"></td>
+            <td class="formula-cell" data-output="labourUnit.780bb"></td>
+            <td class="formula-cell" data-output="labourUnit.780p"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SUPPLIES TAB ============ -->
+<div id="tab-supplies" class="tab-content">
+  <div class="section">
+    <div class="section-header"><span><span class="section-num">04</span>Supplies</span></div>
+    <div class="section-body">
+      <table>
+        <tbody id="supplies-body"></tbody>
+        <tr class="total-row">
+          <td class="label">Total (monthly)</td>
+          <td class="formula-cell" data-output="suppliesTotal"></td>
+        </tr>
+        <tr class="total-row">
+          <td class="label">Per kettle run</td>
+          <td class="formula-cell" data-output="suppliesPerKettle"></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><span><span class="section-num">05</span>Maintenance & Repairs</span></div>
+    <div class="section-body">
+      <table>
+        <tr>
+          <td class="label">Equipment Maintenance & Repair (monthly) <span class="flag">Verify</span></td>
+          <td><input type="number" data-input="maintenance" value="1500" step="50"></td>
+        </tr>
+        <tr class="total-row">
+          <td class="label">Per kettle run</td>
+          <td class="formula-cell" data-output="maintPerKettle"></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DEPRECIATION TAB ============ -->
+<div id="tab-depreciation" class="tab-content">
+  <div class="section">
+    <div class="section-header"><span><span class="section-num">06</span>Equipment Depreciation</span></div>
+    <div class="section-body">
+      <div class="note" style="margin-bottom: 14px;">Straight-line, allocated over 365 calendar days</div>
+      <table class="dep-table">
+        <thead>
+          <tr>
+            <th>Equipment</th>
+            <th>Purchase $</th>
+            <th>Life (yrs)</th>
+            <th>Annual $</th>
+            <th>Daily $</th>
+          </tr>
+        </thead>
+        <tbody id="dep-body"></tbody>
+        <tr class="total-row">
+          <td class="label">Total</td>
+          <td class="formula-cell" data-output="depTotalPurchase"></td>
+          <td></td>
+          <td class="formula-cell" data-output="depTotalAnnual"></td>
+          <td class="formula-cell" data-output="depTotalDaily"></td>
+        </tr>
+        <tr class="total-row">
+          <td class="label">Per kettle run</td>
+          <td></td><td></td><td></td>
+          <td class="formula-cell" data-output="depPerKettle"></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DEBT TAB ============ -->
+<div id="tab-debt" class="tab-content">
+  <div class="section">
+    <div class="section-header"><span><span class="section-num">07</span>Debt Repayment</span></div>
+    <div class="section-body">
+      <table>
+        <tr>
+          <td class="label">Monthly debt payment</td>
+          <td><input type="number" data-input="debtMonthly" value="16666" step="100"></td>
+        </tr>
+        <tr class="total-row">
+          <td class="label">Annual debt service</td>
+          <td class="formula-cell" data-output="debtAnnual"></td>
+        </tr>
+        <tr class="total-row">
+          <td class="label">Per kettle run</td>
+          <td class="formula-cell" data-output="debtPerKettle"></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ INGREDIENTS TAB ============ -->
+<div id="tab-ingredients" class="tab-content">
+  <div class="section">
+    <div class="section-header"><span><span class="section-num">08</span>Bones & Mushroom</span></div>
+    <div class="section-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>$/kg</th>
+            <th>Base kg</th>
+            <th>Extra kg</th>
+            <th>Base $/batch</th>
+            <th>Extra $/batch</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="label">Chicken</td>
+            <td><input type="number" data-input="chickenKg" value="2.20" step="0.05"></td>
+            <td><input type="number" data-input="chickenBase" value="50" step="5"></td>
+            <td><input type="number" data-input="chickenExtra" value="25" step="5"></td>
+            <td class="formula-cell" data-output="chickenBatch"></td>
+            <td class="formula-cell" data-output="chickenExtraBatch"></td>
+          </tr>
+          <tr>
+            <td class="label">Beef</td>
+            <td><input type="number" data-input="beefKg" value="3.50" step="0.05"></td>
+            <td><input type="number" data-input="beefBase" value="60" step="5"></td>
+            <td><input type="number" data-input="beefExtra" value="15" step="5"></td>
+            <td class="formula-cell" data-output="beefBatch"></td>
+            <td class="formula-cell" data-output="beefExtraBatch"></td>
+          </tr>
+          <tr>
+            <td class="label">Turkey bones</td>
+            <td><input type="number" data-input="turkeyKg" value="4.40" step="0.05"></td>
+            <td><input type="number" data-input="turkeyBase" value="50" step="5"></td>
+            <td></td>
+            <td class="formula-cell" data-output="turkeyBonesBatch"></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td class="label">Whole turkeys (2)</td>
+            <td colspan="3"></td>
+            <td><input type="number" data-input="wholeTurkey" value="180" step="5"></td>
+            <td></td>
+          </tr>
+          <tr class="total-row">
+            <td class="label">Turkey total $/batch</td>
+            <td colspan="3"></td>
+            <td class="formula-cell" data-output="turkeyTotalBatch"></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td class="label">Mushroom (fresh)</td>
+            <td><input type="number" data-input="mushFreshKg" value="11.66" step="0.10"></td>
+            <td><input type="number" data-input="mushFreshAmt" value="16" step="1"></td>
+            <td></td>
+            <td class="formula-cell" data-output="mushFreshBatch"></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td class="label">Mushroom (specialty)</td>
+            <td><input type="number" data-input="mushSpecKg" value="22" step="0.50"></td>
+            <td><input type="number" data-input="mushSpecAmt" value="3" step="1"></td>
+            <td></td>
+            <td class="formula-cell" data-output="mushSpecBatch"></td>
+            <td></td>
+          </tr>
+          <tr class="total-row">
+            <td class="label">Mushroom total $/batch</td>
+            <td colspan="3"></td>
+            <td class="formula-cell" data-output="mushTotalBatch"></td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="subsection-label">Per-Unit Cost by SKU</div>
+      <table>
+        <thead>
+          <tr><th></th><th>475ml</th><th>735ml</th><th>876ml</th><th>780ml FZ</th><th>780ml BB</th><th>Pouch</th></tr>
+        </thead>
+        <tbody id="bones-per-unit-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><span><span class="section-num">09</span>Other Ingredients</span></div>
+    <div class="section-body">
+      <table>
+        <thead><tr><th>Ingredient</th><th>$/kg</th><th>kg/batch</th><th>$/batch</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="label">Mirepoix</td>
+            <td><input type="number" data-input="mirepoixKg" value="2.40" step="0.10"></td>
+            <td><input type="number" data-input="mirepoixAmt" value="9.5" step="0.5"></td>
+            <td class="formula-cell" data-output="mirepoixBatch"></td>
+          </tr>
+          <tr>
+            <td class="label">Salt</td>
+            <td><input type="number" data-input="saltKg" value="6.00" step="0.10"></td>
+            <td><input type="number" data-input="saltAmt" value="0.675" step="0.025"></td>
+            <td class="formula-cell" data-output="saltBatch"></td>
+          </tr>
+          <tr>
+            <td class="label">Spices & Other</td>
+            <td><input type="number" data-input="spicesKg" value="40" step="1"></td>
+            <td><input type="number" data-input="spicesAmt" value="0.1" step="0.05"></td>
+            <td class="formula-cell" data-output="spicesBatch"></td>
+          </tr>
+        </tbody>
+        <tr class="total-row">
+          <td class="label">Total Other Ingredients $/batch</td>
+          <td colspan="2"></td>
+          <td class="formula-cell" data-output="otherTotal"></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PACKAGING TAB ============ -->
+<div id="tab-packaging" class="tab-content">
+  <div class="section">
+    <div class="section-header"><span><span class="section-num">10</span>Packaging</span></div>
+    <div class="section-body">
+      <table>
+        <thead>
+          <tr><th></th><th>475ml</th><th>735ml</th><th>876ml</th><th>780ml FZ</th><th>780ml BB</th><th>Pouch</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="label">Container</td>
+            <td><input type="number" data-input="container.475ml" value="1.00" step="0.05"></td>
+            <td><input type="number" data-input="container.735ml" value="1.00" step="0.05"></td>
+            <td><input type="number" data-input="container.876ml" value="1.10" step="0.05"></td>
+            <td><input type="number" data-input="container.780fz" value="0.35" step="0.05"></td>
+            <td><input type="number" data-input="container.780bb" value="0.35" step="0.05"></td>
+            <td><input type="number" data-input="container.780p" value="1.00" step="0.05"></td>
+          </tr>
+          <tr>
+            <td class="label">Lid</td>
+            <td><input type="number" data-input="lid.475ml" value="0.35" step="0.05"></td>
+            <td><input type="number" data-input="lid.735ml" value="0.35" step="0.05"></td>
+            <td><input type="number" data-input="lid.876ml" value="0.35" step="0.05"></td>
+            <td><input type="number" data-input="lid.780fz" value="0" step="0.05"></td>
+            <td><input type="number" data-input="lid.780bb" value="0" step="0.05"></td>
+            <td><input type="number" data-input="lid.780p" value="0" step="0.05"></td>
+          </tr>
+          <tr>
+            <td class="label">Box</td>
+            <td><input type="number" data-input="box.475ml" value="0" step="0.05"></td>
+            <td><input type="number" data-input="box.735ml" value="0" step="0.05"></td>
+            <td><input type="number" data-input="box.876ml" value="0" step="0.05"></td>
+            <td><input type="number" data-input="box.780fz" value="0.16" step="0.05"></td>
+            <td><input type="number" data-input="box.780bb" value="0.16" step="0.05"></td>
+            <td><input type="number" data-input="box.780p" value="0" step="0.05"></td>
+          </tr>
+          <tr class="total-row">
+            <td class="label">Total Packaging $/unit</td>
+            <td class="formula-cell" data-output="pkgTotal.475ml"></td>
+            <td class="formula-cell" data-output="pkgTotal.735ml"></td>
+            <td class="formula-cell" data-output="pkgTotal.876ml"></td>
+            <td class="formula-cell" data-output="pkgTotal.780fz"></td>
+            <td class="formula-cell" data-output="pkgTotal.780bb"></td>
+            <td class="formula-cell" data-output="pkgTotal.780p"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><span><span class="section-num">11</span>Labels</span></div>
+    <div class="section-body">
+      <table>
+        <thead>
+          <tr><th></th><th>475ml</th><th>735ml</th><th>876ml</th><th>780ml FZ</th><th>780ml BB</th><th>Pouch</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="label">Base label</td>
+            <td><input type="number" data-input="label.475ml" value="0.49" step="0.01"></td>
+            <td><input type="number" data-input="label.735ml" value="0.43" step="0.01"></td>
+            <td><input type="number" data-input="label.876ml" value="0.49" step="0.01"></td>
+            <td><input type="number" data-input="label.780fz" value="0.81" step="0.01"></td>
+            <td><input type="number" data-input="label.780bb" value="0" step="0.01"></td>
+            <td><input type="number" data-input="label.780p" value="0" step="0.01"></td>
+          </tr>
+          <tr>
+            <td class="label">Hand-app $/unit (auto)</td>
+            <td class="formula-cell">—</td>
+            <td class="formula-cell" data-output="handLabel.735ml"></td>
+            <td class="formula-cell">—</td>
+            <td class="formula-cell" data-output="handLabel.780fz"></td>
+            <td class="formula-cell">—</td>
+            <td class="formula-cell">—</td>
+          </tr>
+          <tr class="total-row">
+            <td class="label">Total Label $/unit</td>
+            <td class="formula-cell" data-output="labelTotal.475ml"></td>
+            <td class="formula-cell" data-output="labelTotal.735ml"></td>
+            <td class="formula-cell" data-output="labelTotal.876ml"></td>
+            <td class="formula-cell" data-output="labelTotal.780fz"></td>
+            <td class="formula-cell" data-output="labelTotal.780bb"></td>
+            <td class="formula-cell" data-output="labelTotal.780p"></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="subsection-label">Hand-Application Surcharge</div>
+      <table>
+        <tr>
+          <td class="label">Surcharge per day (applied to 735ml & 780ml FZ)</td>
+          <td><input type="number" data-input="handDailyCost" value="80" step="5"></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PRICING TAB ============ -->
+<div id="tab-pricing" class="tab-content">
+  <div class="margin-controls">
+    <div class="margin-control">
+      <label>Wholesale Margin</label>
+      <div class="input-wrap">
+        <input type="range" data-input="wholesaleMargin" value="20" min="5" max="60" step="1">
+        <span class="margin-value" id="wholesale-margin-display">20%</span>
+      </div>
+    </div>
+    <div class="margin-control">
+      <label>Retail Margin</label>
+      <div class="input-wrap">
+        <input type="range" data-input="retailMargin" value="30" min="10" max="80" step="1">
+        <span class="margin-value" id="retail-margin-display">30%</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><span>Wholesale Prices</span></div>
+    <div class="section-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Broth</th>
+            <th>475ml</th>
+            <th>735ml</th>
+            <th>876ml</th>
+            <th>780ml FZ</th>
+            <th>780ml BB</th>
+            <th>780ml Pouch</th>
+          </tr>
+        </thead>
+        <tbody id="wholesale-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><span>Retail Prices</span></div>
+    <div class="section-body">
+      <table>
+        <thead>
+          <tr>
+            <th>Broth</th>
+            <th>475ml</th>
+            <th>735ml</th>
+            <th>876ml</th>
+            <th>780ml FZ</th>
+            <th>780ml BB</th>
+            <th>780ml Pouch</th>
+          </tr>
+        </thead>
+        <tbody id="retail-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="save-indicator" id="save-indicator">Saved</div>
+
+
+
 </div>
 
 <script>
-var _inputs = null;
-var _matrix = null;
-var _saveTimer = null;
-var _collapsed = {};
-var SIZE_KEYS = ['475ml','750ml_ss','876ml','750ml_fz','750ml_bb','750ml_pouch'];
-var SIZE_LABELS = {'475ml':'475ml SS','750ml_ss':'750ml SS','876ml':'876ml SS','750ml_fz':'750ml FZ','750ml_bb':'750ml BB','750ml_pouch':'750ml Pouch'};
-var BROTH_TYPES = ['Chicken','Beef','Turkey','Mushroom'];
-
-function G(id){ return document.getElementById(id); }
-function fmt$(n){ return '$'+parseFloat(n||0).toFixed(2); }
-function fmtN(n){ return parseFloat(n||0).toFixed(2); }
-
-// ── Load ──────────────────────────────────────────────────────────────────────
-async function load() {
-  var res = await fetch('/api/cogs');
-  var d   = await res.json();
-  _inputs = d.inputs;
-  _matrix = d.matrix;
-  populateInputs(d);
-  renderMatrix(d.matrix, d.cost_per_run, d.avg_runs_per_month, 'matrix-body', 'cost-per-run-display');
-}
-
-function populateInputs(d) {
-  var c = d.inputs;
-  // Production
-  G('kettles-per-day').value = c.kettles_per_day;
-  G('prod-days').value       = c.production_days_per_month;
-  G('slow-months').value     = c.slow_months_per_year;
-  G('slow-kettles').value    = c.slow_kettles_per_day;
-  var upk = c.units_per_kettle || {};
-  SIZE_KEYS.forEach(function(sk){ var el=G('upk-'+sk); if(el) el.value=upk[sk]||''; });
-  // Overhead — fixed + variable sections
-  renderLineTable('overhead-fixed-rows', c.overhead_fixed||c.overhead||[], renderOverheadRow);
-  renderLineTable('overhead-var-rows',   c.overhead_variable||[], renderOverheadVarRow);
-  var ohFixed = (c.overhead_fixed||c.overhead||[]).reduce(function(a,x){return a+parseFloat(x.monthly||0);},0);
-  var ohVar   = (c.overhead_variable||[]).reduce(function(a,x){return a+parseFloat(x.monthly||0);},0);
-  updateSubtotal('overhead', ohFixed+ohVar, '/mo');
-  // Labour
-  renderLineTable('labour-rows', c.labour||[], renderLabourRow);
-  var labourMo = computeLabourMonthly(c.labour||[]);
-  updateSubtotal('labour', labourMo, '/mo');
-  // Supplies list
-  renderLineTable('supplies-rows', c.supplies||[], renderOverheadRow);
-  var suppliesMo = (c.supplies||[]).reduce(function(a,x){return a+parseFloat(x.monthly||0);},0);
-  // Fixed
-  G('maint-mo').value    = c.maintenance_monthly;
-  G('debt-mo').value     = c.debt_repayment_monthly;
-  G('other-ingredients').value = c.other_ingredients_per_batch||c.minor_ingredients_per_batch||'';
-  var fixedTotal = suppliesMo + parseFloat(c.maintenance_monthly||0) + parseFloat(c.debt_repayment_monthly||0);
-  updateSubtotal('fixed', fixedTotal, '/mo');
-  // Equipment
-  renderLineTable('equip-rows', c.equipment||[], renderEquipRow);
-  var depMo = (c.equipment||[]).reduce(function(a,e){return a+parseFloat(e.cost||0)/(Math.max(1,parseFloat(e.life_years||1))*12);},0);
-  updateSubtotal('equip', depMo, '/mo depreciation');
-  // Ingredients
-  var bones = c.bones||{};
-  G('bones-chicken').value  = (bones.chicken||{}).price_per_kg||'';
-  G('bones-beef').value     = (bones.beef||{}).price_per_kg||'';
-  G('bones-turkey').value   = (bones.turkey||{}).price_per_kg||'';
-  var mir = c.mirepoix||{};
-  G('mirepoix-onion').value  = (mir.onion||{}).price_per_kg||'';
-  G('mirepoix-carrot').value = (mir.carrot||{}).price_per_kg||'';
-  G('mirepoix-celery').value = (mir.celery||{}).price_per_kg||'';
-  G('mushroom-price').value  = c.mushroom_price_per_kg||'';
-  G('other-ingredients').value = c.minor_ingredients_per_batch||'';
-  // Packaging
-  renderPackagingRows(c);
-  // Scenario defaults
-  resetScenario();
-}
-
-function computeLabourMonthly(labour) {
-  return labour.reduce(function(a,r){
-    if (r.type === 'salary') {
-      return a + parseFloat(r.annual_salary||0) / 12;
-    }
-    var loaded  = parseFloat(r.base_hourly||0) * (1 + parseFloat(r.uplift_pct||8)/100);
-    var weekly  = loaded * (parseFloat(r.weekday_hours||0) + parseFloat(r.weekend_hours||0));
-    return a + weekly * 52 / 12;
-  }, 0);
-}
-
-// ── Matrix rendering ──────────────────────────────────────────────────────────
-function renderMatrix(matrix, costPerRun, avgRuns, tbodyId, headerId) {
-  if(headerId) G(headerId).textContent = fmt$(costPerRun)+'/kettle run · '+avgRuns+' avg runs/month';
-  var tbody = G(tbodyId);
-  if(!matrix){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text-light);padding:20px;">No data</td></tr>'; return; }
-  tbody.innerHTML = BROTH_TYPES.map(function(bt){
-    var row = matrix[bt] || {};
-    return '<tr>'
-      +'<td>'+bt+'</td>'
-      + SIZE_KEYS.map(function(sk){
-          var cell = row[sk];
-          var val  = cell ? fmt$(cell.total) : '—';
-          return '<td onclick="showBreakdown(event,\''+bt+'\',\''+sk+'\')">'
-            +'<span>'+val+'</span>'
-            +'</td>';
-        }).join('')
-      +'</tr>';
-  }).join('');
-}
-
-function showBreakdown(ev, bt, sk) {
-  var pop = G('breakdown-pop');
-  var matrix = _matrix;
-  if(!matrix || !matrix[bt] || !matrix[bt][sk]) return;
-  var cell = matrix[bt][sk];
-  var b    = cell.breakdown;
-  G('bp-title').textContent = bt + ' × ' + SIZE_LABELS[sk];
-  var rows = [
-    ['Fixed costs',      b.fixed],
-    ['Bones',            b.bones],
-    ['Mirepoix',         b.mirepoix],
-    ['Mushroom',         b.mushroom],
-    ['Minor ingredients',b.minor_ingredients],
-    ['Packaging',        b.packaging],
-    ['Label',            b.label],
-  ];
-  G('bp-rows').innerHTML = rows.map(function(r){
-    return '<div class="breakdown-row"><span>'+r[0]+'</span><span>'+fmt$(r[1])+'</span></div>';
-  }).join('')
-  + '<div class="breakdown-row total"><span>Unit COGS (base)</span><span>'+fmt$(cell.total)+'</span></div>'
-  + '<div style="font-size:10px;color:var(--text-light);margin-top:6px;">+ Recipe ingredient costs added when Broth Type is set on recipe card.</div>';
-  // Position
-  pop.style.display = 'block';
-  var rect = ev.target.getBoundingClientRect();
-  var left = Math.min(rect.left, window.innerWidth - 300);
-  pop.style.left = left + 'px';
-  pop.style.top  = (rect.bottom + 8 + window.scrollY) + 'px';
-}
-document.addEventListener('click', function(ev){
-  if(!G('breakdown-pop').contains(ev.target) && !ev.target.closest('.matrix-table'))
-    G('breakdown-pop').style.display = 'none';
-});
-
-// ── Line table renderers ───────────────────────────────────────────────────────
-function renderLineTable(tbodyId, items, rowFn) {
-  G(tbodyId).innerHTML = items.map(function(item,i){ return rowFn(item,i); }).join('');
-}
-
-function renderOverheadRow(item, i) {
-  return '<tr>'
-    +'<td><input value="'+esc(item.name||'')+'" placeholder="Item name" oninput="updateLineItem(\'overhead\','+i+',\'name\',this.value)"></td>'
-    +'<td><input type="number" step="0.01" value="'+(item.monthly||'')+'" oninput="updateLineItem(\'overhead\','+i+',\'monthly\',this.value)"></td>'
-    +'<td><button class="del-btn" onclick="deleteLine(\'overhead\','+i+')">✕</button></td>'
-    +'</tr>';
-}
-
-function renderLabourRow(item, i) {
-  var mo = 0;
-  var role = esc(item.role||'');
-  if (item.type === 'salary') {
-    mo = parseFloat(item.annual_salary||0) / 12;
-    var sal = item.annual_salary||'';
-    return '<tr>'
-      +'<td><input value="'+role+'" placeholder="Role" oninput="updateLabourItem('+i+',&quot;role&quot;,this.value)"></td>'
-      +'<td colspan="2" style="font-size:11px;color:var(--text-light);">Salary $<input type="number" step="1000" value="'+sal+'" oninput="updateLabourItem('+i+',&quot;annual_salary&quot;,this.value)" style="width:90px;">/yr</td>'
-      +'<td style="font-size:11px;color:var(--text-light);">salaried</td>'
-      +'<td style="font-weight:600;">'+fmt$(mo)+'/mo</td>'
-      +'<td><button class="del-btn" onclick="deleteLabourLine('+i+')">&#x2715;</button></td>'
-      +'</tr>';
-  }
-  var loaded = parseFloat(item.base_hourly||0) * (1 + parseFloat(item.uplift_pct||8)/100);
-  var weekly = loaded * (parseFloat(item.weekday_hours||0) + parseFloat(item.weekend_hours||0));
-  mo = weekly * 52 / 12;
-  var bh = item.base_hourly||'';
-  var up = item.uplift_pct||8;
-  var wkd = item.weekday_hours||'';
-  var wkn = item.weekend_hours||0;
-  return '<tr>'
-    +'<td><input value="'+role+'" placeholder="Role" oninput="updateLabourItem('+i+',&quot;role&quot;,this.value)"></td>'
-    +'<td>$<input type="number" step="0.5" value="'+bh+'" oninput="updateLabourItem('+i+',&quot;base_hourly&quot;,this.value)" style="width:55px;">/hr +<input type="number" step="1" value="'+up+'" oninput="updateLabourItem('+i+',&quot;uplift_pct&quot;,this.value)" style="width:35px;">%</td>'
-    +'<td>Wkday:<input type="number" step="1" value="'+wkd+'" oninput="updateLabourItem('+i+',&quot;weekday_hours&quot;,this.value)" style="width:40px;"> Wknd:<input type="number" step="1" value="'+wkn+'" oninput="updateLabourItem('+i+',&quot;weekend_hours&quot;,this.value)" style="width:40px;"></td>'
-    +'<td style="font-size:11px;color:var(--text-light);">loaded</td>'
-    +'<td style="font-weight:600;">'+fmt$(mo)+'/mo</td>'
-    +'<td><button class="del-btn" onclick="deleteLabourLine('+i+')">&#x2715;</button></td>'
-    +'</tr>';
-}
-
-function updateLabourItem(idx, field, val) {
-  if(_inputs.labour && _inputs.labour[idx]) _inputs.labour[idx][field] = isNaN(parseFloat(val))?val:parseFloat(val);
-  debounceSave();
-}
-
-function deleteLabourLine(idx) {
-  _inputs.labour.splice(idx,1);
-  renderLineTable('labour-rows',_inputs.labour,renderLabourRow);
-  debounceSave();
-}
-
-function renderEquipRow(item, i) {
-  var mo = item.cost && item.life_years ? parseFloat(item.cost)/(parseFloat(item.life_years)*12) : 0;
-  return '<tr>'
-    +'<td><input value="'+esc(item.name||'')+'" placeholder="Equipment name" oninput="updateLineItem(\'equip\','+i+',\'name\',this.value)"></td>'
-    +'<td><input type="number" step="100" value="'+(item.cost||'')+'" oninput="updateLineItem(\'equip\','+i+',\'cost\',this.value)"></td>'
-    +'<td><input type="number" step="1" value="'+(item.life_years||'')+'" oninput="updateLineItem(\'equip\','+i+',\'life_years\',this.value)"></td>'
-    +'<td style="font-weight:600;">'+fmt$(mo)+'/mo</td>'
-    +'<td><button class="del-btn" onclick="deleteLine(\'equip\','+i+')">✕</button></td>'
-    +'</tr>';
-}
-
-function renderPackagingRows(c) {
-  var pkg = c.packaging || {};
-  var lbl = c.labels || {};
-  G('packaging-rows').innerHTML = SIZE_KEYS.map(function(sk){
-    var p = pkg[sk]||{};
-    var l = lbl[sk]||{};
-    var total = parseFloat(p.container||0)+parseFloat(p.lid||0)+parseFloat(p.box||0)+parseFloat(l.cost||0)+parseFloat(l.hand_apply_surcharge||0);
-    return '<tr>'
-      +'<td style="font-weight:600;">'+SIZE_LABELS[sk]+'</td>'
-      +'<td><input type="number" step="0.01" value="'+(p.container||'')+'" oninput="updatePackaging(\''+sk+'\',\'container\',this.value)"></td>'
-      +'<td><input type="number" step="0.01" value="'+(p.lid||'')+'" oninput="updatePackaging(\''+sk+'\',\'lid\',this.value)"></td>'
-      +'<td><input type="number" step="0.01" value="'+(p.box||'')+'" oninput="updatePackaging(\''+sk+'\',\'box\',this.value)"></td>'
-      +'<td><input type="number" step="0.01" value="'+(l.cost||'')+'" oninput="updateLabel(\''+sk+'\',\'cost\',this.value)"></td>'
-      +'<td><input type="number" step="0.01" value="'+(l.hand_apply_surcharge||'')+'" oninput="updateLabel(\''+sk+'\',\'hand_apply_surcharge\',this.value)"></td>'
-      +'<td style="font-weight:600;">'+fmt$(total)+'</td>'
-      +'</tr>';
-  }).join('');
-}
-
-// ── Data mutation helpers ──────────────────────────────────────────────────────
-
-
-function deleteLine(section, idx) {
-  var arr = section==='equip' ? _inputs.equipment : (section==='labour' ? _inputs.labour : _inputs.overhead);
-  if(arr) arr.splice(idx, 1);
-  var renderFn = section==='overhead' ? renderOverheadRow : (section==='labour' ? renderLabourRow : renderEquipRow);
-  var tbodyId  = section==='overhead' ? 'overhead-rows' : (section==='labour' ? 'labour-rows' : 'equip-rows');
-  renderLineTable(tbodyId, arr, renderFn);
-  debounceSave();
-}
-
-function addLine(section) {
-  if(section==='overhead_fixed'){ if(!_inputs.overhead_fixed)_inputs.overhead_fixed=[]; _inputs.overhead_fixed.push({name:'',monthly:0}); renderLineTable('overhead-fixed-rows',_inputs.overhead_fixed,renderOverheadRow); }
-  else if(section==='overhead_variable'){ if(!_inputs.overhead_variable)_inputs.overhead_variable=[]; _inputs.overhead_variable.push({name:'',monthly:0}); renderLineTable('overhead-var-rows',_inputs.overhead_variable,renderOverheadVarRow); }
-  else if(section==='overhead'){ if(!_inputs.overhead)_inputs.overhead=[]; _inputs.overhead.push({name:'',monthly:0}); renderLineTable('overhead-rows',_inputs.overhead,renderOverheadRow); }
-  else if(section==='supplies'){ if(!_inputs.supplies)_inputs.supplies=[]; _inputs.supplies.push({name:'',monthly:0}); renderLineTable('supplies-rows',_inputs.supplies,renderOverheadRow); }
-  else if(section==='labour'){ _inputs.labour.push({role:'',type:'hourly',base_hourly:0,uplift_pct:8,weekday_hours:0,weekend_hours:0}); renderLineTable('labour-rows',_inputs.labour,renderLabourRow); }
-  else if(section==='equip'){ _inputs.equipment.push({name:'',cost:0,life_years:10}); renderLineTable('equip-rows',_inputs.equipment,renderEquipRow); }
-  debounceSave();
-}
-
-function updateLineItem(section, idx, field, val) {
-  var arr = section==='equip' ? _inputs.equipment : (section==='labour' ? _inputs.labour : (section==='overhead_fixed' ? (_inputs.overhead_fixed||_inputs.overhead||[]) : (_inputs.overhead_variable||[])));
-  if(arr && arr[idx]) arr[idx][field] = isNaN(parseFloat(val)) ? val : parseFloat(val);
-  debounceSave();
-}
-
-function updateLabourItem(idx, field, val) {
-  if(_inputs.labour && _inputs.labour[idx]) {
-    _inputs.labour[idx][field] = isNaN(parseFloat(val)) ? val : parseFloat(val);
-  }
-  debounceSave();
-}
-
-function deleteLabourLine(idx) {
-  _inputs.labour.splice(idx, 1);
-  renderLineTable('labour-rows', _inputs.labour, renderLabourRow);
-  debounceSave();
-}
-
-function updateVarOverheadItem(idx, field, val) {
-  if(!_inputs.overhead_variable) _inputs.overhead_variable=[];
-  if(_inputs.overhead_variable[idx]) _inputs.overhead_variable[idx][field] = isNaN(parseFloat(val))?val:parseFloat(val);
-  debounceSave();
-}
-
-function deleteVarOverheadLine(idx) {
-  if(_inputs.overhead_variable) _inputs.overhead_variable.splice(idx,1);
-  renderLineTable('overhead-var-rows',_inputs.overhead_variable||[],renderOverheadVarRow);
-  debounceSave();
-}
-
-function updatePackaging(sk, field, val) {
-  if(!_inputs.packaging[sk]) _inputs.packaging[sk]={};
-  _inputs.packaging[sk][field] = parseFloat(val)||0;
-  debounceSave();
-}
-function updateLabel(sk, field, val) {
-  if(!_inputs.labels[sk]) _inputs.labels[sk]={};
-  _inputs.labels[sk][field] = parseFloat(val)||0;
-  debounceSave();
-}
-
-// ── Collect all inputs into _inputs object ────────────────────────────────────
-function collectInputs() {
-  _inputs.kettles_per_day              = parseFloat(G('kettles-per-day').value)||0;
-  _inputs.production_days_per_month    = parseFloat(G('prod-days').value)||0;
-  _inputs.slow_months_per_year         = parseFloat(G('slow-months').value)||0;
-  _inputs.slow_kettles_per_day         = parseFloat(G('slow-kettles').value)||1.5;
-  SIZE_KEYS.forEach(function(sk){ _inputs.units_per_kettle[sk]=parseInt(G('upk-'+sk).value)||0; });
-  _inputs.maintenance_monthly    = parseFloat(G('maint-mo').value)||0;
-  _inputs.debt_repayment_monthly = parseFloat(G('debt-mo').value)||0;
-  _inputs.other_ingredients_per_batch = parseFloat(G('other-ingredients').value)||0;
-  _inputs.bones.chicken.price_per_kg  = parseFloat(G('bones-chicken').value)||0;
-  _inputs.bones.beef.price_per_kg     = parseFloat(G('bones-beef').value)||0;
-  _inputs.bones.turkey.price_per_kg   = parseFloat(G('bones-turkey').value)||0;
-  _inputs.mirepoix.onion.price_per_kg  = parseFloat(G('mirepoix-onion').value)||0;
-  _inputs.mirepoix.carrot.price_per_kg = parseFloat(G('mirepoix-carrot').value)||0;
-  _inputs.mirepoix.celery.price_per_kg = parseFloat(G('mirepoix-celery').value)||0;
-  _inputs.mushroom_price_per_kg        = parseFloat(G('mushroom-price').value)||0;
-  _inputs.minor_ingredients_per_batch  = parseFloat(G('other-ingredients').value)||0;
-}
-
-function updateSubtotal(id, val, suffix) {
-  var el = G(id+'-sub');
-  if(el) el.textContent = fmt$(val)+(suffix||'');
-}
-
-// ── Save (debounced) ──────────────────────────────────────────────────────────
-function debounceSave() {
-  clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(save, 900);
-}
-
-async function save() {
-  collectInputs();
-  var res = await fetch('/api/cogs', {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(_inputs)});
-  var d   = await res.json();
-  _matrix = d.matrix;
-  renderMatrix(d.matrix, d.cost_per_run, d.avg_runs_per_month, 'matrix-body', 'cost-per-run-display');
-  // Update subtotals
-  var ohTotal = (_inputs.overhead||[]).reduce(function(a,x){return a+parseFloat(x.monthly||0);},0);
-  updateSubtotal('overhead', ohTotal, '/mo');
-  updateSubtotal('labour', computeLabourMonthly(_inputs.labour||[]), '/mo');
-  var fixedTotal = (_inputs.supplies_monthly||0)+(_inputs.maintenance_monthly||0)+(_inputs.debt_repayment_monthly||0);
-  updateSubtotal('fixed', fixedTotal, '/mo');
-  var depMo = (_inputs.equipment||[]).reduce(function(a,e){return a+parseFloat(e.cost||0)/(Math.max(1,parseFloat(e.life_years||1))*12);},0);
-  updateSubtotal('equip', depMo, '/mo depreciation');
-  // Flash save indicator
-  var ind = G('save-ind');
-  ind.style.display='inline'; setTimeout(function(){ind.style.display='none';},2000);
-}
-
-// ── Section collapse ──────────────────────────────────────────────────────────
-function toggleSection(id) {
-  var body   = G(id+'-body');
-  var caret  = G(id+'-caret');
-  _collapsed[id] = !_collapsed[id];
-  body.style.display = _collapsed[id] ? 'none' : '';
-  if(caret) caret.textContent = _collapsed[id] ? '▶' : '▼';
-}
-
-// ── Tab switching ─────────────────────────────────────────────────────────────
-function showTab(id) {
-  document.querySelectorAll('.tab-btn').forEach(function(b,i){b.classList.toggle('active',['model','scenario'][i]===id);});
-  document.querySelectorAll('.tab-pane').forEach(function(p){p.classList.remove('active');});
-  G('tab-'+id).classList.add('active');
-  if(id==='scenario') resetScenario();
-}
-
-// ── Scenario ──────────────────────────────────────────────────────────────────
-function resetScenario() {
-  if(!_inputs) return;
-  var ohMo = (_inputs.overhead||[]).reduce(function(a,x){return a+parseFloat(x.monthly||0);},0);
-  G('sc-overhead').value  = ohMo.toFixed(2);
-  G('sc-labour').value    = computeLabourMonthly(_inputs.labour||[]).toFixed(2);
-  G('sc-supplies').value  = _inputs.supplies_monthly||'';
-  G('sc-maint').value     = _inputs.maintenance_monthly||'';
-  G('sc-debt').value      = _inputs.debt_repayment_monthly||'';
-  G('sc-kettles').value   = _inputs.kettles_per_day||'';
-  G('sc-slow-kettles') && (G('sc-slow-kettles').value = _inputs.slow_kettles_per_day||'');
-  G('sc-bones-chicken').value = (_inputs.bones&&_inputs.bones.chicken?_inputs.bones.chicken.price_per_kg:'')||'';
-  G('sc-bones-beef').value    = (_inputs.bones&&_inputs.bones.beef?_inputs.bones.beef.price_per_kg:'')||'';
-  G('sc-bones-turkey').value  = (_inputs.bones&&_inputs.bones.turkey?_inputs.bones.turkey.price_per_kg:'')||'';
-  G('sc-mushroom').value  = _inputs.mushroom_price_per_kg||'';
-  G('sc-minor').value     = _inputs.minor_ingredients_per_batch||'';
-  G('scenario-note').textContent = '';
-  runScenario();
-}
-
-async function runScenario() {
-  if(!_inputs) return;
-  // Build a modified copy of inputs
-  var sc = JSON.parse(JSON.stringify(_inputs));
-  var ohMo = parseFloat(G('sc-overhead').value)||0;
-  var lbMo = parseFloat(G('sc-labour').value)||0;
-  // Replace overhead with a single line item for simplicity
-  sc.overhead = [{name:'Total Overhead', monthly: ohMo}];
-  // Replace labour similarly
-  // labour_mo = hourly * hours_per_week * (52-vacation)/12 per person
-  // We replace with a single synthetic role that produces the right monthly
-  sc.labour = [{role:'Total Labour', hourly: lbMo*12/((52-0)*40), hours_per_week:40, vacation_weeks:0}];
-  sc.supplies_monthly       = parseFloat(G('sc-supplies').value)||0;
-  sc.maintenance_monthly    = parseFloat(G('sc-maint').value)||0;
-  sc.debt_repayment_monthly = parseFloat(G('sc-debt').value)||0;
-  sc.kettles_per_day        = parseFloat(G('sc-kettles').value)||_inputs.kettles_per_day;
-  if(sc.bones) {
-    sc.bones.chicken = {price_per_kg: parseFloat(G('sc-bones-chicken').value)||0};
-    sc.bones.beef    = {price_per_kg: parseFloat(G('sc-bones-beef').value)||0};
-    sc.bones.turkey  = {price_per_kg: parseFloat(G('sc-bones-turkey').value)||0};
-  }
-  sc.mushroom_price_per_kg       = parseFloat(G('sc-mushroom').value)||0;
-  sc.minor_ingredients_per_batch = parseFloat(G('sc-minor').value)||0;
-  // Send to compute endpoint
-  try {
-    var res = await fetch('/api/cogs/compute', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({inputs:sc})});
-    var d = await res.json();
-    renderMatrix(d.matrix, d.cost_per_run, d.avg_runs_per_month, 'scenario-matrix-body', 'scenario-cost-per-run');
-    G('scenario-note').textContent = 'Last updated: '+new Date().toLocaleTimeString();
-  } catch(e) {}
-}
-
-function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-
-// Nav arrows
 (function(){
-  var back=G('nav-back'), fwd=G('nav-fwd');
-  if(back){back.disabled=window.history.length<=1; back.onclick=function(){window.history.back();};}
-  if(fwd) fwd.onclick=function(){window.history.forward();};
+  var back = document.getElementById('nav-back');
+  var fwd  = document.getElementById('nav-fwd');
+  if(back){ back.disabled=window.history.length<=1; back.onclick=function(){window.history.back();}; }
+  if(fwd)  fwd.onclick = function(){ window.history.forward(); };
+})();
+</script>
+
+<script>
+
+// ============================================================================
+// STATE
+// ============================================================================
+const DEFAULTS = {
+  // Production
+  'units.475ml': 290, 'units.735ml': 190, 'units.876ml': 144,
+  'units.780fz': 180, 'units.780bb': 180, 'units.780p': 180,
+  kettlesPerDay: 3, prodDaysPerMonth: 28,
+  slowMonths: 4, fullMonths: 8, slowKettles: 1.5,
+
+  // Labour
+  uplift: 8,
+
+  // Maintenance
+  maintenance: 1500,
+
+  // Debt
+  debtMonthly: 16666,
+
+  // Bones
+  chickenKg: 2.20, chickenBase: 50, chickenExtra: 25,
+  beefKg: 3.50, beefBase: 60, beefExtra: 15,
+  turkeyKg: 4.40, turkeyBase: 50, wholeTurkey: 180,
+  mushFreshKg: 11.66, mushFreshAmt: 16,
+  mushSpecKg: 22, mushSpecAmt: 3,
+
+  // Other ingredients
+  mirepoixKg: 2.40, mirepoixAmt: 9.5,
+  saltKg: 6.00, saltAmt: 0.675,
+  spicesKg: 40, spicesAmt: 0.1,
+
+  // Packaging
+  'container.475ml': 1.00, 'container.735ml': 1.00, 'container.876ml': 1.10,
+  'container.780fz': 0.35, 'container.780bb': 0.35, 'container.780p': 1.00,
+  'lid.475ml': 0.35, 'lid.735ml': 0.35, 'lid.876ml': 0.35,
+  'lid.780fz': 0, 'lid.780bb': 0, 'lid.780p': 0,
+  'box.475ml': 0, 'box.735ml': 0, 'box.876ml': 0,
+  'box.780fz': 0.16, 'box.780bb': 0.16, 'box.780p': 0,
+
+  // Labels
+  'label.475ml': 0.49, 'label.735ml': 0.43, 'label.876ml': 0.49,
+  'label.780fz': 0.81, 'label.780bb': 0, 'label.780p': 0,
+  handDailyCost: 80,
+
+  // Margins
+  wholesaleMargin: 20, retailMargin: 30,
+};
+
+// Fixed overhead items (editable amounts only)
+const FIXED_OVERHEAD_ITEMS = [
+  { id: 'bookkeeper', name: 'Bookkeeper', default: 900 },
+  { id: 'cathy', name: 'Cathy', default: 100 },
+  { id: 'accountant', name: 'Accountant', default: 200 },
+  { id: 'rent', name: 'Rent', default: 4000 },
+  { id: 'phone', name: 'Phone', default: 96 },
+  { id: 'internet', name: 'Internet', default: 151 },
+  { id: 'insurance_soma', name: 'Business Insurance (SOMA)', default: 368.12 },
+  { id: 'license', name: 'Business License', default: 247 },
+  { id: 'sync', name: 'Sync Data Storage', default: 16 },
+  { id: 'fastmail', name: 'Fastmail', default: 36 },
+  { id: 'banking', name: 'Banking Fee', default: 22.5 },
+];
+
+const VAR_OVERHEAD_ITEMS = [
+  { id: 'enbridge', name: 'Enbridge (gas)', default: 1400 },
+  { id: 'hydro977', name: 'Hydro Meter #977', default: 1859.11 },
+  { id: 'hydro550', name: 'Hydro Meter #550', default: 491.25 },
+  { id: 'water', name: 'Water (City of Toronto)', default: 162.82 },
+  { id: 'linen', name: 'Linen Service', default: 200 },
+  { id: 'garbage', name: 'Garbage Pick-up', default: 47.58 },
+  { id: 'garbageDisp', name: 'Garbage Disposal', default: 520 },
+  { id: 'greenBin', name: 'Green Bin & Recycling', default: 50 },
+];
+
+const SUPPLIES_ITEMS = [
+  { id: 'sabrina', name: 'Sabrina (kitchen/cleaning)', default: 1155 },
+  { id: 'staples', name: 'Staples', default: 80 },
+  { id: 'nella', name: 'Nella', default: 300 },
+  { id: 'uline', name: 'Uline', default: 500 },
+  { id: 'dymo', name: 'Dymo', default: 130 },
+];
+
+const LABOUR_ROLES = [
+  { id: 'president', name: 'President (Chris Kaspiris)', type: 'salary', defaultSalary: 40000 },
+  { id: 'ceo', name: 'CEO (Michel Salvador)', type: 'hourly', defaultWage: 50, defaultWkday: 40, defaultWknd: 0 },
+  { id: 'hoo', name: 'Head of Operations (Steve Elenis)', type: 'hourly', defaultWage: 37, defaultWkday: 40, defaultWknd: 0 },
+  { id: 'broth1', name: 'Broth 1 (Kitchen Lead)', type: 'hourly', defaultWage: 28, defaultWkday: 40, defaultWknd: 16 },
+  { id: 'broth2', name: 'Broth 2 (Kitchen Staff)', type: 'hourly', defaultWage: 23, defaultWkday: 40, defaultWknd: 16 },
+];
+
+const DEP_ITEMS = [
+  { id: 'ovens', name: 'Rational Combi Ovens (×2)', defaultPrice: 50000, defaultLife: 15 },
+  { id: 'kettles', name: 'Kettles (×3, used)', defaultPrice: 54000, defaultLife: 8 },
+  { id: 'hvac', name: 'Delta HVAC', defaultPrice: 173455, defaultLife: 20 },
+  { id: 'dishwashers', name: 'Dishwashers (×3)', defaultPrice: 10000, defaultLife: 8 },
+  { id: 'labelMachine', name: 'Label Machine', defaultPrice: 25000, defaultLife: 12 },
+  { id: 'fridges', name: 'Fridges', defaultPrice: 10000, defaultLife: 12 },
+  { id: 'freezerUp', name: 'Freezer (upstairs)', defaultPrice: 10000, defaultLife: 15 },
+  { id: 'freezerDown', name: 'Freezer (downstairs)', defaultPrice: 20000, defaultLife: 15 },
+];
+
+const SKUS = ['475ml', '735ml', '876ml', '780fz', '780bb', '780p'];
+
+// Load from localStorage or use defaults
+let state = {};
+
+async function loadState() {
+  // Build default state first
+  state = { ...DEFAULTS };
+  FIXED_OVERHEAD_ITEMS.forEach(it => state['fixOh.' + it.id] = it.default);
+  VAR_OVERHEAD_ITEMS.forEach(it => state['varOh.' + it.id] = it.default);
+  SUPPLIES_ITEMS.forEach(it => state['supplies.' + it.id] = it.default);
+  LABOUR_ROLES.forEach(r => {
+    if (r.type === 'salary') {
+      state['labour.' + r.id + '.salary'] = r.defaultSalary;
+    } else {
+      state['labour.' + r.id + '.wage'] = r.defaultWage;
+      state['labour.' + r.id + '.wkday'] = r.defaultWkday;
+      state['labour.' + r.id + '.wknd'] = r.defaultWknd;
+    }
+  });
+  DEP_ITEMS.forEach(it => {
+    state['dep.' + it.id + '.price'] = it.defaultPrice;
+    state['dep.' + it.id + '.life'] = it.defaultLife;
+  });
+
+  // Load saved values from server
+  try {
+    const res = await fetch('/api/cogs');
+    const d   = await res.json();
+    const c   = d.inputs || {};
+    // Map server inputs to state keys
+    if (c.units_per_kettle) {
+      state['units.475ml'] = c.units_per_kettle['475ml']   || state['units.475ml'];
+      state['units.735ml'] = c.units_per_kettle['750ml_ss']|| state['units.735ml'];
+      state['units.876ml'] = c.units_per_kettle['876ml']   || state['units.876ml'];
+      state['units.780fz'] = c.units_per_kettle['750ml_fz']|| state['units.780fz'];
+      state['units.780bb'] = c.units_per_kettle['750ml_bb']|| state['units.780bb'];
+      state['units.780p']  = c.units_per_kettle['750ml_pouch']||state['units.780p'];
+    }
+    if (c.kettles_per_day)          state.kettlesPerDay      = c.kettles_per_day;
+    if (c.production_days_per_month)state.prodDaysPerMonth   = c.production_days_per_month;
+    if (c.slow_months_per_year)     state.slowMonths         = c.slow_months_per_year;
+    if (c.slow_kettles_per_day)     state.slowKettles        = c.slow_kettles_per_day;
+    state.fullMonths = 12 - (state.slowMonths || 4);
+    if (c.maintenance_monthly)      state.maintenance        = c.maintenance_monthly;
+    if (c.debt_repayment_monthly)   state.debtMonthly        = c.debt_repayment_monthly;
+    // Overhead fixed
+    if (c.overhead_fixed) {
+      const MAP = {
+        'Bookkeeper':'bookkeeper','Cathy':'cathy','Accountant':'accountant','Rent':'rent',
+        'Phone':'phone','Internet':'internet','Business Insurance':'insurance_soma',
+        'Business License':'license','Sync Data Storage':'sync','Fastmail':'fastmail',
+        'Banking Fee':'banking'
+      };
+      c.overhead_fixed.forEach(item => {
+        const key = MAP[item.name] || item.name.toLowerCase().replace(/[^a-z0-9]/g,'');
+        state['fixOh.' + key] = item.monthly;
+      });
+    }
+    // Overhead variable
+    if (c.overhead_variable) {
+      const MAP = {
+        'Enbridge (gas)':'enbridge','Hydro Meter #977':'hydro977','Hydro Meter #550':'hydro550',
+        'Water':'water','Water (City of Toronto)':'water','Linen Service':'linen',
+        'Garbage Pick-up':'garbage','Garbage Disposal':'garbageDisp','Green Bin & Recycling':'greenBin'
+      };
+      c.overhead_variable.forEach(item => {
+        const key = MAP[item.name] || item.name.toLowerCase().replace(/[^a-z0-9]/g,'');
+        state['varOh.' + key] = item.monthly;
+      });
+    }
+    // Supplies
+    if (c.supplies) {
+      const MAP = {
+        'Sabrina (kitchen/cleaning)':'sabrina','Staples':'staples',
+        'Nella':'nella','Uline':'uline','Dymo':'dymo'
+      };
+      c.supplies.forEach(item => {
+        const key = MAP[item.name] || item.name.toLowerCase().replace(/[^a-z0-9]/g,'');
+        state['supplies.' + key] = item.monthly;
+      });
+    }
+    // Labour
+    if (c.labour) {
+      const MAP = {
+        'President (Chris Kaspiris)':'president','CEO (Michel Salvador)':'ceo',
+        'Head of Operations':'hoo','Broth 1 (Kitchen Lead)':'broth1','Broth 2 (Kitchen Staff)':'broth2'
+      };
+      c.labour.forEach(r => {
+        const key = MAP[r.role] || r.role.toLowerCase().replace(/[^a-z0-9]/g,'');
+        if (r.type === 'salary') {
+          state['labour.' + key + '.salary'] = r.annual_salary;
+        } else {
+          if (r.base_hourly)     state['labour.' + key + '.wage']  = r.base_hourly;
+          if (r.uplift_pct)      state.uplift                       = r.uplift_pct;
+          if (r.weekday_hours)   state['labour.' + key + '.wkday'] = r.weekday_hours;
+          if (r.weekend_hours != null) state['labour.' + key + '.wknd']  = r.weekend_hours;
+        }
+      });
+    }
+    // Equipment depreciation
+    if (c.equipment) {
+      const MAP = {
+        'Rational Combi Ovens (×2)':'ovens','Kettles (×3, used)':'kettles',
+        'Delta HVAC':'hvac','Dishwashers (×3)':'dishwashers','Label Machine':'labelMachine',
+        'Fridges':'fridges','Freezer (upstairs)':'freezerUp','Freezer (downstairs)':'freezerDown'
+      };
+      c.equipment.forEach(e => {
+        const key = MAP[e.name] || e.name.toLowerCase().replace(/[^a-z0-9]/g,'');
+        state['dep.' + key + '.price'] = e.cost;
+        state['dep.' + key + '.life']  = e.life_years;
+      });
+    }
+    // Bones
+    if (c.bones) {
+      if (c.bones.chicken) state.chickenKg  = c.bones.chicken.price_per_kg;
+      if (c.bones.beef)    state.beefKg     = c.bones.beef.price_per_kg;
+      if (c.bones.turkey)  {
+        state.turkeyKg     = c.bones.turkey.price_per_kg;
+        state.wholeTurkey  = c.bones.turkey.whole_turkey_cost_per_batch || 180;
+      }
+    }
+    if (c.mushroom_fresh)     { state.mushFreshKg  = c.mushroom_fresh.price_per_kg;  state.mushFreshAmt = c.mushroom_fresh.kg_per_batch; }
+    if (c.mushroom_specialty) { state.mushSpecKg   = c.mushroom_specialty.price_per_kg; state.mushSpecAmt = c.mushroom_specialty.kg_per_batch; }
+    // Other ingredients — stored as flat batch total, split across 3 lines
+    if (c.other_ingredients_per_batch) {
+      // Keep proportions from defaults, scale to match stored total
+      const defaultOther = state.mirepoixKg*state.mirepoixAmt + state.saltKg*state.saltAmt + state.spicesKg*state.spicesAmt;
+      // Just use defaults — the flat total is what matters
+    }
+    // Packaging
+    if (c.packaging) {
+      const PKG_MAP = {'475ml':'475ml','750ml_ss':'735ml','876ml':'876ml','750ml_fz':'780fz','750ml_bb':'780bb','750ml_pouch':'780p'};
+      Object.entries(c.packaging).forEach(([k,v]) => {
+        const sk = PKG_MAP[k];
+        if (!sk) return;
+        if (v.container != null) state['container.' + sk] = v.container;
+        if (v.lid       != null) state['lid.' + sk]       = v.lid;
+        if (v.box       != null) state['box.' + sk]       = v.box;
+      });
+    }
+    // Labels
+    if (c.labels) {
+      const LBL_MAP = {'475ml':'475ml','750ml_ss':'735ml','876ml':'876ml','750ml_fz':'780fz','750ml_bb':'780bb','750ml_pouch':'780p'};
+      Object.entries(c.labels).forEach(([k,v]) => {
+        const sk = LBL_MAP[k];
+        if (!sk) return;
+        if (v.cost != null) state['label.' + sk] = v.cost;
+      });
+    }
+  } catch(e) {
+    console.warn('Could not load from server, using defaults:', e);
+  }
+}
+
+let _saveTimer = null;
+function saveState() {
+  showSaveIndicator();
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(flushSave, 900);
+}
+
+async function flushSave() {
+  // Map state back to server format
+  const SKU_MAP = {'475ml':'475ml','735ml':'750ml_ss','876ml':'876ml','780fz':'750ml_fz','780bb':'750ml_bb','780p':'750ml_pouch'};
+  const upliftPct = state.uplift || 8;
+  const patch = {
+    units_per_kettle: Object.fromEntries(Object.entries(SKU_MAP).map(([sk,sv]) => [sv, state['units.'+sk]||0])),
+    kettles_per_day:           state.kettlesPerDay,
+    production_days_per_month: state.prodDaysPerMonth,
+    slow_months_per_year:      state.slowMonths,
+    slow_kettles_per_day:      state.slowKettles,
+    maintenance_monthly:       state.maintenance,
+    debt_repayment_monthly:    state.debtMonthly,
+    overhead_fixed:  FIXED_OVERHEAD_ITEMS.map(it => ({name:it.name, monthly: state['fixOh.'+it.id]||0})),
+    overhead_variable: VAR_OVERHEAD_ITEMS.map(it => ({name:it.name, monthly: state['varOh.'+it.id]||0})),
+    supplies:        SUPPLIES_ITEMS.map(it => ({name:it.name, monthly: state['supplies.'+it.id]||0})),
+    labour: LABOUR_ROLES.map(r => {
+      if (r.type==='salary') return {role:r.name, type:'salary', annual_salary: state['labour.'+r.id+'.salary']||0, weekly_cost: (state['labour.'+r.id+'.salary']||0)/52};
+      return {role:r.name, type:'hourly', base_hourly:state['labour.'+r.id+'.wage']||0, uplift_pct:upliftPct, weekday_hours:state['labour.'+r.id+'.wkday']||0, weekend_hours:state['labour.'+r.id+'.wknd']||0};
+    }),
+    equipment: DEP_ITEMS.map(it => ({name:it.name, cost:state['dep.'+it.id+'.price']||0, life_years:state['dep.'+it.id+'.life']||1})),
+    bones: {
+      chicken: {price_per_kg: state.chickenKg},
+      beef:    {price_per_kg: state.beefKg},
+      turkey:  {price_per_kg: state.turkeyKg, whole_turkey_cost_per_batch: state.wholeTurkey},
+    },
+    mushroom_fresh:     {price_per_kg: state.mushFreshKg, kg_per_batch: state.mushFreshAmt},
+    mushroom_specialty: {price_per_kg: state.mushSpecKg,  kg_per_batch: state.mushSpecAmt},
+    other_ingredients_per_batch: (state.mirepoixKg*state.mirepoixAmt + state.saltKg*state.saltAmt + state.spicesKg*state.spicesAmt),
+    packaging: Object.fromEntries(Object.entries(SKU_MAP).map(([sk,sv]) => [sv, {container:state['container.'+sk]||0, lid:state['lid.'+sk]||0, box:state['box.'+sk]||0}])),
+    labels:    Object.fromEntries(Object.entries(SKU_MAP).map(([sk,sv]) => [sv, {cost:state['label.'+sk]||0, hand_applied:['735ml','780fz'].includes(sk), hand_apply_surcharge:0}])),
+    schema_version: 3,
+  };
+  try {
+    await fetch('/api/cogs', {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch)});
+  } catch(e) { console.warn('Save failed:', e); }
+}
+
+function showSaveIndicator() {
+  const ind = document.getElementById('save-indicator');
+  ind.classList.add('visible');
+  clearTimeout(window._saveTimeout);
+  window._saveTimeout = setTimeout(() => ind.classList.remove('visible'), 1200);
+}
+
+// ============================================================================
+// FORMATTERS
+// ============================================================================
+const fmt$ = n => '$' + (Math.round(n * 100) / 100).toFixed(2);
+const fmtNum = n => Math.round(n).toLocaleString();
+const fmtNum2 = n => (Math.round(n * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// ============================================================================
+// CALCULATIONS
+// ============================================================================
+function calculate() {
+  const s = state;
+  const r = {}; // results
+
+  // Production
+  const kpd = +s.kettlesPerDay;
+  const days = +s.prodDaysPerMonth;
+  SKUS.forEach(sku => {
+    const u = +s['units.' + sku];
+    r['perday.' + sku] = u * kpd;
+    r['permonth.' + sku] = u * kpd * days;
+  });
+
+  // Kettle runs
+  r.kettleRuns = (days * s.slowMonths * s.slowKettles) + (days * s.fullMonths * kpd);
+
+  // Fixed overhead
+  let fixedTotal = 0;
+  FIXED_OVERHEAD_ITEMS.forEach(it => {
+    fixedTotal += +s['fixOh.' + it.id];
+  });
+  r.fixedTotal = fixedTotal;
+
+  let varTotal = 0;
+  VAR_OVERHEAD_ITEMS.forEach(it => {
+    varTotal += +s['varOh.' + it.id];
+  });
+  r.varTotal = varTotal;
+
+  r.overheadMonthly = fixedTotal + varTotal;
+  r.overheadPerKettle = (r.overheadMonthly * 12) / r.kettleRuns;
+  SKUS.forEach(sku => {
+    r['overheadUnit.' + sku] = r.overheadPerKettle / +s['units.' + sku];
+  });
+
+  // Labour
+  const uplift = 1 + s.uplift / 100;
+  let weeklyLabour = 0;
+  LABOUR_ROLES.forEach(role => {
+    if (role.type === 'salary') {
+      weeklyLabour += +s['labour.' + role.id + '.salary'] / 52;
+    } else {
+      const w = +s['labour.' + role.id + '.wage'] * uplift;
+      weeklyLabour += w * (+s['labour.' + role.id + '.wkday'] + +s['labour.' + role.id + '.wknd']);
+    }
+  });
+  r.weeklyLabour = weeklyLabour;
+  r.annualLabour = weeklyLabour * 52;
+  r.labourPerKettle = r.annualLabour / r.kettleRuns;
+  SKUS.forEach(sku => {
+    r['labourUnit.' + sku] = r.labourPerKettle / +s['units.' + sku];
+  });
+
+  // Supplies
+  let suppliesTotal = 0;
+  SUPPLIES_ITEMS.forEach(it => {
+    suppliesTotal += +s['supplies.' + it.id];
+  });
+  r.suppliesTotal = suppliesTotal;
+  r.suppliesPerKettle = (suppliesTotal * 12) / r.kettleRuns;
+  SKUS.forEach(sku => {
+    r['suppliesUnit.' + sku] = r.suppliesPerKettle / +s['units.' + sku];
+  });
+
+  // Maintenance
+  r.maintPerKettle = (+s.maintenance * 12) / r.kettleRuns;
+  SKUS.forEach(sku => {
+    r['maintUnit.' + sku] = r.maintPerKettle / +s['units.' + sku];
+  });
+
+  // Depreciation
+  let depTotalAnnual = 0, depTotalPurchase = 0;
+  DEP_ITEMS.forEach(it => {
+    const price = +s['dep.' + it.id + '.price'];
+    const life = +s['dep.' + it.id + '.life'];
+    const annual = price / life;
+    depTotalAnnual += annual;
+    depTotalPurchase += price;
+    r['dep.' + it.id + '.annual'] = annual;
+    r['dep.' + it.id + '.daily'] = annual / 365;
+  });
+  r.depTotalPurchase = depTotalPurchase;
+  r.depTotalAnnual = depTotalAnnual;
+  r.depTotalDaily = depTotalAnnual / 365;
+  r.depPerKettle = depTotalAnnual / r.kettleRuns;
+  SKUS.forEach(sku => {
+    r['depUnit.' + sku] = r.depPerKettle / +s['units.' + sku];
+  });
+
+  // Debt
+  r.debtAnnual = +s.debtMonthly * 12;
+  r.debtPerKettle = r.debtAnnual / r.kettleRuns;
+  SKUS.forEach(sku => {
+    r['debtUnit.' + sku] = r.debtPerKettle / +s['units.' + sku];
+  });
+
+  // Bones & Mushroom
+  r.chickenBatch = s.chickenKg * s.chickenBase;
+  r.chickenExtraBatch = s.chickenKg * s.chickenExtra;
+  r.beefBatch = s.beefKg * s.beefBase;
+  r.beefExtraBatch = s.beefKg * s.beefExtra;
+  r.turkeyBonesBatch = s.turkeyKg * s.turkeyBase;
+  r.turkeyTotalBatch = r.turkeyBonesBatch + (+s.wholeTurkey);
+  r.mushFreshBatch = s.mushFreshKg * s.mushFreshAmt;
+  r.mushSpecBatch = s.mushSpecKg * s.mushSpecAmt;
+  r.mushTotalBatch = r.mushFreshBatch + r.mushSpecBatch;
+
+  SKUS.forEach(sku => {
+    const u = +s['units.' + sku];
+    r['chickenUnit.' + sku] = r.chickenBatch / u;
+    r['chickenExtraUnit.' + sku] = r.chickenExtraBatch / u;
+    r['beefUnit.' + sku] = r.beefBatch / u;
+    r['beefExtraUnit.' + sku] = r.beefExtraBatch / u;
+    r['turkeyUnit.' + sku] = r.turkeyTotalBatch / u;
+    r['mushUnit.' + sku] = r.mushTotalBatch / u;
+  });
+
+  // Other ingredients
+  r.mirepoixBatch = s.mirepoixKg * s.mirepoixAmt;
+  r.saltBatch = s.saltKg * s.saltAmt;
+  r.spicesBatch = s.spicesKg * s.spicesAmt;
+  r.otherTotal = r.mirepoixBatch + r.saltBatch + r.spicesBatch;
+  SKUS.forEach(sku => {
+    r['otherUnit.' + sku] = r.otherTotal / +s['units.' + sku];
+  });
+
+  // Packaging
+  SKUS.forEach(sku => {
+    r['pkgTotal.' + sku] = (+s['container.' + sku]) + (+s['lid.' + sku]) + (+s['box.' + sku]);
+  });
+
+  // Labels (hand surcharge on 735ml and 780fz)
+  const handCost = +s.handDailyCost;
+  r['handLabel.735ml'] = handCost / r['perday.735ml'];
+  r['handLabel.780fz'] = handCost / r['perday.780fz'];
+
+  SKUS.forEach(sku => {
+    const base = +s['label.' + sku];
+    let hand = 0;
+    if (sku === '735ml') hand = r['handLabel.735ml'];
+    if (sku === '780fz') hand = r['handLabel.780fz'];
+    r['labelTotal.' + sku] = base + hand;
+  });
+
+  // Fixed costs per unit
+  SKUS.forEach(sku => {
+    r['fixedUnit.' + sku] = r['overheadUnit.' + sku] + r['labourUnit.' + sku] +
+                             r['suppliesUnit.' + sku] + r['maintUnit.' + sku] +
+                             r['depUnit.' + sku] + r['debtUnit.' + sku];
+  });
+
+  // Full COGS by broth × SKU
+  SKUS.forEach(sku => {
+    const fixed = r['fixedUnit.' + sku];
+    const other = r['otherUnit.' + sku];
+    const pkg = r['pkgTotal.' + sku];
+    const lbl = r['labelTotal.' + sku];
+
+    r['cogs.chicken.' + sku] = fixed + r['chickenUnit.' + sku] + other + pkg + lbl;
+    r['cogs.beef.' + sku] = fixed + r['beefUnit.' + sku] + other + pkg + lbl;
+    r['cogs.turkey.' + sku] = fixed + r['turkeyUnit.' + sku] + other + pkg + lbl;
+    r['cogs.mushroom.' + sku] = fixed + r['mushUnit.' + sku] + other + pkg + lbl;
+  });
+
+  return r;
+}
+
+// ============================================================================
+// RENDER
+// ============================================================================
+const SKU_ORDER = ['475ml', '735ml', '876ml', '780fz', '780bb', '780p'];
+const SKU_LABELS = { '475ml': '475ml', '735ml': '735ml', '876ml': '876ml', '780fz': '780ml FZ', '780bb': '780ml BB', '780p': '780ml Pouch' };
+
+function renderDynamicTables() {
+  // Fixed overhead
+  let html = '';
+  FIXED_OVERHEAD_ITEMS.forEach(it => {
+    html += `<tr><td class="label">${it.name}</td><td><input type="number" data-input="fixOh.${it.id}" value="${state['fixOh.' + it.id]}" step="1"></td></tr>`;
+  });
+  document.getElementById('fixed-overhead-body').innerHTML = html;
+
+  // Variable overhead
+  html = '';
+  VAR_OVERHEAD_ITEMS.forEach(it => {
+    html += `<tr><td class="label">${it.name}</td><td><input type="number" data-input="varOh.${it.id}" value="${state['varOh.' + it.id]}" step="1"></td></tr>`;
+  });
+  document.getElementById('var-overhead-body').innerHTML = html;
+
+  // Supplies
+  html = '';
+  SUPPLIES_ITEMS.forEach(it => {
+    html += `<tr><td class="label">${it.name}</td><td><input type="number" data-input="supplies.${it.id}" value="${state['supplies.' + it.id]}" step="1"></td></tr>`;
+  });
+  document.getElementById('supplies-body').innerHTML = html;
+
+  // Labour
+  html = '';
+  LABOUR_ROLES.forEach(role => {
+    if (role.type === 'salary') {
+      html += `<tr>
+        <td class="label">${role.name} (salary)</td>
+        <td><input type="number" data-input="labour.${role.id}.salary" value="${state['labour.' + role.id + '.salary']}" step="500"></td>
+        <td class="note">annual</td>
+        <td>—</td><td>—</td>
+        <td class="formula-cell" data-output="labourWeekly.${role.id}"></td>
+      </tr>`;
+    } else {
+      html += `<tr>
+        <td class="label">${role.name}</td>
+        <td><input type="number" data-input="labour.${role.id}.wage" value="${state['labour.' + role.id + '.wage']}" step="0.50"></td>
+        <td class="formula-cell" data-output="labourLoaded.${role.id}"></td>
+        <td><input type="number" data-input="labour.${role.id}.wkday" value="${state['labour.' + role.id + '.wkday']}" step="1"></td>
+        <td><input type="number" data-input="labour.${role.id}.wknd" value="${state['labour.' + role.id + '.wknd']}" step="1"></td>
+        <td class="formula-cell" data-output="labourWeekly.${role.id}"></td>
+      </tr>`;
+    }
+  });
+  document.getElementById('labour-body').innerHTML = html;
+
+  // Depreciation
+  html = '';
+  DEP_ITEMS.forEach(it => {
+    html += `<tr>
+      <td class="label">${it.name}</td>
+      <td><input type="number" data-input="dep.${it.id}.price" value="${state['dep.' + it.id + '.price']}" step="500"></td>
+      <td><input type="number" data-input="dep.${it.id}.life" value="${state['dep.' + it.id + '.life']}" step="1"></td>
+      <td class="formula-cell" data-output="dep.${it.id}.annual"></td>
+      <td class="formula-cell" data-output="dep.${it.id}.daily"></td>
+    </tr>`;
+  });
+  document.getElementById('dep-body').innerHTML = html;
+}
+
+function renderBonesPerUnit(r) {
+  const rows = [
+    ['Chicken bones', 'chickenUnit'],
+    ['Chicken +25kg extra', 'chickenExtraUnit'],
+    ['Beef bones', 'beefUnit'],
+    ['Beef +15kg extra', 'beefExtraUnit'],
+    ['Turkey (bones + whole)', 'turkeyUnit'],
+    ['Mushroom (fresh + specialty)', 'mushUnit'],
+  ];
+  let html = '';
+  rows.forEach(([label, key]) => {
+    html += `<tr><td class="label">${label}</td>`;
+    SKUS.forEach(sku => {
+      html += `<td class="formula-cell">${fmt$(r[key + '.' + sku])}</td>`;
+    });
+    html += '</tr>';
+  });
+  document.getElementById('bones-per-unit-body').innerHTML = html;
+}
+
+function renderCogsSummary(r) {
+  const broths = [['Chicken', 'chicken'], ['Beef', 'beef'], ['Turkey', 'turkey'], ['Mushroom', 'mushroom']];
+  let html = '';
+  broths.forEach(([label, key]) => {
+    html += `<tr><td class="label">${label}</td>`;
+    SKUS.forEach(sku => {
+      html += `<td class="formula-cell">${fmt$(r['cogs.' + key + '.' + sku])}</td>`;
+    });
+    html += '</tr>';
+  });
+  document.getElementById('cogs-summary-body').innerHTML = html;
+
+  // Fixed cost breakdown
+  const components = [
+    ['Overhead', 'overheadUnit'],
+    ['Labour', 'labourUnit'],
+    ['Supplies', 'suppliesUnit'],
+    ['Maintenance', 'maintUnit'],
+    ['Depreciation', 'depUnit'],
+    ['Debt', 'debtUnit'],
+  ];
+  html = '';
+  components.forEach(([label, key]) => {
+    html += `<tr><td class="label">${label}</td>`;
+    SKUS.forEach(sku => {
+      html += `<td class="formula-cell">${fmt$(r[key + '.' + sku])}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '<tr class="total-row"><td class="label">Total fixed $/unit</td>';
+  SKUS.forEach(sku => {
+    html += `<td class="formula-cell">${fmt$(r['fixedUnit.' + sku])}</td>`;
+  });
+  html += '</tr>';
+  document.getElementById('fixed-cost-body').innerHTML = html;
+}
+
+function renderPricing(r) {
+  const wholesaleM = state.wholesaleMargin / 100;
+  const retailM = state.retailMargin / 100;
+  document.getElementById('wholesale-margin-display').textContent = state.wholesaleMargin + '%';
+  document.getElementById('retail-margin-display').textContent = state.retailMargin + '%';
+
+  const broths = [['Chicken', 'chicken'], ['Beef', 'beef'], ['Turkey', 'turkey'], ['Mushroom', 'mushroom']];
+
+  let html = '';
+  broths.forEach(([label, key]) => {
+    html += `<tr><td class="label">${label}</td>`;
+    SKUS.forEach(sku => {
+      const cogs = r['cogs.' + key + '.' + sku];
+      const price = cogs / (1 - wholesaleM);
+      html += `<td class="formula-cell">${fmt$(price)}</td>`;
+    });
+    html += '</tr>';
+  });
+  document.getElementById('wholesale-body').innerHTML = html;
+
+  html = '';
+  broths.forEach(([label, key]) => {
+    html += `<tr><td class="label">${label}</td>`;
+    SKUS.forEach(sku => {
+      const cogs = r['cogs.' + key + '.' + sku];
+      const price = cogs / (1 - retailM);
+      html += `<td class="formula-cell">${fmt$(price)}</td>`;
+    });
+    html += '</tr>';
+  });
+  document.getElementById('retail-body').innerHTML = html;
+}
+
+function updateOutputs(r) {
+  // Production
+  SKUS.forEach(sku => {
+    setOutput('perday.' + sku, fmtNum(r['perday.' + sku]));
+    setOutput('permonth.' + sku, fmtNum(r['permonth.' + sku]));
+  });
+  setOutput('kettleRuns', fmtNum(r.kettleRuns));
+
+  // Overhead
+  setOutput('fixedTotal', fmt$(r.fixedTotal));
+  setOutput('varTotal', fmt$(r.varTotal));
+  setOutput('overheadMonthly', fmt$(r.overheadMonthly));
+  setOutput('overheadPerKettle', fmt$(r.overheadPerKettle));
+  SKUS.forEach(sku => setOutput('overheadUnit.' + sku, fmt$(r['overheadUnit.' + sku])));
+
+  // Labour
+  LABOUR_ROLES.forEach(role => {
+    if (role.type === 'salary') {
+      setOutput('labourWeekly.' + role.id, fmt$(state['labour.' + role.id + '.salary'] / 52));
+    } else {
+      const loaded = state['labour.' + role.id + '.wage'] * (1 + state.uplift / 100);
+      const weekly = loaded * (+state['labour.' + role.id + '.wkday'] + +state['labour.' + role.id + '.wknd']);
+      setOutput('labourLoaded.' + role.id, fmt$(loaded));
+      setOutput('labourWeekly.' + role.id, fmt$(weekly));
+    }
+  });
+  setOutput('weeklyLabour', fmt$(r.weeklyLabour));
+  setOutput('annualLabour', fmt$(r.annualLabour));
+  setOutput('labourPerKettle', fmt$(r.labourPerKettle));
+  SKUS.forEach(sku => setOutput('labourUnit.' + sku, fmt$(r['labourUnit.' + sku])));
+
+  // Supplies & Maintenance
+  setOutput('suppliesTotal', fmt$(r.suppliesTotal));
+  setOutput('suppliesPerKettle', fmt$(r.suppliesPerKettle));
+  setOutput('maintPerKettle', fmt$(r.maintPerKettle));
+
+  // Depreciation
+  DEP_ITEMS.forEach(it => {
+    setOutput('dep.' + it.id + '.annual', fmt$(r['dep.' + it.id + '.annual']));
+    setOutput('dep.' + it.id + '.daily', fmt$(r['dep.' + it.id + '.daily']));
+  });
+  setOutput('depTotalPurchase', fmt$(r.depTotalPurchase));
+  setOutput('depTotalAnnual', fmt$(r.depTotalAnnual));
+  setOutput('depTotalDaily', fmt$(r.depTotalDaily));
+  setOutput('depPerKettle', fmt$(r.depPerKettle));
+
+  // Debt
+  setOutput('debtAnnual', fmt$(r.debtAnnual));
+  setOutput('debtPerKettle', fmt$(r.debtPerKettle));
+
+  // Bones
+  setOutput('chickenBatch', fmt$(r.chickenBatch));
+  setOutput('chickenExtraBatch', fmt$(r.chickenExtraBatch));
+  setOutput('beefBatch', fmt$(r.beefBatch));
+  setOutput('beefExtraBatch', fmt$(r.beefExtraBatch));
+  setOutput('turkeyBonesBatch', fmt$(r.turkeyBonesBatch));
+  setOutput('turkeyTotalBatch', fmt$(r.turkeyTotalBatch));
+  setOutput('mushFreshBatch', fmt$(r.mushFreshBatch));
+  setOutput('mushSpecBatch', fmt$(r.mushSpecBatch));
+  setOutput('mushTotalBatch', fmt$(r.mushTotalBatch));
+  setOutput('mirepoixBatch', fmt$(r.mirepoixBatch));
+  setOutput('saltBatch', fmt$(r.saltBatch));
+  setOutput('spicesBatch', fmt$(r.spicesBatch));
+  setOutput('otherTotal', fmt$(r.otherTotal));
+
+  // Packaging & Labels
+  SKUS.forEach(sku => {
+    setOutput('pkgTotal.' + sku, fmt$(r['pkgTotal.' + sku]));
+    setOutput('labelTotal.' + sku, fmt$(r['labelTotal.' + sku]));
+  });
+  setOutput('handLabel.735ml', fmt$(r['handLabel.735ml']));
+  setOutput('handLabel.780fz', fmt$(r['handLabel.780fz']));
+
+  renderBonesPerUnit(r);
+  renderCogsSummary(r);
+  renderPricing(r);
+}
+
+function setOutput(key, value) {
+  const els = document.querySelectorAll(`[data-output="${key}"]`);
+  els.forEach(el => el.textContent = value);
+}
+
+// ============================================================================
+// EVENTS
+// ============================================================================
+function showTab(name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function recalculate() {
+  const r = calculate();
+  updateOutputs(r);
+}
+
+function attachInputListeners() {
+  document.querySelectorAll('input[data-input]').forEach(input => {
+    if (input._wired) return;
+    input._wired = true;
+    const key = input.dataset.input;
+    input.addEventListener('input', () => {
+      const val = input.type === 'range' || input.type === 'number' ? +input.value : input.value;
+      state[key] = val;
+      recalculate();
+      saveState();
+    });
+  });
+}
+
+async function resetDefaults() {
+  if (!confirm('Reset all inputs to the original seed values? This cannot be undone.')) return;
+  try {
+    await fetch('/api/cogs/reset', {method:'POST'});
+    location.reload();
+  } catch(e) { alert('Reset failed: ' + e.message); }
+}
+
+function exportCSV() {
+  const r = calculate();
+  const lines = [];
+  lines.push('COGS Master — Export ' + new Date().toISOString().slice(0,10));
+  lines.push('');
+  lines.push('Section,Item,475ml,735ml,876ml,780ml FZ,780ml BB,780ml Pouch');
+  lines.push(',Units per kettle,' + SKUS.map(s => state['units.' + s]).join(','));
+  lines.push(',Units per day,' + SKUS.map(s => r['perday.' + s]).join(','));
+  lines.push(',Units per 28-day month,' + SKUS.map(s => r['permonth.' + s]).join(','));
+  lines.push('');
+  lines.push('Cost component,,475ml,735ml,876ml,780ml FZ,780ml BB,780ml Pouch');
+  lines.push('Overhead,$/unit,' + SKUS.map(s => r['overheadUnit.' + s].toFixed(4)).join(','));
+  lines.push('Labour,$/unit,' + SKUS.map(s => r['labourUnit.' + s].toFixed(4)).join(','));
+  lines.push('Supplies,$/unit,' + SKUS.map(s => r['suppliesUnit.' + s].toFixed(4)).join(','));
+  lines.push('Maintenance,$/unit,' + SKUS.map(s => r['maintUnit.' + s].toFixed(4)).join(','));
+  lines.push('Depreciation,$/unit,' + SKUS.map(s => r['depUnit.' + s].toFixed(4)).join(','));
+  lines.push('Debt,$/unit,' + SKUS.map(s => r['debtUnit.' + s].toFixed(4)).join(','));
+  lines.push('Total Fixed,$/unit,' + SKUS.map(s => r['fixedUnit.' + s].toFixed(4)).join(','));
+  lines.push('');
+  lines.push('Full COGS,,475ml,735ml,876ml,780ml FZ,780ml BB,780ml Pouch');
+  ['chicken', 'beef', 'turkey', 'mushroom'].forEach(broth => {
+    const name = broth.charAt(0).toUpperCase() + broth.slice(1);
+    lines.push(name + ',,' + SKUS.map(s => r['cogs.' + broth + '.' + s].toFixed(2)).join(','));
+  });
+  lines.push('');
+  lines.push('Wholesale (' + state.wholesaleMargin + '% margin),,475ml,735ml,876ml,780ml FZ,780ml BB,780ml Pouch');
+  ['chicken', 'beef', 'turkey', 'mushroom'].forEach(broth => {
+    const name = broth.charAt(0).toUpperCase() + broth.slice(1);
+    lines.push(name + ',,' + SKUS.map(s => (r['cogs.' + broth + '.' + s] / (1 - state.wholesaleMargin/100)).toFixed(2)).join(','));
+  });
+  lines.push('');
+  lines.push('Retail (' + state.retailMargin + '% margin),,475ml,735ml,876ml,780ml FZ,780ml BB,780ml Pouch');
+  ['chicken', 'beef', 'turkey', 'mushroom'].forEach(broth => {
+    const name = broth.charAt(0).toUpperCase() + broth.slice(1);
+    lines.push(name + ',,' + SKUS.map(s => (r['cogs.' + broth + '.' + s] / (1 - state.retailMargin/100)).toFixed(2)).join(','));
+  });
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'cogs_export_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ============================================================================
+// INIT
+// ============================================================================
+(async function init() {
+  await loadState();
+  renderDynamicTables();
+  attachInputListeners();
+  recalculate();
 })();
 
-load();
 </script>
 </body>
 </html>
