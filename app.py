@@ -5123,10 +5123,15 @@ _COGS_SEED = {
     # ── Mushroom — two types ──────────────────────────────────────────────────
     "mushroom_fresh":     {"price_per_kg": 11.66, "kg_per_batch": 16.0},
     "mushroom_specialty": {"price_per_kg": 22.00,  "kg_per_batch": 3.0},
-    # Note: mushroom cost is flat $/batch (both types combined = $252.56)
-    # When a recipe has mushrooms, use this flat cost per batch
 
-    # ── Other ingredients (flat $/batch — mirepoix + salt + spices) ──────────
+    # ── Mirepoix prices $/kg (used for per-recipe veg cost from recipe card) ──
+    "mirepoix": {
+        "onion":  {"price_per_kg": 1.20},
+        "carrot": {"price_per_kg": 1.50},
+        "celery": {"price_per_kg": 2.20},
+    },
+
+    # ── Other ingredients (flat $/batch — salt + spices) ──────────────────────
     # These are NOT per-ingredient from recipe — kept as flat batch cost
     # Mirepoix: $2.40/kg × 9.5kg = $22.80
     # Salt: $6/kg × 0.675kg = $4.05
@@ -5156,7 +5161,7 @@ _COGS_SEED = {
 }
 
 
-COGS_SCHEMA_VERSION = 3  # increment when seed structure changes
+COGS_SCHEMA_VERSION = 4  # v4: added mirepoix to seed  # increment when seed structure changes
 
 def _load_cogs():
     """Load COGS data. Always validates structure against current seed version."""
@@ -5165,7 +5170,7 @@ def _load_cogs():
     # Force reseed if version mismatch OR any required structural key missing
     required_keys = {"overhead_fixed", "overhead_variable", "slow_kettles_per_day",
                      "supplies", "mushroom_fresh", "mushroom_specialty",
-                     "other_ingredients_per_batch"}
+                     "other_ingredients_per_batch", "mirepoix"}
     needs_migration = (
         data.get("schema_version", 0) < COGS_SCHEMA_VERSION
         or not required_keys.issubset(data.keys())
@@ -5459,7 +5464,6 @@ def _recipe_unit_cogs(recipe_data, cogs_data=None, label_supplied=False):
         unit_cogs  = round(unit_cogs - label_cost, 4)
         breakdown["label"] = 0.0
         breakdown["label_supplied"] = True
-        breakdown.pop("mirepoix", None)
 
     return round(unit_cogs, 2), breakdown
 
@@ -5797,7 +5801,10 @@ def _build_rm_audit_items(categories):
         item_name = (mat.get("item") or "").strip()
         if not item_name:
             continue
-        section_id = assignments.get(item_name, "")
+        # assignments keyed as "name|unit" — must match _ingredient_section_key format
+        unit = (mat.get("unit") or "").strip()
+        assignment_key = f"{item_name}|{unit}"
+        section_id = assignments.get(assignment_key, "")
         section_name = sections.get(section_id, "") or "Unassigned"
         if categories and section_name not in categories:
             continue

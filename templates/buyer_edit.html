@@ -240,7 +240,6 @@ document.querySelectorAll('.sku-row').forEach(function(row) {
   var sk = row.dataset.sku;
   var chk = row.querySelector('.sku-check');
   var priceEl = row.querySelector('.price-input');
-  var cogsEl = row.querySelector('.cogs-input');
   var togEl = row.querySelector('.p-active-tog');
   var lblTog = row.querySelector('.label-supplied-tog');
   _skuData[sk] = {
@@ -270,8 +269,15 @@ document.querySelectorAll('.sku-row').forEach(function(row) {
       // Find recipe
       var recipe = recipes[recipeName];
       if(!recipe || !recipe.broth_type) {
-        el.textContent = 'No broth type set';
-        el.style.color = '#f57f17';
+        // Show hint in cost box instead
+        var hintEl = row.querySelector('.cost-display[data-sku="'+sk+'"]');
+        if(hintEl && !hintEl.textContent.trim()) {
+          hintEl.textContent = 'Set broth type';
+          hintEl.style.color = '#b38b00';
+          hintEl.title = 'Edit this recipe card and set the Broth Type to enable cost calculation';
+          hintEl.style.fontSize = '10px';
+          hintEl.style.fontWeight = '500';
+        }
         return;
       }
       // Make per-recipe COGS request
@@ -279,18 +285,22 @@ document.querySelectorAll('.sku-row').forEach(function(row) {
         .then(function(r){return r.json();})
         .then(function(d){
           if(d.unit_cogs != null){
-            el.textContent = 'Calculator: $'+d.unit_cogs.toFixed(2);
-            el.style.color = 'var(--accent)';
-            el.title = formatCogsBreakdown(d.breakdown);
-            // Update cost display (read-only) and recalculate margin
             var costEl = row.querySelector('.cost-display[data-sku="'+sk+'"]');
-            if(costEl) costEl.textContent = '$'+d.unit_cogs.toFixed(2);
+            if(costEl) {
+              costEl.textContent = d.unit_cogs.toFixed(2);
+              costEl.title = formatCogsBreakdown(d.breakdown);
+            }
             if(_skuData[sk]) {
               _skuData[sk].cogs = d.unit_cogs;
               updateMarginFromPrice(sk);
             }
           } else {
-            el.textContent = 'Format not mapped';
+            var costElErr = row.querySelector('.cost-display[data-sku="'+sk+'"]');
+            if(costElErr && !costElErr.textContent.trim()) {
+              costElErr.textContent = 'Format not mapped';
+              costElErr.style.color = '#999';
+              costElErr.style.fontSize = '10px';
+            }
           }
         }).catch(function(){});
     });
@@ -321,10 +331,11 @@ function onLabelSuppliedChange(el){
     .then(function(r){return r.json();})
     .then(function(d){
       if(d.unit_cogs != null){
-        dispEl.textContent = 'Calculator: $'+d.unit_cogs.toFixed(2);
-        dispEl.title = formatCogsBreakdown(d.breakdown);
         var costEl2 = row.querySelector('.cost-display[data-sku="'+sk+'"]');
-        if(costEl2) costEl2.textContent = '$'+d.unit_cogs.toFixed(2);
+        if(costEl2) {
+          costEl2.textContent = d.unit_cogs.toFixed(2);
+          costEl2.title = formatCogsBreakdown(d.breakdown);
+        }
         if(_skuData[sk]){ _skuData[sk].cogs=d.unit_cogs; updateMarginFromPrice(sk); }
       }
     }).catch(function(){});
