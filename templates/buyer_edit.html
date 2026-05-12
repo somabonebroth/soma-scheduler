@@ -245,7 +245,7 @@ document.querySelectorAll('.sku-row').forEach(function(row) {
   _skuData[sk] = {
     assigned:       chk ? chk.checked : false,
     price:          priceEl && priceEl.value ? parseFloat(priceEl.value) : null,
-    cogs:           cogsEl && cogsEl.value  ? parseFloat(cogsEl.value)  : null,
+    cogs:           null,  // populated by loadComputedCogs()
     margin_pct:     null,
     active:         togEl ? togEl.classList.contains('on') : true,
     label_supplied: lblTog ? lblTog.checked : false,

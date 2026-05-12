@@ -1271,57 +1271,12 @@ const DEFAULTS = {
 };
 
 // Fixed overhead items (editable amounts only)
-const FIXED_OVERHEAD_ITEMS = [
-  { id: 'bookkeeper', name: 'Bookkeeper', default: 900 },
-  { id: 'cathy', name: 'Cathy', default: 100 },
-  { id: 'accountant', name: 'Accountant', default: 200 },
-  { id: 'rent', name: 'Rent', default: 4000 },
-  { id: 'phone', name: 'Phone', default: 96 },
-  { id: 'internet', name: 'Internet', default: 151 },
-  { id: 'insurance_soma', name: 'Business Insurance (SOMA)', default: 368.12 },
-  { id: 'license', name: 'Business License', default: 247 },
-  { id: 'sync', name: 'Sync Data Storage', default: 16 },
-  { id: 'fastmail', name: 'Fastmail', default: 36 },
-  { id: 'banking', name: 'Banking Fee', default: 22.5 },
-];
-
-const VAR_OVERHEAD_ITEMS = [
-  { id: 'enbridge', name: 'Enbridge (gas)', default: 1400 },
-  { id: 'hydro977', name: 'Hydro Meter #977', default: 1859.11 },
-  { id: 'hydro550', name: 'Hydro Meter #550', default: 491.25 },
-  { id: 'water', name: 'Water (City of Toronto)', default: 162.82 },
-  { id: 'linen', name: 'Linen Service', default: 200 },
-  { id: 'garbage', name: 'Garbage Pick-up', default: 47.58 },
-  { id: 'garbageDisp', name: 'Garbage Disposal', default: 520 },
-  { id: 'greenBin', name: 'Green Bin & Recycling', default: 50 },
-];
-
-const SUPPLIES_ITEMS = [
-  { id: 'sabrina', name: 'Sabrina (kitchen/cleaning)', default: 1155 },
-  { id: 'staples', name: 'Staples', default: 80 },
-  { id: 'nella', name: 'Nella', default: 300 },
-  { id: 'uline', name: 'Uline', default: 500 },
-  { id: 'dymo', name: 'Dymo', default: 130 },
-];
-
-const LABOUR_ROLES = [
-  { id: 'president', name: 'President (Chris Kaspiris)', type: 'salary', defaultSalary: 40000 },
-  { id: 'ceo', name: 'CEO (Michel Salvador)', type: 'hourly', defaultWage: 50, defaultWkday: 40, defaultWknd: 0 },
-  { id: 'hoo', name: 'Head of Operations (Steve Elenis)', type: 'hourly', defaultWage: 37, defaultWkday: 40, defaultWknd: 0 },
-  { id: 'broth1', name: 'Broth 1 (Kitchen Lead)', type: 'hourly', defaultWage: 28, defaultWkday: 40, defaultWknd: 16 },
-  { id: 'broth2', name: 'Broth 2 (Kitchen Staff)', type: 'hourly', defaultWage: 23, defaultWkday: 40, defaultWknd: 16 },
-];
-
-const DEP_ITEMS = [
-  { id: 'ovens', name: 'Rational Combi Ovens (×2)', defaultPrice: 50000, defaultLife: 15 },
-  { id: 'kettles', name: 'Kettles (×3, used)', defaultPrice: 54000, defaultLife: 8 },
-  { id: 'hvac', name: 'Delta HVAC', defaultPrice: 173455, defaultLife: 20 },
-  { id: 'dishwashers', name: 'Dishwashers (×3)', defaultPrice: 10000, defaultLife: 8 },
-  { id: 'labelMachine', name: 'Label Machine', defaultPrice: 25000, defaultLife: 12 },
-  { id: 'fridges', name: 'Fridges', defaultPrice: 10000, defaultLife: 12 },
-  { id: 'freezerUp', name: 'Freezer (upstairs)', defaultPrice: 10000, defaultLife: 15 },
-  { id: 'freezerDown', name: 'Freezer (downstairs)', defaultPrice: 20000, defaultLife: 15 },
-];
+// Live arrays — populated from server in loadState, mutated by add/delete row
+var FIXED_OVERHEAD_ITEMS = [];
+var VAR_OVERHEAD_ITEMS   = [];
+var SUPPLIES_ITEMS       = [];
+var LABOUR_ROLES         = [];
+var DEP_ITEMS            = [];
 
 const SKUS = ['475ml', '735ml', '876ml', '780fz', '780bb', '780p'];
 
@@ -1329,178 +1284,75 @@ const SKUS = ['475ml', '735ml', '876ml', '780fz', '780bb', '780p'];
 let state = {};
 
 async function loadState() {
-  // Build default state first
+  var c = {};
+  try {
+    var res = await fetch('/api/cogs');
+    var d   = await res.json();
+    c = d.inputs || {};
+  } catch(e) {
+    console.warn('Could not load COGS from server:', e);
+  }
+
   state = { ...DEFAULTS };
-  FIXED_OVERHEAD_ITEMS.forEach(it => state['fixOh.' + it.id] = it.default);
-  VAR_OVERHEAD_ITEMS.forEach(it => state['varOh.' + it.id] = it.default);
-  SUPPLIES_ITEMS.forEach(it => state['supplies.' + it.id] = it.default);
-  LABOUR_ROLES.forEach(r => {
-    if (r.type === 'salary') {
-      state['labour.' + r.id + '.salary'] = r.defaultSalary;
-    } else {
-      state['labour.' + r.id + '.wage'] = r.defaultWage;
-      state['labour.' + r.id + '.wkday'] = r.defaultWkday;
-      state['labour.' + r.id + '.wknd'] = r.defaultWknd;
-    }
-  });
-  DEP_ITEMS.forEach(it => {
-    state['dep.' + it.id + '.price'] = it.defaultPrice;
-    state['dep.' + it.id + '.life'] = it.defaultLife;
-  });
 
-  // Load saved values from server
-  try {
-    const res = await fetch('/api/cogs');
-    const d   = await res.json();
-    const c   = d.inputs || {};
-    // Map server inputs to state keys
-    if (c.units_per_kettle) {
-      state['units.475ml'] = c.units_per_kettle['475ml']   || state['units.475ml'];
-      state['units.735ml'] = c.units_per_kettle['750ml_ss']|| state['units.735ml'];
-      state['units.876ml'] = c.units_per_kettle['876ml']   || state['units.876ml'];
-      state['units.780fz'] = c.units_per_kettle['750ml_fz']|| state['units.780fz'];
-      state['units.780bb'] = c.units_per_kettle['750ml_bb']|| state['units.780bb'];
-      state['units.780p']  = c.units_per_kettle['750ml_pouch']||state['units.780p'];
-    }
-    if (c.kettles_per_day)          state.kettlesPerDay      = c.kettles_per_day;
-    if (c.production_days_per_month)state.prodDaysPerMonth   = c.production_days_per_month;
-    if (c.slow_months_per_year)     state.slowMonths         = c.slow_months_per_year;
-    if (c.slow_kettles_per_day)     state.slowKettles        = c.slow_kettles_per_day;
-    state.fullMonths = 12 - (state.slowMonths || 4);
-    if (c.maintenance_monthly)      state.maintenance        = c.maintenance_monthly;
-    if (c.debt_repayment_monthly)   state.debtMonthly        = c.debt_repayment_monthly;
-    // Overhead fixed
-    if (c.overhead_fixed) {
-      const MAP = {
-        'Bookkeeper':'bookkeeper','Cathy':'cathy','Accountant':'accountant','Rent':'rent',
-        'Phone':'phone','Internet':'internet','Business Insurance':'insurance_soma',
-        'Business License':'license','Sync Data Storage':'sync','Fastmail':'fastmail',
-        'Banking Fee':'banking'
-      };
-      c.overhead_fixed.forEach(item => {
-        const key = MAP[item.name] || item.name.toLowerCase().replace(/[^a-z0-9]/g,'');
-        state['fixOh.' + key] = item.monthly;
-      });
-    }
-    // Overhead variable
-    if (c.overhead_variable) {
-      const MAP = {
-        'Enbridge (gas)':'enbridge','Hydro Meter #977':'hydro977','Hydro Meter #550':'hydro550',
-        'Water':'water','Water (City of Toronto)':'water','Linen Service':'linen',
-        'Garbage Pick-up':'garbage','Garbage Disposal':'garbageDisp','Green Bin & Recycling':'greenBin'
-      };
-      c.overhead_variable.forEach(item => {
-        const key = MAP[item.name] || item.name.toLowerCase().replace(/[^a-z0-9]/g,'');
-        state['varOh.' + key] = item.monthly;
-      });
-    }
-    // Supplies
-    if (c.supplies) {
-      const MAP = {
-        'Sabrina (kitchen/cleaning)':'sabrina','Staples':'staples',
-        'Nella':'nella','Uline':'uline','Dymo':'dymo'
-      };
-      c.supplies.forEach(item => {
-        const key = MAP[item.name] || item.name.toLowerCase().replace(/[^a-z0-9]/g,'');
-        state['supplies.' + key] = item.monthly;
-      });
-    }
-    // Labour
-    if (c.labour) {
-      const MAP = {
-        'President (Chris Kaspiris)':'president','CEO (Michel Salvador)':'ceo',
-        'Head of Operations':'hoo','Broth 1 (Kitchen Lead)':'broth1','Broth 2 (Kitchen Staff)':'broth2'
-      };
-      c.labour.forEach(r => {
-        const key = MAP[r.role] || r.role.toLowerCase().replace(/[^a-z0-9]/g,'');
-        if (r.type === 'salary') {
-          state['labour.' + key + '.salary'] = r.annual_salary;
-        } else {
-          if (r.base_hourly)     state['labour.' + key + '.wage']  = r.base_hourly;
-          if (r.uplift_pct)      state.uplift                       = r.uplift_pct;
-          if (r.weekday_hours)   state['labour.' + key + '.wkday'] = r.weekday_hours;
-          if (r.weekend_hours != null) state['labour.' + key + '.wknd']  = r.weekend_hours;
-        }
-      });
-    }
-    // Equipment depreciation
-    if (c.equipment) {
-      const MAP = {
-        'Rational Combi Ovens (×2)':'ovens','Kettles (×3, used)':'kettles',
-        'Delta HVAC':'hvac','Dishwashers (×3)':'dishwashers','Label Machine':'labelMachine',
-        'Fridges':'fridges','Freezer (upstairs)':'freezerUp','Freezer (downstairs)':'freezerDown'
-      };
-      c.equipment.forEach(e => {
-        const key = MAP[e.name] || e.name.toLowerCase().replace(/[^a-z0-9]/g,'');
-        state['dep.' + key + '.price'] = e.cost;
-        state['dep.' + key + '.life']  = e.life_years;
-      });
-    }
-    // Bones
-    if (c.bones) {
-      if (c.bones.chicken) {
-        state.chickenKg    = c.bones.chicken.price_per_kg;
-        if (c.bones.chicken.base_kg)  state.chickenBase  = c.bones.chicken.base_kg;
-        if (c.bones.chicken.extra_kg) state.chickenExtra = c.bones.chicken.extra_kg;
-      }
-      if (c.bones.beef) {
-        state.beefKg       = c.bones.beef.price_per_kg;
-        if (c.bones.beef.base_kg)  state.beefBase  = c.bones.beef.base_kg;
-        if (c.bones.beef.extra_kg) state.beefExtra = c.bones.beef.extra_kg;
-      }
-      if (c.bones.turkey)  {
-        state.turkeyKg     = c.bones.turkey.price_per_kg;
-        if (c.bones.turkey.base_kg) state.turkeyBase = c.bones.turkey.base_kg;
-        state.wholeTurkey  = c.bones.turkey.whole_turkey_cost_per_batch || 180;
-      }
-    }
-    if (c.mushroom_fresh)     { state.mushFreshKg  = c.mushroom_fresh.price_per_kg;  state.mushFreshAmt = c.mushroom_fresh.kg_per_batch; }
-    if (c.mushroom_specialty) { state.mushSpecKg   = c.mushroom_specialty.price_per_kg; state.mushSpecAmt = c.mushroom_specialty.kg_per_batch; }
-    if (c.mirepoix) {
-      if (c.mirepoix.onion  && c.mirepoix.onion.price_per_kg)  state.onionKg  = c.mirepoix.onion.price_per_kg;
-      if (c.mirepoix.carrot && c.mirepoix.carrot.price_per_kg) state.carrotKg = c.mirepoix.carrot.price_per_kg;
-      if (c.mirepoix.celery && c.mirepoix.celery.price_per_kg) state.celeryKg = c.mirepoix.celery.price_per_kg;
-    }
-    // Other ingredients — stored as flat batch total, split across 3 lines
-    if (c.other_ingredients_per_batch) {
-      // Keep proportions from defaults, scale to match stored total
-      const defaultOther = state.mirepoixKg*state.mirepoixAmt + state.saltKg*state.saltAmt + state.spicesKg*state.spicesAmt;
-      // Just use defaults — the flat total is what matters
-    }
-    // Packaging
-    if (c.packaging) {
-      const PKG_MAP = {'475ml':'475ml','750ml_ss':'735ml','876ml':'876ml','750ml_fz':'780fz','750ml_bb':'780bb','750ml_pouch':'780p'};
-      Object.entries(c.packaging).forEach(([k,v]) => {
-        const sk = PKG_MAP[k];
-        if (!sk) return;
-        if (v.container != null) state['container.' + sk] = v.container;
-        if (v.lid       != null) state['lid.' + sk]       = v.lid;
-        if (v.box       != null) state['box.' + sk]       = v.box;
-      });
-    }
-    // Labels
-    if (c.labels) {
-      const LBL_MAP = {'475ml':'475ml','750ml_ss':'735ml','876ml':'876ml','750ml_fz':'780fz','750ml_bb':'780bb','750ml_pouch':'780p'};
-      Object.entries(c.labels).forEach(([k,v]) => {
-        const sk = LBL_MAP[k];
-        if (!sk) return;
-        if (v.cost != null) state['label.' + sk] = v.cost;
-      });
-    }
-  } catch(e) {
-    console.warn('Could not load from server, using defaults:', e);
-  }
+  // Production
+  var upk = c.units_per_kettle || {};
+  if (upk['475ml'])        state['units.475ml'] = upk['475ml'];
+  if (upk['750ml_ss'])     state['units.735ml'] = upk['750ml_ss'];
+  if (upk['876ml'])        state['units.876ml'] = upk['876ml'];
+  if (upk['750ml_fz'])     state['units.780fz'] = upk['750ml_fz'];
+  if (upk['750ml_bb'])     state['units.780bb'] = upk['750ml_bb'];
+  if (upk['750ml_pouch'])  state['units.780p']  = upk['750ml_pouch'];
+  if (c.kettles_per_day)           state.kettlesPerDay    = c.kettles_per_day;
+  if (c.production_days_per_month) state.prodDaysPerMonth = c.production_days_per_month;
+  if (c.slow_months_per_year)      state.slowMonths       = c.slow_months_per_year;
+  if (c.slow_kettles_per_day)      state.slowKettles      = c.slow_kettles_per_day;
+  state.fullMonths = 12 - (state.slowMonths || 4);
+  if (c.maintenance_monthly)       state.maintenance      = c.maintenance_monthly;
+  if (c.debt_repayment_monthly)    state.debtMonthly      = c.debt_repayment_monthly;
 
-  // Also populate _inputs (server format) for add/delete row operations
-  try {
-    var ir = await fetch('/api/cogs');
-    var id = await ir.json();
-    _inputs = id.inputs || {};
-  } catch(e) {
-    _inputs = {};
-  }
+  // Populate live arrays from server — single source of truth
+  FIXED_OVERHEAD_ITEMS = (c.overhead_fixed   || []).map(function(x){ return {name:x.name, monthly:+(x.monthly||0)}; });
+  VAR_OVERHEAD_ITEMS   = (c.overhead_variable|| []).map(function(x){ return {name:x.name, monthly:+(x.monthly||0)}; });
+  SUPPLIES_ITEMS       = (c.supplies         || []).map(function(x){ return {name:x.name, monthly:+(x.monthly||0)}; });
+  LABOUR_ROLES = (c.labour || []).map(function(r) {
+    if (r.type === 'salary') return {name:r.role, type:'salary', salary:+(r.annual_salary||0)};
+    return {name:r.role, type:'hourly', wage:+(r.base_hourly||0),
+            uplift:+(r.uplift_pct||8), wkday:+(r.weekday_hours||0), wknd:+(r.weekend_hours||0)};
+  });
+  var firstHourly = LABOUR_ROLES.find(function(r){return r.type==='hourly';});
+  state.uplift = firstHourly ? (firstHourly.uplift||8) : 8;
+  DEP_ITEMS = (c.equipment || []).map(function(e){ return {name:e.name, cost:+(e.cost||0), life:+(e.life_years||1)}; });
+
+  // Scalar fields
+  var bn = c.bones || {};
+  if ((bn.chicken||{}).price_per_kg) state.chickenKg  = bn.chicken.price_per_kg;
+  if ((bn.chicken||{}).base_kg)      state.chickenBase = bn.chicken.base_kg;
+  if ((bn.beef||{}).price_per_kg)    state.beefKg      = bn.beef.price_per_kg;
+  if ((bn.beef||{}).base_kg)         state.beefBase    = bn.beef.base_kg;
+  if ((bn.turkey||{}).price_per_kg)  state.turkeyKg    = bn.turkey.price_per_kg;
+  if ((bn.turkey||{}).whole_turkey_cost_per_batch) state.wholeTurkey = bn.turkey.whole_turkey_cost_per_batch;
+  var mf = c.mushroom_fresh||{}, ms = c.mushroom_specialty||{};
+  if (mf.price_per_kg) state.mushFreshKg  = mf.price_per_kg;
+  if (mf.kg_per_batch) state.mushFreshAmt = mf.kg_per_batch;
+  if (ms.price_per_kg) state.mushSpecKg   = ms.price_per_kg;
+  if (ms.kg_per_batch) state.mushSpecAmt  = ms.kg_per_batch;
+  var mir = c.mirepoix||{};
+  if ((mir.onion ||{}).price_per_kg) state.onionKg  = mir.onion.price_per_kg;
+  if ((mir.carrot||{}).price_per_kg) state.carrotKg = mir.carrot.price_per_kg;
+  if ((mir.celery||{}).price_per_kg) state.celeryKg = mir.celery.price_per_kg;
+  var PKG_MAP = {'475ml':'475ml','750ml_ss':'735ml','876ml':'876ml','750ml_fz':'780fz','750ml_bb':'780bb','750ml_pouch':'780p'};
+  Object.keys(c.packaging||{}).forEach(function(k){
+    var sk=PKG_MAP[k]; if(!sk) return; var v=c.packaging[k];
+    if(v.container!=null) state['container.'+sk]=v.container;
+    if(v.lid!=null)       state['lid.'+sk]=v.lid;
+    if(v.box!=null)       state['box.'+sk]=v.box;
+  });
+  Object.keys(c.labels||{}).forEach(function(k){
+    var sk=PKG_MAP[k]; if(!sk) return;
+    if(c.labels[k].cost!=null) state['label.'+sk]=c.labels[k].cost;
+  });
 }
-
 let _saveTimer = null;
 function saveState() {
   showSaveIndicator();
@@ -1509,47 +1361,52 @@ function saveState() {
 }
 
 async function flushSave() {
-  // Map state back to server format
-  const SKU_MAP = {'475ml':'475ml','735ml':'750ml_ss','876ml':'876ml','780fz':'750ml_fz','780bb':'750ml_bb','780p':'750ml_pouch'};
-  const upliftPct = state.uplift || 8;
-  const patch = {
-    units_per_kettle: Object.fromEntries(Object.entries(SKU_MAP).map(([sk,sv]) => [sv, state['units.'+sk]||0])),
-    kettles_per_day:           state.kettlesPerDay,
-    production_days_per_month: state.prodDaysPerMonth,
-    slow_months_per_year:      state.slowMonths,
-    slow_kettles_per_day:      state.slowKettles,
-    maintenance_monthly:       state.maintenance,
-    debt_repayment_monthly:    state.debtMonthly,
-    overhead_fixed:  FIXED_OVERHEAD_ITEMS.map(it => ({name:it.name, monthly: state['fixOh.'+it.id]||0})),
-    overhead_variable: VAR_OVERHEAD_ITEMS.map(it => ({name:it.name, monthly: state['varOh.'+it.id]||0})),
-    supplies:        SUPPLIES_ITEMS.map(it => ({name:it.name, monthly: state['supplies.'+it.id]||0})),
-    labour: LABOUR_ROLES.map(r => {
-      if (r.type==='salary') return {role:r.name, type:'salary', annual_salary: state['labour.'+r.id+'.salary']||0, weekly_cost: (state['labour.'+r.id+'.salary']||0)/52};
-      return {role:r.name, type:'hourly', base_hourly:state['labour.'+r.id+'.wage']||0, uplift_pct:upliftPct, weekday_hours:state['labour.'+r.id+'.wkday']||0, weekend_hours:state['labour.'+r.id+'.wknd']||0};
+  var SKU_MAP = {'475ml':'475ml','735ml':'750ml_ss','876ml':'876ml','780fz':'750ml_fz','780bb':'750ml_bb','780p':'750ml_pouch'};
+  var s = state;
+  var patch = {
+    schema_version: 4,
+    units_per_kettle:          Object.fromEntries(Object.entries(SKU_MAP).map(function(e){ return [e[1], +(s['units.'+e[0]])||0]; })),
+    kettles_per_day:           s.kettlesPerDay,
+    production_days_per_month: s.prodDaysPerMonth,
+    slow_months_per_year:      s.slowMonths,
+    slow_kettles_per_day:      s.slowKettles,
+    maintenance_monthly:       s.maintenance,
+    debt_repayment_monthly:    s.debtMonthly,
+    overhead_fixed:            FIXED_OVERHEAD_ITEMS.map(function(x){ return {name:x.name, monthly:+(x.monthly)||0}; }),
+    overhead_variable:         VAR_OVERHEAD_ITEMS.map(function(x){   return {name:x.name, monthly:+(x.monthly)||0}; }),
+    supplies:                  SUPPLIES_ITEMS.map(function(x){       return {name:x.name, monthly:+(x.monthly)||0}; }),
+    labour: LABOUR_ROLES.map(function(r) {
+      if (r.type==='salary') return {role:r.name, type:'salary', annual_salary:+(r.salary)||0};
+      return {role:r.name, type:'hourly', base_hourly:+(r.wage)||0, uplift_pct:+(r.uplift)||8,
+              weekday_hours:+(r.wkday)||0, weekend_hours:+(r.wknd)||0};
     }),
-    equipment: DEP_ITEMS.map(it => ({name:it.name, cost:state['dep.'+it.id+'.price']||0, life_years:state['dep.'+it.id+'.life']||1})),
+    equipment: DEP_ITEMS.map(function(e){ return {name:e.name, cost:+(e.cost)||0, life_years:+(e.life)||1}; }),
     bones: {
-      chicken: {price_per_kg: state.chickenKg, base_kg: state.chickenBase, extra_kg: state.chickenExtra},
-      beef:    {price_per_kg: state.beefKg,    base_kg: state.beefBase,    extra_kg: state.beefExtra},
-      turkey:  {price_per_kg: state.turkeyKg,  base_kg: state.turkeyBase,  whole_turkey_cost_per_batch: state.wholeTurkey},
+      chicken: {price_per_kg:s.chickenKg, base_kg:s.chickenBase, extra_kg:s.chickenExtra},
+      beef:    {price_per_kg:s.beefKg,    base_kg:s.beefBase,    extra_kg:s.beefExtra},
+      turkey:  {price_per_kg:s.turkeyKg,  base_kg:s.turkeyBase,  whole_turkey_cost_per_batch:s.wholeTurkey},
     },
-    mushroom_fresh:     {price_per_kg: state.mushFreshKg, kg_per_batch: state.mushFreshAmt},
-    mushroom_specialty: {price_per_kg: state.mushSpecKg,  kg_per_batch: state.mushSpecAmt},
+    mushroom_fresh:     {price_per_kg:s.mushFreshKg, kg_per_batch:s.mushFreshAmt},
+    mushroom_specialty: {price_per_kg:s.mushSpecKg,  kg_per_batch:s.mushSpecAmt},
     mirepoix: {
-      onion:  {price_per_kg: state.onionKg  || 1.20},
-      carrot: {price_per_kg: state.carrotKg || 1.50},
-      celery: {price_per_kg: state.celeryKg || 2.20},
+      onion:  {price_per_kg: s.onionKg  || 1.20},
+      carrot: {price_per_kg: s.carrotKg || 1.50},
+      celery: {price_per_kg: s.celeryKg || 2.20},
     },
-    other_ingredients_per_batch: (state.mirepoixKg*state.mirepoixAmt + state.saltKg*state.saltAmt + state.spicesKg*state.spicesAmt),
-    packaging: Object.fromEntries(Object.entries(SKU_MAP).map(([sk,sv]) => [sv, {container:state['container.'+sk]||0, lid:state['lid.'+sk]||0, box:state['box.'+sk]||0}])),
-    labels:    Object.fromEntries(Object.entries(SKU_MAP).map(([sk,sv]) => [sv, {cost:state['label.'+sk]||0, hand_applied:['735ml','780fz'].includes(sk), hand_apply_surcharge:0}])),
-    schema_version: 3,
+    other_ingredients_per_batch: (s.mirepoixKg*s.mirepoixAmt + s.saltKg*s.saltAmt + s.spicesKg*s.spicesAmt),
+    packaging: Object.fromEntries(Object.entries(SKU_MAP).map(function(e){
+      var sk=e[0],sv=e[1];
+      return [sv, {container:+(s['container.'+sk])||0, lid:+(s['lid.'+sk])||0, box:+(s['box.'+sk])||0}];
+    })),
+    labels: Object.fromEntries(Object.entries(SKU_MAP).map(function(e){
+      var sk=e[0],sv=e[1];
+      return [sv, {cost:+(s['label.'+sk])||0, hand_applied:['735ml','780fz'].includes(sk), hand_apply_surcharge:0}];
+    })),
   };
   try {
     await fetch('/api/cogs', {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(patch)});
   } catch(e) { console.warn('Save failed:', e); }
 }
-
 function showSaveIndicator() {
   const ind = document.getElementById('save-indicator');
   ind.classList.add('visible');
@@ -1583,17 +1440,10 @@ function calculate() {
   // Kettle runs
   r.kettleRuns = (days * s.slowMonths * s.slowKettles) + (days * s.fullMonths * kpd);
 
-  // Fixed overhead
-  let fixedTotal = 0;
-  FIXED_OVERHEAD_ITEMS.forEach(it => {
-    fixedTotal += +s['fixOh.' + it.id];
-  });
+  // Fixed overhead — read directly from live arrays
+  let fixedTotal = FIXED_OVERHEAD_ITEMS.reduce(function(a,x){ return a + (+(x.monthly)||0); }, 0);
   r.fixedTotal = fixedTotal;
-
-  let varTotal = 0;
-  VAR_OVERHEAD_ITEMS.forEach(it => {
-    varTotal += +s['varOh.' + it.id];
-  });
+  let varTotal   = VAR_OVERHEAD_ITEMS.reduce(function(a,x){   return a + (+(x.monthly)||0); }, 0);
   r.varTotal = varTotal;
 
   r.overheadMonthly = fixedTotal + varTotal;
@@ -1602,15 +1452,15 @@ function calculate() {
     r['overheadUnit.' + sku] = r.overheadPerKettle / +s['units.' + sku];
   });
 
-  // Labour
-  const uplift = 1 + s.uplift / 100;
+  // Labour — read from live LABOUR_ROLES array
+  const uplift = 1 + (s.uplift||8) / 100;
   let weeklyLabour = 0;
-  LABOUR_ROLES.forEach(role => {
+  LABOUR_ROLES.forEach(function(role) {
     if (role.type === 'salary') {
-      weeklyLabour += +s['labour.' + role.id + '.salary'] / 52;
+      weeklyLabour += (+(role.salary)||0) / 52;
     } else {
-      const w = +s['labour.' + role.id + '.wage'] * uplift;
-      weeklyLabour += w * (+s['labour.' + role.id + '.wkday'] + +s['labour.' + role.id + '.wknd']);
+      var loaded = (+(role.wage)||0) * (1 + (+(role.uplift)||8)/100);
+      weeklyLabour += loaded * ((+(role.wkday)||0) + (+(role.wknd)||0));
     }
   });
   r.weeklyLabour = weeklyLabour;
@@ -1620,11 +1470,8 @@ function calculate() {
     r['labourUnit.' + sku] = r.labourPerKettle / +s['units.' + sku];
   });
 
-  // Supplies
-  let suppliesTotal = 0;
-  SUPPLIES_ITEMS.forEach(it => {
-    suppliesTotal += +s['supplies.' + it.id];
-  });
+  // Supplies — read from live array
+  let suppliesTotal = SUPPLIES_ITEMS.reduce(function(a,x){ return a + (+(x.monthly)||0); }, 0);
   r.suppliesTotal = suppliesTotal;
   r.suppliesPerKettle = (suppliesTotal * 12) / r.kettleRuns;
   SKUS.forEach(sku => {
@@ -1637,16 +1484,14 @@ function calculate() {
     r['maintUnit.' + sku] = r.maintPerKettle / +s['units.' + sku];
   });
 
-  // Depreciation
+  // Depreciation — read from live array
   let depTotalAnnual = 0, depTotalPurchase = 0;
-  DEP_ITEMS.forEach(it => {
-    const price = +s['dep.' + it.id + '.price'];
-    const life = +s['dep.' + it.id + '.life'];
-    const annual = price / life;
-    depTotalAnnual += annual;
-    depTotalPurchase += price;
-    r['dep.' + it.id + '.annual'] = annual;
-    r['dep.' + it.id + '.daily'] = annual / 365;
+  DEP_ITEMS.forEach(function(it, idx) {
+    var annual = it.life > 0 ? it.cost / it.life : 0;
+    depTotalAnnual   += annual;
+    depTotalPurchase += it.cost;
+    r['dep.' + idx + '.annual'] = annual;
+    r['dep.' + idx + '.daily']  = annual / 365;
   });
   r.depTotalPurchase = depTotalPurchase;
   r.depTotalAnnual = depTotalAnnual;
@@ -1743,65 +1588,70 @@ const SKU_ORDER = ['475ml', '735ml', '876ml', '780fz', '780bb', '780p'];
 const SKU_LABELS = { '475ml': '475ml', '735ml': '735ml', '876ml': '876ml', '780fz': '780ml FZ', '780bb': '780ml BB', '780p': '780ml Pouch' };
 
 function renderDynamicTables() {
+  function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
   // Fixed overhead
-  let html = '';
-  FIXED_OVERHEAD_ITEMS.forEach(it => {
-    html += `<tr><td class="label">${it.name}</td><td><input type="number" data-input="fixOh.${it.id}" value="${state['fixOh.' + it.id]}" step="1"></td></tr>`;
-  });
-  document.getElementById('fixed-overhead-body').innerHTML = html;
+  document.getElementById('fixed-overhead-body').innerHTML = FIXED_OVERHEAD_ITEMS.map(function(it,i){
+    return '<tr><td class="label"><input value="'+esc(it.name)+'" oninput="FIXED_OVERHEAD_ITEMS['+i+'].name=this.value;debounceSave()" style="text-align:left;max-width:200px;"></td>'
+      +'<td><input type="number" step="1" value="'+(it.monthly||0)+'" oninput="FIXED_OVERHEAD_ITEMS['+i+'].monthly=+this.value;recalculate();debounceSave()"></td>'
+      +'<td><button class="del-btn del-row-btn" onclick="FIXED_OVERHEAD_ITEMS.splice('+i+',1);renderDynamicTables();recalculate();debounceSave()">&#x2715;</button></td></tr>';
+  }).join('');
 
   // Variable overhead
-  html = '';
-  VAR_OVERHEAD_ITEMS.forEach(it => {
-    html += `<tr><td class="label">${it.name}</td><td><input type="number" data-input="varOh.${it.id}" value="${state['varOh.' + it.id]}" step="1"></td></tr>`;
-  });
-  document.getElementById('var-overhead-body').innerHTML = html;
+  document.getElementById('var-overhead-body').innerHTML = VAR_OVERHEAD_ITEMS.map(function(it,i){
+    return '<tr><td class="label"><input value="'+esc(it.name)+'" oninput="VAR_OVERHEAD_ITEMS['+i+'].name=this.value;debounceSave()" style="text-align:left;max-width:200px;"></td>'
+      +'<td><input type="number" step="1" value="'+(it.monthly||0)+'" oninput="VAR_OVERHEAD_ITEMS['+i+'].monthly=+this.value;recalculate();debounceSave()"></td>'
+      +'<td><button class="del-btn del-row-btn" onclick="VAR_OVERHEAD_ITEMS.splice('+i+',1);renderDynamicTables();recalculate();debounceSave()">&#x2715;</button></td></tr>';
+  }).join('');
 
   // Supplies
-  html = '';
-  SUPPLIES_ITEMS.forEach(it => {
-    html += `<tr><td class="label">${it.name}</td><td><input type="number" data-input="supplies.${it.id}" value="${state['supplies.' + it.id]}" step="1"></td></tr>`;
-  });
-  document.getElementById('supplies-body').innerHTML = html;
+  document.getElementById('supplies-body').innerHTML = SUPPLIES_ITEMS.map(function(it,i){
+    return '<tr><td class="label"><input value="'+esc(it.name)+'" oninput="SUPPLIES_ITEMS['+i+'].name=this.value;debounceSave()" style="text-align:left;max-width:200px;"></td>'
+      +'<td><input type="number" step="1" value="'+(it.monthly||0)+'" oninput="SUPPLIES_ITEMS['+i+'].monthly=+this.value;recalculate();debounceSave()"></td>'
+      +'<td><button class="del-btn del-row-btn" onclick="SUPPLIES_ITEMS.splice('+i+',1);renderDynamicTables();recalculate();debounceSave()">&#x2715;</button></td></tr>';
+  }).join('');
 
   // Labour
-  html = '';
-  LABOUR_ROLES.forEach(role => {
-    if (role.type === 'salary') {
-      html += `<tr>
-        <td class="label">${role.name} (salary)</td>
-        <td><input type="number" data-input="labour.${role.id}.salary" value="${state['labour.' + role.id + '.salary']}" step="500"></td>
-        <td class="note">annual</td>
-        <td>—</td><td>—</td>
-        <td class="formula-cell" data-output="labourWeekly.${role.id}"></td>
-      </tr>`;
-    } else {
-      html += `<tr>
-        <td class="label">${role.name}</td>
-        <td><input type="number" data-input="labour.${role.id}.wage" value="${state['labour.' + role.id + '.wage']}" step="0.50"></td>
-        <td class="formula-cell" data-output="labourLoaded.${role.id}"></td>
-        <td><input type="number" data-input="labour.${role.id}.wkday" value="${state['labour.' + role.id + '.wkday']}" step="1"></td>
-        <td><input type="number" data-input="labour.${role.id}.wknd" value="${state['labour.' + role.id + '.wknd']}" step="1"></td>
-        <td class="formula-cell" data-output="labourWeekly.${role.id}"></td>
-      </tr>`;
+  document.getElementById('labour-body').innerHTML = LABOUR_ROLES.map(function(role,i){
+    var n = esc(role.name||'');
+    var typeSelect = '<select onchange="LABOUR_ROLES['+i+'].type=this.value;renderDynamicTables();recalculate();debounceSave()" style="width:75px;font-size:11px;">'
+      +'<option value="hourly"'+(role.type==='salary'?'':' selected')+'>Hourly</option>'
+      +'<option value="salary"'+(role.type==='salary'?' selected':'')+'>Salary</option></select>';
+    if (role.type==='salary') {
+      return '<tr>'
+        +'<td><input value="'+n+'" oninput="LABOUR_ROLES['+i+'].name=this.value;debounceSave()" style="text-align:left;max-width:160px;"></td>'
+        +'<td>'+typeSelect+'</td>'
+        +'<td>$<input type="number" step="1000" value="'+(role.salary||0)+'" oninput="LABOUR_ROLES['+i+'].salary=+this.value;recalculate();debounceSave()" style="width:80px;">/yr</td>'
+        +'<td style="color:var(--ink-muted);font-size:11px;">—</td>'
+        +'<td style="color:var(--ink-muted);font-size:11px;">—</td>'
+        +'<td style="font-weight:600;">'+fmt$((role.salary||0)/52)+'/wk</td>'
+        +'<td><button class="del-btn del-row-btn" onclick="LABOUR_ROLES.splice('+i+',1);renderDynamicTables();recalculate();debounceSave()">&#x2715;</button></td></tr>';
     }
-  });
-  document.getElementById('labour-body').innerHTML = html;
+    var loaded = (+(role.wage)||0)*(1+(+(role.uplift)||8)/100);
+    var weekly = loaded*((+(role.wkday)||0)+(+(role.wknd)||0));
+    return '<tr>'
+      +'<td><input value="'+n+'" oninput="LABOUR_ROLES['+i+'].name=this.value;debounceSave()" style="text-align:left;max-width:160px;"></td>'
+      +'<td>'+typeSelect+'</td>'
+      +'<td>$<input type="number" step="0.5" value="'+(role.wage||0)+'" oninput="LABOUR_ROLES['+i+'].wage=+this.value;recalculate();debounceSave()" style="width:50px;">/hr'
+      +' +<input type="number" step="1" value="'+(role.uplift||8)+'" oninput="LABOUR_ROLES['+i+'].uplift=+this.value;recalculate();debounceSave()" style="width:28px;">%</td>'
+      +'<td><input type="number" step="1" value="'+(role.wkday||0)+'" oninput="LABOUR_ROLES['+i+'].wkday=+this.value;recalculate();debounceSave()" style="width:40px;"></td>'
+      +'<td><input type="number" step="1" value="'+(role.wknd||0)+'" oninput="LABOUR_ROLES['+i+'].wknd=+this.value;recalculate();debounceSave()" style="width:40px;"></td>'
+      +'<td style="font-weight:600;">'+fmt$(weekly)+'/wk</td>'
+      +'<td><button class="del-btn del-row-btn" onclick="LABOUR_ROLES.splice('+i+',1);renderDynamicTables();recalculate();debounceSave()">&#x2715;</button></td></tr>';
+  }).join('');
 
   // Depreciation
-  html = '';
-  DEP_ITEMS.forEach(it => {
-    html += `<tr>
-      <td class="label">${it.name}</td>
-      <td><input type="number" data-input="dep.${it.id}.price" value="${state['dep.' + it.id + '.price']}" step="500"></td>
-      <td><input type="number" data-input="dep.${it.id}.life" value="${state['dep.' + it.id + '.life']}" step="1"></td>
-      <td class="formula-cell" data-output="dep.${it.id}.annual"></td>
-      <td class="formula-cell" data-output="dep.${it.id}.daily"></td>
-    </tr>`;
-  });
-  document.getElementById('dep-body').innerHTML = html;
+  document.getElementById('dep-body').innerHTML = DEP_ITEMS.map(function(it,i){
+    var annual = (it.life||1) > 0 ? (it.cost||0)/(it.life||1) : 0;
+    return '<tr>'
+      +'<td><input value="'+esc(it.name||'')+'" oninput="DEP_ITEMS['+i+'].name=this.value;debounceSave()" style="text-align:left;max-width:180px;"></td>'
+      +'<td><input type="number" step="500" value="'+(it.cost||0)+'" oninput="DEP_ITEMS['+i+'].cost=+this.value;recalculate();debounceSave()"></td>'
+      +'<td><input type="number" step="1" value="'+(it.life||10)+'" oninput="DEP_ITEMS['+i+'].life=+this.value;recalculate();debounceSave()"></td>'
+      +'<td class="formula-cell">'+fmt$(annual)+'</td>'
+      +'<td class="formula-cell">'+fmt$(annual/365)+'</td>'
+      +'<td><button class="del-btn del-row-btn" onclick="DEP_ITEMS.splice('+i+',1);renderDynamicTables();recalculate();debounceSave()">&#x2715;</button></td></tr>';
+  }).join('');
 }
-
 function renderBonesPerUnit(r) {
   const rows = [
     ['Chicken bones', 'chickenUnit'],
@@ -1819,7 +1669,7 @@ function renderBonesPerUnit(r) {
     });
     html += '</tr>';
   });
-  document.getElementById('bones-per-unit-body').innerHTML = html;
+  var bpub = document.getElementById('bones-per-unit-body'); if(bpub) bpub.innerHTML = html;
 }
 
 function renderCogsSummary(r) {
@@ -1917,16 +1767,7 @@ function updateOutputs(r) {
   SKUS.forEach(sku => setOutput('overheadUnit.' + sku, fmt$(r['overheadUnit.' + sku])));
 
   // Labour
-  LABOUR_ROLES.forEach(role => {
-    if (role.type === 'salary') {
-      setOutput('labourWeekly.' + role.id, fmt$(state['labour.' + role.id + '.salary'] / 52));
-    } else {
-      const loaded = state['labour.' + role.id + '.wage'] * (1 + state.uplift / 100);
-      const weekly = loaded * (+state['labour.' + role.id + '.wkday'] + +state['labour.' + role.id + '.wknd']);
-      setOutput('labourLoaded.' + role.id, fmt$(loaded));
-      setOutput('labourWeekly.' + role.id, fmt$(weekly));
-    }
-  });
+
   setOutput('weeklyLabour', fmt$(r.weeklyLabour));
   setOutput('annualLabour', fmt$(r.annualLabour));
   setOutput('labourPerKettle', fmt$(r.labourPerKettle));
@@ -2000,89 +1841,11 @@ function recalculate() {
   updateOutputs(r);
 }
 
-function renderLabourRow(item, i) {
-  var role = esc(item.role||'');
-  var isSalary = (item.type === 'salary');
-  var typeToggle = '<select oninput="updateLabourItem('+i+',&quot;type&quot;,this.value)" style="width:75px;font-size:11px;">'
-    +'<option value="hourly"'+(isSalary?'':' selected')+'>Hourly</option>'
-    +'<option value="salary"'+(isSalary?' selected':'')+'>Salary</option>'
-    +'</select>';
-  var mo = 0;
-  if (isSalary) {
-    mo = parseFloat(item.annual_salary||0) / 12;
-    return '<tr><td><input value="'+role+'" placeholder="Role" oninput="updateLabourItem('+i+',&quot;role&quot;,this.value)" style="max-width:140px;text-align:left;"></td>'
-      +'<td>'+typeToggle+'</td>'
-      +'<td>$<input type="number" step="1000" value="'+(item.annual_salary||0)+'" oninput="updateLabourItem('+i+',&quot;annual_salary&quot;,this.value)" style="width:80px;">/yr</td>'
-      +'<td style="color:var(--ink-muted);font-size:11px;">—</td><td style="color:var(--ink-muted);font-size:11px;">—</td>'
-      +'<td style="font-weight:600;">'+fmt$(mo)+'/mo</td>'
-      +'<td><button class="del-btn del-row-btn" onclick="deleteLabourLine('+i+')">&#x2715;</button></td></tr>';
-  }
-  var loaded = parseFloat(item.base_hourly||0) * (1 + parseFloat(item.uplift_pct||8)/100);
-  var weekly = loaded * (parseFloat(item.weekday_hours||0) + parseFloat(item.weekend_hours||0));
-  mo = weekly * 52 / 12;
-  return '<tr><td><input value="'+role+'" placeholder="Role" oninput="updateLabourItem('+i+',&quot;role&quot;,this.value)" style="max-width:140px;text-align:left;"></td>'
-    +'<td>'+typeToggle+'</td>'
-    +'<td>$<input type="number" step="0.5" value="'+(item.base_hourly||0)+'" oninput="updateLabourItem('+i+',&quot;base_hourly&quot;,this.value)" style="width:50px;">/hr'
-    +' +<input type="number" step="1" value="'+(item.uplift_pct||8)+'" oninput="updateLabourItem('+i+',&quot;uplift_pct&quot;,this.value)" style="width:28px;">%</td>'
-    +'<td><input type="number" step="1" value="'+(item.weekday_hours||0)+'" oninput="updateLabourItem('+i+',&quot;weekday_hours&quot;,this.value)" style="width:38px;"></td>'
-    +'<td><input type="number" step="1" value="'+(item.weekend_hours||0)+'" oninput="updateLabourItem('+i+',&quot;weekend_hours&quot;,this.value)" style="width:38px;"></td>'
-    +'<td style="font-weight:600;">'+fmt$(mo)+'/mo</td>'
-    +'<td><button class="del-btn del-row-btn" onclick="deleteLabourLine('+i+')">&#x2715;</button></td></tr>';
-}
 
-function renderOverheadRow(item, i) {
-  return '<tr><td><input value="'+esc(item.name||'')+'" placeholder="Item" oninput="updateOHItem(&quot;fixed&quot;,'+i+',&quot;name&quot;,this.value)" style="text-align:left;max-width:200px;"></td>'
-    +'<td><input type="number" step="1" value="'+(item.monthly||0)+'" oninput="updateOHItem(&quot;fixed&quot;,'+i+',&quot;monthly&quot;,this.value)"></td>'
-    +'<td><button class="del-btn del-row-btn" onclick="deleteOHItem(&quot;fixed&quot;,'+i+')">&#x2715;</button></td></tr>';
-}
 
-function renderOverheadVarRow(item, i) {
-  return '<tr><td><input value="'+esc(item.name||'')+'" placeholder="Item" oninput="updateOHItem(&quot;var&quot;,'+i+',&quot;name&quot;,this.value)" style="text-align:left;max-width:200px;"></td>'
-    +'<td><input type="number" step="1" value="'+(item.monthly||0)+'" oninput="updateOHItem(&quot;var&quot;,'+i+',&quot;monthly&quot;,this.value)"></td>'
-    +'<td><button class="del-btn del-row-btn" onclick="deleteOHItem(&quot;var&quot;,'+i+')">&#x2715;</button></td></tr>';
-}
 
-function renderEquipRow(item, i) {
-  var annual = item.cost && item.life_years ? parseFloat(item.cost)/parseFloat(item.life_years) : 0;
-  return '<tr><td><input value="'+esc(item.name||'')+'" placeholder="Equipment" oninput="updateEquipItem('+i+',&quot;name&quot;,this.value)" style="text-align:left;max-width:200px;"></td>'
-    +'<td><input type="number" step="500" value="'+(item.cost||0)+'" oninput="updateEquipItem('+i+',&quot;cost&quot;,this.value)"></td>'
-    +'<td><input type="number" step="1" value="'+(item.life_years||10)+'" oninput="updateEquipItem('+i+',&quot;life_years&quot;,this.value)"></td>'
-    +'<td class="formula-cell">'+fmt$(annual)+'</td>'
-    +'<td class="formula-cell">'+fmt$(annual/365)+'</td>'
-    +'<td><button class="del-btn del-row-btn" onclick="deleteEquipItem('+i+')">&#x2715;</button></td></tr>';
-}
 
-function updateOHItem(type, i, field, val) {
-  var arr = type==='fixed' ? (_inputs.overhead_fixed||_inputs.overhead||[]) : (_inputs.overhead_variable||[]);
-  if(arr[i]) arr[i][field] = isNaN(parseFloat(val)) ? val : parseFloat(val);
-  debounceSave();
-}
-function deleteOHItem(type, i) {
-  if(type==='fixed') { (_inputs.overhead_fixed||_inputs.overhead||[]).splice(i,1); renderLineTable('fixed-overhead-body',_inputs.overhead_fixed||[],renderOverheadRow); }
-  else { (_inputs.overhead_variable||[]).splice(i,1); renderLineTable('var-overhead-body',_inputs.overhead_variable||[],renderOverheadVarRow); }
-  attachInputListeners(); debounceSave();
-}
-function updateEquipItem(i, field, val) {
-  if(_inputs.equipment && _inputs.equipment[i]) _inputs.equipment[i][field] = isNaN(parseFloat(val)) ? val : parseFloat(val);
-  debounceSave();
-}
-function deleteEquipItem(i) {
-  if(_inputs.equipment) _inputs.equipment.splice(i,1);
-  renderLineTable('dep-body',_inputs.equipment||[],renderEquipRow);
-  attachInputListeners(); debounceSave();
-}
 
-function updateLabourItem(idx, field, val) {
-  if(_inputs.labour && _inputs.labour[idx]) {
-    _inputs.labour[idx][field] = isNaN(parseFloat(val)) ? val : parseFloat(val);
-  }
-  debounceSave();
-}
-function deleteLabourLine(idx) {
-  if(_inputs.labour) _inputs.labour.splice(idx,1);
-  renderLineTable('labour-body',_inputs.labour||[],renderLabourRow);
-  attachInputListeners(); debounceSave();
-}
 
 function attachInputListeners() {
   document.querySelectorAll('input[data-input]').forEach(input => {
@@ -2119,44 +1882,24 @@ function toggleEditMode() {
 
 // ── Add-row helpers ────────────────────────────────────────────────────────────
 function addFixedOverheadRow() {
-  if(!_inputs) _inputs = {};
-  if(!_inputs.overhead_fixed) _inputs.overhead_fixed = [];
-  _inputs.overhead_fixed.push({name:'New item', monthly:0});
-  renderLineTable('fixed-overhead-body', _inputs.overhead_fixed, renderOverheadRow);
-  attachInputListeners();
-  debounceSave();
+  FIXED_OVERHEAD_ITEMS.push({name:'New item', monthly:0});
+  renderDynamicTables(); recalculate(); debounceSave();
 }
 function addVarOverheadRow() {
-  if(!_inputs) _inputs = {};
-  if(!_inputs.overhead_variable) _inputs.overhead_variable = [];
-  _inputs.overhead_variable.push({name:'New item', monthly:0});
-  renderLineTable('var-overhead-body', _inputs.overhead_variable, renderOverheadVarRow);
-  attachInputListeners();
-  debounceSave();
+  VAR_OVERHEAD_ITEMS.push({name:'New item', monthly:0});
+  renderDynamicTables(); recalculate(); debounceSave();
 }
 function addSupplyRow() {
-  if(!_inputs) _inputs = {};
-  if(!_inputs.supplies) _inputs.supplies = [];
-  _inputs.supplies.push({name:'New supply', monthly:0});
-  renderLineTable('supplies-body', _inputs.supplies, renderOverheadRow);
-  attachInputListeners();
-  debounceSave();
+  SUPPLIES_ITEMS.push({name:'New supply', monthly:0});
+  renderDynamicTables(); recalculate(); debounceSave();
 }
 function addDepRow() {
-  if(!_inputs) _inputs = {};
-  if(!_inputs.equipment) _inputs.equipment = [];
-  _inputs.equipment.push({name:'New equipment', cost:0, life_years:10});
-  renderLineTable('dep-body', _inputs.equipment, renderEquipRow);
-  attachInputListeners();
-  debounceSave();
+  DEP_ITEMS.push({name:'New equipment', cost:0, life:10});
+  renderDynamicTables(); recalculate(); debounceSave();
 }
 function addLabourRow() {
-  if(!_inputs) _inputs = {};
-  if(!_inputs.labour) _inputs.labour = [];
-  _inputs.labour.push({role:'New employee', type:'hourly', base_hourly:0, uplift_pct:8, weekday_hours:0, weekend_hours:0});
-  renderLineTable('labour-body', _inputs.labour, renderLabourRow);
-  attachInputListeners();
-  debounceSave();
+  LABOUR_ROLES.push({name:'New employee', type:'hourly', wage:0, uplift:8, wkday:0, wknd:0});
+  renderDynamicTables(); recalculate(); debounceSave();
 }
 
 function exportCSV() {
@@ -2208,7 +1951,6 @@ function exportCSV() {
 // ============================================================================
 // INIT
 // ============================================================================
-var _inputs = null;  // populated from server in loadState
 
 (async function init() {
   document.body.classList.add('readonly-mode');
