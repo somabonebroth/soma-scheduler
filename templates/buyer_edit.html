@@ -167,7 +167,7 @@ body.be-page { background:var(--bg); }
         {% set margin = assigned.get('margin_pct') %}
         {% set is_active = assigned.get('active', True) if is_assigned else True %}
 
-        <div class="sku-row {% if is_assigned %}assigned{% endif %}" data-sku="{{ sku.sku_key|e }}">
+        <div class="sku-row {% if is_assigned %}assigned{% endif %}" data-sku="{{ sku.sku_key|e }}" data-recipe="{{ sku.recipe|e }}">
           <input type="checkbox" class="sku-check" {% if is_assigned %}checked{% endif %}
             onchange="toggleSku('{{ sku.sku_key|e }}', this.checked)">
           <div>
@@ -261,7 +261,7 @@ document.querySelectorAll('.sku-row').forEach(function(row) {
     // For each sku-row, find the recipe and compute COGS
     document.querySelectorAll('.sku-row').forEach(function(row){
       var sk = row.dataset.sku;
-      var recipeName = (row.querySelector('.sku-name')||{}).textContent||'';
+      var recipeName = (row.dataset.recipe || '').trim();
       var format = (sk.split('|')[2]||'').trim().toUpperCase();
       var el = row.querySelector('.cogs-computed[data-sku="'+sk+'"]');
       if(!el) return;
@@ -324,7 +324,7 @@ function onLabelSuppliedChange(el){
   // Refresh computed COGS display
   var row = document.querySelector('.sku-row[data-sku="'+sk+'"]');
   if(!row) return;
-  var recipeName = (row.querySelector('.sku-name')||{}).textContent||'';
+  var recipeName = (row.dataset.recipe || '').trim();
   var dispEl = row.querySelector('.cogs-computed[data-sku="'+sk+'"]');
   if(!dispEl) return;
   fetch('/api/cogs/recipe/'+encodeURIComponent(recipeName)+(el.checked?'?label_supplied=true':''))
@@ -446,7 +446,7 @@ async function saveBuyer() {
     if(d.assigned) {
       skus.push({
         sku_key:        sk,
-        recipe:         (document.querySelector('.sku-row[data-sku="'+sk+'"] .sku-name')||{}).textContent||'',
+        recipe:         (document.querySelector('.sku-row[data-sku="'+sk+'"]')||{}).dataset&&(document.querySelector('.sku-row[data-sku="'+sk+'"]').dataset.recipe||'').trim()||'',
         display:        (document.querySelector('.sku-row[data-sku="'+sk+'"] .sku-name')||{}).textContent||'',
         position:       idx + 1,
         price:          d.price,

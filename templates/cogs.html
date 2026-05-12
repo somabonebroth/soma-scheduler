@@ -239,6 +239,31 @@ input[type="number"], input[type="text"] {
   transition: all 0.15s ease;
   font-variant-numeric: tabular-nums;
 }
+/* Read-only mode */
+body.readonly-mode input[type="number"],
+body.readonly-mode input[type="text"],
+body.readonly-mode input[type="range"] {
+  pointer-events: none;
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink);
+  -webkit-appearance: none;
+  appearance: none;
+}
+body.readonly-mode .add-row-btn,
+body.readonly-mode .del-row-btn { display: none; }
+.edit-mode-banner {
+  display: none;
+  background: #fff8e1;
+  border: 1px solid #ffe082;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: #6d4c00;
+  margin-bottom: 14px;
+  font-family: 'JetBrains Mono', monospace;
+}
+body:not(.readonly-mode) .edit-mode-banner { display: block; }
 
 input.text-input {
   text-align: left;
@@ -478,6 +503,7 @@ body { padding-top: 0; }
 </div>
 
 <div class="cogs-body">
+  <div class="edit-mode-banner">✏ Edit mode — changes save automatically. Click "Done Editing" when finished.</div>
   <div style="border-bottom: 2px solid #1a1a1a; padding-bottom: 16px; margin-bottom: 24px; display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:16px;">
     <div>
       <h2 style="font-family:'Fraunces',serif; font-weight:600; font-size:24px; letter-spacing:-0.02em;">Cost of Goods Sold (COGS)</h2>
@@ -489,8 +515,7 @@ body { padding-top: 0; }
         <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#1a1a1a;margin-right:6px;vertical-align:middle;"></span>Formula</span>
         <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f5ecd9;border:1px solid #c9c2b3;margin-right:6px;vertical-align:middle;"></span>Total</span>
       </div>
-      <button class="btn secondary" onclick="exportCSV()">Export CSV</button>
-      <button class="btn secondary" onclick="resetDefaults()">Reset</button>
+      <button class="btn secondary" id="edit-mode-btn" onclick="toggleEditMode()">✏ Edit Base Costs</button>
     </div>
   </div>
 
@@ -506,8 +531,7 @@ body { padding-top: 0; }
     <span><span class="legend-dot" style="background: var(--total-bg); border: 1px solid var(--rule-strong);"></span>Total</span>
   </div>
   <div class="actions">
-    <button class="btn secondary" onclick="exportCSV()">Export CSV</button>
-    <button class="btn secondary" onclick="resetDefaults()">Reset</button>
+    <button class="btn secondary" id="edit-mode-btn2" onclick="toggleEditMode()">✏ Edit Base Costs</button>
   </div>
 </div>
 
@@ -526,6 +550,68 @@ body { padding-top: 0; }
 
 <!-- ============ SUMMARY TAB ============ -->
 <div id="tab-summary" class="tab-content active">
+
+  <!-- Quick stats row -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;">
+    <div style="background:var(--bg-card);border:1px solid var(--rule);border-radius:4px;padding:14px 16px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-muted);margin-bottom:6px;">Annual Kettle Runs</div>
+      <div style="font-size:22px;font-weight:600;font-family:'Fraunces',serif;" id="sum-annual-runs">—</div>
+    </div>
+    <div style="background:var(--bg-card);border:1px solid var(--rule);border-radius:4px;padding:14px 16px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-muted);margin-bottom:6px;">Fixed Cost / Run</div>
+      <div style="font-size:22px;font-weight:600;font-family:'Fraunces',serif;" id="sum-cost-per-run">—</div>
+    </div>
+    <div style="background:var(--bg-card);border:1px solid var(--rule);border-radius:4px;padding:14px 16px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-muted);margin-bottom:6px;">Total Annual Cost</div>
+      <div style="font-size:22px;font-weight:600;font-family:'Fraunces',serif;" id="sum-annual-total">—</div>
+    </div>
+    <div style="background:var(--bg-card);border:1px solid var(--rule);border-radius:4px;padding:14px 16px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-muted);margin-bottom:6px;">Weekly Labour</div>
+      <div style="font-size:22px;font-weight:600;font-family:'Fraunces',serif;" id="sum-weekly-labour">—</div>
+    </div>
+  </div>
+
+  <!-- How a unit cost is built -->
+  <div class="section" style="margin-bottom:16px;">
+    <div class="section-header"><span>How Unit Cost Is Calculated</span></div>
+    <div class="section-body">
+      <div style="font-family:'Fraunces',serif;font-size:12.5px;color:var(--ink-muted);line-height:1.8;margin-bottom:14px;">
+        Every SKU cost starts from the same fixed cost per unit — derived from total annual overhead, labour, supplies, maintenance, depreciation, and debt, divided by annual kettle runs, then divided by units per kettle for that format. On top of this, each recipe adds its own ingredient costs read from the recipe card.
+      </div>
+      <div style="background:var(--total-bg);border-radius:4px;padding:14px 16px;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:2.2;color:var(--ink);">
+        <div>Fixed $/unit &nbsp;&nbsp;&nbsp;Overhead + Labour + Supplies + Maintenance + Depreciation + Debt</div>
+        <div style="color:var(--ink-muted);">+ Bones $/unit &nbsp;&nbsp;&nbsp;Recipe card kg × $/kg per bone type (chicken, beef, turkey priced separately)</div>
+        <div style="color:var(--ink-muted);">+ Mirepoix $/unit &nbsp;Recipe card kg × $/kg (onion, carrot, celery)</div>
+        <div style="color:var(--ink-muted);">+ Mushroom $/unit &nbsp;Recipe card kg × blended $/kg (mushroom broth only)</div>
+        <div style="color:var(--ink-muted);">+ Other $/unit &nbsp;&nbsp;&nbsp;Flat $/batch (salt, spices) ÷ units per kettle</div>
+        <div style="color:var(--ink-muted);">+ Packaging $/unit &nbsp;Container + Lid + Box</div>
+        <div style="color:var(--ink-muted);">+ Label $/unit &nbsp;&nbsp;&nbsp;Base label + hand-application surcharge (waived if label supplied by buyer)</div>
+        <div style="border-top:1px solid var(--rule-strong);margin-top:4px;padding-top:4px;font-weight:600;">= Unit COGS</div>
+      </div>
+      <div style="margin-top:12px;font-family:'Fraunces',serif;font-size:12px;color:var(--ink-muted);">
+        This cost auto-populates in the <strong style="color:var(--ink);">Cost (auto)</strong> column of each buyer's SKU catalogue under Buyers &amp; Suppliers. Setting a price alongside it immediately shows margin. Margin can also be set directly to back-calculate a price.
+      </div>
+    </div>
+  </div>
+
+  <!-- Input summary -->
+  <div class="section" style="margin-bottom:16px;">
+    <div class="section-header"><span>Input Summary — Current Values</span></div>
+    <div class="section-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-muted);margin-bottom:8px;">Fixed Costs / Month</div>
+          <div style="font-size:13px;" id="sum-fixed-breakdown">—</div>
+        </div>
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-muted);margin-bottom:8px;">Ingredient Prices</div>
+          <div style="font-size:13px;" id="sum-ingredient-prices">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full COGS matrix -->
   <div class="section">
     <div class="section-header">
       <span><span class="section-num">00</span>Full COGS by Broth & SKU</span>
@@ -711,6 +797,11 @@ body { padding-top: 0; }
           <td class="label">Total Fixed</td>
           <td class="formula-cell" data-output="fixedTotal"></td>
         </tr>
+        <tr class="add-row-btn">
+          <td colspan="2" style="padding:6px 10px;">
+            <button onclick="addFixedOverheadRow()" style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:5px 12px;background:var(--ink);color:var(--bg);border:none;border-radius:2px;cursor:pointer;">+ Add Line</button>
+          </td>
+        </tr>
       </table>
 
       <div class="subsection-label">Variable Overhead (monthly)</div>
@@ -719,6 +810,11 @@ body { padding-top: 0; }
         <tr class="total-row">
           <td class="label">Total Variable</td>
           <td class="formula-cell" data-output="varTotal"></td>
+        </tr>
+        <tr class="add-row-btn">
+          <td colspan="2" style="padding:6px 10px;">
+            <button onclick="addVarOverheadRow()" style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:5px 12px;background:var(--ink);color:var(--bg);border:none;border-radius:2px;cursor:pointer;">+ Add Line</button>
+          </td>
         </tr>
       </table>
 
@@ -765,28 +861,34 @@ body { padding-top: 0; }
         <thead>
           <tr>
             <th>Role</th>
-            <th>Base Wage</th>
-            <th>Uplift</th>
+            <th>Type</th>
+            <th>Rate</th>
             <th>Wkday hrs</th>
             <th>Wknd hrs</th>
             <th>Weekly Cost</th>
+            <th class="add-row-btn" style="text-align:right;"></th>
           </tr>
         </thead>
         <tbody id="labour-body"></tbody>
+        <tr>
+          <td colspan="7" class="add-row-btn" style="padding:6px 10px;">
+            <button onclick="addLabourRow()" style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:5px 12px;background:var(--ink);color:var(--bg);border:none;border-radius:2px;cursor:pointer;">+ Add Employee</button>
+          </td>
+        </tr>
         <tr class="total-row">
           <td class="label">Weekly Labour Total</td>
           <td></td><td></td><td></td><td></td>
-          <td class="formula-cell" data-output="weeklyLabour"></td>
+          <td class="formula-cell" data-output="weeklyLabour"></td><td></td>
         </tr>
         <tr class="total-row">
           <td class="label">Annual Labour</td>
           <td></td><td></td><td></td><td></td>
-          <td class="formula-cell" data-output="annualLabour"></td>
+          <td class="formula-cell" data-output="annualLabour"></td><td></td>
         </tr>
         <tr class="total-row">
           <td class="label">Per kettle run</td>
           <td></td><td></td><td></td><td></td>
-          <td class="formula-cell" data-output="labourPerKettle"></td>
+          <td class="formula-cell" data-output="labourPerKettle"></td><td></td>
         </tr>
       </table>
 
@@ -831,6 +933,11 @@ body { padding-top: 0; }
         <tr class="total-row">
           <td class="label">Per kettle run</td>
           <td class="formula-cell" data-output="suppliesPerKettle"></td>
+        </tr>
+        <tr class="add-row-btn">
+          <td colspan="2" style="padding:6px 10px;">
+            <button onclick="addSupplyRow()" style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:5px 12px;background:var(--ink);color:var(--bg);border:none;border-radius:2px;cursor:pointer;">+ Add Supply</button>
+          </td>
         </tr>
       </table>
     </div>
@@ -881,6 +988,11 @@ body { padding-top: 0; }
           <td class="label">Per kettle run</td>
           <td></td><td></td><td></td>
           <td class="formula-cell" data-output="depPerKettle"></td>
+        </tr>
+        <tr class="add-row-btn">
+          <td colspan="5" style="padding:6px 10px;">
+            <button onclick="addDepRow()" style="font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:5px 12px;background:var(--ink);color:var(--bg);border:none;border-radius:2px;cursor:pointer;">+ Add Equipment</button>
+          </td>
         </tr>
       </table>
     </div>
@@ -1794,6 +1906,44 @@ function renderBonesPerUnit(r) {
 }
 
 function renderCogsSummary(r) {
+  // Update stats cards
+  const annualRuns = r.kettleRuns;
+  const costPerRun = (r.overheadPerKettle + r.labourPerKettle + r.suppliesPerKettle + r.maintPerKettle + r.depPerKettle + r.debtPerKettle) * annualRuns / 12;
+  setOutput('sum-annual-runs', fmtNum(annualRuns));
+  const el_cpr = document.getElementById('sum-cost-per-run');
+  const el_wl  = document.getElementById('sum-weekly-labour');
+  const el_at  = document.getElementById('sum-annual-total');
+  const el_fb  = document.getElementById('sum-fixed-breakdown');
+  const el_ip  = document.getElementById('sum-ingredient-prices');
+  if(el_cpr) el_cpr.textContent = fmt$((r.overheadPerKettle + r.labourPerKettle + r.suppliesPerKettle + r.maintPerKettle + r.depPerKettle + r.debtPerKettle));
+  if(el_wl)  el_wl.textContent  = fmt$(r.weeklyLabour);
+  const totalAnnual = (r.overheadMonthly + r.suppliesTotal + (state.maintenance||0)) * 12 + r.annualLabour + r.depTotalAnnual + (state.debtMonthly||0)*12;
+  if(el_at)  el_at.textContent  = '$' + Math.round(totalAnnual).toLocaleString();
+  // Fixed breakdown summary
+  if(el_fb) {
+    el_fb.innerHTML = [
+      ['Overhead', fmt$(r.overheadMonthly) + '/mo'],
+      ['Labour',   fmt$(r.annualLabour/12) + '/mo'],
+      ['Supplies', fmt$(r.suppliesTotal) + '/mo'],
+      ['Maintenance', fmt$(state.maintenance||0) + '/mo'],
+      ['Depreciation', fmt$(r.depTotalAnnual/12) + '/mo'],
+      ['Debt', fmt$(state.debtMonthly||0) + '/mo'],
+    ].map(function(row){ return '<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--rule);padding:3px 0;"><span style="color:var(--ink-muted);">'+row[0]+'</span><span style="font-weight:600;">'+row[1]+'</span></div>'; }).join('');
+  }
+  // Ingredient prices summary
+  if(el_ip) {
+    el_ip.innerHTML = [
+      ['Chicken bones', fmt$(state.chickenKg||0) + '/kg'],
+      ['Beef bones',    fmt$(state.beefKg||0) + '/kg'],
+      ['Turkey bones',  fmt$(state.turkeyKg||0) + '/kg'],
+      ['Mushroom (blended)', fmt$(r.mushBlendedRate||0) + '/kg'],
+      ['Onion',  fmt$(state.onionKg||0) + '/kg'],
+      ['Carrot', fmt$(state.carrotKg||0) + '/kg'],
+      ['Celery', fmt$(state.celeryKg||0) + '/kg'],
+      ['Other ingredients', fmt$(r.otherTotal||0) + '/batch'],
+    ].map(function(row){ return '<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--rule);padding:3px 0;"><span style="color:var(--ink-muted);">'+row[0]+'</span><span style="font-weight:600;">'+row[1]+'</span></div>'; }).join('');
+  }
+
   const broths = [['Chicken', 'chicken'], ['Beef', 'beef'], ['Turkey', 'turkey'], ['Mushroom', 'mushroom']];
   let html = '';
   broths.forEach(([label, key]) => {
@@ -1962,6 +2112,90 @@ function recalculate() {
   updateOutputs(r);
 }
 
+function renderLabourRow(item, i) {
+  var role = esc(item.role||'');
+  var isSalary = (item.type === 'salary');
+  var typeToggle = '<select oninput="updateLabourItem('+i+',&quot;type&quot;,this.value)" style="width:75px;font-size:11px;">'
+    +'<option value="hourly"'+(isSalary?'':' selected')+'>Hourly</option>'
+    +'<option value="salary"'+(isSalary?' selected':'')+'>Salary</option>'
+    +'</select>';
+  var mo = 0;
+  if (isSalary) {
+    mo = parseFloat(item.annual_salary||0) / 12;
+    return '<tr><td><input value="'+role+'" placeholder="Role" oninput="updateLabourItem('+i+',&quot;role&quot;,this.value)" style="max-width:140px;text-align:left;"></td>'
+      +'<td>'+typeToggle+'</td>'
+      +'<td>$<input type="number" step="1000" value="'+(item.annual_salary||0)+'" oninput="updateLabourItem('+i+',&quot;annual_salary&quot;,this.value)" style="width:80px;">/yr</td>'
+      +'<td style="color:var(--ink-muted);font-size:11px;">—</td><td style="color:var(--ink-muted);font-size:11px;">—</td>'
+      +'<td style="font-weight:600;">'+fmt$(mo)+'/mo</td>'
+      +'<td><button class="del-btn del-row-btn" onclick="deleteLabourLine('+i+')">&#x2715;</button></td></tr>';
+  }
+  var loaded = parseFloat(item.base_hourly||0) * (1 + parseFloat(item.uplift_pct||8)/100);
+  var weekly = loaded * (parseFloat(item.weekday_hours||0) + parseFloat(item.weekend_hours||0));
+  mo = weekly * 52 / 12;
+  return '<tr><td><input value="'+role+'" placeholder="Role" oninput="updateLabourItem('+i+',&quot;role&quot;,this.value)" style="max-width:140px;text-align:left;"></td>'
+    +'<td>'+typeToggle+'</td>'
+    +'<td>$<input type="number" step="0.5" value="'+(item.base_hourly||0)+'" oninput="updateLabourItem('+i+',&quot;base_hourly&quot;,this.value)" style="width:50px;">/hr'
+    +' +<input type="number" step="1" value="'+(item.uplift_pct||8)+'" oninput="updateLabourItem('+i+',&quot;uplift_pct&quot;,this.value)" style="width:28px;">%</td>'
+    +'<td><input type="number" step="1" value="'+(item.weekday_hours||0)+'" oninput="updateLabourItem('+i+',&quot;weekday_hours&quot;,this.value)" style="width:38px;"></td>'
+    +'<td><input type="number" step="1" value="'+(item.weekend_hours||0)+'" oninput="updateLabourItem('+i+',&quot;weekend_hours&quot;,this.value)" style="width:38px;"></td>'
+    +'<td style="font-weight:600;">'+fmt$(mo)+'/mo</td>'
+    +'<td><button class="del-btn del-row-btn" onclick="deleteLabourLine('+i+')">&#x2715;</button></td></tr>';
+}
+
+function renderOverheadRow(item, i) {
+  return '<tr><td><input value="'+esc(item.name||'')+'" placeholder="Item" oninput="updateOHItem(&quot;fixed&quot;,'+i+',&quot;name&quot;,this.value)" style="text-align:left;max-width:200px;"></td>'
+    +'<td><input type="number" step="1" value="'+(item.monthly||0)+'" oninput="updateOHItem(&quot;fixed&quot;,'+i+',&quot;monthly&quot;,this.value)"></td>'
+    +'<td><button class="del-btn del-row-btn" onclick="deleteOHItem(&quot;fixed&quot;,'+i+')">&#x2715;</button></td></tr>';
+}
+
+function renderOverheadVarRow(item, i) {
+  return '<tr><td><input value="'+esc(item.name||'')+'" placeholder="Item" oninput="updateOHItem(&quot;var&quot;,'+i+',&quot;name&quot;,this.value)" style="text-align:left;max-width:200px;"></td>'
+    +'<td><input type="number" step="1" value="'+(item.monthly||0)+'" oninput="updateOHItem(&quot;var&quot;,'+i+',&quot;monthly&quot;,this.value)"></td>'
+    +'<td><button class="del-btn del-row-btn" onclick="deleteOHItem(&quot;var&quot;,'+i+')">&#x2715;</button></td></tr>';
+}
+
+function renderEquipRow(item, i) {
+  var annual = item.cost && item.life_years ? parseFloat(item.cost)/parseFloat(item.life_years) : 0;
+  return '<tr><td><input value="'+esc(item.name||'')+'" placeholder="Equipment" oninput="updateEquipItem('+i+',&quot;name&quot;,this.value)" style="text-align:left;max-width:200px;"></td>'
+    +'<td><input type="number" step="500" value="'+(item.cost||0)+'" oninput="updateEquipItem('+i+',&quot;cost&quot;,this.value)"></td>'
+    +'<td><input type="number" step="1" value="'+(item.life_years||10)+'" oninput="updateEquipItem('+i+',&quot;life_years&quot;,this.value)"></td>'
+    +'<td class="formula-cell">'+fmt$(annual)+'</td>'
+    +'<td class="formula-cell">'+fmt$(annual/365)+'</td>'
+    +'<td><button class="del-btn del-row-btn" onclick="deleteEquipItem('+i+')">&#x2715;</button></td></tr>';
+}
+
+function updateOHItem(type, i, field, val) {
+  var arr = type==='fixed' ? (_inputs.overhead_fixed||_inputs.overhead||[]) : (_inputs.overhead_variable||[]);
+  if(arr[i]) arr[i][field] = isNaN(parseFloat(val)) ? val : parseFloat(val);
+  debounceSave();
+}
+function deleteOHItem(type, i) {
+  if(type==='fixed') { (_inputs.overhead_fixed||_inputs.overhead||[]).splice(i,1); renderLineTable('fixed-overhead-body',_inputs.overhead_fixed||[],renderOverheadRow); }
+  else { (_inputs.overhead_variable||[]).splice(i,1); renderLineTable('var-overhead-body',_inputs.overhead_variable||[],renderOverheadVarRow); }
+  attachInputListeners(); debounceSave();
+}
+function updateEquipItem(i, field, val) {
+  if(_inputs.equipment && _inputs.equipment[i]) _inputs.equipment[i][field] = isNaN(parseFloat(val)) ? val : parseFloat(val);
+  debounceSave();
+}
+function deleteEquipItem(i) {
+  if(_inputs.equipment) _inputs.equipment.splice(i,1);
+  renderLineTable('dep-body',_inputs.equipment||[],renderEquipRow);
+  attachInputListeners(); debounceSave();
+}
+
+function updateLabourItem(idx, field, val) {
+  if(_inputs.labour && _inputs.labour[idx]) {
+    _inputs.labour[idx][field] = isNaN(parseFloat(val)) ? val : parseFloat(val);
+  }
+  debounceSave();
+}
+function deleteLabourLine(idx) {
+  if(_inputs.labour) _inputs.labour.splice(idx,1);
+  renderLineTable('labour-body',_inputs.labour||[],renderLabourRow);
+  attachInputListeners(); debounceSave();
+}
+
 function attachInputListeners() {
   document.querySelectorAll('input[data-input]').forEach(input => {
     if (input._wired) return;
@@ -1982,6 +2216,54 @@ async function resetDefaults() {
     await fetch('/api/cogs/reset', {method:'POST'});
     location.reload();
   } catch(e) { alert('Reset failed: ' + e.message); }
+}
+
+var _editMode = false;
+function toggleEditMode() {
+  _editMode = !_editMode;
+  document.body.classList.toggle('readonly-mode', !_editMode);
+  var btns = ['edit-mode-btn','edit-mode-btn2'];
+  btns.forEach(function(id){
+    var b = document.getElementById(id);
+    if(b) b.textContent = _editMode ? '✓ Done Editing' : '✏ Edit Base Costs';
+  });
+}
+
+// ── Add-row helpers ────────────────────────────────────────────────────────────
+function addFixedOverheadRow() {
+  if(!_inputs.overhead_fixed) _inputs.overhead_fixed = [];
+  _inputs.overhead_fixed.push({name:'New item', monthly:0});
+  renderLineTable('fixed-overhead-body', _inputs.overhead_fixed, renderOverheadRow);
+  attachInputListeners();
+  debounceSave();
+}
+function addVarOverheadRow() {
+  if(!_inputs.overhead_variable) _inputs.overhead_variable = [];
+  _inputs.overhead_variable.push({name:'New item', monthly:0});
+  renderLineTable('var-overhead-body', _inputs.overhead_variable, renderOverheadVarRow);
+  attachInputListeners();
+  debounceSave();
+}
+function addSupplyRow() {
+  if(!_inputs.supplies) _inputs.supplies = [];
+  _inputs.supplies.push({name:'New supply', monthly:0});
+  renderLineTable('supplies-body', _inputs.supplies, renderOverheadRow);
+  attachInputListeners();
+  debounceSave();
+}
+function addDepRow() {
+  if(!_inputs.equipment) _inputs.equipment = [];
+  _inputs.equipment.push({name:'New equipment', cost:0, life_years:10});
+  renderLineTable('dep-body', _inputs.equipment, renderEquipRow);
+  attachInputListeners();
+  debounceSave();
+}
+function addLabourRow() {
+  if(!_inputs.labour) _inputs.labour = [];
+  _inputs.labour.push({role:'New employee', type:'hourly', base_hourly:0, uplift_pct:8, weekday_hours:0, weekend_hours:0});
+  renderLineTable('labour-body', _inputs.labour, renderLabourRow);
+  attachInputListeners();
+  debounceSave();
 }
 
 function exportCSV() {
@@ -2034,6 +2316,8 @@ function exportCSV() {
 // INIT
 // ============================================================================
 (async function init() {
+  // Start in read-only mode
+  document.body.classList.add('readonly-mode');
   await loadState();
   renderDynamicTables();
   attachInputListeners();
