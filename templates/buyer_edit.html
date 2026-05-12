@@ -181,10 +181,22 @@ body.be-page { background:var(--bg); }
               {% if not is_assigned %}disabled{% endif %}>
           </div>
           <div>
-            <input type="number" class="p-input cogs-input" step="0.01" min="0" placeholder="—"
-              value="{{ '%.2f'|format(cogs) if cogs is not none else '' }}"
-              data-sku="{{ sku.sku_key|e }}" data-field="cogs"
-              {% if not is_assigned %}disabled{% endif %}>
+            <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">
+              <input type="number" class="p-input cogs-input" step="0.01" min="0" placeholder="—"
+                value="{{ '%.2f'|format(cogs) if cogs is not none else '' }}"
+                data-sku="{{ sku.sku_key|e }}" data-field="cogs"
+                {% if not is_assigned %}disabled{% endif %} style="flex:1;">
+            </div>
+            <div style="font-size:10px;color:var(--accent);min-height:14px;">
+              <span class="cogs-computed" data-sku="{{ sku.sku_key|e }}" title="From COGS Calculator"></span>
+            </div>
+            <label style="font-size:10px;color:var(--text-light);display:flex;align-items:center;gap:3px;cursor:pointer;margin-top:2px;">
+              <input type="checkbox" class="label-supplied-tog" data-sku="{{ sku.sku_key|e }}"
+                {% if assigned.get('label_supplied') %}checked{% endif %}
+                onchange="onLabelSuppliedChange(this)"
+                style="width:12px;height:12px;accent-color:var(--accent);">
+              Label by buyer
+            </label>
           </div>
           <div class="p-margin" data-sku-margin="{{ sku.sku_key|e }}">
             {{ '%.1f'|format(margin) + '%' if margin is not none else '—' }}
@@ -227,14 +239,91 @@ document.querySelectorAll('.sku-row').forEach(function(row) {
   var priceEl = row.querySelector('.price-input');
   var cogsEl = row.querySelector('.cogs-input');
   var togEl = row.querySelector('.p-active-tog');
+  var lblTog = row.querySelector('.label-supplied-tog');
   _skuData[sk] = {
-    assigned: chk ? chk.checked : false,
-    price:    priceEl && priceEl.value ? parseFloat(priceEl.value) : null,
-    cogs:     cogsEl && cogsEl.value  ? parseFloat(cogsEl.value)  : null,
-    margin_pct: null,
-    active:   togEl ? togEl.classList.contains('on') : true,
+    assigned:       chk ? chk.checked : false,
+    price:          priceEl && priceEl.value ? parseFloat(priceEl.value) : null,
+    cogs:           cogsEl && cogsEl.value  ? parseFloat(cogsEl.value)  : null,
+    margin_pct:     null,
+    active:         togEl ? togEl.classList.contains('on') : true,
+    label_supplied: lblTog ? lblTog.checked : false,
   };
 });
+
+// Load computed COGS for all SKUs from COGS calculator
+(async function loadComputedCogs(){
+  try {
+    var recipes = await (await fetch('/api/recipes')).json();
+    var cogsRes = await fetch('/api/cogs');
+    var cogsData = await cogsRes.json();
+    // For each sku-row, find the recipe and compute COGS
+    document.querySelectorAll('.sku-row').forEach(function(row){
+      var sk = row.dataset.sku;
+      var recipeName = (row.querySelector('.sku-name')||{}).textContent||'';
+      var format = (sk.split('|')[2]||'').trim().toUpperCase();
+      var el = row.querySelector('.cogs-computed[data-sku="'+sk+'"]');
+      if(!el) return;
+      var labelSupplied = _skuData[sk] && _skuData[sk].label_supplied;
+      // Find recipe
+      var recipe = recipes[recipeName];
+      if(!recipe || !recipe.broth_type) {
+        el.textContent = 'No broth type set';
+        el.style.color = '#f57f17';
+        return;
+      }
+      // Make per-recipe COGS request
+      fetch('/api/cogs/recipe/'+encodeURIComponent(recipeName)+(labelSupplied?'?label_supplied=true':''))
+        .then(function(r){return r.json();})
+        .then(function(d){
+          if(d.unit_cogs != null){
+            el.textContent = 'Calculator: $'+d.unit_cogs.toFixed(2);
+            el.style.color = 'var(--accent)';
+            el.title = formatCogsBreakdown(d.breakdown);
+            // Auto-fill cogs input if empty
+            var cogsEl = row.querySelector('.cogs-input');
+            if(cogsEl && !cogsEl.value) {
+              cogsEl.value = d.unit_cogs.toFixed(2);
+              if(_skuData[sk]) _skuData[sk].cogs = d.unit_cogs;
+            }
+          } else {
+            el.textContent = 'Format not mapped';
+          }
+        }).catch(function(){});
+    });
+  } catch(e){}
+})();
+
+function formatCogsBreakdown(b){
+  if(!b) return '';
+  return 'Fixed: $'+b.fixed.toFixed(2)
+    +' | Bones: $'+b.bones.toFixed(2)
+    +' | Mirepoix: $'+b.mirepoix.toFixed(2)
+    +' | Mushroom: $'+b.mushroom.toFixed(2)
+    +' | Minor: $'+b.minor_ingredients.toFixed(2)
+    +' | Pack: $'+b.packaging.toFixed(2)
+    +' | Label: $'+b.label.toFixed(2);
+}
+
+function onLabelSuppliedChange(el){
+  var sk = el.dataset.sku;
+  if(_skuData[sk]) _skuData[sk].label_supplied = el.checked;
+  // Refresh computed COGS display
+  var row = document.querySelector('.sku-row[data-sku="'+sk+'"]');
+  if(!row) return;
+  var recipeName = (row.querySelector('.sku-name')||{}).textContent||'';
+  var dispEl = row.querySelector('.cogs-computed[data-sku="'+sk+'"]');
+  if(!dispEl) return;
+  fetch('/api/cogs/recipe/'+encodeURIComponent(recipeName)+(el.checked?'?label_supplied=true':''))
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d.unit_cogs != null){
+        dispEl.textContent = 'Calculator: $'+d.unit_cogs.toFixed(2);
+        dispEl.title = formatCogsBreakdown(d.breakdown);
+        var cogsEl = row.querySelector('.cogs-input');
+        if(cogsEl){ cogsEl.value=d.unit_cogs.toFixed(2); if(_skuData[sk]) _skuData[sk].cogs=d.unit_cogs; }
+      }
+    }).catch(function(){});
+}
 
 function toggleSku(sk, checked) {
   var row = document.querySelector('.sku-row[data-sku="'+sk+'"]');
@@ -319,14 +408,15 @@ async function saveBuyer() {
     var d = _skuData[sk] || {};
     if(d.assigned) {
       skus.push({
-        sku_key:    sk,
-        recipe:     (document.querySelector('.sku-row[data-sku="'+sk+'"] .sku-name')||{}).textContent||'',
-        display:    (document.querySelector('.sku-row[data-sku="'+sk+'"] .sku-name')||{}).textContent||'',
-        position:   idx + 1,
-        price:      d.price,
-        cogs:       d.cogs,
-        margin_pct: d.margin_pct,
-        active:     d.active !== false,
+        sku_key:        sk,
+        recipe:         (document.querySelector('.sku-row[data-sku="'+sk+'"] .sku-name')||{}).textContent||'',
+        display:        (document.querySelector('.sku-row[data-sku="'+sk+'"] .sku-name')||{}).textContent||'',
+        position:       idx + 1,
+        price:          d.price,
+        cogs:           d.cogs,
+        margin_pct:     d.margin_pct,
+        active:         d.active !== false,
+        label_supplied: d.label_supplied || false,
       });
     }
   });

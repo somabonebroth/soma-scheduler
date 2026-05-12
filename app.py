@@ -2907,6 +2907,7 @@ SKU_META_PATH = os.path.join(INVENTORY_DIR, "sku_meta.json")  # PAR levels + pri
 ADJUSTMENTS_PATH = os.path.join(INVENTORY_DIR, "adjustments.json")
 AUDITS_PATH      = os.path.join(INVENTORY_DIR, "audits.json")
 EQUIPMENT_PATH   = os.path.join(DATA_DIR, "equipment.json")
+COGS_PATH        = os.path.join(DATA_DIR, "cogs.json")
 # Camera-scan request log: per-day rolling counter for daily-limit enforcement
 # plus an audit trail of every scan (success or failure).
 SUPPLIERS_PATH = os.path.join(INVENTORY_DIR, "suppliers.json")
@@ -4992,6 +4993,384 @@ def manual_subtract_finished_good():
         "quantity_removed": qty,
         "drained": drained,
         "remaining_total": available - qty,
+    })
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# COGS CALCULATOR ROUTES
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Maps app format codes to COGS matrix size keys
+_FORMAT_TO_COGS_SIZE = {
+    "SS-476ML":    "475ml",
+    "SS-475ML":    "475ml",
+    "SS-750ML":    "750ml_ss",
+    "SS-735ML":    "750ml_ss",
+    "SS-876ML":    "876ml",
+    "FZ-750ML":    "750ml_fz",
+    "FZ-780ML":    "750ml_fz",
+    "BB-750ML":    "750ml_bb",
+    "BB-780ML":    "750ml_bb",
+    "POUCH-750ML": "750ml_pouch",
+    "POUCH-780ML": "750ml_pouch",
+}
+
+# Ingredient keywords for each costed category (bones, mirepoix, mushroom)
+_COGS_INGREDIENT_KEYWORDS = {
+    "bones": [
+        "bone", "knuckle", "neck", "back", "foot", "feet", "marrow",
+        "oxtail", "carcass", "drumstick", "wing", "frame", "rib",
+        "femur", "tibia", "chicken", "beef", "turkey", "bison", "pork",
+    ],
+    "onion":    ["onion"],
+    "carrot":   ["carrot"],
+    "celery":   ["celery"],
+    "mushroom": [
+        "mushroom", "shiitake", "porcini", "portobello", "cremini",
+        "reishi", "chaga", "maitake", "enoki", "chanterelle",
+    ],
+}
+
+_COGS_SEED = {
+    "units_per_kettle": {
+        "475ml": 290, "750ml_ss": 190, "876ml": 144,
+        "750ml_fz": 180, "750ml_bb": 180, "750ml_pouch": 180
+    },
+    "kettles_per_day": 2,
+    "production_days_per_month": 21,
+    "slow_months_per_year": 3,
+    "slow_month_volume_pct": 60,
+    "overhead": [
+        {"name": "Rent",                     "monthly": 5500.00},
+        {"name": "Hydro",                    "monthly": 800.00},
+        {"name": "Gas",                      "monthly": 400.00},
+        {"name": "Water",                    "monthly": 150.00},
+        {"name": "Internet / Phone",         "monthly": 200.00},
+        {"name": "Insurance",                "monthly": 450.00},
+        {"name": "Accounting / Legal",       "monthly": 300.00},
+        {"name": "Bank Fees",                "monthly": 75.00},
+        {"name": "Software / Subscriptions", "monthly": 150.00},
+        {"name": "Miscellaneous",            "monthly": 300.00},
+    ],
+    "labour": [
+        {"role": "President",          "hourly": 25.00, "hours_per_week": 15, "vacation_weeks": 3},
+        {"role": "CEO",                "hourly": 25.00, "hours_per_week": 15, "vacation_weeks": 3},
+        {"role": "Head of Operations", "hourly": 22.00, "hours_per_week": 32, "vacation_weeks": 2},
+        {"role": "Broth Lead 1",       "hourly": 18.00, "hours_per_week": 35, "vacation_weeks": 2},
+        {"role": "Broth Lead 2",       "hourly": 17.00, "hours_per_week": 32, "vacation_weeks": 2},
+    ],
+    "supplies_monthly": 487.00,
+    "maintenance_monthly": 300.00,
+    "equipment": [
+        {"name": "Kettle K1",               "cost": 18000, "life_years": 10},
+        {"name": "Kettle K2",               "cost": 18000, "life_years": 10},
+        {"name": "Kettle K3",               "cost": 18000, "life_years": 10},
+        {"name": "Retort",                  "cost": 45000, "life_years": 15},
+        {"name": "Blast Freezer",           "cost": 12000, "life_years": 10},
+        {"name": "Labelling Machine",       "cost": 8000,  "life_years": 7},
+        {"name": "Dishwasher (commercial)", "cost": 6000,  "life_years": 8},
+    ],
+    "debt_repayment_monthly": 16666.00,
+    "bones": {
+        "chicken": {"price_per_kg": 1.10},
+        "beef":    {"price_per_kg": 1.85},
+        "turkey":  {"price_per_kg": 1.40},
+    },
+    "mirepoix": {
+        "onion":  {"price_per_kg": 1.20},
+        "carrot": {"price_per_kg": 1.50},
+        "celery": {"price_per_kg": 2.20},
+    },
+    "mushroom_price_per_kg": 12.00,
+    "minor_ingredients_per_batch": 18.00,
+    "packaging": {
+        "475ml":       {"container": 1.20, "lid": 0.35, "box": 0.80},
+        "750ml_ss":    {"container": 1.20, "lid": 0.35, "box": 0.80},
+        "876ml":       {"container": 0.68, "lid": 0.35, "box": 0.42},
+        "750ml_fz":    {"container": 0.20, "lid": 0.10, "box": 0.21},
+        "750ml_bb":    {"container": 0.20, "lid": 0.10, "box": 0.21},
+        "750ml_pouch": {"container": 0.65, "lid": 0.00, "box": 0.35},
+    },
+    "labels": {
+        "475ml":       {"cost": 0.43, "hand_applied": False, "hand_apply_surcharge": 0.00},
+        "750ml_ss":    {"cost": 0.43, "hand_applied": True,  "hand_apply_surcharge": 0.14},
+        "876ml":       {"cost": 0.43, "hand_applied": False, "hand_apply_surcharge": 0.00},
+        "750ml_fz":    {"cost": 0.43, "hand_applied": True,  "hand_apply_surcharge": 0.53},
+        "750ml_bb":    {"cost": 0.06, "hand_applied": False, "hand_apply_surcharge": 0.00},
+        "750ml_pouch": {"cost": 0.00, "hand_applied": False, "hand_apply_surcharge": 0.00},
+    },
+}
+
+
+def _load_cogs():
+    if not os.path.exists(COGS_PATH):
+        _save_json(COGS_PATH, _COGS_SEED)
+        return _COGS_SEED
+    return _load_json(COGS_PATH, _COGS_SEED)
+
+
+def _compute_cogs_matrix(c, recipe_overrides=None):
+    """Compute the 24-cell COGS matrix from inputs.
+    recipe_overrides: optional dict of ingredient kg amounts for a specific recipe
+    {bones_kg, onion_kg, carrot_kg, celery_kg, mushroom_kg, broth_type}
+    If provided, uses recipe amounts instead of zero for variable costs.
+    """
+    # ── Fixed costs per kettle run ─────────────────────────────────────────────
+    overhead_mo = sum(float(x.get("monthly", 0)) for x in c.get("overhead", []))
+    labour_mo   = 0.0
+    for r in c.get("labour", []):
+        weeks = max(0, 52 - float(r.get("vacation_weeks", 0)))
+        labour_mo += float(r.get("hourly", 0)) * float(r.get("hours_per_week", 0)) * weeks / 12
+    supplies_mo   = float(c.get("supplies_monthly", 0))
+    maint_mo      = float(c.get("maintenance_monthly", 0))
+    dep_mo        = sum(float(e.get("cost", 0)) / max(1, float(e.get("life_years", 1)) * 12)
+                        for e in c.get("equipment", []))
+    debt_mo       = float(c.get("debt_repayment_monthly", 0))
+    total_mo      = overhead_mo + labour_mo + supplies_mo + maint_mo + dep_mo + debt_mo
+
+    # Average monthly kettle runs
+    full_runs = float(c.get("kettles_per_day", 2)) * float(c.get("production_days_per_month", 21))
+    slow_pct  = float(c.get("slow_month_volume_pct", 60)) / 100
+    slow_mo   = float(c.get("slow_months_per_year", 3))
+    avg_runs  = ((12 - slow_mo) * full_runs + slow_mo * full_runs * slow_pct) / 12
+    if avg_runs <= 0:
+        avg_runs = 1
+
+    cost_per_run = total_mo / avg_runs
+
+    # Minor ingredients per unit by size
+    minor_per_batch = float(c.get("minor_ingredients_per_batch", 18))
+
+    matrix = {}
+    broth_types = ["Chicken", "Beef", "Turkey", "Mushroom"]
+
+    for bt in broth_types:
+        bt_key = bt.lower()
+        matrix[bt] = {}
+
+        for size_key, units in c.get("units_per_kettle", {}).items():
+            units = max(1, int(units))
+
+            # Fixed cost per unit
+            fixed_pu = cost_per_run / units
+
+            # Minor ingredients per unit
+            minor_pu = minor_per_batch / units
+
+            # Variable ingredient costs — from recipe_overrides if provided, else zero
+            bone_pu = mushroom_pu = onion_pu = carrot_pu = celery_pu = 0.0
+
+            if recipe_overrides:
+                bones_kg   = float(recipe_overrides.get("bones_kg", 0))
+                onion_kg   = float(recipe_overrides.get("onion_kg", 0))
+                carrot_kg  = float(recipe_overrides.get("carrot_kg", 0))
+                celery_kg  = float(recipe_overrides.get("celery_kg", 0))
+                mushroom_kg= float(recipe_overrides.get("mushroom_kg", 0))
+
+                # Bone price depends on broth type
+                bone_prices = c.get("bones", {})
+                bone_price  = float(bone_prices.get(bt_key, {}).get("price_per_kg", 0))
+                bone_pu     = (bones_kg * bone_price) / units
+
+                mirepoix = c.get("mirepoix", {})
+                onion_pu  = (onion_kg  * float(mirepoix.get("onion",  {}).get("price_per_kg", 0))) / units
+                carrot_pu = (carrot_kg * float(mirepoix.get("carrot", {}).get("price_per_kg", 0))) / units
+                celery_pu = (celery_kg * float(mirepoix.get("celery", {}).get("price_per_kg", 0))) / units
+
+                mush_price  = float(c.get("mushroom_price_per_kg", 0))
+                mushroom_pu = (mushroom_kg * mush_price) / units
+
+            # Packaging
+            pack = c.get("packaging", {}).get(size_key, {})
+            pack_pu = (float(pack.get("container", 0)) +
+                       float(pack.get("lid", 0)) +
+                       float(pack.get("box", 0)))
+
+            # Label
+            lbl = c.get("labels", {}).get(size_key, {})
+            label_pu = float(lbl.get("cost", 0)) + float(lbl.get("hand_apply_surcharge", 0))
+
+            ingredient_pu = bone_pu + onion_pu + carrot_pu + celery_pu + mushroom_pu
+
+            total = fixed_pu + ingredient_pu + minor_pu + pack_pu + label_pu
+
+            matrix[bt][size_key] = {
+                "total":        round(total, 4),
+                "breakdown": {
+                    "fixed":        round(fixed_pu, 4),
+                    "bones":        round(bone_pu, 4),
+                    "mirepoix":     round(onion_pu + carrot_pu + celery_pu, 4),
+                    "mushroom":     round(mushroom_pu, 4),
+                    "minor_ingredients": round(minor_pu, 4),
+                    "packaging":    round(pack_pu, 4),
+                    "label":        round(label_pu, 4),
+                },
+            }
+
+    return matrix, round(cost_per_run, 2), round(avg_runs, 1)
+
+
+def _extract_recipe_kg(recipe_data):
+    """Extract costed ingredient kg from kettle_overnight section of a recipe."""
+    result = {
+        "bones_kg": 0.0, "onion_kg": 0.0, "carrot_kg": 0.0,
+        "celery_kg": 0.0, "mushroom_kg": 0.0
+    }
+    kettle = recipe_data.get("kettle_overnight", [])
+    for item in kettle:
+        if not isinstance(item, dict):
+            continue
+        name  = (item.get("name") or "").lower()
+        unit  = (item.get("unit") or "").lower()
+        amount = float(item.get("amount") or 0)
+        if amount <= 0:
+            continue
+        # Convert to kg
+        if unit == "g":
+            amount /= 1000
+        elif unit in ("lb", "lbs"):
+            amount *= 0.4536
+        elif unit in ("per l", "per_l", "ml"):
+            amount = 0  # not a weight — skip
+
+        # Classify
+        kw = _COGS_INGREDIENT_KEYWORDS
+        if any(kw_word in name for kw_word in kw["bones"]):
+            result["bones_kg"] += amount
+        elif any(kw_word in name for kw_word in kw["onion"]):
+            result["onion_kg"] += amount
+        elif any(kw_word in name for kw_word in kw["carrot"]):
+            result["carrot_kg"] += amount
+        elif any(kw_word in name for kw_word in kw["celery"]):
+            result["celery_kg"] += amount
+        elif any(kw_word in name for kw_word in kw["mushroom"]):
+            result["mushroom_kg"] += amount
+    return result
+
+
+def _recipe_unit_cogs(recipe_data, cogs_data=None, label_supplied=False):
+    """Compute unit COGS for a single recipe.
+    Returns (unit_cogs, breakdown_dict) or (None, None) if recipe lacks required fields.
+    """
+    broth_type = (recipe_data.get("broth_type") or "").strip()
+    fmt        = _normalize_format((recipe_data.get("format") or "").strip()).upper()
+    if not broth_type or not fmt:
+        return None, None
+
+    size_key = _FORMAT_TO_COGS_SIZE.get(fmt)
+    if not size_key:
+        return None, None
+
+    if cogs_data is None:
+        cogs_data = _load_cogs()
+
+    kg = _extract_recipe_kg(recipe_data)
+    matrix, _, _ = _compute_cogs_matrix(cogs_data, recipe_overrides={**kg, "broth_type": broth_type})
+
+    bt_matrix = matrix.get(broth_type.capitalize()) or matrix.get(broth_type)
+    if not bt_matrix:
+        # Try case-insensitive
+        bt_matrix = next((v for k, v in matrix.items() if k.lower() == broth_type.lower()), None)
+    if not bt_matrix:
+        return None, None
+
+    cell = bt_matrix.get(size_key)
+    if not cell:
+        return None, None
+
+    unit_cogs = cell["total"]
+    breakdown = dict(cell["breakdown"])
+
+    if label_supplied:
+        lbl = cogs_data.get("labels", {}).get(size_key, {})
+        label_cost = float(lbl.get("cost", 0)) + float(lbl.get("hand_apply_surcharge", 0))
+        unit_cogs  = round(unit_cogs - label_cost, 4)
+        breakdown["label"] = 0.0
+        breakdown["label_supplied"] = True
+
+    return round(unit_cogs, 2), breakdown
+
+
+@app.route("/cogs")
+@login_required
+def cogs_page():
+    return render_template("cogs.html")
+
+
+@app.route("/api/cogs", methods=["GET"])
+@login_required
+def get_cogs():
+    c = _load_cogs()
+    matrix, cost_per_run, avg_runs = _compute_cogs_matrix(c)
+    return jsonify({
+        "inputs": c,
+        "matrix": matrix,
+        "cost_per_run": cost_per_run,
+        "avg_runs_per_month": avg_runs,
+        "size_labels": {
+            "475ml": "475ml SS",
+            "750ml_ss": "750ml SS",
+            "876ml": "876ml SS",
+            "750ml_fz": "750ml FZ",
+            "750ml_bb": "750ml BB",
+            "750ml_pouch": "750ml Pouch",
+        }
+    })
+
+
+@app.route("/api/cogs", methods=["PATCH"])
+@login_required
+def update_cogs():
+    data = request.get_json() or {}
+    c = _load_cogs()
+    # Merge top-level keys
+    for key, val in data.items():
+        c[key] = val
+    _save_json(COGS_PATH, c)
+    matrix, cost_per_run, avg_runs = _compute_cogs_matrix(c)
+    return jsonify({
+        "ok": True,
+        "matrix": matrix,
+        "cost_per_run": cost_per_run,
+        "avg_runs_per_month": avg_runs,
+    })
+
+
+@app.route("/api/cogs/recipe/<path:recipe_name>", methods=["GET"])
+@login_required
+def get_recipe_cogs(recipe_name):
+    """Return computed unit COGS for a specific recipe."""
+    recipes = load_recipes()
+    recipe  = recipes.get(recipe_name)
+    if not recipe:
+        return jsonify({"error": "Recipe not found"}), 404
+    label_supplied = request.args.get("label_supplied", "false").lower() == "true"
+    cogs_data = _load_cogs()
+    unit_cogs, breakdown = _recipe_unit_cogs(recipe, cogs_data, label_supplied)
+    kg = _extract_recipe_kg(recipe)
+    return jsonify({
+        "recipe":       recipe_name,
+        "broth_type":   recipe.get("broth_type", ""),
+        "format":       recipe.get("format", ""),
+        "unit_cogs":    unit_cogs,
+        "breakdown":    breakdown,
+        "ingredient_kg": kg,
+    })
+
+
+@app.route("/api/cogs/compute", methods=["POST"])
+@login_required
+def compute_cogs_scenario():
+    """Compute COGS matrix from a scenario (modified inputs) without saving.
+    Used for R&D / what-if exploration.
+    """
+    data   = request.get_json() or {}
+    inputs = data.get("inputs", _load_cogs())
+    matrix, cost_per_run, avg_runs = _compute_cogs_matrix(inputs)
+    return jsonify({
+        "matrix":              matrix,
+        "cost_per_run":        cost_per_run,
+        "avg_runs_per_month":  avg_runs,
     })
 
 

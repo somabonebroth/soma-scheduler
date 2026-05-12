@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>COGS Calculator · Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.cogs-wrap { max-width:1100px; margin:0 auto; padding:24px 16px 80px; }
+/* Section cards */
+.cogs-section { background:#fff; border:1px solid var(--border); border-radius:var(--r-lg); margin-bottom:14px; overflow:hidden; }
+.cogs-section-head { padding:13px 18px; background:#fafaf7; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; cursor:pointer; user-select:none; }
+.cogs-section-head h3 { margin:0; font-size:13px; font-weight:700; color:var(--dark); }
+.cogs-section-head .subtotal { font-size:12px; color:var(--accent); font-weight:700; }
+.cogs-section-body { padding:16px 18px; }
+/* Inputs */
+.input-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.input-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+.inp-field { display:flex; flex-direction:column; gap:4px; }
+.inp-field label { font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
+.inp-field input { padding:8px 10px; border:1.5px solid var(--border); border-radius:7px; font-size:14px; font-weight:600; outline:none; }
+.inp-field input:focus { border-color:var(--accent); }
+/* Line item tables */
+.line-table { width:100%; border-collapse:collapse; font-size:13px; }
+.line-table th { text-align:left; padding:7px 10px; border-bottom:2px solid var(--border); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-light); }
+.line-table td { padding:7px 10px; border-bottom:1px solid var(--border); }
+.line-table tr:last-child td { border-bottom:none; }
+.line-table input { width:100%; box-sizing:border-box; padding:5px 8px; border:1px solid var(--border); border-radius:5px; font-size:13px; font-weight:500; }
+.line-table input:focus { border-color:var(--accent); outline:none; }
+.line-table .del-btn { background:none; border:none; color:var(--text-light); cursor:pointer; font-size:14px; padding:2px 6px; }
+.line-table .del-btn:hover { color:#c62828; }
+.add-line-btn { font-size:12px; margin-top:8px; }
+/* Matrix */
+.matrix-wrap { background:#fff; border:1px solid var(--border); border-radius:var(--r-lg); margin-bottom:20px; overflow:hidden; }
+.matrix-head { padding:14px 18px; background:var(--dark); color:#fff; display:flex; justify-content:space-between; align-items:center; }
+.matrix-head h2 { margin:0; font-size:15px; font-weight:700; }
+.matrix-head .cost-per-run { font-size:13px; opacity:.8; }
+.matrix-table { width:100%; border-collapse:collapse; font-size:13px; }
+.matrix-table th { background:#f5f5f0; padding:10px 14px; text-align:center; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-light); border-bottom:2px solid var(--border); }
+.matrix-table th:first-child { text-align:left; }
+.matrix-table td { padding:12px 14px; text-align:center; border-bottom:1px solid var(--border); font-weight:600; color:var(--dark); cursor:pointer; }
+.matrix-table td:first-child { text-align:left; font-weight:700; color:var(--text-light); font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+.matrix-table tr:last-child td { border-bottom:none; }
+.matrix-table td:not(:first-child):hover { background:#f0f7f0; color:var(--accent); }
+/* Breakdown popover */
+.breakdown-pop { position:fixed; background:#fff; border:1px solid var(--border); border-radius:10px; padding:14px 16px; box-shadow:0 8px 32px rgba(0,0,0,.12); z-index:100; max-width:280px; display:none; }
+.breakdown-pop h4 { margin:0 0 10px; font-size:13px; font-weight:700; color:var(--dark); }
+.breakdown-row { display:flex; justify-content:space-between; font-size:12px; padding:3px 0; border-bottom:1px solid var(--border); }
+.breakdown-row:last-child { border-bottom:none; }
+.breakdown-row.total { font-weight:700; font-size:13px; color:var(--accent); }
+/* Scenario tab */
+.tab-bar { display:flex; gap:0; background:#fff; border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:18px; }
+.tab-btn { flex:1; padding:12px; font-size:13px; font-weight:600; border:none; background:none; cursor:pointer; color:var(--text-light); border-bottom:3px solid transparent; transition:all .15s; }
+.tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); background:#f9faf7; }
+.tab-pane { display:none; }
+.tab-pane.active { display:block; }
+.scenario-banner { background:#fff8e1; border:1px solid #ffe082; border-radius:10px; padding:12px 16px; font-size:13px; color:#6d4c00; margin-bottom:16px; display:flex; align-items:center; gap:10px; }
+.save-indicator { font-size:12px; color:var(--accent); display:none; }
+@media(max-width:640px) {
+  .input-grid, .input-grid-3 { grid-template-columns:1fr; }
+  .matrix-table { font-size:11px; }
+  .matrix-table th, .matrix-table td { padding:8px 8px; }
+}
+</style>
+</head>
+<body class="inv-page">
+<div class="header">
+  <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+  <div class="header-text"><h1>SOMA BONE BROTH</h1><p>COGS Calculator</p></div>
+  <div class="header-right" style="display:flex;align-items:center;gap:8px;">
+    <div class="nav-arrows">
+      <button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button>
+      <button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button>
+    </div>
+    <span class="save-indicator" id="save-ind">✓ Saved</span>
+    <a href="/" class="header-btn">⌂ Dashboard</a>
+  </div>
+</div>
+
+<div class="cogs-wrap">
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="showTab('model')">Base Model</button>
+    <button class="tab-btn" onclick="showTab('scenario')">R&amp;D Scenario</button>
+  </div>
+
+  <!-- ── BASE MODEL TAB ── -->
+  <div class="tab-pane active" id="tab-model">
+
+    <!-- Matrix always at top -->
+    <div class="matrix-wrap">
+      <div class="matrix-head">
+        <h2>COGS Matrix — Unit Cost by Broth Type × Format</h2>
+        <div class="cost-per-run" id="cost-per-run-display">Loading…</div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="matrix-table" id="matrix-table">
+          <thead><tr>
+            <th>Broth Type</th>
+            <th>475ml SS</th><th>750ml SS</th><th>876ml SS</th>
+            <th>750ml FZ</th><th>750ml BB</th><th>750ml Pouch</th>
+          </tr></thead>
+          <tbody id="matrix-body">
+            <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-light);">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="padding:10px 18px;font-size:11px;color:var(--text-light);">
+        Click any cell to see cost breakdown. Matrix uses base fixed costs only — recipe-specific ingredient costs are computed when a recipe has Broth Type set.
+      </div>
+    </div>
+
+    <!-- Production Volume -->
+    <div class="cogs-section">
+      <div class="cogs-section-head" onclick="toggleSection('prod')">
+        <h3>📊 Production Volume</h3>
+        <span id="prod-sub" class="subtotal"></span>
+        <span id="prod-caret">▼</span>
+      </div>
+      <div class="cogs-section-body" id="prod-body">
+        <div class="input-grid">
+          <div class="inp-field"><label>Kettles per Day</label><input type="number" id="kettles-per-day" min="1" step="1" oninput="debounceSave()"></div>
+          <div class="inp-field"><label>Production Days per Month</label><input type="number" id="prod-days" min="1" max="31" step="1" oninput="debounceSave()"></div>
+          <div class="inp-field"><label>Slow Months per Year</label><input type="number" id="slow-months" min="0" max="12" step="1" oninput="debounceSave()"></div>
+          <div class="inp-field"><label>Slow Month Volume %</label><input type="number" id="slow-pct" min="0" max="100" step="5" oninput="debounceSave()"></div>
+        </div>
+        <div style="margin-top:14px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Units per Kettle by Format</div>
+          <div class="input-grid-3">
+            <div class="inp-field"><label>475ml SS</label><input type="number" id="upk-475ml" min="1" oninput="debounceSave()"></div>
+            <div class="inp-field"><label>750ml SS</label><input type="number" id="upk-750ml_ss" min="1" oninput="debounceSave()"></div>
+            <div class="inp-field"><label>876ml SS</label><input type="number" id="upk-876ml" min="1" oninput="debounceSave()"></div>
+            <div class="inp-field"><label>750ml FZ</label><input type="number" id="upk-750ml_fz" min="1" oninput="debounceSave()"></div>
+            <div class="inp-field"><label>750ml BB</label><input type="number" id="upk-750ml_bb" min="1" oninput="debounceSave()"></div>
+            <div class="inp-field"><label>750ml Pouch</label><input type="number" id="upk-750ml_pouch" min="1" oninput="debounceSave()"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Overhead -->
+    <div class="cogs-section">
+      <div class="cogs-section-head" onclick="toggleSection('overhead')">
+        <h3>🏢 Overhead</h3>
+        <span id="overhead-sub" class="subtotal"></span>
+        <span id="overhead-caret">▼</span>
+      </div>
+      <div class="cogs-section-body" id="overhead-body">
+        <table class="line-table">
+          <thead><tr><th>Item</th><th>Monthly $</th><th></th></tr></thead>
+          <tbody id="overhead-rows"></tbody>
+        </table>
+        <button class="btn btn-outline add-line-btn" onclick="addLine('overhead')">+ Add Line</button>
+      </div>
+    </div>
+
+    <!-- Labour -->
+    <div class="cogs-section">
+      <div class="cogs-section-head" onclick="toggleSection('labour')">
+        <h3>👷 Labour</h3>
+        <span id="labour-sub" class="subtotal"></span>
+        <span id="labour-caret">▼</span>
+      </div>
+      <div class="cogs-section-body" id="labour-body">
+        <table class="line-table">
+          <thead><tr><th>Role</th><th>$/hr</th><th>hrs/wk</th><th>Vacation wks</th><th>Monthly $</th><th></th></tr></thead>
+          <tbody id="labour-rows"></tbody>
+        </table>
+        <button class="btn btn-outline add-line-btn" onclick="addLine('labour')">+ Add Role</button>
+      </div>
+    </div>
+
+    <!-- Supplies, Maintenance, Debt -->
+    <div class="cogs-section">
+      <div class="cogs-section-head" onclick="toggleSection('fixed')">
+        <h3>📦 Supplies, Maintenance &amp; Debt</h3>
+        <span id="fixed-sub" class="subtotal"></span>
+        <span id="fixed-caret">▼</span>
+      </div>
+      <div class="cogs-section-body" id="fixed-body">
+        <div class="input-grid">
+          <div class="inp-field"><label>Supplies / Month ($)</label><input type="number" id="supplies-mo" step="0.01" oninput="debounceSave()"></div>
+          <div class="inp-field"><label>Maintenance / Month ($)</label><input type="number" id="maint-mo" step="0.01" oninput="debounceSave()"></div>
+          <div class="inp-field"><label>Debt Repayment / Month ($)</label><input type="number" id="debt-mo" step="0.01" oninput="debounceSave()"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Equipment Depreciation -->
+    <div class="cogs-section">
+      <div class="cogs-section-head" onclick="toggleSection('equip')">
+        <h3>⚙️ Equipment Depreciation</h3>
+        <span id="equip-sub" class="subtotal"></span>
+        <span id="equip-caret">▼</span>
+      </div>
+      <div class="cogs-section-body" id="equip-body">
+        <table class="line-table">
+          <thead><tr><th>Equipment</th><th>Purchase Cost ($)</th><th>Useful Life (yrs)</th><th>$/month</th><th></th></tr></thead>
+          <tbody id="equip-rows"></tbody>
+        </table>
+        <button class="btn btn-outline add-line-btn" onclick="addLine('equip')">+ Add Equipment</button>
+      </div>
+    </div>
+
+    <!-- Ingredient Prices -->
+    <div class="cogs-section">
+      <div class="cogs-section-head" onclick="toggleSection('ingredients')">
+        <h3>🦴 Ingredient Prices</h3>
+        <span id="ingredients-sub" class="subtotal"></span>
+        <span id="ingredients-caret">▼</span>
+      </div>
+      <div class="cogs-section-body" id="ingredients-body">
+        <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px;">Bones ($/kg)</div>
+        <div class="input-grid-3" style="margin-bottom:16px;">
+          <div class="inp-field"><label>Chicken</label><input type="number" id="bones-chicken" step="0.01" min="0" oninput="debounceSave()"></div>
+          <div class="inp-field"><label>Beef</label><input type="number" id="bones-beef" step="0.01" min="0" oninput="debounceSave()"></div>
+          <div class="inp-field"><label>Turkey</label><input type="number" id="bones-turkey" step="0.01" min="0" oninput="debounceSave()"></div>
+        </div>
+        <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px;">Mirepoix ($/kg)</div>
+        <div class="input-grid-3" style="margin-bottom:16px;">
+          <div class="inp-field"><label>Onion</label><input type="number" id="mirepoix-onion" step="0.01" min="0" oninput="debounceSave()"></div>
+          <div class="inp-field"><label>Carrot</label><input type="number" id="mirepoix-carrot" step="0.01" min="0" oninput="debounceSave()"></div>
+          <div class="inp-field"><label>Celery</label><input type="number" id="mirepoix-celery" step="0.01" min="0" oninput="debounceSave()"></div>
+        </div>
+        <div class="input-grid" style="margin-bottom:0;">
+          <div class="inp-field"><label>Mushroom ($/kg)</label><input type="number" id="mushroom-price" step="0.01" min="0" oninput="debounceSave()"></div>
+          <div class="inp-field"><label>Minor Ingredients ($/batch flat)</label><input type="number" id="minor-ingredients" step="0.01" min="0" oninput="debounceSave()"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Packaging -->
+    <div class="cogs-section">
+      <div class="cogs-section-head" onclick="toggleSection('packaging')">
+        <h3>📦 Packaging &amp; Labels</h3>
+        <span id="packaging-sub" class="subtotal"></span>
+        <span id="packaging-caret">▼</span>
+      </div>
+      <div class="cogs-section-body" id="packaging-body">
+        <table class="line-table">
+          <thead><tr><th>Format</th><th>Container ($)</th><th>Lid ($)</th><th>Box ($)</th><th>Label ($)</th><th>Hand-apply ($)</th><th>Total/unit</th></tr></thead>
+          <tbody id="packaging-rows"></tbody>
+        </table>
+        <div style="font-size:11px;color:var(--text-light);margin-top:8px;">Hand-application surcharge is added to label cost for formats requiring manual labelling.</div>
+      </div>
+    </div>
+
+  </div><!-- end tab-model -->
+
+  <!-- ── SCENARIO TAB ── -->
+  <div class="tab-pane" id="tab-scenario">
+    <div class="scenario-banner">
+      <span style="font-size:20px;">🧪</span>
+      <div>
+        <strong>R&amp;D Scenario Explorer</strong> — Changes here are never saved. Adjust any input to see the impact on unit COGS across all SKUs. Reset to live model at any time.
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+      <button class="btn btn-outline" onclick="resetScenario()">↺ Reset to Live Model</button>
+      <div id="scenario-note" style="font-size:12px;color:var(--text-light);align-self:center;"></div>
+    </div>
+
+    <div class="matrix-wrap">
+      <div class="matrix-head" style="background:#0277bd;">
+        <h2>Scenario Matrix</h2>
+        <div class="cost-per-run" id="scenario-cost-per-run">—</div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="matrix-table" id="scenario-matrix-table">
+          <thead><tr>
+            <th>Broth Type</th>
+            <th>475ml SS</th><th>750ml SS</th><th>876ml SS</th>
+            <th>750ml FZ</th><th>750ml BB</th><th>750ml BB</th>
+          </tr></thead>
+          <tbody id="scenario-matrix-body">
+            <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-light);">Load the base model first.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Scenario overrides - simplified -->
+    <div class="cogs-section">
+      <div class="cogs-section-head"><h3>Adjust Any Input</h3></div>
+      <div class="cogs-section-body">
+        <div class="input-grid" style="margin-bottom:16px;">
+          <div class="inp-field"><label>Overhead Total / Month ($)</label><input type="number" id="sc-overhead" step="0.01" oninput="runScenario()"></div>
+          <div class="inp-field"><label>Labour Total / Month ($)</label><input type="number" id="sc-labour" step="0.01" oninput="runScenario()"></div>
+          <div class="inp-field"><label>Supplies / Month ($)</label><input type="number" id="sc-supplies" step="0.01" oninput="runScenario()"></div>
+          <div class="inp-field"><label>Maintenance / Month ($)</label><input type="number" id="sc-maint" step="0.01" oninput="runScenario()"></div>
+          <div class="inp-field"><label>Debt Repayment / Month ($)</label><input type="number" id="sc-debt" step="0.01" oninput="runScenario()"></div>
+          <div class="inp-field"><label>Kettles / Day</label><input type="number" id="sc-kettles" step="1" oninput="runScenario()"></div>
+        </div>
+        <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Bone Prices ($/kg)</div>
+        <div class="input-grid-3" style="margin-bottom:16px;">
+          <div class="inp-field"><label>Chicken</label><input type="number" id="sc-bones-chicken" step="0.01" oninput="runScenario()"></div>
+          <div class="inp-field"><label>Beef</label><input type="number" id="sc-bones-beef" step="0.01" oninput="runScenario()"></div>
+          <div class="inp-field"><label>Turkey</label><input type="number" id="sc-bones-turkey" step="0.01" oninput="runScenario()"></div>
+        </div>
+        <div class="input-grid">
+          <div class="inp-field"><label>Mushroom ($/kg)</label><input type="number" id="sc-mushroom" step="0.01" oninput="runScenario()"></div>
+          <div class="inp-field"><label>Minor Ingredients ($/batch)</label><input type="number" id="sc-minor" step="0.01" oninput="runScenario()"></div>
+        </div>
+      </div>
+    </div>
+  </div><!-- end tab-scenario -->
+</div>
+
+<!-- Breakdown popover -->
+<div class="breakdown-pop" id="breakdown-pop">
+  <h4 id="bp-title">—</h4>
+  <div id="bp-rows"></div>
+</div>
+
+<script>
+var _inputs = null;
+var _matrix = null;
+var _saveTimer = null;
+var _collapsed = {};
+var SIZE_KEYS = ['475ml','750ml_ss','876ml','750ml_fz','750ml_bb','750ml_pouch'];
+var SIZE_LABELS = {'475ml':'475ml SS','750ml_ss':'750ml SS','876ml':'876ml SS','750ml_fz':'750ml FZ','750ml_bb':'750ml BB','750ml_pouch':'750ml Pouch'};
+var BROTH_TYPES = ['Chicken','Beef','Turkey','Mushroom'];
+
+function G(id){ return document.getElementById(id); }
+function fmt$(n){ return '$'+parseFloat(n||0).toFixed(2); }
+function fmtN(n){ return parseFloat(n||0).toFixed(2); }
+
+// ── Load ──────────────────────────────────────────────────────────────────────
+async function load() {
+  var res = await fetch('/api/cogs');
+  var d   = await res.json();
+  _inputs = d.inputs;
+  _matrix = d.matrix;
+  populateInputs(d);
+  renderMatrix(d.matrix, d.cost_per_run, d.avg_runs_per_month, 'matrix-body', 'cost-per-run-display');
+}
+
+function populateInputs(d) {
+  var c = d.inputs;
+  // Production
+  G('kettles-per-day').value = c.kettles_per_day;
+  G('prod-days').value       = c.production_days_per_month;
+  G('slow-months').value     = c.slow_months_per_year;
+  G('slow-pct').value        = c.slow_month_volume_pct;
+  var upk = c.units_per_kettle || {};
+  SIZE_KEYS.forEach(function(sk){ var el=G('upk-'+sk); if(el) el.value=upk[sk]||''; });
+  // Overhead
+  renderLineTable('overhead-rows', c.overhead||[], renderOverheadRow);
+  updateSubtotal('overhead', (c.overhead||[]).reduce(function(a,x){return a+parseFloat(x.monthly||0);},0), '/mo');
+  // Labour
+  renderLineTable('labour-rows', c.labour||[], renderLabourRow);
+  var labourMo = computeLabourMonthly(c.labour||[]);
+  updateSubtotal('labour', labourMo, '/mo');
+  // Fixed
+  G('supplies-mo').value = c.supplies_monthly;
+  G('maint-mo').value    = c.maintenance_monthly;
+  G('debt-mo').value     = c.debt_repayment_monthly;
+  var fixedTotal = parseFloat(c.supplies_monthly||0) + parseFloat(c.maintenance_monthly||0) + parseFloat(c.debt_repayment_monthly||0);
+  updateSubtotal('fixed', fixedTotal, '/mo');
+  // Equipment
+  renderLineTable('equip-rows', c.equipment||[], renderEquipRow);
+  var depMo = (c.equipment||[]).reduce(function(a,e){return a+parseFloat(e.cost||0)/(Math.max(1,parseFloat(e.life_years||1))*12);},0);
+  updateSubtotal('equip', depMo, '/mo depreciation');
+  // Ingredients
+  var bones = c.bones||{};
+  G('bones-chicken').value  = (bones.chicken||{}).price_per_kg||'';
+  G('bones-beef').value     = (bones.beef||{}).price_per_kg||'';
+  G('bones-turkey').value   = (bones.turkey||{}).price_per_kg||'';
+  var mir = c.mirepoix||{};
+  G('mirepoix-onion').value  = (mir.onion||{}).price_per_kg||'';
+  G('mirepoix-carrot').value = (mir.carrot||{}).price_per_kg||'';
+  G('mirepoix-celery').value = (mir.celery||{}).price_per_kg||'';
+  G('mushroom-price').value  = c.mushroom_price_per_kg||'';
+  G('minor-ingredients').value = c.minor_ingredients_per_batch||'';
+  // Packaging
+  renderPackagingRows(c);
+  // Scenario defaults
+  resetScenario();
+}
+
+function computeLabourMonthly(labour) {
+  return labour.reduce(function(a,r){
+    var weeks = Math.max(0, 52 - parseFloat(r.vacation_weeks||0));
+    return a + parseFloat(r.hourly||0) * parseFloat(r.hours_per_week||0) * weeks / 12;
+  }, 0);
+}
+
+// ── Matrix rendering ──────────────────────────────────────────────────────────
+function renderMatrix(matrix, costPerRun, avgRuns, tbodyId, headerId) {
+  if(headerId) G(headerId).textContent = fmt$(costPerRun)+'/kettle run · '+avgRuns+' avg runs/month';
+  var tbody = G(tbodyId);
+  if(!matrix){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text-light);padding:20px;">No data</td></tr>'; return; }
+  tbody.innerHTML = BROTH_TYPES.map(function(bt){
+    var row = matrix[bt] || {};
+    return '<tr>'
+      +'<td>'+bt+'</td>'
+      + SIZE_KEYS.map(function(sk){
+          var cell = row[sk];
+          var val  = cell ? fmt$(cell.total) : '—';
+          return '<td onclick="showBreakdown(event,\''+bt+'\',\''+sk+'\')">'
+            +'<span>'+val+'</span>'
+            +'</td>';
+        }).join('')
+      +'</tr>';
+  }).join('');
+}
+
+function showBreakdown(ev, bt, sk) {
+  var pop = G('breakdown-pop');
+  var matrix = _matrix;
+  if(!matrix || !matrix[bt] || !matrix[bt][sk]) return;
+  var cell = matrix[bt][sk];
+  var b    = cell.breakdown;
+  G('bp-title').textContent = bt + ' × ' + SIZE_LABELS[sk];
+  var rows = [
+    ['Fixed costs',      b.fixed],
+    ['Bones',            b.bones],
+    ['Mirepoix',         b.mirepoix],
+    ['Mushroom',         b.mushroom],
+    ['Minor ingredients',b.minor_ingredients],
+    ['Packaging',        b.packaging],
+    ['Label',            b.label],
+  ];
+  G('bp-rows').innerHTML = rows.map(function(r){
+    return '<div class="breakdown-row"><span>'+r[0]+'</span><span>'+fmt$(r[1])+'</span></div>';
+  }).join('')
+  + '<div class="breakdown-row total"><span>Unit COGS (base)</span><span>'+fmt$(cell.total)+'</span></div>'
+  + '<div style="font-size:10px;color:var(--text-light);margin-top:6px;">+ Recipe ingredient costs added when Broth Type is set on recipe card.</div>';
+  // Position
+  pop.style.display = 'block';
+  var rect = ev.target.getBoundingClientRect();
+  var left = Math.min(rect.left, window.innerWidth - 300);
+  pop.style.left = left + 'px';
+  pop.style.top  = (rect.bottom + 8 + window.scrollY) + 'px';
+}
+document.addEventListener('click', function(ev){
+  if(!G('breakdown-pop').contains(ev.target) && !ev.target.closest('.matrix-table'))
+    G('breakdown-pop').style.display = 'none';
+});
+
+// ── Line table renderers ───────────────────────────────────────────────────────
+function renderLineTable(tbodyId, items, rowFn) {
+  G(tbodyId).innerHTML = items.map(function(item,i){ return rowFn(item,i); }).join('');
+}
+
+function renderOverheadRow(item, i) {
+  return '<tr>'
+    +'<td><input value="'+esc(item.name||'')+'" placeholder="Item name" oninput="updateLineItem(\'overhead\','+i+',\'name\',this.value)"></td>'
+    +'<td><input type="number" step="0.01" value="'+(item.monthly||'')+'" oninput="updateLineItem(\'overhead\','+i+',\'monthly\',this.value)"></td>'
+    +'<td><button class="del-btn" onclick="deleteLine(\'overhead\','+i+')">✕</button></td>'
+    +'</tr>';
+}
+
+function renderLabourRow(item, i) {
+  var mo = 0;
+  if(item.hourly && item.hours_per_week) {
+    var wks = Math.max(0, 52 - parseFloat(item.vacation_weeks||0));
+    mo = parseFloat(item.hourly) * parseFloat(item.hours_per_week) * wks / 12;
+  }
+  return '<tr>'
+    +'<td><input value="'+esc(item.role||'')+'" placeholder="Role" oninput="updateLineItem(\'labour\','+i+',\'role\',this.value)"></td>'
+    +'<td><input type="number" step="0.01" value="'+(item.hourly||'')+'" oninput="updateLineItem(\'labour\','+i+',\'hourly\',this.value)"></td>'
+    +'<td><input type="number" step="1" value="'+(item.hours_per_week||'')+'" oninput="updateLineItem(\'labour\','+i+',\'hours_per_week\',this.value)"></td>'
+    +'<td><input type="number" step="1" value="'+(item.vacation_weeks||'')+'" oninput="updateLineItem(\'labour\','+i+',\'vacation_weeks\',this.value)"></td>'
+    +'<td style="font-weight:600;">'+fmt$(mo)+'/mo</td>'
+    +'<td><button class="del-btn" onclick="deleteLine(\'labour\','+i+')">✕</button></td>'
+    +'</tr>';
+}
+
+function renderEquipRow(item, i) {
+  var mo = item.cost && item.life_years ? parseFloat(item.cost)/(parseFloat(item.life_years)*12) : 0;
+  return '<tr>'
+    +'<td><input value="'+esc(item.name||'')+'" placeholder="Equipment name" oninput="updateLineItem(\'equip\','+i+',\'name\',this.value)"></td>'
+    +'<td><input type="number" step="100" value="'+(item.cost||'')+'" oninput="updateLineItem(\'equip\','+i+',\'cost\',this.value)"></td>'
+    +'<td><input type="number" step="1" value="'+(item.life_years||'')+'" oninput="updateLineItem(\'equip\','+i+',\'life_years\',this.value)"></td>'
+    +'<td style="font-weight:600;">'+fmt$(mo)+'/mo</td>'
+    +'<td><button class="del-btn" onclick="deleteLine(\'equip\','+i+')">✕</button></td>'
+    +'</tr>';
+}
+
+function renderPackagingRows(c) {
+  var pkg = c.packaging || {};
+  var lbl = c.labels || {};
+  G('packaging-rows').innerHTML = SIZE_KEYS.map(function(sk){
+    var p = pkg[sk]||{};
+    var l = lbl[sk]||{};
+    var total = parseFloat(p.container||0)+parseFloat(p.lid||0)+parseFloat(p.box||0)+parseFloat(l.cost||0)+parseFloat(l.hand_apply_surcharge||0);
+    return '<tr>'
+      +'<td style="font-weight:600;">'+SIZE_LABELS[sk]+'</td>'
+      +'<td><input type="number" step="0.01" value="'+(p.container||'')+'" oninput="updatePackaging(\''+sk+'\',\'container\',this.value)"></td>'
+      +'<td><input type="number" step="0.01" value="'+(p.lid||'')+'" oninput="updatePackaging(\''+sk+'\',\'lid\',this.value)"></td>'
+      +'<td><input type="number" step="0.01" value="'+(p.box||'')+'" oninput="updatePackaging(\''+sk+'\',\'box\',this.value)"></td>'
+      +'<td><input type="number" step="0.01" value="'+(l.cost||'')+'" oninput="updateLabel(\''+sk+'\',\'cost\',this.value)"></td>'
+      +'<td><input type="number" step="0.01" value="'+(l.hand_apply_surcharge||'')+'" oninput="updateLabel(\''+sk+'\',\'hand_apply_surcharge\',this.value)"></td>'
+      +'<td style="font-weight:600;">'+fmt$(total)+'</td>'
+      +'</tr>';
+  }).join('');
+}
+
+// ── Data mutation helpers ──────────────────────────────────────────────────────
+function updateLineItem(section, idx, field, val) {
+  var arr = section==='equip' ? _inputs.equipment : (section==='labour' ? _inputs.labour : _inputs.overhead);
+  if(arr && arr[idx]) arr[idx][field] = isNaN(parseFloat(val))?val:parseFloat(val);
+  debounceSave();
+}
+
+function deleteLine(section, idx) {
+  var arr = section==='equip' ? _inputs.equipment : (section==='labour' ? _inputs.labour : _inputs.overhead);
+  if(arr) arr.splice(idx, 1);
+  var renderFn = section==='overhead' ? renderOverheadRow : (section==='labour' ? renderLabourRow : renderEquipRow);
+  var tbodyId  = section==='overhead' ? 'overhead-rows' : (section==='labour' ? 'labour-rows' : 'equip-rows');
+  renderLineTable(tbodyId, arr, renderFn);
+  debounceSave();
+}
+
+function addLine(section) {
+  if(section==='overhead'){ _inputs.overhead.push({name:'',monthly:0}); renderLineTable('overhead-rows',_inputs.overhead,renderOverheadRow); }
+  else if(section==='labour'){ _inputs.labour.push({role:'',hourly:0,hours_per_week:0,vacation_weeks:0}); renderLineTable('labour-rows',_inputs.labour,renderLabourRow); }
+  else if(section==='equip'){ _inputs.equipment.push({name:'',cost:0,life_years:10}); renderLineTable('equip-rows',_inputs.equipment,renderEquipRow); }
+  debounceSave();
+}
+
+function updatePackaging(sk, field, val) {
+  if(!_inputs.packaging[sk]) _inputs.packaging[sk]={};
+  _inputs.packaging[sk][field] = parseFloat(val)||0;
+  debounceSave();
+}
+function updateLabel(sk, field, val) {
+  if(!_inputs.labels[sk]) _inputs.labels[sk]={};
+  _inputs.labels[sk][field] = parseFloat(val)||0;
+  debounceSave();
+}
+
+// ── Collect all inputs into _inputs object ────────────────────────────────────
+function collectInputs() {
+  _inputs.kettles_per_day              = parseFloat(G('kettles-per-day').value)||0;
+  _inputs.production_days_per_month    = parseFloat(G('prod-days').value)||0;
+  _inputs.slow_months_per_year         = parseFloat(G('slow-months').value)||0;
+  _inputs.slow_month_volume_pct        = parseFloat(G('slow-pct').value)||0;
+  SIZE_KEYS.forEach(function(sk){ _inputs.units_per_kettle[sk]=parseInt(G('upk-'+sk).value)||0; });
+  _inputs.supplies_monthly     = parseFloat(G('supplies-mo').value)||0;
+  _inputs.maintenance_monthly  = parseFloat(G('maint-mo').value)||0;
+  _inputs.debt_repayment_monthly = parseFloat(G('debt-mo').value)||0;
+  _inputs.bones.chicken.price_per_kg  = parseFloat(G('bones-chicken').value)||0;
+  _inputs.bones.beef.price_per_kg     = parseFloat(G('bones-beef').value)||0;
+  _inputs.bones.turkey.price_per_kg   = parseFloat(G('bones-turkey').value)||0;
+  _inputs.mirepoix.onion.price_per_kg  = parseFloat(G('mirepoix-onion').value)||0;
+  _inputs.mirepoix.carrot.price_per_kg = parseFloat(G('mirepoix-carrot').value)||0;
+  _inputs.mirepoix.celery.price_per_kg = parseFloat(G('mirepoix-celery').value)||0;
+  _inputs.mushroom_price_per_kg        = parseFloat(G('mushroom-price').value)||0;
+  _inputs.minor_ingredients_per_batch  = parseFloat(G('minor-ingredients').value)||0;
+}
+
+function updateSubtotal(id, val, suffix) {
+  var el = G(id+'-sub');
+  if(el) el.textContent = fmt$(val)+(suffix||'');
+}
+
+// ── Save (debounced) ──────────────────────────────────────────────────────────
+function debounceSave() {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(save, 900);
+}
+
+async function save() {
+  collectInputs();
+  var res = await fetch('/api/cogs', {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(_inputs)});
+  var d   = await res.json();
+  _matrix = d.matrix;
+  renderMatrix(d.matrix, d.cost_per_run, d.avg_runs_per_month, 'matrix-body', 'cost-per-run-display');
+  // Update subtotals
+  var ohTotal = (_inputs.overhead||[]).reduce(function(a,x){return a+parseFloat(x.monthly||0);},0);
+  updateSubtotal('overhead', ohTotal, '/mo');
+  updateSubtotal('labour', computeLabourMonthly(_inputs.labour||[]), '/mo');
+  var fixedTotal = (_inputs.supplies_monthly||0)+(_inputs.maintenance_monthly||0)+(_inputs.debt_repayment_monthly||0);
+  updateSubtotal('fixed', fixedTotal, '/mo');
+  var depMo = (_inputs.equipment||[]).reduce(function(a,e){return a+parseFloat(e.cost||0)/(Math.max(1,parseFloat(e.life_years||1))*12);},0);
+  updateSubtotal('equip', depMo, '/mo depreciation');
+  // Flash save indicator
+  var ind = G('save-ind');
+  ind.style.display='inline'; setTimeout(function(){ind.style.display='none';},2000);
+}
+
+// ── Section collapse ──────────────────────────────────────────────────────────
+function toggleSection(id) {
+  var body   = G(id+'-body');
+  var caret  = G(id+'-caret');
+  _collapsed[id] = !_collapsed[id];
+  body.style.display = _collapsed[id] ? 'none' : '';
+  if(caret) caret.textContent = _collapsed[id] ? '▶' : '▼';
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function showTab(id) {
+  document.querySelectorAll('.tab-btn').forEach(function(b,i){b.classList.toggle('active',['model','scenario'][i]===id);});
+  document.querySelectorAll('.tab-pane').forEach(function(p){p.classList.remove('active');});
+  G('tab-'+id).classList.add('active');
+  if(id==='scenario') resetScenario();
+}
+
+// ── Scenario ──────────────────────────────────────────────────────────────────
+function resetScenario() {
+  if(!_inputs) return;
+  var ohMo = (_inputs.overhead||[]).reduce(function(a,x){return a+parseFloat(x.monthly||0);},0);
+  G('sc-overhead').value  = ohMo.toFixed(2);
+  G('sc-labour').value    = computeLabourMonthly(_inputs.labour||[]).toFixed(2);
+  G('sc-supplies').value  = _inputs.supplies_monthly||'';
+  G('sc-maint').value     = _inputs.maintenance_monthly||'';
+  G('sc-debt').value      = _inputs.debt_repayment_monthly||'';
+  G('sc-kettles').value   = _inputs.kettles_per_day||'';
+  G('sc-bones-chicken').value = (_inputs.bones&&_inputs.bones.chicken?_inputs.bones.chicken.price_per_kg:'')||'';
+  G('sc-bones-beef').value    = (_inputs.bones&&_inputs.bones.beef?_inputs.bones.beef.price_per_kg:'')||'';
+  G('sc-bones-turkey').value  = (_inputs.bones&&_inputs.bones.turkey?_inputs.bones.turkey.price_per_kg:'')||'';
+  G('sc-mushroom').value  = _inputs.mushroom_price_per_kg||'';
+  G('sc-minor').value     = _inputs.minor_ingredients_per_batch||'';
+  G('scenario-note').textContent = '';
+  runScenario();
+}
+
+async function runScenario() {
+  if(!_inputs) return;
+  // Build a modified copy of inputs
+  var sc = JSON.parse(JSON.stringify(_inputs));
+  var ohMo = parseFloat(G('sc-overhead').value)||0;
+  var lbMo = parseFloat(G('sc-labour').value)||0;
+  // Replace overhead with a single line item for simplicity
+  sc.overhead = [{name:'Total Overhead', monthly: ohMo}];
+  // Replace labour similarly
+  // labour_mo = hourly * hours_per_week * (52-vacation)/12 per person
+  // We replace with a single synthetic role that produces the right monthly
+  sc.labour = [{role:'Total Labour', hourly: lbMo*12/((52-0)*40), hours_per_week:40, vacation_weeks:0}];
+  sc.supplies_monthly       = parseFloat(G('sc-supplies').value)||0;
+  sc.maintenance_monthly    = parseFloat(G('sc-maint').value)||0;
+  sc.debt_repayment_monthly = parseFloat(G('sc-debt').value)||0;
+  sc.kettles_per_day        = parseFloat(G('sc-kettles').value)||_inputs.kettles_per_day;
+  if(sc.bones) {
+    sc.bones.chicken = {price_per_kg: parseFloat(G('sc-bones-chicken').value)||0};
+    sc.bones.beef    = {price_per_kg: parseFloat(G('sc-bones-beef').value)||0};
+    sc.bones.turkey  = {price_per_kg: parseFloat(G('sc-bones-turkey').value)||0};
+  }
+  sc.mushroom_price_per_kg       = parseFloat(G('sc-mushroom').value)||0;
+  sc.minor_ingredients_per_batch = parseFloat(G('sc-minor').value)||0;
+  // Send to compute endpoint
+  try {
+    var res = await fetch('/api/cogs/compute', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({inputs:sc})});
+    var d = await res.json();
+    renderMatrix(d.matrix, d.cost_per_run, d.avg_runs_per_month, 'scenario-matrix-body', 'scenario-cost-per-run');
+    G('scenario-note').textContent = 'Last updated: '+new Date().toLocaleTimeString();
+  } catch(e) {}
+}
+
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// Nav arrows
+(function(){
+  var back=G('nav-back'), fwd=G('nav-fwd');
+  if(back){back.disabled=window.history.length<=1; back.onclick=function(){window.history.back();};}
+  if(fwd) fwd.onclick=function(){window.history.forward();};
+})();
+
+load();
+</script>
+</body>
+</html>
