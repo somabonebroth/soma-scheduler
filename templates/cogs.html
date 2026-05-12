@@ -121,7 +121,7 @@
           <div class="inp-field"><label>Kettles per Day</label><input type="number" id="kettles-per-day" min="1" step="1" oninput="debounceSave()"></div>
           <div class="inp-field"><label>Production Days per Month</label><input type="number" id="prod-days" min="1" max="31" step="1" oninput="debounceSave()"></div>
           <div class="inp-field"><label>Slow Months per Year</label><input type="number" id="slow-months" min="0" max="12" step="1" oninput="debounceSave()"></div>
-          <div class="inp-field"><label>Slow Month Volume %</label><input type="number" id="slow-pct" min="0" max="100" step="5" oninput="debounceSave()"></div>
+          <div class="inp-field"><label>Slow Month Kettles/Day</label><input type="number" id="slow-kettles" min="0.5" max="10" step="0.5" oninput="debounceSave()"></div>
         </div>
         <div style="margin-top:14px;">
           <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Units per Kettle by Format</div>
@@ -354,7 +354,7 @@ function populateInputs(d) {
   G('kettles-per-day').value = c.kettles_per_day;
   G('prod-days').value       = c.production_days_per_month;
   G('slow-months').value     = c.slow_months_per_year;
-  G('slow-pct').value        = c.slow_month_volume_pct;
+  G('slow-kettles').value    = c.slow_kettles_per_day;
   var upk = c.units_per_kettle || {};
   SIZE_KEYS.forEach(function(sk){ var el=G('upk-'+sk); if(el) el.value=upk[sk]||''; });
   // Overhead — fixed + variable sections
@@ -476,26 +476,32 @@ function renderOverheadRow(item, i) {
 
 function renderLabourRow(item, i) {
   var mo = 0;
+  var role = esc(item.role||'');
   if (item.type === 'salary') {
     mo = parseFloat(item.annual_salary||0) / 12;
+    var sal = item.annual_salary||'';
     return '<tr>'
-      +'<td><input value="'+esc(item.role||'')+'" placeholder="Role" oninput="updateLabourItem('+i+','role',this.value)"></td>'
-      +'<td colspan="2" style="font-size:11px;color:var(--text-light);">Salary $<input type="number" step="1000" value="'+(item.annual_salary||'')+'" oninput="updateLabourItem('+i+','annual_salary',this.value)" style="width:90px;">/yr</td>'
+      +'<td><input value="'+role+'" placeholder="Role" oninput="updateLabourItem('+i+',&quot;role&quot;,this.value)"></td>'
+      +'<td colspan="2" style="font-size:11px;color:var(--text-light);">Salary $<input type="number" step="1000" value="'+sal+'" oninput="updateLabourItem('+i+',&quot;annual_salary&quot;,this.value)" style="width:90px;">/yr</td>'
       +'<td style="font-size:11px;color:var(--text-light);">salaried</td>'
       +'<td style="font-weight:600;">'+fmt$(mo)+'/mo</td>'
-      +'<td><button class="del-btn" onclick="deleteLabourLine('+i+')">✕</button></td>'
+      +'<td><button class="del-btn" onclick="deleteLabourLine('+i+')">&#x2715;</button></td>'
       +'</tr>';
   }
   var loaded = parseFloat(item.base_hourly||0) * (1 + parseFloat(item.uplift_pct||8)/100);
   var weekly = loaded * (parseFloat(item.weekday_hours||0) + parseFloat(item.weekend_hours||0));
   mo = weekly * 52 / 12;
+  var bh = item.base_hourly||'';
+  var up = item.uplift_pct||8;
+  var wkd = item.weekday_hours||'';
+  var wkn = item.weekend_hours||0;
   return '<tr>'
-    +'<td><input value="'+esc(item.role||'')+'" placeholder="Role" oninput="updateLabourItem('+i+','role',this.value)"></td>'
-    +'<td>$<input type="number" step="0.5" value="'+(item.base_hourly||'')+'" oninput="updateLabourItem('+i+','base_hourly',this.value)" style="width:55px;">/hr +<input type="number" step="1" value="'+(item.uplift_pct||8)+'" oninput="updateLabourItem('+i+','uplift_pct',this.value)" style="width:35px;">%</td>'
-    +'<td>Wkday:<input type="number" step="1" value="'+(item.weekday_hours||'')+'" oninput="updateLabourItem('+i+','weekday_hours',this.value)" style="width:40px;"> Wknd:<input type="number" step="1" value="'+(item.weekend_hours||0)+'" oninput="updateLabourItem('+i+','weekend_hours',this.value)" style="width:40px;"></td>'
+    +'<td><input value="'+role+'" placeholder="Role" oninput="updateLabourItem('+i+',&quot;role&quot;,this.value)"></td>'
+    +'<td>$<input type="number" step="0.5" value="'+bh+'" oninput="updateLabourItem('+i+',&quot;base_hourly&quot;,this.value)" style="width:55px;">/hr +<input type="number" step="1" value="'+up+'" oninput="updateLabourItem('+i+',&quot;uplift_pct&quot;,this.value)" style="width:35px;">%</td>'
+    +'<td>Wkday:<input type="number" step="1" value="'+wkd+'" oninput="updateLabourItem('+i+',&quot;weekday_hours&quot;,this.value)" style="width:40px;"> Wknd:<input type="number" step="1" value="'+wkn+'" oninput="updateLabourItem('+i+',&quot;weekend_hours&quot;,this.value)" style="width:40px;"></td>'
     +'<td style="font-size:11px;color:var(--text-light);">loaded</td>'
     +'<td style="font-weight:600;">'+fmt$(mo)+'/mo</td>'
-    +'<td><button class="del-btn" onclick="deleteLabourLine('+i+')">✕</button></td>'
+    +'<td><button class="del-btn" onclick="deleteLabourLine('+i+')">&#x2715;</button></td>'
     +'</tr>';
 }
 
@@ -564,7 +570,20 @@ function addLine(section) {
 
 function updateLineItem(section, idx, field, val) {
   var arr = section==='equip' ? _inputs.equipment : (section==='labour' ? _inputs.labour : (section==='overhead_fixed' ? (_inputs.overhead_fixed||_inputs.overhead||[]) : (_inputs.overhead_variable||[])));
-  if(arr && arr[idx]) arr[idx][field] = isNaN(parseFloat(val))?val:parseFloat(val);
+  if(arr && arr[idx]) arr[idx][field] = isNaN(parseFloat(val)) ? val : parseFloat(val);
+  debounceSave();
+}
+
+function updateLabourItem(idx, field, val) {
+  if(_inputs.labour && _inputs.labour[idx]) {
+    _inputs.labour[idx][field] = isNaN(parseFloat(val)) ? val : parseFloat(val);
+  }
+  debounceSave();
+}
+
+function deleteLabourLine(idx) {
+  _inputs.labour.splice(idx, 1);
+  renderLineTable('labour-rows', _inputs.labour, renderLabourRow);
   debounceSave();
 }
 
@@ -596,7 +615,7 @@ function collectInputs() {
   _inputs.kettles_per_day              = parseFloat(G('kettles-per-day').value)||0;
   _inputs.production_days_per_month    = parseFloat(G('prod-days').value)||0;
   _inputs.slow_months_per_year         = parseFloat(G('slow-months').value)||0;
-  _inputs.slow_month_volume_pct        = parseFloat(G('slow-pct').value)||0;
+  _inputs.slow_kettles_per_day         = parseFloat(G('slow-kettles').value)||1.5;
   SIZE_KEYS.forEach(function(sk){ _inputs.units_per_kettle[sk]=parseInt(G('upk-'+sk).value)||0; });
   _inputs.maintenance_monthly    = parseFloat(G('maint-mo').value)||0;
   _inputs.debt_repayment_monthly = parseFloat(G('debt-mo').value)||0;
@@ -668,6 +687,7 @@ function resetScenario() {
   G('sc-maint').value     = _inputs.maintenance_monthly||'';
   G('sc-debt').value      = _inputs.debt_repayment_monthly||'';
   G('sc-kettles').value   = _inputs.kettles_per_day||'';
+  G('sc-slow-kettles') && (G('sc-slow-kettles').value = _inputs.slow_kettles_per_day||'');
   G('sc-bones-chicken').value = (_inputs.bones&&_inputs.bones.chicken?_inputs.bones.chicken.price_per_kg:'')||'';
   G('sc-bones-beef').value    = (_inputs.bones&&_inputs.bones.beef?_inputs.bones.beef.price_per_kg:'')||'';
   G('sc-bones-turkey').value  = (_inputs.bones&&_inputs.bones.turkey?_inputs.bones.turkey.price_per_kg:'')||'';
