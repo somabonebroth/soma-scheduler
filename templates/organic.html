@@ -39,16 +39,11 @@ body.inv-page .card h2 .count-badge {
 body.inv-page .card > p { font-size: 12px; line-height: 1.5; color: var(--text-light); margin-bottom: 14px; }
 
 /* Tabs */
-.tab-bar { display: flex; gap: 0; margin-bottom: 24px; overflow-x: auto; }
-.tab-btn {
-    padding: 12px 20px; border: 1px solid var(--border);
-    font-size: 13px; font-weight: 600; cursor: pointer;
-    background: var(--card-bg); color: var(--text); white-space: nowrap;
-    min-height: 44px;
-}
+
+
 .tab-btn:first-child { border-radius: 6px 0 0 6px; }
 .tab-btn:last-child { border-radius: 0 6px 6px 0; }
-.tab-btn.active { background: #2e7d32; color: #fff; border-color: #2e7d32; }
+
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
@@ -126,7 +121,7 @@ body.inv-page .btn-outline {
     font-weight: 500;
 }
 body.inv-page .btn-outline:hover {
-    background: #f5f5f0;
+    background: var(--bg);
     border-color: #c0c0b8;
 }
 
@@ -144,17 +139,9 @@ body.inv-page .filter-bar {
     display: flex; gap: 8px; flex-wrap: wrap;
     margin: 0 0 16px 0;
 }
-body.inv-page .filter-btn {
-    padding: 8px 16px; min-height: 38px;
-    border: 1px solid var(--border); border-radius: 20px;
-    background: #fff; color: var(--text-light);
-    font-size: 12px; font-weight: 600;
-    cursor: pointer; transition: all 0.15s;
-}
+body.inv-page 
 body.inv-page .filter-btn:hover { background: var(--row-alt); color: var(--text); }
-body.inv-page .filter-btn.active {
-    background: var(--dark); color: #fff; border-color: var(--dark);
-}
+body.inv-page 
 
 /* Tables — more vertical room per row */
 /* Tables — more vertical room per row */
@@ -207,7 +194,7 @@ body.inv-page .btn-danger {
 body.inv-page .btn-danger:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
 
 /* Badges */
-.organic-badge { background: #e8f5e9; color: #2e7d32; font-size: 10px; padding: 3px 9px; border-radius: 10px; font-weight: 700; }
+.organic-badge { background: var(--action-green-bg); color: var(--action-green); font-size: 10px; padding: 3px 9px; border-radius: 10px; font-weight: 700; }
 body.inv-page .baseline-badge {
     display: inline-block;
     font-size: 10px; font-weight: 700;
@@ -263,8 +250,8 @@ body.inv-page .cert-badge {
     border-left: 3px solid var(--text-light);
 }
 .run-week-header.current {
-    background: #e8f5e9;
-    border-left-color: #2e7d32;
+    background: var(--action-green-bg);
+    border-left-color: var(--action-green);
     color: #1b5e20;
 }
 .run-week-header .run-week-meta {
@@ -274,7 +261,7 @@ body.inv-page .cert-badge {
     letter-spacing: 0.4px;
 }
 .run-week-header.current .run-week-meta {
-    color: #2e7d32;
+    color: var(--action-green);
 }
 .run-completed-toggle {
     display: block;
@@ -567,8 +554,8 @@ body.inv-page .modal-actions {
     body.inv-page .card > p { font-size: 12px; margin-bottom: 10px; }
 
     /* Tab bar — compress tabs on mobile */
-    .tab-bar { margin-bottom: 16px; }
-    .tab-btn { padding: 10px 13px; font-size: 12px; }
+    
+    
 
     /* Forms */
     body.inv-page .form-row { gap: 10px; grid-template-columns: 1fr; }
@@ -691,7 +678,7 @@ body.inv-page .modal-actions {
     }
 
     /* Tab bar — 6 tabs, shrink further on mobile */
-    .tab-btn { padding: 10px 10px; font-size: 11px; white-space: nowrap; }
+    
 
     /* FG action button row — stack on very narrow */
     #tab-fg .card > div:first-child {
@@ -734,7 +721,7 @@ body.inv-page .modal-actions {
 
 /* Extra small phones (< 390px) */
 @media (max-width: 390px) {
-    .tab-btn { padding: 8px 8px; font-size: 10px; min-height: 38px; }
+    
     body.inv-page .card { padding: 12px; }
     body.inv-page .card h2 { font-size: 14px; }
     /* Hide label text on smallest tabs, keep tappable */
@@ -744,7 +731,7 @@ body.inv-page .modal-actions {
         position: absolute; left: 50%; transform: translateX(-50%);
         font-size: 8px; top: 50%; margin-top: -4px;
     }
-    .tab-btn.active { color: #fff; }
+    
 }
 </style>
 </head>
@@ -4622,7 +4609,7 @@ async function loadFinishedGoods(){
             html+='<div class="fg-info" style="flex:1;min-width:160px;">';
             html+='<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;"><strong>'+displaySafe+'</strong>'+certBadge(s.certification)+baselineBadge+stockBadge+parWarningBadge+'</div>';
             html+='<div style="font-size:11px;color:var(--text-light);margin-top:3px;">'+lotNote+(s.total_produced?' • '+s.total_produced+' produced lifetime':'')+'</div>';
-            html+='<div style="font-size:10px;color:#b8b8b0;font-family:ui-monospace,monospace;margin-top:2px;user-select:all;" title="Soma SKU Key — copy into Ripe portal">'+escSku(s.sku_key)+'</div>';
+            html+='<div style="font-size:10px;color:#b8b8b0;font-family:monospace;margin-top:2px;user-select:all;" title="Soma SKU Key — copy into Ripe portal">'+escSku(s.sku_key)+'</div>';
             html+='</div>';
 
             // Stock pill

@@ -29,12 +29,12 @@ body.be-page { background:var(--bg); }
 .loc-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; font-size:12px; font-weight:600; color:var(--text-light); }
 
 /* SKU assignment table */
-.sku-section-hdr { font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.06em; padding:8px 14px 6px; background:#f5f5f0; border-bottom:1px solid var(--border); }
+.sku-section-hdr { font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.06em; padding:8px 14px 6px; background:var(--bg); border-bottom:1px solid var(--border); }
 .sku-row { display:grid; grid-template-columns:32px 1fr 100px 90px 76px 90px 44px; gap:10px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--border); background:#fff; }
 .sku-row:last-child { border-bottom:none; }
 .sku-row:hover { background:#f9faf7; }
 .sku-row.assigned { background:#f0f7f0; }
-.sku-hdr { display:grid; grid-template-columns:32px 1fr 100px 90px 76px 90px 44px; gap:10px; padding:8px 16px; background:#f5f5f0; border-bottom:2px solid var(--border); font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
+.sku-hdr { display:grid; grid-template-columns:32px 1fr 100px 90px 76px 90px 44px; gap:10px; padding:8px 16px; background:var(--bg); border-bottom:2px solid var(--border); font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
 .sku-hdr span, .sku-row span.hdr { text-align:right; }
 .sku-hdr span:nth-child(2), .sku-row .sku-name { text-align:left; }
 .sku-check { width:17px; height:17px; accent-color:var(--accent); cursor:pointer; }
@@ -42,7 +42,7 @@ body.be-page { background:var(--bg); }
 .sku-fmt { font-size:11px; color:var(--text-light); }
 .p-input { width:100%; box-sizing:border-box; padding:6px 8px; border:1.5px solid var(--border); border-radius:7px; font-size:13px; font-weight:600; text-align:right; outline:none; }
 .p-input:focus { border-color:var(--accent); box-shadow:0 0 0 2px rgba(74,103,65,.1); }
-.p-input:disabled { background:#f5f5f0; opacity:.5; }
+.p-input:disabled { background:var(--bg); opacity:.5; }
 .p-margin { font-size:12px; color:var(--text-light); text-align:right; }
 .price-display { cursor:default; }
 .cost-display  { cursor:help; }
@@ -61,8 +61,8 @@ body.be-page { background:var(--bg); }
 /* Sticky save bar */
 .save-bar { position:sticky; bottom:0; background:#fff; border-top:1px solid var(--border); padding:14px 22px; display:flex; align-items:center; justify-content:space-between; gap:12px; box-shadow:0 -4px 16px rgba(0,0,0,.07); z-index:10; }
 .save-status { font-size:13px; color:var(--text-light); }
-.save-status.ok { color:#2e7d32; font-weight:600; }
-.save-status.err { color:#c62828; font-weight:600; }
+.save-status.ok { color:var(--action-green); font-weight:600; }
+.save-status.err { color:var(--action-red); font-weight:600; }
 
 @media(max-width:640px){
   .g2,.g3 { grid-template-columns:1fr; }
@@ -112,7 +112,7 @@ body.be-page { background:var(--bg); }
   <div class="be-card">
     <div class="be-card-head">
       <h2>Delivery Locations</h2>
-      <button class="btn btn-o" style="font-size:12px;padding:7px 14px;" onclick="addLoc()">+ Add Location</button>
+      <button class="btn btn-outline" style="font-size:12px;padding:7px 14px;" onclick="addLoc()">+ Add Location</button>
     </div>
     <div class="be-card-body" id="loc-list">
       {% if buyer.locations %}
@@ -179,7 +179,7 @@ body.be-page { background:var(--bg); }
           <!-- Col 2: Product name + SKU key -->
           <div>
             <div class="sku-name">{{ sku.recipe }}</div>
-            <div class="sku-fmt" style="font-family:ui-monospace,monospace;font-size:10px;color:var(--text-light);margin-top:2px;">{{ sku.sku_key }}</div>
+            <div class="sku-fmt" style="font-family: 'Courier New', monospace,monospace;font-size:10px;color:var(--text-light);margin-top:2px;">{{ sku.sku_key }}</div>
           </div>
 
           <!-- Col 3: Cost — read-only, from COGS model -->
@@ -238,8 +238,8 @@ body.be-page { background:var(--bg); }
   <div class="save-bar">
     <div class="save-status" id="save-status"></div>
     <div style="display:flex;gap:10px;">
-      <a href="/contacts?tab=buyers" class="btn btn-o" style="text-decoration:none;display:inline-flex;align-items:center;">Cancel</a>
-      <button class="btn btn-p" onclick="saveBuyer()" style="background:#0288d1;border:none;min-width:120px;">Save Buyer</button>
+      <a href="/contacts?tab=buyers" class="btn btn-outline" style="text-decoration:none;display:inline-flex;align-items:center;">Cancel</a>
+      <button class="btn btn-primary" onclick="saveBuyer()" style="background:#0288d1;border:none;min-width:120px;">Save Buyer</button>
     </div>
   </div>
 </div>

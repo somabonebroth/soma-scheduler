@@ -55,7 +55,7 @@ body.audit-page { background: var(--bg); overflow-x: hidden; }
 .start-btn:disabled { background: #ccc; }
 
 /* ── Progress bar ────────────────────────────────────────────────── */
-.progress-wrap { background: #e0e0d8; height: 4px; flex-shrink: 0; }
+.progress-wrap { background: var(--border); height: 4px; flex-shrink: 0; }
 .progress-fill { height: 4px; background: var(--accent); transition: width .3s; }
 
 /* ── Item screen ─────────────────────────────────────────────────── */
@@ -75,9 +75,9 @@ body.audit-page { background: var(--bg); overflow-x: hidden; }
   color: var(--text-light); margin-top: 6px;
 }
 .lot-badge {
-  display: inline-block; background: #e3f2fd; border: 1px solid #90caf9;
+  display: inline-block; background: var(--action-blue-bg); border: 1px solid #90caf9;
   border-radius: 6px; padding: 3px 10px; font-size: 11px; font-weight: 700;
-  color: #0277bd; margin-top: 6px;
+  color: var(--action-blue); margin-top: 6px;
 }
 
 /* System qty card */
@@ -114,9 +114,9 @@ body.audit-page { background: var(--bg); overflow-x: hidden; }
   margin: 0 20px 16px; padding: 12px 16px; border-radius: 10px;
   font-size: 14px; font-weight: 600; display: none;
 }
-.diff-indicator.over  { background: #e8f5e9; color: #2e7d32; }
-.diff-indicator.under { background: #ffebee; color: #c62828; }
-.diff-indicator.exact { background: #e8f5e9; color: #2e7d32; }
+.diff-indicator.over  { background: var(--action-green-bg); color: var(--action-green); }
+.diff-indicator.under { background: var(--action-red-bg); color: var(--action-red); }
+.diff-indicator.exact { background: var(--action-green-bg); color: var(--action-green); }
 
 /* Bottom nav */
 .item-nav {
@@ -148,8 +148,8 @@ body.audit-page { background: var(--bg); overflow-x: hidden; }
 .adj-row:last-child { border-bottom: none; }
 .adj-name { font-weight: 600; color: var(--dark); }
 .adj-diff { font-weight: 700; }
-.adj-diff.pos { color: #2e7d32; }
-.adj-diff.neg { color: #c62828; }
+.adj-diff.pos { color: var(--action-green); }
+.adj-diff.neg { color: var(--action-red); }
 .adj-diff.zero { color: var(--text-light); }
 .done-btn {
   width: 100%; padding: 18px; background: var(--accent); color: #fff;
