@@ -626,12 +626,12 @@ body { padding-top: 0; }
         <tbody>
           <tr>
             <td class="label">Units per kettle</td>
-            <td><input type="number" data-input="units.475ml" value="290" step="1"></td>
-            <td><input type="number" data-input="units.735ml" value="190" step="1"></td>
-            <td><input type="number" data-input="units.876ml" value="144" step="1"></td>
-            <td><input type="number" data-input="units.780fz" value="180" step="1"></td>
-            <td><input type="number" data-input="units.780bb" value="180" step="1"></td>
-            <td><input type="number" data-input="units.780p" value="180" step="1"></td>
+            <td><input type="number" id="di-units-475ml" data-input="units.475ml" value="290" step="1"></td>
+            <td><input type="number" id="di-units-735ml" data-input="units.735ml" value="190" step="1"></td>
+            <td><input type="number" id="di-units-876ml" data-input="units.876ml" value="144" step="1"></td>
+            <td><input type="number" id="di-units-780fz" data-input="units.780fz" value="180" step="1"></td>
+            <td><input type="number" id="di-units-780bb" data-input="units.780bb" value="180" step="1"></td>
+            <td><input type="number" id="di-units-780p" data-input="units.780p" value="180" step="1"></td>
           </tr>
           <tr>
             <td class="label">Units per day (× kettles)</td>
@@ -659,27 +659,27 @@ body { padding-top: 0; }
         <tbody>
           <tr>
             <td class="label">Kettles per day (full)</td>
-            <td><input type="number" data-input="kettlesPerDay" value="3" step="0.5"></td>
+            <td><input type="number" id="di-kettlesPerDay" data-input="kettlesPerDay" value="3" step="0.5"></td>
             <td class="note">Standard production day</td>
           </tr>
           <tr>
             <td class="label">Production days per month</td>
-            <td><input type="number" data-input="prodDaysPerMonth" value="28" step="1"></td>
+            <td><input type="number" id="di-prodDaysPerMonth" data-input="prodDaysPerMonth" value="28" step="1"></td>
             <td class="note">28-day production month</td>
           </tr>
           <tr>
             <td class="label">Slow months per year</td>
-            <td><input type="number" data-input="slowMonths" value="4" step="1"></td>
+            <td><input type="number" id="di-slowMonths" data-input="slowMonths" value="4" step="1"></td>
             <td class="note">Months at reduced output</td>
           </tr>
           <tr>
             <td class="label">Full months per year</td>
-            <td><input type="number" data-input="fullMonths" value="8" step="1"></td>
+            <td><input type="number" id="di-fullMonths" data-input="fullMonths" value="8" step="1"></td>
             <td class="note">Months at full output</td>
           </tr>
           <tr>
             <td class="label">Slow-month kettles/day</td>
-            <td><input type="number" data-input="slowKettles" value="1.5" step="0.5"></td>
+            <td><input type="number" id="di-slowKettles" data-input="slowKettles" value="1.5" step="0.5"></td>
             <td class="note">Reduced production rate</td>
           </tr>
           <tr class="total-row">
@@ -804,7 +804,7 @@ body { padding-top: 0; }
       <table>
         <tr>
           <td class="label">Vacation / Tax / WSIB uplift</td>
-          <td><input type="number" data-input="uplift" value="8" step="0.5"> %</td>
+          <td><input type="number" id="di-uplift" data-input="uplift" value="8" step="0.5"> %</td>
         </tr>
       </table>
 
@@ -857,7 +857,7 @@ body { padding-top: 0; }
       <table>
         <tr>
           <td class="label">Equipment Maintenance & Repair (monthly) <span class="flag">Verify</span></td>
-          <td><input type="number" data-input="maintenance" value="1500" step="50"></td>
+          <td><input type="number" id="di-maintenance" data-input="maintenance" value="1500" step="50"></td>
         </tr>
         <tr class="total-row">
           <td class="label">Per kettle run</td>
@@ -915,7 +915,7 @@ body { padding-top: 0; }
       <table>
         <tr>
           <td class="label">Monthly debt payment</td>
-          <td><input type="number" data-input="debtMonthly" value="16666" step="100"></td>
+          <td><input type="number" id="di-debtMonthly" data-input="debtMonthly" value="16666" step="100"></td>
         </tr>
         <tr class="total-row">
           <td class="label">Annual debt service</td>
@@ -942,22 +942,22 @@ body { padding-top: 0; }
         <tbody>
           <tr>
             <td class="label">Chicken</td>
-            <td><input type="number" data-input="chickenKg" value="2.20" step="0.05"></td>
+            <td><input type="number" id="di-chickenKg" data-input="chickenKg" value="2.20" step="0.05"></td>
             <td></td>
           </tr>
           <tr>
             <td class="label">Beef</td>
-            <td><input type="number" data-input="beefKg" value="3.50" step="0.05"></td>
+            <td><input type="number" id="di-beefKg" data-input="beefKg" value="3.50" step="0.05"></td>
             <td></td>
           </tr>
           <tr>
             <td class="label">Turkey</td>
-            <td><input type="number" data-input="turkeyKg" value="4.40" step="0.05"></td>
+            <td><input type="number" id="di-turkeyKg" data-input="turkeyKg" value="4.40" step="0.05"></td>
             <td></td>
           </tr>
           <tr>
             <td class="label">Whole turkeys (2) — flat $/batch</td>
-            <td><input type="number" data-input="wholeTurkey" value="180" step="5"></td>
+            <td><input type="number" id="di-wholeTurkey" data-input="wholeTurkey" value="180" step="5"></td>
             <td class="note">Added to turkey bone cost per batch</td>
           </tr>
         </tbody>
@@ -969,14 +969,14 @@ body { padding-top: 0; }
         <tbody>
           <tr>
             <td class="label">Fresh mushroom</td>
-            <td><input type="number" data-input="mushFreshKg" value="11.66" step="0.10"></td>
-            <td><input type="number" data-input="mushFreshAmt" value="16" step="1"></td>
+            <td><input type="number" id="di-mushFreshKg" data-input="mushFreshKg" value="11.66" step="0.10"></td>
+            <td><input type="number" id="di-mushFreshAmt" data-input="mushFreshAmt" value="16" step="1"></td>
             <td class="formula-cell" data-output="mushFreshBatch"></td>
           </tr>
           <tr>
             <td class="label">Specialty mushroom</td>
-            <td><input type="number" data-input="mushSpecKg" value="22" step="0.50"></td>
-            <td><input type="number" data-input="mushSpecAmt" value="3" step="1"></td>
+            <td><input type="number" id="di-mushSpecKg" data-input="mushSpecKg" value="22" step="0.50"></td>
+            <td><input type="number" id="di-mushSpecAmt" data-input="mushSpecAmt" value="3" step="1"></td>
             <td class="formula-cell" data-output="mushSpecBatch"></td>
           </tr>
         </tbody>
@@ -988,27 +988,7 @@ body { padding-top: 0; }
         </tr>
       </table>
 
-      <div class="subsection-label">Mirepoix — $/kg</div>
-      <table>
-        <thead><tr><th>Vegetable</th><th>$/kg</th><th class="note" style="text-align:left;font-style:italic;">Used in COGS calculation via actual kg on recipe card</th></tr></thead>
-        <tbody>
-          <tr>
-            <td class="label">Onion</td>
-            <td><input type="number" data-input="onionKg" value="1.20" step="0.05"></td>
-            <td></td>
-          </tr>
-          <tr>
-            <td class="label">Carrot</td>
-            <td><input type="number" data-input="carrotKg" value="1.50" step="0.05"></td>
-            <td></td>
-          </tr>
-          <tr>
-            <td class="label">Celery</td>
-            <td><input type="number" data-input="celeryKg" value="2.20" step="0.05"></td>
-            <td></td>
-          </tr>
-        </tbody>
-      </table>
+
 
       <div class="subsection-label">Other Ingredients — flat $/batch</div>
       <table>
@@ -1016,20 +996,20 @@ body { padding-top: 0; }
         <tbody>
           <tr>
             <td class="label">Mirepoix (average blended)</td>
-            <td><input type="number" data-input="mirepoixKg" value="2.40" step="0.10"></td>
-            <td><input type="number" data-input="mirepoixAmt" value="9.5" step="0.5"></td>
+            <td><input type="number" id="di-mirepoixKg" data-input="mirepoixKg" value="2.40" step="0.10"></td>
+            <td><input type="number" id="di-mirepoixAmt" data-input="mirepoixAmt" value="9.5" step="0.5"></td>
             <td class="formula-cell" data-output="mirepoixBatch"></td>
           </tr>
           <tr>
             <td class="label">Salt</td>
-            <td><input type="number" data-input="saltKg" value="6.00" step="0.10"></td>
-            <td><input type="number" data-input="saltAmt" value="0.675" step="0.025"></td>
+            <td><input type="number" id="di-saltKg" data-input="saltKg" value="6.00" step="0.10"></td>
+            <td><input type="number" id="di-saltAmt" data-input="saltAmt" value="0.675" step="0.025"></td>
             <td class="formula-cell" data-output="saltBatch"></td>
           </tr>
           <tr>
             <td class="label">Spices & Other</td>
-            <td><input type="number" data-input="spicesKg" value="40" step="1"></td>
-            <td><input type="number" data-input="spicesAmt" value="0.1" step="0.05"></td>
+            <td><input type="number" id="di-spicesKg" data-input="spicesKg" value="40" step="1"></td>
+            <td><input type="number" id="di-spicesAmt" data-input="spicesAmt" value="0.1" step="0.05"></td>
             <td class="formula-cell" data-output="spicesBatch"></td>
           </tr>
         </tbody>
@@ -1055,30 +1035,30 @@ body { padding-top: 0; }
         <tbody>
           <tr>
             <td class="label">Container</td>
-            <td><input type="number" data-input="container.475ml" value="1.00" step="0.05"></td>
-            <td><input type="number" data-input="container.735ml" value="1.00" step="0.05"></td>
-            <td><input type="number" data-input="container.876ml" value="1.10" step="0.05"></td>
-            <td><input type="number" data-input="container.780fz" value="0.35" step="0.05"></td>
-            <td><input type="number" data-input="container.780bb" value="0.35" step="0.05"></td>
-            <td><input type="number" data-input="container.780p" value="1.00" step="0.05"></td>
+            <td><input type="number" id="di-container-475ml" data-input="container.475ml" value="1.00" step="0.05"></td>
+            <td><input type="number" id="di-container-735ml" data-input="container.735ml" value="1.00" step="0.05"></td>
+            <td><input type="number" id="di-container-876ml" data-input="container.876ml" value="1.10" step="0.05"></td>
+            <td><input type="number" id="di-container-780fz" data-input="container.780fz" value="0.35" step="0.05"></td>
+            <td><input type="number" id="di-container-780bb" data-input="container.780bb" value="0.35" step="0.05"></td>
+            <td><input type="number" id="di-container-780p" data-input="container.780p" value="1.00" step="0.05"></td>
           </tr>
           <tr>
             <td class="label">Lid</td>
-            <td><input type="number" data-input="lid.475ml" value="0.35" step="0.05"></td>
-            <td><input type="number" data-input="lid.735ml" value="0.35" step="0.05"></td>
-            <td><input type="number" data-input="lid.876ml" value="0.35" step="0.05"></td>
-            <td><input type="number" data-input="lid.780fz" value="0" step="0.05"></td>
-            <td><input type="number" data-input="lid.780bb" value="0" step="0.05"></td>
-            <td><input type="number" data-input="lid.780p" value="0" step="0.05"></td>
+            <td><input type="number" id="di-lid-475ml" data-input="lid.475ml" value="0.35" step="0.05"></td>
+            <td><input type="number" id="di-lid-735ml" data-input="lid.735ml" value="0.35" step="0.05"></td>
+            <td><input type="number" id="di-lid-876ml" data-input="lid.876ml" value="0.35" step="0.05"></td>
+            <td><input type="number" id="di-lid-780fz" data-input="lid.780fz" value="0" step="0.05"></td>
+            <td><input type="number" id="di-lid-780bb" data-input="lid.780bb" value="0" step="0.05"></td>
+            <td><input type="number" id="di-lid-780p" data-input="lid.780p" value="0" step="0.05"></td>
           </tr>
           <tr>
             <td class="label">Box</td>
-            <td><input type="number" data-input="box.475ml" value="0" step="0.05"></td>
-            <td><input type="number" data-input="box.735ml" value="0" step="0.05"></td>
-            <td><input type="number" data-input="box.876ml" value="0" step="0.05"></td>
-            <td><input type="number" data-input="box.780fz" value="0.16" step="0.05"></td>
-            <td><input type="number" data-input="box.780bb" value="0.16" step="0.05"></td>
-            <td><input type="number" data-input="box.780p" value="0" step="0.05"></td>
+            <td><input type="number" id="di-box-475ml" data-input="box.475ml" value="0" step="0.05"></td>
+            <td><input type="number" id="di-box-735ml" data-input="box.735ml" value="0" step="0.05"></td>
+            <td><input type="number" id="di-box-876ml" data-input="box.876ml" value="0" step="0.05"></td>
+            <td><input type="number" id="di-box-780fz" data-input="box.780fz" value="0.16" step="0.05"></td>
+            <td><input type="number" id="di-box-780bb" data-input="box.780bb" value="0.16" step="0.05"></td>
+            <td><input type="number" id="di-box-780p" data-input="box.780p" value="0" step="0.05"></td>
           </tr>
           <tr class="total-row">
             <td class="label">Total Packaging $/unit</td>
@@ -1104,12 +1084,12 @@ body { padding-top: 0; }
         <tbody>
           <tr>
             <td class="label">Base label</td>
-            <td><input type="number" data-input="label.475ml" value="0.49" step="0.01"></td>
-            <td><input type="number" data-input="label.735ml" value="0.43" step="0.01"></td>
-            <td><input type="number" data-input="label.876ml" value="0.49" step="0.01"></td>
-            <td><input type="number" data-input="label.780fz" value="0.81" step="0.01"></td>
-            <td><input type="number" data-input="label.780bb" value="0" step="0.01"></td>
-            <td><input type="number" data-input="label.780p" value="0" step="0.01"></td>
+            <td><input type="number" id="di-label-475ml" data-input="label.475ml" value="0.49" step="0.01"></td>
+            <td><input type="number" id="di-label-735ml" data-input="label.735ml" value="0.43" step="0.01"></td>
+            <td><input type="number" id="di-label-876ml" data-input="label.876ml" value="0.49" step="0.01"></td>
+            <td><input type="number" id="di-label-780fz" data-input="label.780fz" value="0.81" step="0.01"></td>
+            <td><input type="number" id="di-label-780bb" data-input="label.780bb" value="0" step="0.01"></td>
+            <td><input type="number" id="di-label-780p" data-input="label.780p" value="0" step="0.01"></td>
           </tr>
           <tr>
             <td class="label">Hand-app $/unit (auto)</td>
@@ -1135,7 +1115,7 @@ body { padding-top: 0; }
       <table>
         <tr>
           <td class="label">Surcharge per day (applied to 735ml & 780ml FZ)</td>
-          <td><input type="number" data-input="handDailyCost" value="80" step="5"></td>
+          <td><input type="number" id="di-handDailyCost" data-input="handDailyCost" value="80" step="5"></td>
         </tr>
       </table>
     </div>
@@ -1146,16 +1126,16 @@ body { padding-top: 0; }
 <div id="tab-pricing" class="tab-content">
   <div class="margin-controls">
     <div class="margin-control">
-      <label>Wholesale Margin</label>
+      <label for="wholesale-margin-input">Wholesale Margin</label>
       <div class="input-wrap">
-        <input type="range" data-input="wholesaleMargin" value="20" min="5" max="60" step="1">
+        <input type="range" id="wholesale-margin-input" data-input="wholesaleMargin" value="20" min="5" max="60" step="1">
         <span class="margin-value" id="wholesale-margin-display">20%</span>
       </div>
     </div>
     <div class="margin-control">
-      <label>Retail Margin</label>
+      <label for="retail-margin-input">Retail Margin</label>
       <div class="input-wrap">
-        <input type="range" data-input="retailMargin" value="30" min="10" max="80" step="1">
+        <input type="range" id="retail-margin-input" data-input="retailMargin" value="30" min="10" max="80" step="1">
         <span class="margin-value" id="retail-margin-display">30%</span>
       </div>
     </div>
@@ -1239,14 +1219,13 @@ const DEFAULTS = {
   debtMonthly: 16666,
 
   // Bones
-  chickenKg: 2.20, chickenBase: 50, chickenExtra: 25,
-  beefKg: 3.50, beefBase: 60, beefExtra: 15,
-  turkeyKg: 4.40, turkeyBase: 50, wholeTurkey: 180,
+  chickenKg: 2.20,
+  beefKg: 3.50,
+  turkeyKg: 4.40, wholeTurkey: 180,
   mushFreshKg: 11.66, mushFreshAmt: 16,
   mushSpecKg: 22, mushSpecAmt: 3,
 
-  // Mirepoix per-kg prices (used by recipe card COGS)
-  onionKg: 1.20, carrotKg: 1.50, celeryKg: 2.20,
+
 
   // Other ingredients (flat batch)
   mirepoixKg: 2.40, mirepoixAmt: 9.5,
@@ -1327,9 +1306,7 @@ async function loadState() {
   // Scalar fields
   var bn = c.bones || {};
   if ((bn.chicken||{}).price_per_kg) state.chickenKg  = bn.chicken.price_per_kg;
-  if ((bn.chicken||{}).base_kg)      state.chickenBase = bn.chicken.base_kg;
   if ((bn.beef||{}).price_per_kg)    state.beefKg      = bn.beef.price_per_kg;
-  if ((bn.beef||{}).base_kg)         state.beefBase    = bn.beef.base_kg;
   if ((bn.turkey||{}).price_per_kg)  state.turkeyKg    = bn.turkey.price_per_kg;
   if ((bn.turkey||{}).whole_turkey_cost_per_batch) state.wholeTurkey = bn.turkey.whole_turkey_cost_per_batch;
   var mf = c.mushroom_fresh||{}, ms = c.mushroom_specialty||{};
@@ -1337,10 +1314,7 @@ async function loadState() {
   if (mf.kg_per_batch) state.mushFreshAmt = mf.kg_per_batch;
   if (ms.price_per_kg) state.mushSpecKg   = ms.price_per_kg;
   if (ms.kg_per_batch) state.mushSpecAmt  = ms.kg_per_batch;
-  var mir = c.mirepoix||{};
-  if ((mir.onion ||{}).price_per_kg) state.onionKg  = mir.onion.price_per_kg;
-  if ((mir.carrot||{}).price_per_kg) state.carrotKg = mir.carrot.price_per_kg;
-  if ((mir.celery||{}).price_per_kg) state.celeryKg = mir.celery.price_per_kg;
+
   var PKG_MAP = {'475ml':'475ml','750ml_ss':'735ml','876ml':'876ml','750ml_fz':'780fz','750ml_bb':'780bb','750ml_pouch':'780p'};
   Object.keys(c.packaging||{}).forEach(function(k){
     var sk=PKG_MAP[k]; if(!sk) return; var v=c.packaging[k];
@@ -1382,17 +1356,13 @@ async function flushSave() {
     }),
     equipment: DEP_ITEMS.map(function(e){ return {name:e.name, cost:+(e.cost)||0, life_years:+(e.life)||1}; }),
     bones: {
-      chicken: {price_per_kg:s.chickenKg, base_kg:s.chickenBase, extra_kg:s.chickenExtra},
-      beef:    {price_per_kg:s.beefKg,    base_kg:s.beefBase,    extra_kg:s.beefExtra},
-      turkey:  {price_per_kg:s.turkeyKg,  base_kg:s.turkeyBase,  whole_turkey_cost_per_batch:s.wholeTurkey},
+      chicken: {price_per_kg: s.chickenKg},
+      beef:    {price_per_kg: s.beefKg},
+      turkey:  {price_per_kg: s.turkeyKg, whole_turkey_cost_per_batch: s.wholeTurkey},
     },
     mushroom_fresh:     {price_per_kg:s.mushFreshKg, kg_per_batch:s.mushFreshAmt},
     mushroom_specialty: {price_per_kg:s.mushSpecKg,  kg_per_batch:s.mushSpecAmt},
-    mirepoix: {
-      onion:  {price_per_kg: s.onionKg  || 1.20},
-      carrot: {price_per_kg: s.carrotKg || 1.50},
-      celery: {price_per_kg: s.celeryKg || 2.20},
-    },
+
     other_ingredients_per_batch: (s.mirepoixKg*s.mirepoixAmt + s.saltKg*s.saltAmt + s.spicesKg*s.spicesAmt),
     packaging: Object.fromEntries(Object.entries(SKU_MAP).map(function(e){
       var sk=e[0],sv=e[1];
@@ -1419,7 +1389,6 @@ function showSaveIndicator() {
 // ============================================================================
 const fmt$ = n => '$' + (Math.round(n * 100) / 100).toFixed(2);
 const fmtNum = n => Math.round(n).toLocaleString();
-const fmtNum2 = n => (Math.round(n * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // ============================================================================
 // CALCULATIONS
@@ -1447,7 +1416,7 @@ function calculate() {
   r.varTotal = varTotal;
 
   r.overheadMonthly = fixedTotal + varTotal;
-  r.overheadPerKettle = (r.overheadMonthly * 12) / r.kettleRuns;
+  r.overheadPerKettle = r.kettleRuns > 0 ? (r.overheadMonthly * 12) / r.kettleRuns : 0;
   SKUS.forEach(sku => {
     r['overheadUnit.' + sku] = r.overheadPerKettle / +s['units.' + sku];
   });
@@ -1465,7 +1434,7 @@ function calculate() {
   });
   r.weeklyLabour = weeklyLabour;
   r.annualLabour = weeklyLabour * 52;
-  r.labourPerKettle = r.annualLabour / r.kettleRuns;
+  r.labourPerKettle = r.kettleRuns > 0 ? r.annualLabour / r.kettleRuns : 0;
   SKUS.forEach(sku => {
     r['labourUnit.' + sku] = r.labourPerKettle / +s['units.' + sku];
   });
@@ -1473,13 +1442,13 @@ function calculate() {
   // Supplies — read from live array
   let suppliesTotal = SUPPLIES_ITEMS.reduce(function(a,x){ return a + (+(x.monthly)||0); }, 0);
   r.suppliesTotal = suppliesTotal;
-  r.suppliesPerKettle = (suppliesTotal * 12) / r.kettleRuns;
+  r.suppliesPerKettle = r.kettleRuns > 0 ? (suppliesTotal * 12) / r.kettleRuns : 0;
   SKUS.forEach(sku => {
     r['suppliesUnit.' + sku] = r.suppliesPerKettle / +s['units.' + sku];
   });
 
   // Maintenance
-  r.maintPerKettle = (+s.maintenance * 12) / r.kettleRuns;
+  r.maintPerKettle = r.kettleRuns > 0 ? (+s.maintenance * 12) / r.kettleRuns : 0;
   SKUS.forEach(sku => {
     r['maintUnit.' + sku] = r.maintPerKettle / +s['units.' + sku];
   });
@@ -1496,25 +1465,23 @@ function calculate() {
   r.depTotalPurchase = depTotalPurchase;
   r.depTotalAnnual = depTotalAnnual;
   r.depTotalDaily = depTotalAnnual / 365;
-  r.depPerKettle = depTotalAnnual / r.kettleRuns;
+  r.depPerKettle = r.kettleRuns > 0 ? depTotalAnnual / r.kettleRuns : 0;
   SKUS.forEach(sku => {
     r['depUnit.' + sku] = r.depPerKettle / +s['units.' + sku];
   });
 
   // Debt
   r.debtAnnual = +s.debtMonthly * 12;
-  r.debtPerKettle = r.debtAnnual / r.kettleRuns;
+  r.debtPerKettle = r.kettleRuns > 0 ? r.debtAnnual / r.kettleRuns : 0;
   SKUS.forEach(sku => {
     r['debtUnit.' + sku] = r.debtPerKettle / +s['units.' + sku];
   });
 
   // Bones & Mushroom
-  r.chickenBatch = s.chickenKg * s.chickenBase;
-  r.chickenExtraBatch = s.chickenKg * s.chickenExtra;
-  r.beefBatch = s.beefKg * s.beefBase;
-  r.beefExtraBatch = s.beefKg * s.beefExtra;
-  r.turkeyBonesBatch = s.turkeyKg * s.turkeyBase;
-  r.turkeyTotalBatch = r.turkeyBonesBatch + (+s.wholeTurkey);
+  // Bone batch costs use standard reference amounts for the summary matrix
+  r.chickenBatch  = s.chickenKg * 50;
+  r.beefBatch     = s.beefKg    * 60;
+  r.turkeyBatch   = s.turkeyKg  * 50 + (+s.wholeTurkey);
   r.mushFreshBatch = s.mushFreshKg * s.mushFreshAmt;
   r.mushSpecBatch = s.mushSpecKg * s.mushSpecAmt;
   r.mushTotalBatch = r.mushFreshBatch + r.mushSpecBatch;
@@ -1524,11 +1491,9 @@ function calculate() {
   SKUS.forEach(sku => {
     const u = +s['units.' + sku];
     r['chickenUnit.' + sku] = r.chickenBatch / u;
-    r['chickenExtraUnit.' + sku] = r.chickenExtraBatch / u;
-    r['beefUnit.' + sku] = r.beefBatch / u;
-    r['beefExtraUnit.' + sku] = r.beefExtraBatch / u;
-    r['turkeyUnit.' + sku] = r.turkeyTotalBatch / u;
-    r['mushUnit.' + sku] = r.mushTotalBatch / u;
+    r['beefUnit.' + sku]    = r.beefBatch    / u;
+    r['turkeyUnit.' + sku]  = r.turkeyBatch  / u;
+    r['mushUnit.' + sku]    = r.mushTotalBatch / u;
   });
 
   // Other ingredients
@@ -1547,8 +1512,8 @@ function calculate() {
 
   // Labels (hand surcharge on 735ml and 780fz)
   const handCost = +s.handDailyCost;
-  r['handLabel.735ml'] = handCost / r['perday.735ml'];
-  r['handLabel.780fz'] = handCost / r['perday.780fz'];
+  r['handLabel.735ml'] = r['perday.735ml'] > 0 ? handCost / r['perday.735ml'] : 0;
+  r['handLabel.780fz'] = r['perday.780fz'] > 0 ? handCost / r['perday.780fz'] : 0;
 
   SKUS.forEach(sku => {
     const base = +s['label.' + sku];
@@ -1584,8 +1549,6 @@ function calculate() {
 // ============================================================================
 // RENDER
 // ============================================================================
-const SKU_ORDER = ['475ml', '735ml', '876ml', '780fz', '780bb', '780p'];
-const SKU_LABELS = { '475ml': '475ml', '735ml': '735ml', '876ml': '876ml', '780fz': '780ml FZ', '780bb': '780ml BB', '780p': '780ml Pouch' };
 
 function renderDynamicTables() {
   function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -1651,25 +1614,6 @@ function renderDynamicTables() {
       +'<td class="formula-cell">'+fmt$(annual/365)+'</td>'
       +'<td><button class="del-btn del-row-btn" onclick="DEP_ITEMS.splice('+i+',1);renderDynamicTables();recalculate();debounceSave()">&#x2715;</button></td></tr>';
   }).join('');
-}
-function renderBonesPerUnit(r) {
-  const rows = [
-    ['Chicken bones', 'chickenUnit'],
-    ['Chicken +25kg extra', 'chickenExtraUnit'],
-    ['Beef bones', 'beefUnit'],
-    ['Beef +15kg extra', 'beefExtraUnit'],
-    ['Turkey (bones + whole)', 'turkeyUnit'],
-    ['Mushroom (fresh + specialty)', 'mushUnit'],
-  ];
-  let html = '';
-  rows.forEach(([label, key]) => {
-    html += `<tr><td class="label">${label}</td>`;
-    SKUS.forEach(sku => {
-      html += `<td class="formula-cell">${fmt$(r[key + '.' + sku])}</td>`;
-    });
-    html += '</tr>';
-  });
-  var bpub = document.getElementById('bones-per-unit-body'); if(bpub) bpub.innerHTML = html;
 }
 
 function renderCogsSummary(r) {
@@ -1778,10 +1722,10 @@ function updateOutputs(r) {
   setOutput('suppliesPerKettle', fmt$(r.suppliesPerKettle));
   setOutput('maintPerKettle', fmt$(r.maintPerKettle));
 
-  // Depreciation
-  DEP_ITEMS.forEach(it => {
-    setOutput('dep.' + it.id + '.annual', fmt$(r['dep.' + it.id + '.annual']));
-    setOutput('dep.' + it.id + '.daily', fmt$(r['dep.' + it.id + '.daily']));
+  // Depreciation — uses index since DEP_ITEMS has no id field
+  DEP_ITEMS.forEach(function(it, idx) {
+    setOutput('dep.' + idx + '.annual', fmt$(r['dep.' + idx + '.annual']));
+    setOutput('dep.' + idx + '.daily',  fmt$(r['dep.' + idx + '.daily']));
   });
   setOutput('depTotalPurchase', fmt$(r.depTotalPurchase));
   setOutput('depTotalAnnual', fmt$(r.depTotalAnnual));
@@ -1793,12 +1737,7 @@ function updateOutputs(r) {
   setOutput('debtPerKettle', fmt$(r.debtPerKettle));
 
   // Bones
-  setOutput('chickenBatch', fmt$(r.chickenBatch));
-  setOutput('chickenExtraBatch', fmt$(r.chickenExtraBatch));
-  setOutput('beefBatch', fmt$(r.beefBatch));
-  setOutput('beefExtraBatch', fmt$(r.beefExtraBatch));
-  setOutput('turkeyBonesBatch', fmt$(r.turkeyBonesBatch));
-  setOutput('turkeyTotalBatch', fmt$(r.turkeyTotalBatch));
+  setOutput('turkeyTotalBatch', fmt$(r.turkeyBatch));
   setOutput('mushFreshBatch', fmt$(r.mushFreshBatch));
   setOutput('mushSpecBatch', fmt$(r.mushSpecBatch));
   setOutput('mushTotalBatch', fmt$(r.mushTotalBatch));
@@ -1816,7 +1755,6 @@ function updateOutputs(r) {
   setOutput('handLabel.735ml', fmt$(r['handLabel.735ml']));
   setOutput('handLabel.780fz', fmt$(r['handLabel.780fz']));
 
-  renderBonesPerUnit(r);
   renderCogsSummary(r);
   renderPricing(r);
 }
@@ -1903,64 +1841,27 @@ function addLabourRow() {
   renderDynamicTables(); recalculate(); debounceSave();
 }
 
-function exportCSV() {
-  const r = calculate();
-  const lines = [];
-  lines.push('COGS Master — Export ' + new Date().toISOString().slice(0,10));
-  lines.push('');
-  lines.push('Section,Item,475ml,735ml,876ml,780ml FZ,780ml BB,780ml Pouch');
-  lines.push(',Units per kettle,' + SKUS.map(s => state['units.' + s]).join(','));
-  lines.push(',Units per day,' + SKUS.map(s => r['perday.' + s]).join(','));
-  lines.push(',Units per 28-day month,' + SKUS.map(s => r['permonth.' + s]).join(','));
-  lines.push('');
-  lines.push('Cost component,,475ml,735ml,876ml,780ml FZ,780ml BB,780ml Pouch');
-  lines.push('Overhead,$/unit,' + SKUS.map(s => r['overheadUnit.' + s].toFixed(4)).join(','));
-  lines.push('Labour,$/unit,' + SKUS.map(s => r['labourUnit.' + s].toFixed(4)).join(','));
-  lines.push('Supplies,$/unit,' + SKUS.map(s => r['suppliesUnit.' + s].toFixed(4)).join(','));
-  lines.push('Maintenance,$/unit,' + SKUS.map(s => r['maintUnit.' + s].toFixed(4)).join(','));
-  lines.push('Depreciation,$/unit,' + SKUS.map(s => r['depUnit.' + s].toFixed(4)).join(','));
-  lines.push('Debt,$/unit,' + SKUS.map(s => r['debtUnit.' + s].toFixed(4)).join(','));
-  lines.push('Total Fixed,$/unit,' + SKUS.map(s => r['fixedUnit.' + s].toFixed(4)).join(','));
-  lines.push('');
-  lines.push('Full COGS,,475ml,735ml,876ml,780ml FZ,780ml BB,780ml Pouch');
-  ['chicken', 'beef', 'turkey', 'mushroom'].forEach(broth => {
-    const name = broth.charAt(0).toUpperCase() + broth.slice(1);
-    lines.push(name + ',,' + SKUS.map(s => r['cogs.' + broth + '.' + s].toFixed(2)).join(','));
-  });
-  lines.push('');
-  lines.push('Wholesale (' + state.wholesaleMargin + '% margin),,475ml,735ml,876ml,780ml FZ,780ml BB,780ml Pouch');
-  ['chicken', 'beef', 'turkey', 'mushroom'].forEach(broth => {
-    const name = broth.charAt(0).toUpperCase() + broth.slice(1);
-    lines.push(name + ',,' + SKUS.map(s => (r['cogs.' + broth + '.' + s] / (1 - state.wholesaleMargin/100)).toFixed(2)).join(','));
-  });
-  lines.push('');
-  lines.push('Retail (' + state.retailMargin + '% margin),,475ml,735ml,876ml,780ml FZ,780ml BB,780ml Pouch');
-  ['chicken', 'beef', 'turkey', 'mushroom'].forEach(broth => {
-    const name = broth.charAt(0).toUpperCase() + broth.slice(1);
-    lines.push(name + ',,' + SKUS.map(s => (r['cogs.' + broth + '.' + s] / (1 - state.retailMargin/100)).toFixed(2)).join(','));
-  });
-
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'cogs_export_' + new Date().toISOString().slice(0,10) + '.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 // ============================================================================
 // INIT
 // ============================================================================
 
 (async function init() {
   document.body.classList.add('readonly-mode');
-  await loadState();
-  renderDynamicTables();
-  attachInputListeners();
-  recalculate();
+  try {
+    await loadState();
+  } catch(e) { console.warn('loadState error:', e); }
+  try {
+    renderDynamicTables();
+  } catch(e) { console.warn('renderDynamicTables error:', e); }
+  try {
+    attachInputListeners();
+  } catch(e) { console.warn('attachInputListeners error:', e); }
+  try {
+    recalculate();
+  } catch(e) { console.warn('recalculate error:', e); }
 })();
 
 </script>
+</div><!-- /cogs-body -->
 </body>
 </html>

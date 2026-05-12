@@ -5026,9 +5026,6 @@ _COGS_INGREDIENT_KEYWORDS = {
         "oxtail", "carcass", "drumstick", "wing", "frame", "rib",
         "femur", "tibia", "chicken", "beef", "turkey", "bison", "pork",
     ],
-    "onion":    ["onion"],
-    "carrot":   ["carrot"],
-    "celery":   ["celery"],
     "mushroom": [
         "mushroom", "shiitake", "porcini", "portobello", "cremini",
         "reishi", "chaga", "maitake", "enoki", "chanterelle",
@@ -5266,7 +5263,6 @@ def _compute_cogs_matrix(c, recipe_overrides=None):
 
             bone_pu    = 0.0
             mush_pu    = 0.0
-            veg_pu     = 0.0
 
             if recipe_overrides:
                 bones_kg    = float(recipe_overrides.get("bones_kg", 0))
@@ -5294,16 +5290,8 @@ def _compute_cogs_matrix(c, recipe_overrides=None):
                     untyped_kg   * broth_price
                 ) / max(units, 1)
 
-                # Mirepoix per-kg from recipe card
-                mir = c.get("mirepoix", {})
-                onion_kg  = float(recipe_overrides.get("onion_kg", 0))
-                carrot_kg = float(recipe_overrides.get("carrot_kg", 0))
-                celery_kg = float(recipe_overrides.get("celery_kg", 0))
-                veg_pu = (
-                    onion_kg  * float(mir.get("onion",  {}).get("price_per_kg", 1.20)) +
-                    carrot_kg * float(mir.get("carrot", {}).get("price_per_kg", 1.50)) +
-                    celery_kg * float(mir.get("celery", {}).get("price_per_kg", 2.20))
-                ) / max(units, 1)
+                # Mirepoix cost is included in other_ingredients_per_batch (flat)
+                # No separate per-kg calculation to avoid double-counting
 
                 # Turkey flat cost: add when any turkey bones present
                 if turkey_kg_r > 0 or bt_key == "turkey":
@@ -5359,16 +5347,13 @@ def _compute_cogs_matrix(c, recipe_overrides=None):
             lbl     = c.get("labels", {}).get(size_key, {})
             label_pu = float(lbl.get("cost", 0)) + float(lbl.get("hand_apply_surcharge", 0))
 
-            # veg_pu only set in recipe path, else 0
-            _veg_pu = veg_pu if recipe_overrides else 0.0
-            total = fixed_pu + bone_pu + _veg_pu + mush_pu + other_pu + pack_pu + label_pu
+            total = fixed_pu + bone_pu + mush_pu + other_pu + pack_pu + label_pu
 
             matrix[bt][size_key] = {
                 "total": round(total, 4),
                 "breakdown": {
                     "fixed":             round(fixed_pu, 4),
                     "bones":             round(bone_pu, 4),
-                    "mirepoix":          round(_veg_pu, 4),
                     "mushroom":          round(mush_pu, 4),
                     "other_ingredients": round(other_pu, 4),
                     "packaging":         round(pack_pu, 4),
@@ -5381,11 +5366,11 @@ def _compute_cogs_matrix(c, recipe_overrides=None):
 
 def _extract_recipe_kg(recipe_data):
     """Extract costed ingredient kg from kettle_overnight section of a recipe.
-    Extracts: bones, mushroom, onion, carrot, celery.
-    Everything else (salt, spices) uses the flat other_ingredients_per_batch cost.
+    Extracts: bones (by type) and mushroom.
+    All other ingredients (mirepoix, salt, spices) use the flat
+    other_ingredients_per_batch cost to avoid double-counting.
     """
-    result = {"bones_kg": 0.0, "mushroom_kg": 0.0,
-              "onion_kg": 0.0, "carrot_kg": 0.0, "celery_kg": 0.0}
+    result = {"bones_kg": 0.0, "mushroom_kg": 0.0}
     kettle = recipe_data.get("kettle_overnight", [])
     for item in kettle:
         if not isinstance(item, dict):
@@ -5418,12 +5403,7 @@ def _extract_recipe_kg(recipe_data):
                 result["untyped_kg"] = result.get("untyped_kg", 0.0) + amount
         elif any(kw_word in name for kw_word in kw["mushroom"]):
             result["mushroom_kg"] += amount
-        elif any(kw_word in name for kw_word in kw["onion"]):
-            result["onion_kg"] += amount
-        elif any(kw_word in name for kw_word in kw["carrot"]):
-            result["carrot_kg"] += amount
-        elif any(kw_word in name for kw_word in kw["celery"]):
-            result["celery_kg"] += amount
+
     return result
 
 
@@ -6237,12 +6217,12 @@ def get_finished_goods_grouped():
     if cert_filter:
         grouped = [g for g in grouped
                    if (g.get("certification") or "").lower() == cert_filter.lower()]
-    # Merge PAR levels and prices from sku_meta.json
+    # Merge PAR levels from sku_meta.json
     meta = _load_json(SKU_META_PATH, {})
     for g in grouped:
         m = meta.get(g["sku_key"], {})
         g["par"] = m.get("par")          # None = no PAR; int = PAR level
-        g["price"] = m.get("price")      # None = unset; float = price per unit
+        # price lives in buyers.json — not surfaced here
     return jsonify(grouped)
 
 
@@ -7288,12 +7268,14 @@ def update_buyer_sku_pricing(bid, sku_key):
     cogs       = float(data["cogs"])       if "cogs"       in data and data["cogs"]       is not None else sku.get("cogs")
     margin_pct = float(data["margin_pct"]) if "margin_pct" in data and data["margin_pct"] is not None else sku.get("margin_pct")
 
+    # Gross margin formula: margin = (price - cost) / price × 100
+    # Consistent with buyer_edit.html
     if price is not None and cogs is not None:
-        margin_pct = round(((price / cogs) - 1) * 100, 2) if cogs > 0 else 0.0
+        margin_pct = round(((price - cogs) / price) * 100, 2) if price > 0 else 0.0
     elif price is not None and margin_pct is not None:
-        cogs = round(price / (1 + margin_pct / 100), 2) if (1 + margin_pct / 100) > 0 else price
+        cogs = round(price * (1 - margin_pct / 100), 2)
     elif cogs is not None and margin_pct is not None:
-        price = round(cogs * (1 + margin_pct / 100), 2)
+        price = round(cogs / (1 - margin_pct / 100), 2) if margin_pct < 100 else cogs
 
     if price      is not None: sku["price"]      = round(price, 2)
     if cogs       is not None: sku["cogs"]        = round(cogs, 2)
