@@ -186,9 +186,7 @@ body.be-page { background:var(--bg); }
               class="cost-display" data-sku="{{ sku.sku_key|e }}">
               {{ '%.2f'|format(cogs) if cogs is not none else '—' }}
             </div>
-            <div style="font-size:10px;color:var(--accent);min-height:14px;margin-top:2px;">
-              <span class="cogs-computed" data-sku="{{ sku.sku_key|e }}" title="From COGS Calculator"></span>
-            </div>
+
             <label style="font-size:10px;color:var(--text-light);display:flex;align-items:center;gap:3px;cursor:pointer;margin-top:2px;">
               <input type="checkbox" class="label-supplied-tog" data-sku="{{ sku.sku_key|e }}"
                 {% if assigned.get('label_supplied') %}checked{% endif %}

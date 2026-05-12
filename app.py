@@ -5265,11 +5265,27 @@ def _compute_cogs_matrix(c, recipe_overrides=None):
                 bones_kg    = float(recipe_overrides.get("bones_kg", 0))
                 mushroom_kg = float(recipe_overrides.get("mushroom_kg", 0))
 
-                # Bone cost from recipe kg × $/kg
-                bone_prices = c.get("bones", {})
-                bp          = bone_prices.get(bt_key, {})
-                bone_price  = float(bp.get("price_per_kg", 0))
-                bone_pu     = (bones_kg * bone_price) / units
+                # Bone cost — each bone type priced individually
+                # Broth type only determines matrix row; actual cost uses per-type kg × $/kg
+                bone_prices   = c.get("bones", {})
+                bp            = bone_prices.get(bt_key, {})
+
+                chicken_kg_r  = float(recipe_overrides.get("chicken_kg", 0))
+                beef_kg_r     = float(recipe_overrides.get("beef_kg", 0))
+                turkey_kg_r   = float(recipe_overrides.get("turkey_kg", 0))
+                untyped_kg    = float(recipe_overrides.get("untyped_kg", 0))
+
+                chicken_price = float(bone_prices.get("chicken", {}).get("price_per_kg", 0))
+                beef_price    = float(bone_prices.get("beef",    {}).get("price_per_kg", 0))
+                turkey_price  = float(bone_prices.get("turkey",  {}).get("price_per_kg", 0))
+                broth_price   = float(bp.get("price_per_kg", 0))  # for untyped bones
+
+                bone_pu = (
+                    chicken_kg_r * chicken_price +
+                    beef_kg_r    * beef_price +
+                    turkey_kg_r  * turkey_price +
+                    untyped_kg   * broth_price
+                ) / max(units, 1)
 
                 # Mirepoix per-kg from recipe card
                 mir = c.get("mirepoix", {})
@@ -5280,12 +5296,12 @@ def _compute_cogs_matrix(c, recipe_overrides=None):
                     onion_kg  * float(mir.get("onion",  {}).get("price_per_kg", 1.20)) +
                     carrot_kg * float(mir.get("carrot", {}).get("price_per_kg", 1.50)) +
                     celery_kg * float(mir.get("celery", {}).get("price_per_kg", 2.20))
-                ) / units
+                ) / max(units, 1)
 
-                # Turkey: add flat whole-turkey cost per batch
-                if bt_key == "turkey":
-                    whole_cost = float(bp.get("whole_turkey_cost_per_batch", 180))
-                    bone_pu   += whole_cost / units
+                # Turkey flat cost: add when any turkey bones present
+                if turkey_kg_r > 0 or bt_key == "turkey":
+                    whole_cost = float(bone_prices.get("turkey", {}).get("whole_turkey_cost_per_batch", 0))
+                    bone_pu   += whole_cost / max(units, 1)
 
                 # Mushroom: from recipe kg if mushroom broth,
                 # OR use flat $/batch from seed if no kg provided
@@ -5382,7 +5398,17 @@ def _extract_recipe_kg(recipe_data):
 
         kw = _COGS_INGREDIENT_KEYWORDS
         if any(kw_word in name for kw_word in kw["bones"]):
-            result["bones_kg"] += amount
+            result["bones_kg"] += amount  # total for fallback
+            # Also track per-type for accurate mixed-bone pricing
+            if "chicken" in name or "carcass" in name or "drumstick" in name or "wing" in name:
+                result["chicken_kg"] = result.get("chicken_kg", 0.0) + amount
+            elif "beef" in name or "oxtail" in name or "bison" in name:
+                result["beef_kg"] = result.get("beef_kg", 0.0) + amount
+            elif "turkey" in name:
+                result["turkey_kg"] = result.get("turkey_kg", 0.0) + amount
+            else:
+                # Unknown bone type — attribute to whichever broth type is set
+                result["untyped_kg"] = result.get("untyped_kg", 0.0) + amount
         elif any(kw_word in name for kw_word in kw["mushroom"]):
             result["mushroom_kg"] += amount
         elif any(kw_word in name for kw_word in kw["onion"]):
