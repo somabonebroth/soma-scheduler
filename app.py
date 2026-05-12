@@ -3297,8 +3297,10 @@ def auto_assign_rm_sections():
         key = _ingredient_section_key(name, unit)
         existing = assignments.get(key)
 
-        # Skip if already assigned and not overwriting
-        if existing and existing in valid_section_ids and not overwrite:
+        # Skip if already assigned to a REAL section (not Unassigned) and not overwriting
+        existing_is_real = (existing and existing in valid_section_ids
+                            and existing != UNASSIGNED_SECTION_ID)
+        if existing_is_real and not overwrite:
             skipped.append({"name": name, "unit": unit, "section": existing})
             continue
 
