@@ -5154,36 +5154,31 @@ _COGS_SEED = {
 }
 
 
-COGS_SCHEMA_VERSION = 2  # increment when seed structure changes
+COGS_SCHEMA_VERSION = 3  # increment when seed structure changes
 
 def _load_cogs():
-    """Load COGS data, migrating to current seed if schema version is outdated."""
-    if not os.path.exists(COGS_PATH):
-        seed = dict(_COGS_SEED, schema_version=COGS_SCHEMA_VERSION)
-        _save_json(COGS_PATH, seed)
-        return seed
+    """Load COGS data. Always validates structure against current seed version."""
+    data = _load_json(COGS_PATH, {}) if os.path.exists(COGS_PATH) else {}
 
-    data = _load_json(COGS_PATH, {})
-
-    # Migrate if on old schema — missing new fields means it needs reseed
+    # Force reseed if version mismatch OR any required structural key missing
+    required_keys = {"overhead_fixed", "overhead_variable", "slow_kettles_per_day",
+                     "supplies", "mushroom_fresh", "mushroom_specialty",
+                     "other_ingredients_per_batch"}
     needs_migration = (
-        data.get("schema_version", 1) < COGS_SCHEMA_VERSION
-        or "overhead_fixed" not in data        # new split overhead structure
-        or "slow_kettles_per_day" not in data  # new production volume field
-        or "supplies" not in data              # new supplies list
+        data.get("schema_version", 0) < COGS_SCHEMA_VERSION
+        or not required_keys.issubset(data.keys())
     )
 
     if needs_migration:
-        # Preserve any user-edited values that exist in both old and new schema
-        migrated = dict(_COGS_SEED)
-        # Carry over top-level scalar edits if they exist in old data
+        migrated = {k: v for k, v in _COGS_SEED.items()}  # fresh copy of seed
+        # Preserve scalar user edits if present and non-zero
         for key in ("maintenance_monthly", "debt_repayment_monthly",
-                    "mushroom_price_per_kg", "other_ingredients_per_batch",
-                    "minor_ingredients_per_batch"):
-            if key in data and data[key]:
+                    "other_ingredients_per_batch"):
+            if data.get(key) and float(data[key]) > 0:
                 migrated[key] = data[key]
-        # Carry over equipment if it looks like the new schema
-        if data.get("equipment") and any("life_years" in e for e in data["equipment"]):
+        # Preserve equipment list if it has the correct structure
+        if (data.get("equipment") and isinstance(data["equipment"], list)
+                and all("life_years" in e and "cost" in e for e in data["equipment"])):
             migrated["equipment"] = data["equipment"]
         migrated["schema_version"] = COGS_SCHEMA_VERSION
         _save_json(COGS_PATH, migrated)
