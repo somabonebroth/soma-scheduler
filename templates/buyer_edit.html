@@ -136,7 +136,7 @@ body.be-page { background:var(--bg); }
   <div class="be-card">
     <div class="be-card-head">
       <h2>Catalogue &amp; Pricing</h2>
-      <div style="font-size:12px;color:var(--text-light);">Tick to assign · Enter price per unit · COGS &amp; margin are internal only</div>
+      <div style="font-size:12px;color:var(--text-light);">Tick to assign · Enter price per unit · Cost auto-calculated · Margin % updates price</div>
     </div>
 
     {% set ns = namespace(cur_fmt='') %}
@@ -148,8 +148,8 @@ body.be-page { background:var(--bg); }
         <span></span>
         <span style="text-align:left;">Product</span>
         <span>Price/unit</span>
-        <span>COGS</span>
-        <span>Margin</span>
+        <span>Cost (auto)</span>
+        <span>Margin %</span>
         <span>Active</span>
       </div>
 
@@ -180,14 +180,13 @@ body.be-page { background:var(--bg); }
               data-sku="{{ sku.sku_key|e }}" data-field="price"
               {% if not is_assigned %}disabled{% endif %}>
           </div>
+          <!-- Cost — read-only, computed from COGS model -->
           <div>
-            <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">
-              <input type="number" class="p-input cogs-input" step="0.01" min="0" placeholder="—"
-                value="{{ '%.2f'|format(cogs) if cogs is not none else '' }}"
-                data-sku="{{ sku.sku_key|e }}" data-field="cogs"
-                {% if not is_assigned %}disabled{% endif %} style="flex:1;">
+            <div style="background:#f5f5f0;border:1.5px solid var(--border);border-radius:7px;padding:6px 8px;font-size:13px;font-weight:600;text-align:right;color:var(--dark);min-height:32px;"
+              class="cost-display" data-sku="{{ sku.sku_key|e }}">
+              {{ '%.2f'|format(cogs) if cogs is not none else '—' }}
             </div>
-            <div style="font-size:10px;color:var(--accent);min-height:14px;">
+            <div style="font-size:10px;color:var(--accent);min-height:14px;margin-top:2px;">
               <span class="cogs-computed" data-sku="{{ sku.sku_key|e }}" title="From COGS Calculator"></span>
             </div>
             <label style="font-size:10px;color:var(--text-light);display:flex;align-items:center;gap:3px;cursor:pointer;margin-top:2px;">
@@ -198,8 +197,14 @@ body.be-page { background:var(--bg); }
               Label by buyer
             </label>
           </div>
-          <div class="p-margin" data-sku-margin="{{ sku.sku_key|e }}">
-            {{ '%.1f'|format(margin) + '%' if margin is not none else '—' }}
+          <!-- Margin — editable, recalculates price -->
+          <div>
+            <input type="number" class="p-input margin-input" step="0.1" min="0" max="100" placeholder="—"
+              value="{{ '%.1f'|format(margin) if margin is not none else '' }}"
+              data-sku="{{ sku.sku_key|e }}"
+              {% if not is_assigned %}disabled{% endif %}
+              oninput="onMarginChange(this)">
+            <div style="font-size:10px;color:var(--text-light);margin-top:2px;">%</div>
           </div>
           <div>
             <button class="p-active-tog {% if is_active %}on{% else %}off{% endif %}"
@@ -279,11 +284,12 @@ document.querySelectorAll('.sku-row').forEach(function(row) {
             el.textContent = 'Calculator: $'+d.unit_cogs.toFixed(2);
             el.style.color = 'var(--accent)';
             el.title = formatCogsBreakdown(d.breakdown);
-            // Auto-fill cogs input if empty
-            var cogsEl = row.querySelector('.cogs-input');
-            if(cogsEl && !cogsEl.value) {
-              cogsEl.value = d.unit_cogs.toFixed(2);
-              if(_skuData[sk]) _skuData[sk].cogs = d.unit_cogs;
+            // Update cost display (read-only) and recalculate margin
+            var costEl = row.querySelector('.cost-display[data-sku="'+sk+'"]');
+            if(costEl) costEl.textContent = '$'+d.unit_cogs.toFixed(2);
+            if(_skuData[sk]) {
+              _skuData[sk].cogs = d.unit_cogs;
+              updateMarginFromPrice(sk);
             }
           } else {
             el.textContent = 'Format not mapped';
@@ -319,8 +325,9 @@ function onLabelSuppliedChange(el){
       if(d.unit_cogs != null){
         dispEl.textContent = 'Calculator: $'+d.unit_cogs.toFixed(2);
         dispEl.title = formatCogsBreakdown(d.breakdown);
-        var cogsEl = row.querySelector('.cogs-input');
-        if(cogsEl){ cogsEl.value=d.unit_cogs.toFixed(2); if(_skuData[sk]) _skuData[sk].cogs=d.unit_cogs; }
+        var costEl2 = row.querySelector('.cost-display[data-sku="'+sk+'"]');
+        if(costEl2) costEl2.textContent = '$'+d.unit_cogs.toFixed(2);
+        if(_skuData[sk]){ _skuData[sk].cogs=d.unit_cogs; updateMarginFromPrice(sk); }
       }
     }).catch(function(){});
 }
@@ -346,24 +353,45 @@ function toggleActive(sk, btn) {
   _skuData[sk].active = !isOn;
 }
 
-// Delegated input listener for price/cogs
+// Delegated input listener for price and margin
 document.getElementById('sku-table').addEventListener('input', function(ev) {
   var el = ev.target;
   var sk = el.getAttribute('data-sku');
-  var field = el.getAttribute('data-field');
-  if(!sk || !field) return;
+  if(!sk) return;
   _skuData[sk] = _skuData[sk] || {};
-  var val = el.value.trim() ? parseFloat(el.value) : null;
-  _skuData[sk][field] = val;
-  // Recalculate margin
-  var p = _skuData[sk].price, c = _skuData[sk].cogs;
-  if(p && c && c > 0) {
-    var m = ((p / c) - 1) * 100;
-    _skuData[sk].margin_pct = Math.round(m * 100) / 100;
-    var mEl = document.querySelector('[data-sku-margin="'+sk+'"]');
-    if(mEl) mEl.textContent = m.toFixed(1) + '%';
+
+  if(el.classList.contains('price-input')) {
+    var price = el.value.trim() ? parseFloat(el.value) : null;
+    _skuData[sk].price = price;
+    _skuData[sk]['field'] = 'price';
+    updateMarginFromPrice(sk);
+  } else if(el.classList.contains('margin-input')) {
+    var margin = el.value.trim() ? parseFloat(el.value) : null;
+    _skuData[sk].margin_pct = margin;
+    if(margin != null && _skuData[sk].cogs != null && margin < 100) {
+      var cost  = _skuData[sk].cogs;
+      var price2 = Math.round(cost / (1 - margin/100) * 100) / 100;
+      _skuData[sk].price = price2;
+      var pEl = document.querySelector('.price-input[data-sku="'+sk+'"]');
+      if(pEl) pEl.value = price2.toFixed(2);
+    }
   }
 });
+
+function updateMarginFromPrice(sk) {
+  var d = _skuData[sk];
+  if(!d) return;
+  var cost  = d.cogs;
+  var price = d.price;
+  if(cost != null && price != null && price > 0) {
+    var margin = Math.round(((price - cost) / price) * 1000) / 10;
+    d.margin_pct = margin;
+    var mEl = document.querySelector('.margin-input[data-sku="'+sk+'"]');
+    if(mEl) mEl.value = margin.toFixed(1);
+  }
+}
+
+function onMarginChange(el) {}  // handled by delegated listener above
 
 function updateSkuBadge() {
   var n = Object.values(_skuData).filter(function(d){ return d.assigned; }).length;
@@ -413,7 +441,7 @@ async function saveBuyer() {
         display:        (document.querySelector('.sku-row[data-sku="'+sk+'"] .sku-name')||{}).textContent||'',
         position:       idx + 1,
         price:          d.price,
-        cogs:           d.cogs,
+        cogs:           d.cogs,       // computed from COGS model, stored for display
         margin_pct:     d.margin_pct,
         active:         d.active !== false,
         label_supplied: d.label_supplied || false,

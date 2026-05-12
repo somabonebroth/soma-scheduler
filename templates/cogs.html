@@ -872,99 +872,89 @@ body { padding-top: 0; }
 <!-- ============ INGREDIENTS TAB ============ -->
 <div id="tab-ingredients" class="tab-content">
   <div class="section">
-    <div class="section-header"><span><span class="section-num">08</span>Bones & Mushroom</span></div>
+    <div class="section-header"><span><span class="section-num">08</span>Ingredient Prices</span></div>
     <div class="section-body">
+
+      <div class="subsection-label">Bones — $/kg</div>
       <table>
-        <thead>
-          <tr>
-            <th>Type</th>
-            <th>$/kg</th>
-            <th>Base kg</th>
-            <th>Extra kg</th>
-            <th>Base $/batch</th>
-            <th>Extra $/batch</th>
-          </tr>
-        </thead>
+        <thead><tr><th>Type</th><th>$/kg</th><th class="note" style="text-align:left;font-style:italic;">Used in COGS calculation via actual kg on recipe card</th></tr></thead>
         <tbody>
           <tr>
             <td class="label">Chicken</td>
             <td><input type="number" data-input="chickenKg" value="2.20" step="0.05"></td>
-            <td><input type="number" data-input="chickenBase" value="50" step="5"></td>
-            <td><input type="number" data-input="chickenExtra" value="25" step="5"></td>
-            <td class="formula-cell" data-output="chickenBatch"></td>
-            <td class="formula-cell" data-output="chickenExtraBatch"></td>
+            <td></td>
           </tr>
           <tr>
             <td class="label">Beef</td>
             <td><input type="number" data-input="beefKg" value="3.50" step="0.05"></td>
-            <td><input type="number" data-input="beefBase" value="60" step="5"></td>
-            <td><input type="number" data-input="beefExtra" value="15" step="5"></td>
-            <td class="formula-cell" data-output="beefBatch"></td>
-            <td class="formula-cell" data-output="beefExtraBatch"></td>
+            <td></td>
           </tr>
           <tr>
-            <td class="label">Turkey bones</td>
+            <td class="label">Turkey</td>
             <td><input type="number" data-input="turkeyKg" value="4.40" step="0.05"></td>
-            <td><input type="number" data-input="turkeyBase" value="50" step="5"></td>
-            <td></td>
-            <td class="formula-cell" data-output="turkeyBonesBatch"></td>
             <td></td>
           </tr>
           <tr>
-            <td class="label">Whole turkeys (2)</td>
-            <td colspan="3"></td>
+            <td class="label">Whole turkeys (2) — flat $/batch</td>
             <td><input type="number" data-input="wholeTurkey" value="180" step="5"></td>
-            <td></td>
+            <td class="note">Added to turkey bone cost per batch</td>
           </tr>
-          <tr class="total-row">
-            <td class="label">Turkey total $/batch</td>
-            <td colspan="3"></td>
-            <td class="formula-cell" data-output="turkeyTotalBatch"></td>
-            <td></td>
-          </tr>
+        </tbody>
+      </table>
+
+      <div class="subsection-label">Mushroom — blended $/kg</div>
+      <table>
+        <thead><tr><th>Type</th><th>$/kg</th><th>kg/batch</th><th>$/batch</th></tr></thead>
+        <tbody>
           <tr>
-            <td class="label">Mushroom (fresh)</td>
+            <td class="label">Fresh mushroom</td>
             <td><input type="number" data-input="mushFreshKg" value="11.66" step="0.10"></td>
             <td><input type="number" data-input="mushFreshAmt" value="16" step="1"></td>
-            <td></td>
             <td class="formula-cell" data-output="mushFreshBatch"></td>
+          </tr>
+          <tr>
+            <td class="label">Specialty mushroom</td>
+            <td><input type="number" data-input="mushSpecKg" value="22" step="0.50"></td>
+            <td><input type="number" data-input="mushSpecAmt" value="3" step="1"></td>
+            <td class="formula-cell" data-output="mushSpecBatch"></td>
+          </tr>
+        </tbody>
+        <tr class="total-row">
+          <td class="label">Blended mushroom rate</td>
+          <td class="formula-cell" data-output="mushBlendedRate" style="font-weight:700;"></td>
+          <td class="note">/kg (auto-calculated)</td>
+          <td class="formula-cell" data-output="mushTotalBatch"></td>
+        </tr>
+      </table>
+
+      <div class="subsection-label">Mirepoix — $/kg</div>
+      <table>
+        <thead><tr><th>Vegetable</th><th>$/kg</th><th class="note" style="text-align:left;font-style:italic;">Used in COGS calculation via actual kg on recipe card</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="label">Onion</td>
+            <td><input type="number" data-input="onionKg" value="1.20" step="0.05"></td>
             <td></td>
           </tr>
           <tr>
-            <td class="label">Mushroom (specialty)</td>
-            <td><input type="number" data-input="mushSpecKg" value="22" step="0.50"></td>
-            <td><input type="number" data-input="mushSpecAmt" value="3" step="1"></td>
-            <td></td>
-            <td class="formula-cell" data-output="mushSpecBatch"></td>
+            <td class="label">Carrot</td>
+            <td><input type="number" data-input="carrotKg" value="1.50" step="0.05"></td>
             <td></td>
           </tr>
-          <tr class="total-row">
-            <td class="label">Mushroom total $/batch</td>
-            <td colspan="3"></td>
-            <td class="formula-cell" data-output="mushTotalBatch"></td>
+          <tr>
+            <td class="label">Celery</td>
+            <td><input type="number" data-input="celeryKg" value="2.20" step="0.05"></td>
             <td></td>
           </tr>
         </tbody>
       </table>
 
-      <div class="subsection-label">Per-Unit Cost by SKU</div>
-      <table>
-        <thead>
-          <tr><th></th><th>475ml</th><th>735ml</th><th>876ml</th><th>780ml FZ</th><th>780ml BB</th><th>Pouch</th></tr>
-        </thead>
-        <tbody id="bones-per-unit-body"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-header"><span><span class="section-num">09</span>Other Ingredients</span></div>
-    <div class="section-body">
+      <div class="subsection-label">Other Ingredients — flat $/batch</div>
       <table>
         <thead><tr><th>Ingredient</th><th>$/kg</th><th>kg/batch</th><th>$/batch</th></tr></thead>
         <tbody>
           <tr>
-            <td class="label">Mirepoix</td>
+            <td class="label">Mirepoix (average blended)</td>
             <td><input type="number" data-input="mirepoixKg" value="2.40" step="0.10"></td>
             <td><input type="number" data-input="mirepoixAmt" value="9.5" step="0.5"></td>
             <td class="formula-cell" data-output="mirepoixBatch"></td>
@@ -1194,7 +1184,10 @@ const DEFAULTS = {
   mushFreshKg: 11.66, mushFreshAmt: 16,
   mushSpecKg: 22, mushSpecAmt: 3,
 
-  // Other ingredients
+  // Mirepoix per-kg prices (used by recipe card COGS)
+  onionKg: 1.20, carrotKg: 1.50, celeryKg: 2.20,
+
+  // Other ingredients (flat batch)
   mirepoixKg: 2.40, mirepoixAmt: 9.5,
   saltKg: 6.00, saltAmt: 0.675,
   spicesKg: 40, spicesAmt: 0.1,
@@ -1402,6 +1395,11 @@ async function loadState() {
     }
     if (c.mushroom_fresh)     { state.mushFreshKg  = c.mushroom_fresh.price_per_kg;  state.mushFreshAmt = c.mushroom_fresh.kg_per_batch; }
     if (c.mushroom_specialty) { state.mushSpecKg   = c.mushroom_specialty.price_per_kg; state.mushSpecAmt = c.mushroom_specialty.kg_per_batch; }
+    if (c.mirepoix) {
+      if (c.mirepoix.onion  && c.mirepoix.onion.price_per_kg)  state.onionKg  = c.mirepoix.onion.price_per_kg;
+      if (c.mirepoix.carrot && c.mirepoix.carrot.price_per_kg) state.carrotKg = c.mirepoix.carrot.price_per_kg;
+      if (c.mirepoix.celery && c.mirepoix.celery.price_per_kg) state.celeryKg = c.mirepoix.celery.price_per_kg;
+    }
     // Other ingredients — stored as flat batch total, split across 3 lines
     if (c.other_ingredients_per_batch) {
       // Keep proportions from defaults, scale to match stored total
@@ -1467,6 +1465,11 @@ async function flushSave() {
     },
     mushroom_fresh:     {price_per_kg: state.mushFreshKg, kg_per_batch: state.mushFreshAmt},
     mushroom_specialty: {price_per_kg: state.mushSpecKg,  kg_per_batch: state.mushSpecAmt},
+    mirepoix: {
+      onion:  {price_per_kg: state.onionKg  || 1.20},
+      carrot: {price_per_kg: state.carrotKg || 1.50},
+      celery: {price_per_kg: state.celeryKg || 2.20},
+    },
     other_ingredients_per_batch: (state.mirepoixKg*state.mirepoixAmt + state.saltKg*state.saltAmt + state.spicesKg*state.spicesAmt),
     packaging: Object.fromEntries(Object.entries(SKU_MAP).map(([sk,sv]) => [sv, {container:state['container.'+sk]||0, lid:state['lid.'+sk]||0, box:state['box.'+sk]||0}])),
     labels:    Object.fromEntries(Object.entries(SKU_MAP).map(([sk,sv]) => [sv, {cost:state['label.'+sk]||0, hand_applied:['735ml','780fz'].includes(sk), hand_apply_surcharge:0}])),
@@ -1600,6 +1603,8 @@ function calculate() {
   r.mushFreshBatch = s.mushFreshKg * s.mushFreshAmt;
   r.mushSpecBatch = s.mushSpecKg * s.mushSpecAmt;
   r.mushTotalBatch = r.mushFreshBatch + r.mushSpecBatch;
+  const totalMushKg = (+s.mushFreshAmt) + (+s.mushSpecAmt);
+  r.mushBlendedRate = totalMushKg > 0 ? r.mushTotalBatch / totalMushKg : 0;
 
   SKUS.forEach(sku => {
     const u = +s['units.' + sku];
@@ -1877,6 +1882,7 @@ function updateOutputs(r) {
   setOutput('mushFreshBatch', fmt$(r.mushFreshBatch));
   setOutput('mushSpecBatch', fmt$(r.mushSpecBatch));
   setOutput('mushTotalBatch', fmt$(r.mushTotalBatch));
+  setOutput('mushBlendedRate', fmt$(r.mushBlendedRate) + '/kg');
   setOutput('mirepoixBatch', fmt$(r.mirepoixBatch));
   setOutput('saltBatch', fmt$(r.saltBatch));
   setOutput('spicesBatch', fmt$(r.spicesBatch));

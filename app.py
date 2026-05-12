@@ -5259,6 +5259,7 @@ def _compute_cogs_matrix(c, recipe_overrides=None):
 
             bone_pu    = 0.0
             mush_pu    = 0.0
+            veg_pu     = 0.0
 
             if recipe_overrides:
                 bones_kg    = float(recipe_overrides.get("bones_kg", 0))
@@ -5270,6 +5271,17 @@ def _compute_cogs_matrix(c, recipe_overrides=None):
                 bone_price  = float(bp.get("price_per_kg", 0))
                 bone_pu     = (bones_kg * bone_price) / units
 
+                # Mirepoix per-kg from recipe card
+                mir = c.get("mirepoix", {})
+                onion_kg  = float(recipe_overrides.get("onion_kg", 0))
+                carrot_kg = float(recipe_overrides.get("carrot_kg", 0))
+                celery_kg = float(recipe_overrides.get("celery_kg", 0))
+                veg_pu = (
+                    onion_kg  * float(mir.get("onion",  {}).get("price_per_kg", 1.20)) +
+                    carrot_kg * float(mir.get("carrot", {}).get("price_per_kg", 1.50)) +
+                    celery_kg * float(mir.get("celery", {}).get("price_per_kg", 2.20))
+                ) / units
+
                 # Turkey: add flat whole-turkey cost per batch
                 if bt_key == "turkey":
                     whole_cost = float(bp.get("whole_turkey_cost_per_batch", 180))
@@ -5278,22 +5290,19 @@ def _compute_cogs_matrix(c, recipe_overrides=None):
                 # Mushroom: from recipe kg if mushroom broth,
                 # OR use flat $/batch from seed if no kg provided
                 if bt_key == "mushroom":
-                    if mushroom_kg > 0:
-                        # fresh rate used for all mushroom kg from recipe
-                        mf = c.get("mushroom_fresh", {})
-                        ms = c.get("mushroom_specialty", {})
-                        mush_cost_per_batch = (
-                            float(mf.get("kg_per_batch", 16)) * float(mf.get("price_per_kg", 11.66)) +
-                            float(ms.get("kg_per_batch", 3))  * float(ms.get("price_per_kg", 22.00))
-                        )
-                        mush_pu = mush_cost_per_batch / units
-                    else:
-                        # Flat mushroom cost from seed
-                        mf = c.get("mushroom_fresh", {})
-                        ms = c.get("mushroom_specialty", {})
-                        mush_cost = (float(mf.get("kg_per_batch",16)) * float(mf.get("price_per_kg",11.66)) +
-                                     float(ms.get("kg_per_batch",3))  * float(ms.get("price_per_kg",22.00)))
-                        mush_pu = mush_cost / units
+                    # Use blended $/kg rate × actual recipe mushroom kg
+                    mf = c.get("mushroom_fresh", {})
+                    ms = c.get("mushroom_specialty", {})
+                    mf_kg = float(mf.get("kg_per_batch", 16))
+                    ms_kg = float(ms.get("kg_per_batch", 3))
+                    total_mush_kg = mf_kg + ms_kg
+                    blended_mush_rate = (
+                        float(mf.get("price_per_kg", 11.66)) * mf_kg +
+                        float(ms.get("price_per_kg", 22.00)) * ms_kg
+                    ) / max(total_mush_kg, 0.001)
+                    # Use recipe kg if available, else fall back to standard batch total
+                    effective_mush_kg = mushroom_kg if mushroom_kg > 0 else total_mush_kg
+                    mush_pu = (effective_mush_kg * blended_mush_rate) / units
             else:
                 # Base matrix (no recipe): use spreadsheet's known bone amounts for reference
                 # These are the base kg from the spreadsheet
@@ -5310,9 +5319,14 @@ def _compute_cogs_matrix(c, recipe_overrides=None):
                 if bt_key == "mushroom":
                     mf = c.get("mushroom_fresh", {})
                     ms = c.get("mushroom_specialty", {})
-                    mush_cost = (float(mf.get("kg_per_batch",16)) * float(mf.get("price_per_kg",11.66)) +
-                                 float(ms.get("kg_per_batch",3))  * float(ms.get("price_per_kg",22.00)))
-                    mush_pu = mush_cost / units
+                    mf_kg = float(mf.get("kg_per_batch", 16))
+                    ms_kg = float(ms.get("kg_per_batch", 3))
+                    total_mush_kg = mf_kg + ms_kg
+                    blended_mush_rate = (
+                        float(mf.get("price_per_kg", 11.66)) * mf_kg +
+                        float(ms.get("price_per_kg", 22.00)) * ms_kg
+                    ) / max(total_mush_kg, 0.001)
+                    mush_pu = (total_mush_kg * blended_mush_rate) / units
 
             # Packaging
             pack = c.get("packaging", {}).get(size_key, {})
@@ -5322,13 +5336,16 @@ def _compute_cogs_matrix(c, recipe_overrides=None):
             lbl     = c.get("labels", {}).get(size_key, {})
             label_pu = float(lbl.get("cost", 0)) + float(lbl.get("hand_apply_surcharge", 0))
 
-            total = fixed_pu + bone_pu + mush_pu + other_pu + pack_pu + label_pu
+            # veg_pu only set in recipe path, else 0
+            _veg_pu = veg_pu if recipe_overrides else 0.0
+            total = fixed_pu + bone_pu + _veg_pu + mush_pu + other_pu + pack_pu + label_pu
 
             matrix[bt][size_key] = {
                 "total": round(total, 4),
                 "breakdown": {
                     "fixed":             round(fixed_pu, 4),
                     "bones":             round(bone_pu, 4),
+                    "mirepoix":          round(_veg_pu, 4),
                     "mushroom":          round(mush_pu, 4),
                     "other_ingredients": round(other_pu, 4),
                     "packaging":         round(pack_pu, 4),
@@ -5341,10 +5358,11 @@ def _compute_cogs_matrix(c, recipe_overrides=None):
 
 def _extract_recipe_kg(recipe_data):
     """Extract costed ingredient kg from kettle_overnight section of a recipe.
-    Only bones and mushrooms are extracted per-recipe — everything else
-    (mirepoix, salt, spices) uses the flat other_ingredients_per_batch cost.
+    Extracts: bones, mushroom, onion, carrot, celery.
+    Everything else (salt, spices) uses the flat other_ingredients_per_batch cost.
     """
-    result = {"bones_kg": 0.0, "mushroom_kg": 0.0}
+    result = {"bones_kg": 0.0, "mushroom_kg": 0.0,
+              "onion_kg": 0.0, "carrot_kg": 0.0, "celery_kg": 0.0}
     kettle = recipe_data.get("kettle_overnight", [])
     for item in kettle:
         if not isinstance(item, dict):
@@ -5367,6 +5385,12 @@ def _extract_recipe_kg(recipe_data):
             result["bones_kg"] += amount
         elif any(kw_word in name for kw_word in kw["mushroom"]):
             result["mushroom_kg"] += amount
+        elif any(kw_word in name for kw_word in kw["onion"]):
+            result["onion_kg"] += amount
+        elif any(kw_word in name for kw_word in kw["carrot"]):
+            result["carrot_kg"] += amount
+        elif any(kw_word in name for kw_word in kw["celery"]):
+            result["celery_kg"] += amount
     return result
 
 
@@ -5425,11 +5449,24 @@ def cogs_page():
 def get_cogs():
     c = _load_cogs()
     matrix, cost_per_run, avg_runs = _compute_cogs_matrix(c)
+    # Compute blended mushroom rate to expose in API
+    mf = c.get("mushroom_fresh", {})
+    ms = c.get("mushroom_specialty", {})
+    mf_kg = float(mf.get("kg_per_batch", 16))
+    ms_kg = float(ms.get("kg_per_batch", 3))
+    total_mush_kg = mf_kg + ms_kg
+    blended_mushroom_rate = round(
+        (float(mf.get("price_per_kg", 11.66)) * mf_kg +
+         float(ms.get("price_per_kg", 22.00)) * ms_kg)
+        / max(total_mush_kg, 0.001), 4
+    )
+
     return jsonify({
         "inputs": c,
         "matrix": matrix,
         "cost_per_run": cost_per_run,
         "avg_runs_per_month": avg_runs,
+        "blended_mushroom_rate": blended_mushroom_rate,
         "size_labels": {
             "475ml": "475ml SS",
             "750ml_ss": "750ml SS",
