@@ -30,11 +30,11 @@ body.be-page { background:var(--bg); }
 
 /* SKU assignment table */
 .sku-section-hdr { font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.06em; padding:8px 14px 6px; background:#f5f5f0; border-bottom:1px solid var(--border); }
-.sku-row { display:grid; grid-template-columns:32px 1fr 80px 80px 75px 60px; gap:8px; align-items:center; padding:9px 14px; border-bottom:1px solid var(--border); background:#fff; }
+.sku-row { display:grid; grid-template-columns:32px 1fr 90px 110px 80px 50px; gap:8px; align-items:center; padding:9px 14px; border-bottom:1px solid var(--border); background:#fff; }
 .sku-row:last-child { border-bottom:none; }
 .sku-row:hover { background:#f9faf7; }
 .sku-row.assigned { background:#f0f7f0; }
-.sku-hdr { display:grid; grid-template-columns:32px 1fr 80px 80px 75px 60px; gap:8px; padding:8px 14px; background:#f5f5f0; border-bottom:2px solid var(--border); font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
+.sku-hdr { display:grid; grid-template-columns:32px 1fr 90px 110px 80px 50px; gap:8px; padding:8px 14px; background:#f5f5f0; border-bottom:2px solid var(--border); font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
 .sku-hdr span, .sku-row span.hdr { text-align:right; }
 .sku-hdr span:nth-child(2), .sku-row .sku-name { text-align:left; }
 .sku-check { width:17px; height:17px; accent-color:var(--accent); cursor:pointer; }
@@ -173,6 +173,13 @@ body.be-page { background:var(--bg); }
           <div>
             <div class="sku-name">{{ sku.recipe }}</div>
             <div class="sku-fmt" style="font-family:ui-monospace,monospace;font-size:10px;">{{ sku.sku_key }}</div>
+            <label style="font-size:10px;color:var(--text-light);display:flex;align-items:center;gap:3px;cursor:pointer;margin-top:3px;">
+              <input type="checkbox" class="label-supplied-tog" data-sku="{{ sku.sku_key|e }}"
+                {% if assigned.get('label_supplied') %}checked{% endif %}
+                onchange="onLabelSuppliedChange(this)"
+                style="width:11px;height:11px;accent-color:var(--accent);">
+              Label by buyer
+            </label>
           </div>
           <div>
             <input type="number" class="p-input price-input" step="0.01" min="0" placeholder="—"
@@ -182,18 +189,9 @@ body.be-page { background:var(--bg); }
           </div>
           <!-- Cost — read-only, computed from COGS model -->
           <div>
-            <div style="display:flex;align-items:center;gap:6px;">
-              <div style="flex:1;background:#f5f5f0;border:1.5px solid var(--border);border-radius:7px;padding:6px 8px;font-size:13px;font-weight:600;text-align:right;color:var(--dark);min-height:32px;"
-                class="cost-display" data-sku="{{ sku.sku_key|e }}">
-                {{ '%.2f'|format(cogs) if cogs is not none else '—' }}
-              </div>
-              <label style="font-size:10px;color:var(--text-light);display:flex;align-items:center;gap:3px;cursor:pointer;white-space:nowrap;">
-                <input type="checkbox" class="label-supplied-tog" data-sku="{{ sku.sku_key|e }}"
-                  {% if assigned.get('label_supplied') %}checked{% endif %}
-                  onchange="onLabelSuppliedChange(this)"
-                  style="width:12px;height:12px;accent-color:var(--accent);">
-                Label by buyer
-              </label>
+            <div style="background:#f5f5f0;border:1.5px solid var(--border);border-radius:7px;padding:6px 8px;font-size:13px;font-weight:600;text-align:right;color:var(--dark);min-height:32px;"
+              class="cost-display" data-sku="{{ sku.sku_key|e }}">
+              {{ '%.2f'|format(cogs) if cogs is not none else '—' }}
             </div>
           </div>
           <!-- Margin — editable, recalculates price -->
@@ -243,13 +241,14 @@ document.querySelectorAll('.sku-row').forEach(function(row) {
   var priceEl = row.querySelector('.price-input');
   var togEl = row.querySelector('.p-active-tog');
   var lblTog = row.querySelector('.label-supplied-tog');
-  var price0 = priceEl && priceEl.value ? parseFloat(priceEl.value) : null;
-  var cogs0  = null;  // populated by loadComputedCogs()
+  var price0  = priceEl && priceEl.value ? parseFloat(priceEl.value) : null;
+  var cogs0   = null;  // populated by loadComputedCogs()
+  var margin0 = null;
   _skuData[sk] = {
     assigned:       chk ? chk.checked : false,
     price:          price0,
     cogs:           cogs0,
-    margin_pct:     null,
+    margin_pct:     margin0,
     active:         togEl ? togEl.classList.contains('on') : true,
     label_supplied: lblTog ? lblTog.checked : false,
   };
@@ -377,12 +376,20 @@ document.getElementById('sku-table').addEventListener('input', function(ev) {
   } else if(el.classList.contains('margin-input')) {
     var margin = el.value.trim() ? parseFloat(el.value) : null;
     _skuData[sk].margin_pct = margin;
-    if(margin != null && _skuData[sk].cogs != null && margin < 100) {
-      var cost  = _skuData[sk].cogs;
-      var price2 = Math.round(cost / (1 - margin/100) * 100) / 100;
-      _skuData[sk].price = price2;
-      var pEl = document.querySelector('.price-input[data-sku="'+sk+'"]');
-      if(pEl) pEl.value = price2.toFixed(2);
+    if(margin != null && margin < 100) {
+      // Use cogs from state, or fall back to what's displayed in the cost box
+      var cost = _skuData[sk].cogs;
+      if(cost == null) {
+        var costBox = document.querySelector('.cost-display[data-sku="'+sk+'"]');
+        if(costBox) cost = parseFloat(costBox.textContent) || null;
+      }
+      if(cost != null && cost > 0) {
+        var price2 = Math.round(cost / (1 - margin/100) * 100) / 100;
+        _skuData[sk].price = price2;
+        _skuData[sk].cogs  = cost;
+        var pEl = document.querySelector('.price-input[data-sku="'+sk+'"]');
+        if(pEl) pEl.value = price2.toFixed(2);
+      }
     }
   }
 });
@@ -392,7 +399,16 @@ function updateMarginFromPrice(sk) {
   if(!d) return;
   var cost  = d.cogs;
   var price = d.price;
-  if(cost != null && price != null && price > 0) {
+  // Fallback: read from DOM if not yet in state
+  if(cost == null) {
+    var costBox = document.querySelector('.cost-display[data-sku="'+sk+'"]');
+    if(costBox) cost = parseFloat(costBox.textContent) || null;
+  }
+  if(price == null) {
+    var pEl = document.querySelector('.price-input[data-sku="'+sk+'"]');
+    if(pEl) price = parseFloat(pEl.value) || null;
+  }
+  if(cost != null && cost > 0 && price != null && price > 0) {
     var margin = Math.round(((price - cost) / price) * 1000) / 10;
     d.margin_pct = margin;
     var mEl = document.querySelector('.margin-input[data-sku="'+sk+'"]');
