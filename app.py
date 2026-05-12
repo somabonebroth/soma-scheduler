@@ -5004,8 +5004,10 @@ def manual_subtract_finished_good():
 
 # Maps app format codes to COGS matrix size keys
 _FORMAT_TO_COGS_SIZE = {
-    "SS-476ML":    "475ml",
+    "SS-473ML":    "475ml",
+    "SS-474ML":    "475ml",
     "SS-475ML":    "475ml",
+    "SS-476ML":    "475ml",
     "SS-750ML":    "750ml_ss",
     "SS-735ML":    "750ml_ss",
     "SS-876ML":    "876ml",

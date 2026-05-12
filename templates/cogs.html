@@ -536,16 +536,16 @@ body { padding-top: 0; }
 </div>
 
 <div class="tabs">
-  <button class="tab active" onclick="showTab('summary')">Summary</button>
-  <button class="tab" onclick="showTab('production')">Production</button>
-  <button class="tab" onclick="showTab('overhead')">Overhead</button>
-  <button class="tab" onclick="showTab('labour')">Labour</button>
-  <button class="tab" onclick="showTab('supplies')">Supplies & Maint</button>
-  <button class="tab" onclick="showTab('depreciation')">Depreciation</button>
-  <button class="tab" onclick="showTab('debt')">Debt</button>
-  <button class="tab" onclick="showTab('ingredients')">Ingredients</button>
-  <button class="tab" onclick="showTab('packaging')">Packaging & Labels</button>
-  <button class="tab" onclick="showTab('pricing')">Pricing</button>
+  <button class="tab active" onclick=\"showTab('summary',this)\">Summary</button>
+  <button class="tab" onclick=\"showTab('production',this)\">Production</button>
+  <button class="tab" onclick=\"showTab('overhead',this)\">Overhead</button>
+  <button class="tab" onclick=\"showTab('labour',this)\">Labour</button>
+  <button class="tab" onclick=\"showTab('supplies',this)\">Supplies & Maint</button>
+  <button class="tab" onclick=\"showTab('depreciation',this)\">Depreciation</button>
+  <button class="tab" onclick=\"showTab('debt',this)\">Debt</button>
+  <button class="tab" onclick=\"showTab('ingredients',this)\">Ingredients</button>
+  <button class="tab" onclick=\"showTab('packaging',this)\">Packaging & Labels</button>
+  <button class="tab" onclick=\"showTab('pricing',this)\">Pricing</button>
 </div>
 
 <!-- ============ SUMMARY TAB ============ -->
@@ -1829,11 +1829,12 @@ function setOutput(key, value) {
 // ============================================================================
 // EVENTS
 // ============================================================================
-function showTab(name) {
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  event.target.classList.add('active');
+function showTab(name, btn) {
+  document.querySelectorAll('.tab-content').forEach(function(t){ t.classList.remove('active'); });
+  document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
+  var pane = document.getElementById('tab-' + name);
+  if(pane) pane.classList.add('active');
+  if(btn) btn.classList.add('active');
 }
 
 function recalculate() {
