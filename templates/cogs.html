@@ -145,11 +145,18 @@
         <span id="overhead-caret">▼</span>
       </div>
       <div class="cogs-section-body" id="overhead-body">
+        <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Fixed (bills regardless of production)</div>
         <table class="line-table">
           <thead><tr><th>Item</th><th>Monthly $</th><th></th></tr></thead>
-          <tbody id="overhead-rows"></tbody>
+          <tbody id="overhead-fixed-rows"></tbody>
         </table>
-        <button class="btn btn-outline add-line-btn" onclick="addLine('overhead')">+ Add Line</button>
+        <button class="btn btn-outline add-line-btn" onclick="addLine('overhead_fixed')">+ Add Fixed</button>
+        <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin:14px 0 6px;">Variable (scales with production)</div>
+        <table class="line-table">
+          <thead><tr><th>Item</th><th>Monthly $</th><th></th></tr></thead>
+          <tbody id="overhead-var-rows"></tbody>
+        </table>
+        <button class="btn btn-outline add-line-btn" onclick="addLine('overhead_variable')">+ Add Variable</button>
       </div>
     </div>
 
@@ -177,10 +184,17 @@
         <span id="fixed-caret">▼</span>
       </div>
       <div class="cogs-section-body" id="fixed-body">
+        <div style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">Supplies</div>
+        <table class="line-table">
+          <thead><tr><th>Item</th><th>Monthly $</th><th></th></tr></thead>
+          <tbody id="supplies-rows"></tbody>
+        </table>
+        <button class="btn btn-outline add-line-btn" onclick="addLine('supplies')">+ Add Supply</button>
+        <div style="margin-top:14px;">
         <div class="input-grid">
-          <div class="inp-field"><label>Supplies / Month ($)</label><input type="number" id="supplies-mo" step="0.01" oninput="debounceSave()"></div>
           <div class="inp-field"><label>Maintenance / Month ($)</label><input type="number" id="maint-mo" step="0.01" oninput="debounceSave()"></div>
           <div class="inp-field"><label>Debt Repayment / Month ($)</label><input type="number" id="debt-mo" step="0.01" oninput="debounceSave()"></div>
+        </div>
         </div>
       </div>
     </div>
@@ -223,7 +237,7 @@
         </div>
         <div class="input-grid" style="margin-bottom:0;">
           <div class="inp-field"><label>Mushroom ($/kg)</label><input type="number" id="mushroom-price" step="0.01" min="0" oninput="debounceSave()"></div>
-          <div class="inp-field"><label>Minor Ingredients ($/batch flat)</label><input type="number" id="minor-ingredients" step="0.01" min="0" oninput="debounceSave()"></div>
+          <div class="inp-field"><label>Other Ingredients $/batch (mirepoix, salt, spices)</label><input type="number" id="other-ingredients" step="0.01" min="0" oninput="debounceSave()"></div>
         </div>
       </div>
     </div>
@@ -343,18 +357,24 @@ function populateInputs(d) {
   G('slow-pct').value        = c.slow_month_volume_pct;
   var upk = c.units_per_kettle || {};
   SIZE_KEYS.forEach(function(sk){ var el=G('upk-'+sk); if(el) el.value=upk[sk]||''; });
-  // Overhead
-  renderLineTable('overhead-rows', c.overhead||[], renderOverheadRow);
-  updateSubtotal('overhead', (c.overhead||[]).reduce(function(a,x){return a+parseFloat(x.monthly||0);},0), '/mo');
+  // Overhead — fixed + variable sections
+  renderLineTable('overhead-fixed-rows', c.overhead_fixed||c.overhead||[], renderOverheadRow);
+  renderLineTable('overhead-var-rows',   c.overhead_variable||[], renderOverheadVarRow);
+  var ohFixed = (c.overhead_fixed||c.overhead||[]).reduce(function(a,x){return a+parseFloat(x.monthly||0);},0);
+  var ohVar   = (c.overhead_variable||[]).reduce(function(a,x){return a+parseFloat(x.monthly||0);},0);
+  updateSubtotal('overhead', ohFixed+ohVar, '/mo');
   // Labour
   renderLineTable('labour-rows', c.labour||[], renderLabourRow);
   var labourMo = computeLabourMonthly(c.labour||[]);
   updateSubtotal('labour', labourMo, '/mo');
+  // Supplies list
+  renderLineTable('supplies-rows', c.supplies||[], renderOverheadRow);
+  var suppliesMo = (c.supplies||[]).reduce(function(a,x){return a+parseFloat(x.monthly||0);},0);
   // Fixed
-  G('supplies-mo').value = c.supplies_monthly;
   G('maint-mo').value    = c.maintenance_monthly;
   G('debt-mo').value     = c.debt_repayment_monthly;
-  var fixedTotal = parseFloat(c.supplies_monthly||0) + parseFloat(c.maintenance_monthly||0) + parseFloat(c.debt_repayment_monthly||0);
+  G('other-ingredients').value = c.other_ingredients_per_batch||c.minor_ingredients_per_batch||'';
+  var fixedTotal = suppliesMo + parseFloat(c.maintenance_monthly||0) + parseFloat(c.debt_repayment_monthly||0);
   updateSubtotal('fixed', fixedTotal, '/mo');
   // Equipment
   renderLineTable('equip-rows', c.equipment||[], renderEquipRow);
@@ -370,7 +390,7 @@ function populateInputs(d) {
   G('mirepoix-carrot').value = (mir.carrot||{}).price_per_kg||'';
   G('mirepoix-celery').value = (mir.celery||{}).price_per_kg||'';
   G('mushroom-price').value  = c.mushroom_price_per_kg||'';
-  G('minor-ingredients').value = c.minor_ingredients_per_batch||'';
+  G('other-ingredients').value = c.minor_ingredients_per_batch||'';
   // Packaging
   renderPackagingRows(c);
   // Scenario defaults
@@ -379,8 +399,12 @@ function populateInputs(d) {
 
 function computeLabourMonthly(labour) {
   return labour.reduce(function(a,r){
-    var weeks = Math.max(0, 52 - parseFloat(r.vacation_weeks||0));
-    return a + parseFloat(r.hourly||0) * parseFloat(r.hours_per_week||0) * weeks / 12;
+    if (r.type === 'salary') {
+      return a + parseFloat(r.annual_salary||0) / 12;
+    }
+    var loaded  = parseFloat(r.base_hourly||0) * (1 + parseFloat(r.uplift_pct||8)/100);
+    var weekly  = loaded * (parseFloat(r.weekday_hours||0) + parseFloat(r.weekend_hours||0));
+    return a + weekly * 52 / 12;
   }, 0);
 }
 
@@ -452,18 +476,38 @@ function renderOverheadRow(item, i) {
 
 function renderLabourRow(item, i) {
   var mo = 0;
-  if(item.hourly && item.hours_per_week) {
-    var wks = Math.max(0, 52 - parseFloat(item.vacation_weeks||0));
-    mo = parseFloat(item.hourly) * parseFloat(item.hours_per_week) * wks / 12;
+  if (item.type === 'salary') {
+    mo = parseFloat(item.annual_salary||0) / 12;
+    return '<tr>'
+      +'<td><input value="'+esc(item.role||'')+'" placeholder="Role" oninput="updateLabourItem('+i+','role',this.value)"></td>'
+      +'<td colspan="2" style="font-size:11px;color:var(--text-light);">Salary $<input type="number" step="1000" value="'+(item.annual_salary||'')+'" oninput="updateLabourItem('+i+','annual_salary',this.value)" style="width:90px;">/yr</td>'
+      +'<td style="font-size:11px;color:var(--text-light);">salaried</td>'
+      +'<td style="font-weight:600;">'+fmt$(mo)+'/mo</td>'
+      +'<td><button class="del-btn" onclick="deleteLabourLine('+i+')">✕</button></td>'
+      +'</tr>';
   }
+  var loaded = parseFloat(item.base_hourly||0) * (1 + parseFloat(item.uplift_pct||8)/100);
+  var weekly = loaded * (parseFloat(item.weekday_hours||0) + parseFloat(item.weekend_hours||0));
+  mo = weekly * 52 / 12;
   return '<tr>'
-    +'<td><input value="'+esc(item.role||'')+'" placeholder="Role" oninput="updateLineItem(\'labour\','+i+',\'role\',this.value)"></td>'
-    +'<td><input type="number" step="0.01" value="'+(item.hourly||'')+'" oninput="updateLineItem(\'labour\','+i+',\'hourly\',this.value)"></td>'
-    +'<td><input type="number" step="1" value="'+(item.hours_per_week||'')+'" oninput="updateLineItem(\'labour\','+i+',\'hours_per_week\',this.value)"></td>'
-    +'<td><input type="number" step="1" value="'+(item.vacation_weeks||'')+'" oninput="updateLineItem(\'labour\','+i+',\'vacation_weeks\',this.value)"></td>'
+    +'<td><input value="'+esc(item.role||'')+'" placeholder="Role" oninput="updateLabourItem('+i+','role',this.value)"></td>'
+    +'<td>$<input type="number" step="0.5" value="'+(item.base_hourly||'')+'" oninput="updateLabourItem('+i+','base_hourly',this.value)" style="width:55px;">/hr +<input type="number" step="1" value="'+(item.uplift_pct||8)+'" oninput="updateLabourItem('+i+','uplift_pct',this.value)" style="width:35px;">%</td>'
+    +'<td>Wkday:<input type="number" step="1" value="'+(item.weekday_hours||'')+'" oninput="updateLabourItem('+i+','weekday_hours',this.value)" style="width:40px;"> Wknd:<input type="number" step="1" value="'+(item.weekend_hours||0)+'" oninput="updateLabourItem('+i+','weekend_hours',this.value)" style="width:40px;"></td>'
+    +'<td style="font-size:11px;color:var(--text-light);">loaded</td>'
     +'<td style="font-weight:600;">'+fmt$(mo)+'/mo</td>'
-    +'<td><button class="del-btn" onclick="deleteLine(\'labour\','+i+')">✕</button></td>'
+    +'<td><button class="del-btn" onclick="deleteLabourLine('+i+')">✕</button></td>'
     +'</tr>';
+}
+
+function updateLabourItem(idx, field, val) {
+  if(_inputs.labour && _inputs.labour[idx]) _inputs.labour[idx][field] = isNaN(parseFloat(val))?val:parseFloat(val);
+  debounceSave();
+}
+
+function deleteLabourLine(idx) {
+  _inputs.labour.splice(idx,1);
+  renderLineTable('labour-rows',_inputs.labour,renderLabourRow);
+  debounceSave();
 }
 
 function renderEquipRow(item, i) {
@@ -497,11 +541,7 @@ function renderPackagingRows(c) {
 }
 
 // ── Data mutation helpers ──────────────────────────────────────────────────────
-function updateLineItem(section, idx, field, val) {
-  var arr = section==='equip' ? _inputs.equipment : (section==='labour' ? _inputs.labour : _inputs.overhead);
-  if(arr && arr[idx]) arr[idx][field] = isNaN(parseFloat(val))?val:parseFloat(val);
-  debounceSave();
-}
+
 
 function deleteLine(section, idx) {
   var arr = section==='equip' ? _inputs.equipment : (section==='labour' ? _inputs.labour : _inputs.overhead);
@@ -513,9 +553,30 @@ function deleteLine(section, idx) {
 }
 
 function addLine(section) {
-  if(section==='overhead'){ _inputs.overhead.push({name:'',monthly:0}); renderLineTable('overhead-rows',_inputs.overhead,renderOverheadRow); }
-  else if(section==='labour'){ _inputs.labour.push({role:'',hourly:0,hours_per_week:0,vacation_weeks:0}); renderLineTable('labour-rows',_inputs.labour,renderLabourRow); }
+  if(section==='overhead_fixed'){ if(!_inputs.overhead_fixed)_inputs.overhead_fixed=[]; _inputs.overhead_fixed.push({name:'',monthly:0}); renderLineTable('overhead-fixed-rows',_inputs.overhead_fixed,renderOverheadRow); }
+  else if(section==='overhead_variable'){ if(!_inputs.overhead_variable)_inputs.overhead_variable=[]; _inputs.overhead_variable.push({name:'',monthly:0}); renderLineTable('overhead-var-rows',_inputs.overhead_variable,renderOverheadVarRow); }
+  else if(section==='overhead'){ if(!_inputs.overhead)_inputs.overhead=[]; _inputs.overhead.push({name:'',monthly:0}); renderLineTable('overhead-rows',_inputs.overhead,renderOverheadRow); }
+  else if(section==='supplies'){ if(!_inputs.supplies)_inputs.supplies=[]; _inputs.supplies.push({name:'',monthly:0}); renderLineTable('supplies-rows',_inputs.supplies,renderOverheadRow); }
+  else if(section==='labour'){ _inputs.labour.push({role:'',type:'hourly',base_hourly:0,uplift_pct:8,weekday_hours:0,weekend_hours:0}); renderLineTable('labour-rows',_inputs.labour,renderLabourRow); }
   else if(section==='equip'){ _inputs.equipment.push({name:'',cost:0,life_years:10}); renderLineTable('equip-rows',_inputs.equipment,renderEquipRow); }
+  debounceSave();
+}
+
+function updateLineItem(section, idx, field, val) {
+  var arr = section==='equip' ? _inputs.equipment : (section==='labour' ? _inputs.labour : (section==='overhead_fixed' ? (_inputs.overhead_fixed||_inputs.overhead||[]) : (_inputs.overhead_variable||[])));
+  if(arr && arr[idx]) arr[idx][field] = isNaN(parseFloat(val))?val:parseFloat(val);
+  debounceSave();
+}
+
+function updateVarOverheadItem(idx, field, val) {
+  if(!_inputs.overhead_variable) _inputs.overhead_variable=[];
+  if(_inputs.overhead_variable[idx]) _inputs.overhead_variable[idx][field] = isNaN(parseFloat(val))?val:parseFloat(val);
+  debounceSave();
+}
+
+function deleteVarOverheadLine(idx) {
+  if(_inputs.overhead_variable) _inputs.overhead_variable.splice(idx,1);
+  renderLineTable('overhead-var-rows',_inputs.overhead_variable||[],renderOverheadVarRow);
   debounceSave();
 }
 
@@ -537,9 +598,9 @@ function collectInputs() {
   _inputs.slow_months_per_year         = parseFloat(G('slow-months').value)||0;
   _inputs.slow_month_volume_pct        = parseFloat(G('slow-pct').value)||0;
   SIZE_KEYS.forEach(function(sk){ _inputs.units_per_kettle[sk]=parseInt(G('upk-'+sk).value)||0; });
-  _inputs.supplies_monthly     = parseFloat(G('supplies-mo').value)||0;
-  _inputs.maintenance_monthly  = parseFloat(G('maint-mo').value)||0;
+  _inputs.maintenance_monthly    = parseFloat(G('maint-mo').value)||0;
   _inputs.debt_repayment_monthly = parseFloat(G('debt-mo').value)||0;
+  _inputs.other_ingredients_per_batch = parseFloat(G('other-ingredients').value)||0;
   _inputs.bones.chicken.price_per_kg  = parseFloat(G('bones-chicken').value)||0;
   _inputs.bones.beef.price_per_kg     = parseFloat(G('bones-beef').value)||0;
   _inputs.bones.turkey.price_per_kg   = parseFloat(G('bones-turkey').value)||0;
@@ -547,7 +608,7 @@ function collectInputs() {
   _inputs.mirepoix.carrot.price_per_kg = parseFloat(G('mirepoix-carrot').value)||0;
   _inputs.mirepoix.celery.price_per_kg = parseFloat(G('mirepoix-celery').value)||0;
   _inputs.mushroom_price_per_kg        = parseFloat(G('mushroom-price').value)||0;
-  _inputs.minor_ingredients_per_batch  = parseFloat(G('minor-ingredients').value)||0;
+  _inputs.minor_ingredients_per_batch  = parseFloat(G('other-ingredients').value)||0;
 }
 
 function updateSubtotal(id, val, suffix) {

@@ -5032,71 +5032,123 @@ _COGS_INGREDIENT_KEYWORDS = {
 }
 
 _COGS_SEED = {
+    # ── Production volume ──────────────────────────────────────────────────────
     "units_per_kettle": {
         "475ml": 290, "750ml_ss": 190, "876ml": 144,
         "750ml_fz": 180, "750ml_bb": 180, "750ml_pouch": 180
     },
-    "kettles_per_day": 2,
-    "production_days_per_month": 21,
-    "slow_months_per_year": 3,
-    "slow_month_volume_pct": 60,
-    "overhead": [
-        {"name": "Rent",                     "monthly": 5500.00},
-        {"name": "Hydro",                    "monthly": 800.00},
-        {"name": "Gas",                      "monthly": 400.00},
-        {"name": "Water",                    "monthly": 150.00},
-        {"name": "Internet / Phone",         "monthly": 200.00},
-        {"name": "Insurance",                "monthly": 450.00},
-        {"name": "Accounting / Legal",       "monthly": 300.00},
-        {"name": "Bank Fees",                "monthly": 75.00},
-        {"name": "Software / Subscriptions", "monthly": 150.00},
-        {"name": "Miscellaneous",            "monthly": 300.00},
+    "kettles_per_day":          3,    # full production
+    "production_days_per_month":28,
+    "slow_months_per_year":     4,
+    "slow_kettles_per_day":     1.5,  # kettles/day during slow months (NOT a %)
+
+    # ── Overhead — split into fixed and variable lines ─────────────────────────
+    "overhead_fixed": [
+        {"name": "Bookkeeper",            "monthly": 900.00},
+        {"name": "Cathy",                 "monthly": 100.00},
+        {"name": "Accountant",            "monthly": 200.00},
+        {"name": "Rent",                  "monthly": 4000.00},
+        {"name": "Phone",                 "monthly": 96.00},
+        {"name": "Internet",              "monthly": 151.00},
+        {"name": "Business Insurance",    "monthly": 368.12},
+        {"name": "Business License",      "monthly": 247.00},
+        {"name": "Sync Data Storage",     "monthly": 16.00},
+        {"name": "Fastmail",              "monthly": 36.00},
+        {"name": "Banking Fee",           "monthly": 22.50},
     ],
+    "overhead_variable": [
+        {"name": "Enbridge (gas)",        "monthly": 1400.00},
+        {"name": "Hydro Meter #977",      "monthly": 1859.11},
+        {"name": "Hydro Meter #550",      "monthly": 491.25},
+        {"name": "Water",                 "monthly": 162.82},
+        {"name": "Linen Service",         "monthly": 200.00},
+        {"name": "Garbage Pick-up",       "monthly": 47.58},
+        {"name": "Garbage Disposal",      "monthly": 520.00},
+        {"name": "Green Bin & Recycling", "monthly": 50.00},
+    ],
+
+    # ── Labour (+8% uplift on hourly roles for vacation/tax/WSIB) ─────────────
     "labour": [
-        {"role": "President",          "hourly": 25.00, "hours_per_week": 15, "vacation_weeks": 3},
-        {"role": "CEO",                "hourly": 25.00, "hours_per_week": 15, "vacation_weeks": 3},
-        {"role": "Head of Operations", "hourly": 22.00, "hours_per_week": 32, "vacation_weeks": 2},
-        {"role": "Broth Lead 1",       "hourly": 18.00, "hours_per_week": 35, "vacation_weeks": 2},
-        {"role": "Broth Lead 2",       "hourly": 17.00, "hours_per_week": 32, "vacation_weeks": 2},
+        # Salaried: use type="salary", annual_salary field
+        {"role": "President (Chris Kaspiris)", "type": "salary", "annual_salary": 40000,
+         "weekly_cost": 769.23},
+        # Hourly: loaded_rate = base * 1.08, weekday + weekend hrs separate
+        {"role": "CEO (Michel Salvador)",      "type": "hourly", "base_hourly": 50.00,
+         "uplift_pct": 8, "weekday_hours": 40, "weekend_hours": 0},
+        {"role": "Head of Operations",         "type": "hourly", "base_hourly": 37.00,
+         "uplift_pct": 8, "weekday_hours": 40, "weekend_hours": 0},
+        {"role": "Broth 1 (Kitchen Lead)",     "type": "hourly", "base_hourly": 28.00,
+         "uplift_pct": 8, "weekday_hours": 40, "weekend_hours": 16},
+        {"role": "Broth 2 (Kitchen Staff)",    "type": "hourly", "base_hourly": 23.00,
+         "uplift_pct": 8, "weekday_hours": 40, "weekend_hours": 16},
     ],
-    "supplies_monthly": 487.00,
-    "maintenance_monthly": 300.00,
+
+    # ── Supplies ───────────────────────────────────────────────────────────────
+    "supplies": [
+        {"name": "Sabrina (kitchen/cleaning)", "monthly": 1155.00},
+        {"name": "Staples",                    "monthly": 80.00},
+        {"name": "Nella",                      "monthly": 300.00},
+        {"name": "Uline",                      "monthly": 500.00},
+        {"name": "Dymo",                       "monthly": 130.00},
+    ],
+
+    # ── Maintenance ───────────────────────────────────────────────────────────
+    "maintenance_monthly": 1500.00,
+
+    # ── Equipment depreciation ────────────────────────────────────────────────
     "equipment": [
-        {"name": "Kettle K1",               "cost": 18000, "life_years": 10},
-        {"name": "Kettle K2",               "cost": 18000, "life_years": 10},
-        {"name": "Kettle K3",               "cost": 18000, "life_years": 10},
-        {"name": "Retort",                  "cost": 45000, "life_years": 15},
-        {"name": "Blast Freezer",           "cost": 12000, "life_years": 10},
-        {"name": "Labelling Machine",       "cost": 8000,  "life_years": 7},
-        {"name": "Dishwasher (commercial)", "cost": 6000,  "life_years": 8},
+        {"name": "Rational Combi Ovens (×2)",  "cost": 50000,  "life_years": 15},
+        {"name": "Kettles (×3, used)",          "cost": 54000,  "life_years": 8},
+        {"name": "Delta HVAC",                  "cost": 173455, "life_years": 20},
+        {"name": "Dishwashers (×3)",            "cost": 10000,  "life_years": 8},
+        {"name": "Label Machine",               "cost": 25000,  "life_years": 12},
+        {"name": "Fridges",                     "cost": 10000,  "life_years": 12},
+        {"name": "Freezer (upstairs)",          "cost": 10000,  "life_years": 15},
+        {"name": "Freezer (downstairs)",        "cost": 20000,  "life_years": 15},
     ],
+
+    # ── Debt repayment ────────────────────────────────────────────────────────
     "debt_repayment_monthly": 16666.00,
+
+    # ── Bones $/kg — actual recipe kg read from recipe card ───────────────────
     "bones": {
-        "chicken": {"price_per_kg": 1.10},
-        "beef":    {"price_per_kg": 1.85},
-        "turkey":  {"price_per_kg": 1.40},
+        "chicken": {"price_per_kg": 2.20},
+        "beef":    {"price_per_kg": 3.50},
+        "turkey":  {"price_per_kg": 4.40,
+                    "whole_turkey_cost_per_batch": 180.00},  # 2 whole turkeys
     },
-    "mirepoix": {
-        "onion":  {"price_per_kg": 1.20},
-        "carrot": {"price_per_kg": 1.50},
-        "celery": {"price_per_kg": 2.20},
-    },
-    "mushroom_price_per_kg": 12.00,
-    "minor_ingredients_per_batch": 18.00,
+
+    # ── Mushroom — two types ──────────────────────────────────────────────────
+    "mushroom_fresh":     {"price_per_kg": 11.66, "kg_per_batch": 16.0},
+    "mushroom_specialty": {"price_per_kg": 22.00,  "kg_per_batch": 3.0},
+    # Note: mushroom cost is flat $/batch (both types combined = $252.56)
+    # When a recipe has mushrooms, use this flat cost per batch
+
+    # ── Other ingredients (flat $/batch — mirepoix + salt + spices) ──────────
+    # These are NOT per-ingredient from recipe — kept as flat batch cost
+    # Mirepoix: $2.40/kg × 9.5kg = $22.80
+    # Salt: $6/kg × 0.675kg = $4.05
+    # Spices: $40/kg × 0.1kg = $4.00
+    "other_ingredients_per_batch": 30.85,
+
+    # ── Packaging $/unit ──────────────────────────────────────────────────────
     "packaging": {
-        "475ml":       {"container": 1.20, "lid": 0.35, "box": 0.80},
-        "750ml_ss":    {"container": 1.20, "lid": 0.35, "box": 0.80},
-        "876ml":       {"container": 0.68, "lid": 0.35, "box": 0.42},
-        "750ml_fz":    {"container": 0.20, "lid": 0.10, "box": 0.21},
-        "750ml_bb":    {"container": 0.20, "lid": 0.10, "box": 0.21},
-        "750ml_pouch": {"container": 0.65, "lid": 0.00, "box": 0.35},
+        "475ml":       {"container": 1.00, "lid": 0.35, "box": 0.00},
+        "750ml_ss":    {"container": 1.00, "lid": 0.35, "box": 0.00},
+        "876ml":       {"container": 1.10, "lid": 0.35, "box": 0.00},
+        "750ml_fz":    {"container": 0.35, "lid": 0.00, "box": 0.16},
+        "750ml_bb":    {"container": 0.35, "lid": 0.00, "box": 0.16},
+        "750ml_pouch": {"container": 1.00, "lid": 0.00, "box": 0.00},
     },
+
+    # ── Labels $/unit (base cost + hand-application surcharge where applicable)
+    # Hand-apply surcharge: $80/day allocated across units/day for that format
     "labels": {
-        "475ml":       {"cost": 0.43, "hand_applied": False, "hand_apply_surcharge": 0.00},
+        "475ml":       {"cost": 0.49, "hand_applied": False, "hand_apply_surcharge": 0.00},
         "750ml_ss":    {"cost": 0.43, "hand_applied": True,  "hand_apply_surcharge": 0.14},
-        "876ml":       {"cost": 0.43, "hand_applied": False, "hand_apply_surcharge": 0.00},
-        "750ml_fz":    {"cost": 0.43, "hand_applied": True,  "hand_apply_surcharge": 0.53},
-        "750ml_bb":    {"cost": 0.06, "hand_applied": False, "hand_apply_surcharge": 0.00},
+        "876ml":       {"cost": 0.49, "hand_applied": False, "hand_apply_surcharge": 0.00},
+        "750ml_fz":    {"cost": 0.81, "hand_applied": True,  "hand_apply_surcharge": 0.15},
+        "750ml_bb":    {"cost": 0.00, "hand_applied": False, "hand_apply_surcharge": 0.00},
         "750ml_pouch": {"cost": 0.00, "hand_applied": False, "hand_apply_surcharge": 0.00},
     },
 }
@@ -5111,35 +5163,58 @@ def _load_cogs():
 
 def _compute_cogs_matrix(c, recipe_overrides=None):
     """Compute the 24-cell COGS matrix from inputs.
-    recipe_overrides: optional dict of ingredient kg amounts for a specific recipe
-    {bones_kg, onion_kg, carrot_kg, celery_kg, mushroom_kg, broth_type}
-    If provided, uses recipe amounts instead of zero for variable costs.
+    Matches the logic in COGS_Master_Updated.xlsx exactly.
+
+    recipe_overrides: {bones_kg, mushroom_kg, broth_type, is_mushroom_broth}
+    Other ingredients (mirepoix etc.) are flat $/batch from other_ingredients_per_batch.
     """
+    # ── Annual kettle runs (spreadsheet logic: slow months use slow_kettles_per_day)
+    days_mo     = float(c.get("production_days_per_month", 28))
+    full_k      = float(c.get("kettles_per_day", 3))
+    slow_k      = float(c.get("slow_kettles_per_day", 1.5))
+    slow_mo     = float(c.get("slow_months_per_year", 4))
+    full_mo     = 12 - slow_mo
+    annual_runs = (full_mo * full_k * days_mo) + (slow_mo * slow_k * days_mo)
+    if annual_runs <= 0:
+        annual_runs = 840
+
     # ── Fixed costs per kettle run ─────────────────────────────────────────────
-    overhead_mo = sum(float(x.get("monthly", 0)) for x in c.get("overhead", []))
-    labour_mo   = 0.0
+    # Overhead: fixed + variable, allocated per run
+    oh_fixed   = sum(float(x.get("monthly", 0)) for x in c.get("overhead_fixed", []))
+    oh_var     = sum(float(x.get("monthly", 0)) for x in c.get("overhead_variable", []))
+    # Fallback: old single overhead list if migrating from old format
+    oh_legacy  = sum(float(x.get("monthly", 0)) for x in c.get("overhead", []))
+    overhead_mo = oh_fixed + oh_var + oh_legacy
+    overhead_annual = overhead_mo * 12
+
+    # Labour — salaried vs hourly with +uplift%
+    labour_annual = 0.0
     for r in c.get("labour", []):
-        weeks = max(0, 52 - float(r.get("vacation_weeks", 0)))
-        labour_mo += float(r.get("hourly", 0)) * float(r.get("hours_per_week", 0)) * weeks / 12
-    supplies_mo   = float(c.get("supplies_monthly", 0))
-    maint_mo      = float(c.get("maintenance_monthly", 0))
-    dep_mo        = sum(float(e.get("cost", 0)) / max(1, float(e.get("life_years", 1)) * 12)
-                        for e in c.get("equipment", []))
-    debt_mo       = float(c.get("debt_repayment_monthly", 0))
-    total_mo      = overhead_mo + labour_mo + supplies_mo + maint_mo + dep_mo + debt_mo
+        if r.get("type") == "salary":
+            labour_annual += float(r.get("annual_salary", 0))
+        else:
+            loaded = float(r.get("base_hourly", 0)) * (1 + float(r.get("uplift_pct", 8)) / 100)
+            weekly = loaded * (float(r.get("weekday_hours", 0)) + float(r.get("weekend_hours", 0)))
+            labour_annual += weekly * 52
 
-    # Average monthly kettle runs
-    full_runs = float(c.get("kettles_per_day", 2)) * float(c.get("production_days_per_month", 21))
-    slow_pct  = float(c.get("slow_month_volume_pct", 60)) / 100
-    slow_mo   = float(c.get("slow_months_per_year", 3))
-    avg_runs  = ((12 - slow_mo) * full_runs + slow_mo * full_runs * slow_pct) / 12
-    if avg_runs <= 0:
-        avg_runs = 1
+    # Supplies — list of line items
+    supplies_list = c.get("supplies", [])
+    if supplies_list:
+        supplies_annual = sum(float(x.get("monthly", 0)) for x in supplies_list) * 12
+    else:
+        supplies_annual = float(c.get("supplies_monthly", 0)) * 12
 
-    cost_per_run = total_mo / avg_runs
+    maint_annual = float(c.get("maintenance_monthly", 0)) * 12
+    dep_annual   = sum(float(e.get("cost", 0)) / max(1, float(e.get("life_years", 1)))
+                       for e in c.get("equipment", []))
+    debt_annual  = float(c.get("debt_repayment_monthly", 0)) * 12
 
-    # Minor ingredients per unit by size
-    minor_per_batch = float(c.get("minor_ingredients_per_batch", 18))
+    total_annual = overhead_annual + labour_annual + supplies_annual + maint_annual + dep_annual + debt_annual
+    cost_per_run = total_annual / annual_runs
+
+    # ── Other ingredients (flat $/batch) ──────────────────────────────────────
+    other_per_batch = float(c.get("other_ingredients_per_batch",
+                                   c.get("minor_ingredients_per_batch", 30.85)))
 
     matrix = {}
     broth_types = ["Chicken", "Beef", "Turkey", "Mushroom"]
@@ -5151,77 +5226,102 @@ def _compute_cogs_matrix(c, recipe_overrides=None):
         for size_key, units in c.get("units_per_kettle", {}).items():
             units = max(1, int(units))
 
-            # Fixed cost per unit
             fixed_pu = cost_per_run / units
+            other_pu = other_per_batch / units
 
-            # Minor ingredients per unit
-            minor_pu = minor_per_batch / units
-
-            # Variable ingredient costs — from recipe_overrides if provided, else zero
-            bone_pu = mushroom_pu = onion_pu = carrot_pu = celery_pu = 0.0
+            bone_pu    = 0.0
+            mush_pu    = 0.0
 
             if recipe_overrides:
-                bones_kg   = float(recipe_overrides.get("bones_kg", 0))
-                onion_kg   = float(recipe_overrides.get("onion_kg", 0))
-                carrot_kg  = float(recipe_overrides.get("carrot_kg", 0))
-                celery_kg  = float(recipe_overrides.get("celery_kg", 0))
-                mushroom_kg= float(recipe_overrides.get("mushroom_kg", 0))
+                bones_kg    = float(recipe_overrides.get("bones_kg", 0))
+                mushroom_kg = float(recipe_overrides.get("mushroom_kg", 0))
 
-                # Bone price depends on broth type
+                # Bone cost from recipe kg × $/kg
                 bone_prices = c.get("bones", {})
-                bone_price  = float(bone_prices.get(bt_key, {}).get("price_per_kg", 0))
+                bp          = bone_prices.get(bt_key, {})
+                bone_price  = float(bp.get("price_per_kg", 0))
                 bone_pu     = (bones_kg * bone_price) / units
 
-                mirepoix = c.get("mirepoix", {})
-                onion_pu  = (onion_kg  * float(mirepoix.get("onion",  {}).get("price_per_kg", 0))) / units
-                carrot_pu = (carrot_kg * float(mirepoix.get("carrot", {}).get("price_per_kg", 0))) / units
-                celery_pu = (celery_kg * float(mirepoix.get("celery", {}).get("price_per_kg", 0))) / units
+                # Turkey: add flat whole-turkey cost per batch
+                if bt_key == "turkey":
+                    whole_cost = float(bp.get("whole_turkey_cost_per_batch", 180))
+                    bone_pu   += whole_cost / units
 
-                mush_price  = float(c.get("mushroom_price_per_kg", 0))
-                mushroom_pu = (mushroom_kg * mush_price) / units
+                # Mushroom: from recipe kg if mushroom broth,
+                # OR use flat $/batch from seed if no kg provided
+                if bt_key == "mushroom":
+                    if mushroom_kg > 0:
+                        # fresh rate used for all mushroom kg from recipe
+                        mf = c.get("mushroom_fresh", {})
+                        ms = c.get("mushroom_specialty", {})
+                        mush_cost_per_batch = (
+                            float(mf.get("kg_per_batch", 16)) * float(mf.get("price_per_kg", 11.66)) +
+                            float(ms.get("kg_per_batch", 3))  * float(ms.get("price_per_kg", 22.00))
+                        )
+                        mush_pu = mush_cost_per_batch / units
+                    else:
+                        # Flat mushroom cost from seed
+                        mf = c.get("mushroom_fresh", {})
+                        ms = c.get("mushroom_specialty", {})
+                        mush_cost = (float(mf.get("kg_per_batch",16)) * float(mf.get("price_per_kg",11.66)) +
+                                     float(ms.get("kg_per_batch",3))  * float(ms.get("price_per_kg",22.00)))
+                        mush_pu = mush_cost / units
+            else:
+                # Base matrix (no recipe): use spreadsheet's known bone amounts for reference
+                # These are the base kg from the spreadsheet
+                BASE_BONES_KG = {"chicken": 50, "beef": 60, "turkey": 50, "mushroom": 0}
+                bone_prices = c.get("bones", {})
+                bp          = bone_prices.get(bt_key, {})
+                base_kg     = BASE_BONES_KG.get(bt_key, 0)
+                bone_price  = float(bp.get("price_per_kg", 0))
+                bone_pu     = (base_kg * bone_price) / units
+                if bt_key == "turkey":
+                    whole_cost = float(bp.get("whole_turkey_cost_per_batch", 180))
+                    bone_pu   += whole_cost / units
+                if bt_key == "mushroom":
+                    mf = c.get("mushroom_fresh", {})
+                    ms = c.get("mushroom_specialty", {})
+                    mush_cost = (float(mf.get("kg_per_batch",16)) * float(mf.get("price_per_kg",11.66)) +
+                                 float(ms.get("kg_per_batch",3))  * float(ms.get("price_per_kg",22.00)))
+                    mush_pu = mush_cost / units
 
             # Packaging
             pack = c.get("packaging", {}).get(size_key, {})
-            pack_pu = (float(pack.get("container", 0)) +
-                       float(pack.get("lid", 0)) +
-                       float(pack.get("box", 0)))
+            pack_pu = sum(float(pack.get(k, 0)) for k in ("container", "lid", "box"))
 
             # Label
-            lbl = c.get("labels", {}).get(size_key, {})
+            lbl     = c.get("labels", {}).get(size_key, {})
             label_pu = float(lbl.get("cost", 0)) + float(lbl.get("hand_apply_surcharge", 0))
 
-            ingredient_pu = bone_pu + onion_pu + carrot_pu + celery_pu + mushroom_pu
-
-            total = fixed_pu + ingredient_pu + minor_pu + pack_pu + label_pu
+            total = fixed_pu + bone_pu + mush_pu + other_pu + pack_pu + label_pu
 
             matrix[bt][size_key] = {
-                "total":        round(total, 4),
+                "total": round(total, 4),
                 "breakdown": {
-                    "fixed":        round(fixed_pu, 4),
-                    "bones":        round(bone_pu, 4),
-                    "mirepoix":     round(onion_pu + carrot_pu + celery_pu, 4),
-                    "mushroom":     round(mushroom_pu, 4),
-                    "minor_ingredients": round(minor_pu, 4),
-                    "packaging":    round(pack_pu, 4),
-                    "label":        round(label_pu, 4),
+                    "fixed":             round(fixed_pu, 4),
+                    "bones":             round(bone_pu, 4),
+                    "mushroom":          round(mush_pu, 4),
+                    "other_ingredients": round(other_pu, 4),
+                    "packaging":         round(pack_pu, 4),
+                    "label":             round(label_pu, 4),
                 },
             }
 
-    return matrix, round(cost_per_run, 2), round(avg_runs, 1)
+    return matrix, round(cost_per_run, 2), round(annual_runs / 12, 1)
 
 
 def _extract_recipe_kg(recipe_data):
-    """Extract costed ingredient kg from kettle_overnight section of a recipe."""
-    result = {
-        "bones_kg": 0.0, "onion_kg": 0.0, "carrot_kg": 0.0,
-        "celery_kg": 0.0, "mushroom_kg": 0.0
-    }
+    """Extract costed ingredient kg from kettle_overnight section of a recipe.
+    Only bones and mushrooms are extracted per-recipe — everything else
+    (mirepoix, salt, spices) uses the flat other_ingredients_per_batch cost.
+    """
+    result = {"bones_kg": 0.0, "mushroom_kg": 0.0}
     kettle = recipe_data.get("kettle_overnight", [])
     for item in kettle:
         if not isinstance(item, dict):
             continue
-        name  = (item.get("name") or "").lower()
-        unit  = (item.get("unit") or "").lower()
+        name   = (item.get("name") or "").lower()
+        unit   = (item.get("unit") or "").lower()
         amount = float(item.get("amount") or 0)
         if amount <= 0:
             continue
@@ -5231,18 +5331,11 @@ def _extract_recipe_kg(recipe_data):
         elif unit in ("lb", "lbs"):
             amount *= 0.4536
         elif unit in ("per l", "per_l", "ml"):
-            amount = 0  # not a weight — skip
+            continue  # not a weight
 
-        # Classify
         kw = _COGS_INGREDIENT_KEYWORDS
         if any(kw_word in name for kw_word in kw["bones"]):
             result["bones_kg"] += amount
-        elif any(kw_word in name for kw_word in kw["onion"]):
-            result["onion_kg"] += amount
-        elif any(kw_word in name for kw_word in kw["carrot"]):
-            result["carrot_kg"] += amount
-        elif any(kw_word in name for kw_word in kw["celery"]):
-            result["celery_kg"] += amount
         elif any(kw_word in name for kw_word in kw["mushroom"]):
             result["mushroom_kg"] += amount
     return result
@@ -5287,6 +5380,7 @@ def _recipe_unit_cogs(recipe_data, cogs_data=None, label_supplied=False):
         unit_cogs  = round(unit_cogs - label_cost, 4)
         breakdown["label"] = 0.0
         breakdown["label_supplied"] = True
+        breakdown.pop("mirepoix", None)
 
     return round(unit_cogs, 2), breakdown
 
