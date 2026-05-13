@@ -5577,15 +5577,15 @@ def edit_organic_sale(sale_id):
             for fg_entry in fg:
                 if fg_entry.get("lot") == lot_info.get("lot") and restore > 0:
                     fg_entry["quantity_remaining"] = int(fg_entry.get("quantity_remaining") or 0) + restore
-            restore = 0
-            break
+                    restore = 0
+                    break
             # If we couldn't trace back to a specific LOT, restore to most recent entry
             if restore > 0:
                 sku_key = sale.get("sku_key", "")
             matching = [f for f in fg if _sku_key(f.get("brand",""), f.get("recipe",""), f.get("format","")) == sku_key]
             if matching:
                 matching.sort(key=lambda e: e.get("created_at",""), reverse=True)
-            matching[0]["quantity_remaining"] = int(matching[0].get("quantity_remaining") or 0) + restore
+                matching[0]["quantity_remaining"] = int(matching[0].get("quantity_remaining") or 0) + restore
 
         sale["quantity"] = new_qty
         _save_json(ORGANIC_FG_PATH, fg)
