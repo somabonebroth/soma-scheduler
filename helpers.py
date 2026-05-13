@@ -139,14 +139,6 @@ def load_recipes() -> dict:
                 pass
     return {}
 
-# ── SKU key ─────────────────────────────────────────────────────────────────
-def _sku_key(brand, recipe, fmt):
-    """Stable identifier for a SKU group: 'BRAND|RECIPE|FORMAT'.
-    Format is normalized so 'SS-750ML' and 'ss-750ml' collapse into one SKU.
-    Separator chosen so it can't appear in any of the components."""
-    return "|".join([(brand or ""), (recipe or ""), _normalize_format(fmt or "")])
-
-
 _TEMPLATE_CONTRACTS: dict = {
     "buyer_edit.html":    {"buyer", "sku_catalog", "sku_map"},
     "analytics.html":     {"buyer_names"},
