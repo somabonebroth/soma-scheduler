@@ -771,7 +771,7 @@ def parse_recipe_pdf_text(text):
 # ── Auth routes ────────────────────────────────────────────────────────
 @app.route("/login")
 def login_page():
-    return render_template("login.html")
+    return _render("login.html")
 
 @app.route("/api/login", methods=["POST"])
 def login():
@@ -799,41 +799,41 @@ def manifest():
 @app.route("/")
 @login_required
 def dashboard():
-    return render_template("dashboard.html")
+    return _render("dashboard.html")
 
 @app.route("/create-schedule")
 @login_required
 def create_schedule_page():
-    return render_template("create_schedule.html")
+    return _render("create_schedule.html")
 
 @app.route("/weekly-schedule")
 @login_required
 def weekly_schedule_page():
-    return render_template("weekly_view.html")
+    return _render("weekly_view.html")
 
 @app.route("/daily-production/<week_id>/<int:day_idx>")
 @login_required
 @require_valid_week
 @require_valid_day
 def daily_production_page(week_id, day_idx):
-    return render_template("daily_production.html", week_id=week_id, day_idx=day_idx)
+    return _render("daily_production.html", week_id=week_id, day_idx=day_idx)
 
 @app.route("/checklist/<week_id>/<int:day_idx>")
 @login_required
 @require_valid_week
 @require_valid_day
 def checklist_page(week_id, day_idx):
-    return render_template("checklist.html", week_id=week_id, day_idx=day_idx)
+    return _render("checklist.html", week_id=week_id, day_idx=day_idx)
 
 @app.route("/recipes")
 @login_required
 def recipes_page():
-    return render_template("recipes.html")
+    return _render("recipes.html")
 
 @app.route("/contacts")
 @login_required
 def contacts_page():
-    return render_template("contacts.html")
+    return _render("contacts.html")
 
 @app.route("/api/verify-manager", methods=["POST"])
 @login_required
@@ -853,7 +853,7 @@ def verify_manager():
 @login_required
 def certifications_page():
     """Organic & compliance document storage page."""
-    return render_template("certifications.html")
+    return _render("certifications.html")
 
 @app.route("/api/certifications", methods=["GET"])
 @login_required
@@ -934,7 +934,7 @@ def analytics_page():
     """
     buyers = _load_buyers()
     buyer_names = [b["name"] for b in buyers]
-    return render_template("analytics.html", buyer_names=buyer_names)
+    return _render("analytics.html", buyer_names=buyer_names)
 
 @app.route("/analytics/buyer/<path:buyer_name>")
 @login_required
@@ -943,7 +943,7 @@ def buyer_analytics_page(buyer_name):
     buyers = _load_buyers()
     buyer = next((b for b in buyers if b["name"].lower() == buyer_name.lower()), None)
     display_name = buyer["name"] if buyer else buyer_name
-    return render_template("buyer_analytics.html",
+    return _render("buyer_analytics.html",
                            buyer_name=display_name,
                            buyer_names=[b["name"] for b in buyers])
 
@@ -1333,22 +1333,22 @@ def buyer_edit_page(bid):
 
     # Build sku_map: {sku_key: sku_dict} for fast lookup in template
     sku_map = {s["sku_key"]: s for s in buyer.get("skus", []) if s.get("sku_key")}
-    return render_template("buyer_edit.html", buyer=buyer, sku_catalog=sku_catalog, sku_map=sku_map)
+    return _render("buyer_edit.html", buyer=buyer, sku_catalog=sku_catalog, sku_map=sku_map)
 
 @app.route("/ccp-master")
 @login_required
 def ccp_master_page():
-    return render_template("master_ccp.html")
+    return _render("master_ccp.html")
 
 @app.route("/traceability")
 @login_required
 def traceability_page():
-    return render_template("traceability.html")
+    return _render("traceability.html")
 
 @app.route("/production-tracker")
 @login_required
 def production_tracker_page():
-    return render_template("production_tracker.html")
+    return _render("production_tracker.html")
 
 
 # ── Recipe API ─────────────────────────────────────────────────────────
@@ -3025,11 +3025,57 @@ def _save_json(path, data):
         os.replace(tmp, path)
 
 
+# ── Template rendering with contract validation ──────────────────────────────
+# Maps each template to the variables it requires from the route.
+# If a route forgets to pass a required variable, a warning is logged
+# immediately — not discovered when the template crashes mid-render.
+
+_TEMPLATE_CONTRACTS: dict = {
+    "buyer_edit.html":    {"buyer", "sku_catalog", "sku_map"},
+    "analytics.html":     {"buyer_names"},
+    "buyer_analytics.html": {"buyer_name"},
+    "contacts.html":      {},
+    "organic.html":       {},
+    "cogs.html":          {},
+    "dashboard.html":     {},
+    "recipes.html":       {},
+    "audit.html":         {"kind"},
+    "equipment.html":     {},
+    "company_settings.html": {},
+    "certifications.html": {},
+    "traceability.html":  {},
+    "production_tracker.html": {},
+    "weekly_view.html":   {"week_id"},
+    "daily_production.html": {"week_id", "day_idx"},
+    "create_schedule.html": {},
+    "master_ccp.html":    {},
+    "important_documents.html": {},
+    "login.html":         {},
+    "checklist.html":     {"week_id", "day_idx"},
+}
+
+_render_logger = logging.getLogger("soma.render")
+
+def _render(template_name: str, **context):
+    """Wrapper around render_template that validates required variables.
+    Logs a warning if the template contract is violated so the bug is
+    caught at request time rather than mid-render.
+    """
+    required = _TEMPLATE_CONTRACTS.get(template_name, set())
+    missing  = required - set(context.keys())
+    if missing:
+        _render_logger.warning(
+            "render(%s) missing required variables: %s  -- will likely crash",
+            template_name, sorted(missing)
+        )
+    return render_template(template_name, **context)
+
+
 # ── Organic Page ──────────────────────────────────────────────────────
 @app.route("/organic")
 @login_required
 def organic_page():
-    return render_template("organic.html")
+    return _render("organic.html")
 
 
 # ── Organic: Get ingredient list from organic recipes ─────────────────
@@ -5472,7 +5518,7 @@ def _recipe_unit_cogs(recipe_data, cogs_data=None, label_supplied=False):
 @app.route("/cogs")
 @login_required
 def cogs_page():
-    return render_template("cogs.html")
+    return _render("cogs.html")
 
 
 @app.route("/api/cogs", methods=["GET"])
@@ -5590,19 +5636,19 @@ def _save_equipment(data):
 @app.route("/company-settings")
 @login_required
 def company_settings_page():
-    return render_template("company_settings.html")
+    return _render("company_settings.html")
 
 
 @app.route("/important-documents")
 @login_required
 def important_documents_page():
-    return render_template("important_documents.html")
+    return _render("important_documents.html")
 
 
 @app.route("/equipment")
 @login_required
 def equipment_page():
-    return render_template("equipment.html")
+    return _render("equipment.html")
 
 
 @app.route("/api/equipment", methods=["GET"])
@@ -5743,7 +5789,7 @@ def audit_page(kind):
     """Render the audit page for 'rm' or 'fg'."""
     if kind not in ("rm", "fg"):
         return "Invalid audit type", 400
-    return render_template("audit.html", kind=kind)
+    return _render("audit.html", kind=kind)
 
 
 @app.route("/api/audit/start", methods=["POST"])
