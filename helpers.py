@@ -10,7 +10,7 @@ import logging
 import threading
 from functools import wraps
 
-from flask import session, jsonify, render_template
+from flask import session, jsonify, render_template, request)
 
 logger = logging.getLogger(__name__)
 

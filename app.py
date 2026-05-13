@@ -6729,17 +6729,18 @@ def _check_organic_completion(run, checklist):
     return bool(checklist.get("complete"))
 
 
-def build_display_name(rdata, rname):
+def build_display_name(rdata, rname=None, recipe_name=None):
     """Build a human-readable display name for a recipe SKU."""
+    name_str = rname or recipe_name or ""
     brand = (rdata.get("brand") or "").strip()
     fmt   = (rdata.get("format") or "").strip()
-    if brand and brand.lower() not in rname.lower():
-        name = f"{brand} {rname}"
+    if brand and brand.lower() not in name_str.lower():
+        display = f"{brand} {name_str}"
     else:
-        name = rname
-    if fmt and fmt.upper() not in name.upper():
-        name = f"{name} {fmt}"
-    return name.strip()
+        display = name_str
+    if fmt and fmt.upper() not in display.upper():
+        display = f"{display} {fmt}"
+    return display.strip()
 
 
 def parse_recipe_pdf_text(text):
