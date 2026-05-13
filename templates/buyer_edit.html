@@ -446,7 +446,7 @@ function syncLocs() {
 
 async function saveBuyer() {
   syncLocs();
-  var btn = document.querySelector('.save-bar .btn-p');
+  var btn = document.querySelector('.save-bar button');
   var status = document.getElementById('save-status');
   btn.disabled = true; btn.textContent = 'Saving…'; status.textContent = ''; status.className = 'save-status';
 

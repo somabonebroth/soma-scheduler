@@ -347,23 +347,6 @@ def ripe_order_action(order_id):
     return jsonify({"error": f"Unknown action: {action}"}), 400
 
 
-@ripe_orders_bp.route("/ripe-products")
-@_soma_login_required
-def ripe_products_page():
-    """Products & pricing are now managed via the Buyer edit page.
-    Redirect to the Buyers & Suppliers page with a hint.
-    """
-    from flask import redirect, url_for, flash
-    flash("Products and pricing are managed in Buyers & Suppliers → Edit Buyer → Catalogue & Pricing.", "info")
-    return redirect("/contacts?tab=buyers")
-
-
-
-
-
-
-
-
 @ripe_orders_bp.route("/ripe-analytics")
 @_soma_login_required
 def ripe_analytics_page():
