@@ -21,7 +21,7 @@ from helpers import (
     login_required, require_valid_week, require_valid_day,
     _render, _render_logger,
     _TEMPLATE_CONTRACTS, DATA_DIR,
-    load_recipes, _normalize_format, FORMAT_RE,
+    load_recipes, _normalize_format, FORMAT_RE, _sku_key,
 )
 from ripe_orders import ripe_orders_bp, init_paths as _ripe_init_paths
 
@@ -256,6 +256,115 @@ def download_certification(file_id):
         download_name=entry["filename"],
         as_attachment=True,
     )
+
+
+@app.route("/api/analytics/sales-by-buyer", methods=["GET"])
+@login_required
+def api_sales_by_buyer():
+    """Aggregate sales.json by buyer, date range, and SKU."""
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    buyers_q = request.args.get("buyer", "").strip()
+    period   = request.args.get("period", "all")  # all / ytd / 90d / 30d
+
+    from datetime import datetime as _dt, timedelta as _td
+    now = _dt.now().date()
+    if period == "30d":
+        cutoff = now - _td(days=30)
+    elif period == "90d":
+        cutoff = now - _td(days=90)
+    elif period == "ytd":
+        cutoff = now.replace(month=1, day=1)
+    else:
+        cutoff = None
+
+    # Aggregate
+    by_buyer = {}
+    for sale in sales:
+        buyer = (sale.get("buyer") or "Unknown").strip()
+        if buyers_q and buyer.lower() != buyers_q.lower():
+            continue
+        sale_date = (sale.get("sale_date") or "")[:10]
+        if cutoff and sale_date and sale_date < cutoff.isoformat():
+            continue
+        if buyer not in by_buyer:
+            by_buyer[buyer] = {"buyer": buyer, "orders": set(), "units": 0, "revenue": 0.0, "by_sku": set()}
+        qty   = int(sale.get("quantity") or 0)
+        # unit_price may be None for pre-catalogue records — fall back to 0
+        price = float(sale.get("unit_price") or sale.get("price") or sale.get("unit_selling_price") or 0)
+        # Use stored line_total if available (more accurate), else compute from price * qty
+        line_total_stored = sale.get("line_total")
+        sku   = sale.get("sku_key") or sale.get("recipe") or "Unknown"
+        order_id = sale.get("order_id") or sale.get("id")
+        by_buyer[buyer]["orders"].add(order_id)
+        by_buyer[buyer]["units"]   += qty
+        revenue_this = float(line_total_stored) if line_total_stored is not None else qty * price
+        by_buyer[buyer]["revenue"] += revenue_this
+        if sku not in by_buyer[buyer]["by_sku"]:
+            by_buyer[buyer]["by_sku"][sku] = {"sku": sku,
+                "recipe": sale.get("recipe",""), "format": sale.get("format",""),
+                "units": 0, "revenue": 0.0}
+        by_buyer[buyer]["by_sku"][sku]["units"]   += qty
+        by_buyer[buyer]["by_sku"][sku]["revenue"] += revenue_this
+
+    result = []
+    for b_data in sorted(by_buyer.values(), key=lambda x: -x["revenue"]):
+        skus = sorted(b_data["by_sku"].values(), key=lambda s: -s["units"])
+        result.append({
+            "buyer":   b_data["buyer"],
+            "orders":  len(b_data["orders"]),
+            "units":   b_data["units"],
+            "cases":   b_data["units"] // 12,
+            "revenue": round(b_data["revenue"], 2),
+            "by_sku":  [{**s, "revenue": round(s["revenue"],2)} for s in skus],
+        })
+    return jsonify({"buyers": result, "period": period})
+
+@app.route("/buyers/<bid>/edit")
+@login_required
+def buyer_edit_page(bid):
+    buyers = _load_buyers()
+    buyer = next((b for b in buyers if b["id"] == bid), None)
+    if not buyer:
+        return "Buyer not found", 404
+
+    # Group catalog by Brand → Format (SS → FZ → BB → Other) → Recipe name
+    flat = _all_sku_catalog()
+    FORMAT_ORDER = ["SS", "FZ", "BB"]
+    FORMAT_LABELS = {"SS": "Shelf Stable", "FZ": "Frozen", "BB": "Back Bar"}
+
+    # Collect brands in sorted order
+    brand_fmt_dict = {}  # {brand: {fmt_prefix: [skus]}}
+    for sku in flat:
+        brand = (sku.get("brand") or "Other").strip() or "Other"
+        fmt   = _normalize_format(sku.get("format") or "")
+        prefix = fmt[:2].upper() if fmt else "Other"
+        prefix = prefix if prefix in FORMAT_ORDER else "Other"
+        if brand not in brand_fmt_dict:
+            brand_fmt_dict[brand] = {}
+        if prefix not in brand_fmt_dict[brand]:
+            brand_fmt_dict[brand][prefix] = []
+        brand_fmt_dict[brand][prefix].append(sku)
+
+    sku_catalog = []
+    for brand in sorted(brand_fmt_dict.keys()):
+        for prefix in FORMAT_ORDER + ["Other"]:
+            skus_in = brand_fmt_dict[brand].get(prefix)
+            if not skus_in:
+                continue
+            skus_sorted = sorted(skus_in, key=lambda s: s.get("recipe","").lower())
+            sku_catalog.append({
+                "format_prefix": prefix,
+                "format_label":  FORMAT_LABELS.get(prefix, "Other"),
+                "brand":         brand,
+                "skus":          skus_sorted,
+            })
+
+    # Build sku_map: {sku_key: sku_dict} for fast lookup in template
+    sku_map = {s["sku_key"]: s for s in buyer.get("skus", []) if s.get("sku_key")}
+    return _render("buyer_edit.html", buyer=buyer, sku_catalog=sku_catalog, sku_map=sku_map)
+
+@app.route("/ccp-master")
+@login_required
 
 @app.route("/analytics")
 @login_required
@@ -561,113 +670,7 @@ def backfill_sale_prices():
 
 
 
-@app.route("/api/analytics/sales-by-buyer", methods=["GET"])
-@login_required
-def api_sales_by_buyer():
-    """Aggregate sales.json by buyer, date range, and SKU."""
-    sales = _load_json(ORGANIC_SALES_PATH, [])
-    buyers_q = request.args.get("buyer", "").strip()
-    period   = request.args.get("period", "all")  # all / ytd / 90d / 30d
 
-    from datetime import datetime as _dt, timedelta as _td
-    now = _dt.now().date()
-    if period == "30d":
-        cutoff = now - _td(days=30)
-    elif period == "90d":
-        cutoff = now - _td(days=90)
-    elif period == "ytd":
-        cutoff = now.replace(month=1, day=1)
-    else:
-        cutoff = None
-
-    # Aggregate
-    by_buyer = {}
-    for sale in sales:
-        buyer = (sale.get("buyer") or "Unknown").strip()
-        if buyers_q and buyer.lower() != buyers_q.lower():
-            continue
-        sale_date = (sale.get("sale_date") or "")[:10]
-        if cutoff and sale_date and sale_date < cutoff.isoformat():
-            continue
-        if buyer not in by_buyer:
-            by_buyer[buyer] = {"buyer": buyer, "orders": set(), "units": 0, "revenue": 0.0, "by_sku": set()}
-        qty   = int(sale.get("quantity") or 0)
-        # unit_price may be None for pre-catalogue records — fall back to 0
-        price = float(sale.get("unit_price") or sale.get("price") or sale.get("unit_selling_price") or 0)
-        # Use stored line_total if available (more accurate), else compute from price * qty
-        line_total_stored = sale.get("line_total")
-        sku   = sale.get("sku_key") or sale.get("recipe") or "Unknown"
-        order_id = sale.get("order_id") or sale.get("id")
-        by_buyer[buyer]["orders"].add(order_id)
-        by_buyer[buyer]["units"]   += qty
-        revenue_this = float(line_total_stored) if line_total_stored is not None else qty * price
-        by_buyer[buyer]["revenue"] += revenue_this
-        if sku not in by_buyer[buyer]["by_sku"]:
-            by_buyer[buyer]["by_sku"][sku] = {"sku": sku,
-                "recipe": sale.get("recipe",""), "format": sale.get("format",""),
-                "units": 0, "revenue": 0.0}
-        by_buyer[buyer]["by_sku"][sku]["units"]   += qty
-        by_buyer[buyer]["by_sku"][sku]["revenue"] += revenue_this
-
-    result = []
-    for b_data in sorted(by_buyer.values(), key=lambda x: -x["revenue"]):
-        skus = sorted(b_data["by_sku"].values(), key=lambda s: -s["units"])
-        result.append({
-            "buyer":   b_data["buyer"],
-            "orders":  len(b_data["orders"]),
-            "units":   b_data["units"],
-            "cases":   b_data["units"] // 12,
-            "revenue": round(b_data["revenue"], 2),
-            "by_sku":  [{**s, "revenue": round(s["revenue"],2)} for s in skus],
-        })
-    return jsonify({"buyers": result, "period": period})
-
-@app.route("/buyers/<bid>/edit")
-@login_required
-def buyer_edit_page(bid):
-    buyers = _load_buyers()
-    buyer = next((b for b in buyers if b["id"] == bid), None)
-    if not buyer:
-        return "Buyer not found", 404
-
-    # Group catalog by Brand → Format (SS → FZ → BB → Other) → Recipe name
-    flat = _all_sku_catalog()
-    FORMAT_ORDER = ["SS", "FZ", "BB"]
-    FORMAT_LABELS = {"SS": "Shelf Stable", "FZ": "Frozen", "BB": "Back Bar"}
-
-    # Collect brands in sorted order
-    brand_fmt_dict = {}  # {brand: {fmt_prefix: [skus]}}
-    for sku in flat:
-        brand = (sku.get("brand") or "Other").strip() or "Other"
-        fmt   = _normalize_format(sku.get("format") or "")
-        prefix = fmt[:2].upper() if fmt else "Other"
-        prefix = prefix if prefix in FORMAT_ORDER else "Other"
-        if brand not in brand_fmt_dict:
-            brand_fmt_dict[brand] = {}
-        if prefix not in brand_fmt_dict[brand]:
-            brand_fmt_dict[brand][prefix] = []
-        brand_fmt_dict[brand][prefix].append(sku)
-
-    sku_catalog = []
-    for brand in sorted(brand_fmt_dict.keys()):
-        for prefix in FORMAT_ORDER + ["Other"]:
-            skus_in = brand_fmt_dict[brand].get(prefix)
-            if not skus_in:
-                continue
-            skus_sorted = sorted(skus_in, key=lambda s: s.get("recipe","").lower())
-            sku_catalog.append({
-                "format_prefix": prefix,
-                "format_label":  FORMAT_LABELS.get(prefix, "Other"),
-                "brand":         brand,
-                "skus":          skus_sorted,
-            })
-
-    # Build sku_map: {sku_key: sku_dict} for fast lookup in template
-    sku_map = {s["sku_key"]: s for s in buyer.get("skus", []) if s.get("sku_key")}
-    return _render("buyer_edit.html", buyer=buyer, sku_catalog=sku_catalog, sku_map=sku_map)
-
-@app.route("/ccp-master")
-@login_required
 def ccp_master_page():
     return _render("master_ccp.html")
 
@@ -715,7 +718,7 @@ def update_recipe(name):
     name, this is treated as a rename.
 
     Cascades any name/brand/format change to all downstream records:
-    FG inventory, sales, production runs, schedules, sku_meta, buyers,
+        FG inventory, sales, production runs, schedules, sku_meta, buyers,
     and notifies the Ripe portal to update soma_sku_key.
     """
     data = request.json or {}
@@ -2077,7 +2080,7 @@ def get_production_tracker(week_id):
 def get_tracker_other_details(week_id):
     """Diagnostic: return every production entry in this week that classified
     as 'Other', with the reason. Uses the SAME attribution logic as the tracker:
-    looks up the PREVIOUS day's recipe (what finished today), not today's start."""
+        looks up the PREVIOUS day's recipe (what finished today), not today's start."""
     recipes = load_recipes()
     rows = []
     for d_idx in range(7):
@@ -2975,7 +2978,7 @@ def add_raw_materials_bulk():
         keeps its own supplier_lot from the parsed invoice
 
     Behavior:
-    - All entries are validated upfront against the canonical ingredient list
+        - All entries are validated upfront against the canonical ingredient list
       (recipes + custom items). Atomic: either all valid entries save, or none.
     - Skips rows with quantity <= 0 silently (so users can leave blanks)
     - Returns count of created entries and the LOT(s) used
@@ -3954,7 +3957,7 @@ def delete_finished_good(fg_id):
 @login_required
 def adjust_lot_remaining():
     """Set the total remaining quantity for a LOT within a SKU. Body:
-    {sku_key, lot, new_remaining}. The delta from current is distributed across
+        {sku_key, lot, new_remaining}. The delta from current is distributed across
     underlying FG entries (same LOT can span multiple kettles).
     Used for manual stock corrections (loss, breakage, recount)."""
     data = request.json or {}
@@ -4075,7 +4078,7 @@ def add_baseline_finished_goods_bulk():
     at once and submits everything together.
 
     Behavior:
-    - All entries share the same BL-DDMMYY LOT (same migration date)
+        - All entries share the same BL-DDMMYY LOT (same migration date)
     - Skips entries with quantity <= 0 (so user can leave most rows blank)
     - Validates each recipe exists; returns 400 if any are unknown
     - Atomic: either all valid entries save, or none if any validation fails
@@ -4804,16 +4807,6 @@ def get_rm_receipt_photo(entry_id):
     return jsonify({"error": "Not found"}), 404
 
 
-@app.route("/api/organic/raw-materials/receipt-photo/<entry_id>", methods=["DELETE"])
-@login_required
-def delete_rm_receipt_photo(entry_id):
-    for fn in os.listdir(RM_RECEIPT_PHOTOS_DIR):
-        if fn.startswith(entry_id + "."):
-            os.remove(os.path.join(RM_RECEIPT_PHOTOS_DIR, fn))
-            return jsonify({"ok": True})
-    return jsonify({"error": "Not found"}), 404
-
-
 @app.route("/api/organic/raw-materials/receipt-photo-exists/<entry_id>", methods=["GET"])
 @login_required
 def rm_receipt_photo_exists(entry_id):
@@ -4823,33 +4816,11 @@ def rm_receipt_photo_exists(entry_id):
     return jsonify({"exists": False})
 
 
-@app.route("/api/organic/finished-goods/grouped", methods=["GET"])
-@login_required
-def get_finished_goods_grouped():
-    fg = _load_json(ORGANIC_FG_PATH, [])
-    recipes = load_recipes()
-    grouped = _group_fg_with_catalog(fg, recipes)
-    cert_filter = (request.args.get("certification") or "").strip()
-    if cert_filter:
-        grouped = [g for g in grouped
-                   if (g.get("certification") or "").lower() == cert_filter.lower()]
-    # Merge PAR levels from sku_meta.json
-    meta = _load_json(SKU_META_PATH, {})
-    for g in grouped:
-        m = meta.get(g["sku_key"], {})
-        g["par"] = m.get("par")          # None = no PAR; int = PAR level
-        # price lives in buyers.json — not surfaced here
-    return jsonify(grouped)
-
 
 @app.route("/api/internal/catalogue", methods=["GET"])
 def internal_buyer_catalogue():
-    """Return the product catalogue for a specific buyer — their assigned SKUs
-    with buyer-specific pricing and live FG stock.
-    Called by the buyer portal (e.g. Ripe) to build its order form.
-
-    Query params:
-      buyer  — buyer name (e.g. 'Ripe') or buyer id
+    """Internal API — called by Ripe portal to get the buyer SKU catalogue.
+    Authenticated via X-Internal-Key header.
     """
     internal_key = os.environ.get("INTERNAL_API_KEY", "")
     provided = request.headers.get("X-Internal-Key", "")
@@ -4871,25 +4842,28 @@ def internal_buyer_catalogue():
         return jsonify({"error": f"Buyer '{buyer_ref}' not found"}), 404
 
     # Build stock map
-    fg = _load_json(ORGANIC_FG_PATH, [])
-    sales = _load_json(ORGANIC_SALES_PATH, [])
-    meta = _load_json(SKU_META_PATH, {})
-    company = _load_company_info()
-    buffer_units = int(company.get("ripe_inventory_buffer") or 0)
-
     stock_map = {}
+    lower_map = {}
     for entry in fg:
-        key = _sku_key(entry.get("brand",""), entry.get("recipe",""), entry.get("format",""))
-        stock_map[key] = stock_map.get(key, 0) + int(entry.get("quantity_remaining") or 0)
-
-    # Subtract committed (not yet deducted) sales
-    lower_map = {k.lower(): k for k in stock_map}
+        sk = entry.get("sku_key") or _sku_key(
+            entry.get("brand",""), entry.get("recipe",""), entry.get("format",""))
+        stock_map[sk] = stock_map.get(sk, 0) + max(0, int(entry.get("quantity_remaining") or 0))
+        lower_map[sk.lower()] = sk
+    sales = _load_json(ORGANIC_SALES_PATH, [])
     for sale in sales:
-        if sale.get("deducted") is False:
-            sk = sale.get("sku_key", "")
-            canonical = stock_map.get(sk) and sk or lower_map.get(sk.lower())
-            if canonical:
-                stock_map[canonical] = max(0, stock_map[canonical] - int(sale.get("quantity") or 0))
+        sk = sale.get("sku_key", "")
+        canonical = stock_map.get(sk) and sk or lower_map.get(sk.lower())
+        for entry in fg:
+            sk = entry.get("sku_key") or _sku_key(
+            entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", ""))
+        stock_map[sk] = stock_map.get(sk, 0) + max(0, int(entry.get("quantity_remaining") or 0))
+        lower_map[sk.lower()] = sk
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    for sale in sales:
+        sk = sale.get("sku_key", "")
+        canonical = stock_map.get(sk) and sk or lower_map.get(sk.lower())
+        if canonical:
+            stock_map[canonical] = max(0, stock_map[canonical] - int(sale.get("quantity") or 0))
 
     # Build catalogue from buyer's assigned SKUs
     catalogue = []
@@ -4903,59 +4877,34 @@ def internal_buyer_catalogue():
             "name":        sku.get("recipe", ""),
             "brand":       sku.get("brand", ""),
             "format":      sku.get("format", ""),
-            "display":     sku.get("display", ""),
-            "position":    sku.get("position", 999),
-            # Buyer-specific pricing (set in Soma buyer record)
-            "price":       sku.get("price"),
-            "cogs":        sku.get("cogs"),
-            "margin_pct":  sku.get("margin_pct"),
-            "buyer_sku":   sku.get("buyer_sku", ""),
-            "active":      sku.get("active", True),
-            # Live stock
-            "available_units": available,
-            "available_cases": available // 12,
-            "par":         m.get("par"),
-        })
-
-    catalogue.sort(key=lambda x: (x["position"], x["format"], x["name"]))
-
-    return jsonify({
-        "buyer": buyer["name"],
-        "buyer_id": buyer["id"],
-        "catalogue": catalogue,
-        "units_per_case": 12,
-        "buffer_units": buffer_units,
-        # Order rules — sourced from Soma company settings
-        "rules": {
             "ss_min_cases_delivery": int(company.get("ss_min_cases_delivery") or 40),
             "fzbb_small_lead_days":  int(company.get("fzbb_small_lead_days")  or 3),
             "fzbb_large_lead_days":  int(company.get("fzbb_large_lead_days")  or 7),
             "fzbb_large_threshold":  int(company.get("fzbb_large_threshold")  or 8),
-        },
-    })
+        })
+
 
 
 @app.route("/api/internal/sku-audit", methods=["GET"])
 def internal_sku_audit():
-    """Cross-reference Soma FG recipes against Ripe product soma_sku_key values.
-    Key-gated. Returns a full match/mismatch report.
-    """
+    """Return all SKU keys and their recipe/format metadata. Used by Ripe portal."""
     internal_key = os.environ.get("INTERNAL_API_KEY", "")
     provided = request.headers.get("X-Internal-Key", "")
     import hmac as _hmac
     if not internal_key or not _hmac.compare_digest(provided.encode(), internal_key.encode()):
         return jsonify({"error": "Unauthorized"}), 401
 
-    # Build Soma side: all active recipe sku_keys
     recipes = load_recipes()
-    soma_keys = {}  # sku_key -> {recipe_name, brand, format, display}
+    skus = {}
     for rname, rdata in recipes.items():
-        if rdata.get("archived"):
-            continue
-        brand  = (rdata.get("brand") or "").strip()
-        fmt    = _normalize_format((rdata.get("format") or "").strip())
-        key    = _sku_key(brand, rname, fmt)
-        soma_keys[key] = {
+        sk = _sku_key(rdata.get("brand",""), rname, rdata.get("format",""))
+        fmt = _normalize_format((rdata.get("format") or "").strip()).upper()
+        brand = (rdata.get("brand") or "").strip()
+        fmt = _normalize_format((rdata.get("format") or "").strip()).upper()
+        sk = _sku_key(rdata.get("brand",""), rname, rdata.get("format",""))
+    for rname, rdata in recipes.items():
+
+        skus[sk] = {
             "recipe_name": rname,
             "brand": brand,
             "format": fmt,
@@ -4981,29 +4930,18 @@ def internal_sku_audit():
             req = _ur.Request(
                 f"{ripe_url}/api/internal/products",
                 headers={"X-Internal-Key": ikey},
-                method="GET",
             )
-            with _ur.urlopen(req, timeout=8) as resp:
-                ripe_products = json.loads(resp.read())
-        except Exception as e:
-            ripe_error = str(e)
+            ripe_products = json.loads(_ur.urlopen(req, timeout=5).read())
+        except Exception:
+            pass
 
-    # Audit each Ripe product
-    ripe_audit = []
+    # Match Ripe products to Soma SKUs
+    results = []
     ripe_matched_keys = set()
-    for p in ripe_products:
-        sk = (p.get("soma_sku_key") or "").strip()
-        result = {
-            "ripe_id":   p["id"],
-            "ripe_name": p["name"],
-            "ripe_format": p.get("format",""),
-            "soma_sku_key": sk,
-            "active": p.get("active", True),
-        }
-        if not sk:
-            result["status"] = "no_key"
-            result["issue"]  = "soma_sku_key not set"
-        elif sk in soma_keys:
+    for rp in ripe_products:
+        sk = rp.get("soma_sku_key", "")
+        result = {"ripe_sku": rp.get("sku",""), "soma_sku_key": sk, "price": rp.get("price")}
+        if sk in soma_keys:
             result["status"] = "matched"
             result["soma_recipe"] = soma_keys[sk]
             result["fg_units"]    = fg_stock.get(sk, 0)
@@ -5031,13 +4969,13 @@ def internal_sku_audit():
     for key, info in soma_keys.items():
         if key not in ripe_matched_keys:
             unlinked_soma.append({
-                "sku_key": key,
-                "recipe_name": info["recipe_name"],
-                "brand": info["brand"],
-                "format": info["format"],
-                "display": info["display"],
-                "fg_units": fg_stock.get(key, 0),
-                "has_format_in_name": info["has_format_in_name"],
+            "sku_key": key,
+            "recipe_name": info["recipe_name"],
+            "brand": info["brand"],
+            "format": info["format"],
+            "display": info["display"],
+            "fg_units": fg_stock.get(key, 0),
+            "has_format_in_name": info["has_format_in_name"],
             })
 
     # Summary
@@ -5158,12 +5096,12 @@ def get_all_sku_meta():
             remaining = g.get("total_remaining", 0)
             if remaining < par:
                 warnings.append({
-                    "sku_key": g["sku_key"],
-                    "display": g.get("display", ""),
-                    "par": par,
-                    "remaining": remaining,
-                    "shortfall": par - remaining,
-                })
+            "sku_key": g["sku_key"],
+            "display": g.get("display", ""),
+            "par": par,
+            "remaining": remaining,
+            "shortfall": par - remaining,
+            })
     return jsonify({"meta": meta, "par_warnings": warnings})
 
 
@@ -5184,11 +5122,11 @@ def get_finished_goods_sku_detail(sku_key):
     for entry in fg:
         if _sku_key(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", "")) == sku_key:
             display_info = {
-                "sku_key": sku_key,
-                "brand": entry.get("brand", ""),
-                "recipe": entry.get("recipe", ""),
-                "format": entry.get("format", ""),
-                "display": _sku_display(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", "")),
+            "sku_key": sku_key,
+            "brand": entry.get("brand", ""),
+            "recipe": entry.get("recipe", ""),
+            "format": entry.get("format", ""),
+            "display": _sku_display(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", "")),
             }
             break
     return jsonify({
@@ -5241,7 +5179,7 @@ def get_organic_sales():
     cert_filter = (request.args.get("certification") or "").strip()
     if cert_filter:
         sales = [s for s in sales
-                 if (s.get("certification") or "").lower() == cert_filter.lower()]
+            if (s.get("certification") or "").lower() == cert_filter.lower()]
     return jsonify(sales)
 
 
@@ -5289,8 +5227,8 @@ def add_organic_sale():
         # NEW path: FIFO across the SKU's LOTs (oldest production date first)
         # Build a list of FG entries belonging to this SKU, ordered FIFO
         candidates = [f for f in fg
-                      if _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")) == sku_key
-                      and (f.get("quantity_remaining") or 0) > 0]
+            if _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")) == sku_key
+            and (f.get("quantity_remaining") or 0) > 0]
         if not candidates:
             return jsonify({"error": "No inventory available for this SKU"}), 400
 
@@ -5330,15 +5268,15 @@ def add_organic_sale():
             lot = entry.get("lot", "")
             if lot not in lot_summary:
                 lot_summary[lot] = {
-                    "lot": lot, "quantity": 0,
-                    "fg_ids": [],            # legacy/display convenience
-                    "breakdown": [],         # exact per-fg_id deduction (for accurate restore)
-                }
+            "lot": lot, "quantity": 0,
+            "fg_ids": [],            # legacy/display convenience
+            "breakdown": [],         # exact per-fg_id deduction (for accurate restore)
+            }
             lot_summary[lot]["quantity"] += take
             lot_summary[lot]["fg_ids"].append(entry.get("id"))
             lot_summary[lot]["breakdown"].append({
-                "fg_id": entry.get("id"),
-                "quantity": take,
+            "fg_id": entry.get("id"),
+            "quantity": take,
             })
         sale_lots = list(lot_summary.values())
 
@@ -5369,7 +5307,7 @@ def add_organic_sale():
             target = next((f for f in fg if f.get("id") == b.get("fg_id")), None)
             if target and target.get("certification"):
                 sale_cert = target["certification"]
-                break
+            break
         if sale_cert:
             break
 
@@ -5468,7 +5406,7 @@ def add_sale_order():
                 sku_key = _sku_key(brand, recipe, fmt)
             else:
                 errors.append(f"Line missing sku_key and recipe: {line}")
-                continue
+            continue
 
         # FIFO deduction across this SKU's LOTs
         candidates = [
@@ -5519,9 +5457,9 @@ def add_sale_order():
         for lot_entry in sale_lots:
             for b in (lot_entry.get("breakdown") or []):
                 target = next((f for f in fg if f.get("id") == b.get("fg_id")), None)
-                if target and target.get("certification"):
-                    sale_cert = target["certification"]
-                    break
+            if target and target.get("certification"):
+                sale_cert = target["certification"]
+            break
             if sale_cert:
                 break
 
@@ -5613,19 +5551,19 @@ def edit_organic_sale(sale_id):
             # Need to deduct more — FIFO from same SKU
             sku_key = sale.get("sku_key", "")
             candidates = [
-                f for f in fg
-                if _sku_key(f.get("brand",""), f.get("recipe",""), f.get("format","")) == sku_key
-                and int(f.get("quantity_remaining") or 0) > 0
+            f for f in fg
+            if _sku_key(f.get("brand",""), f.get("recipe",""), f.get("format","")) == sku_key
+            and int(f.get("quantity_remaining") or 0) > 0
             ]
             candidates.sort(key=lambda e: (e.get("created_at",""), e.get("lot","")))
             remaining = delta
             for entry in candidates:
                 if remaining <= 0:
                     break
-                avail = int(entry.get("quantity_remaining") or 0)
-                take = min(avail, remaining)
-                entry["quantity_remaining"] = avail - take
-                remaining -= take
+            avail = int(entry.get("quantity_remaining") or 0)
+            take = min(avail, remaining)
+            entry["quantity_remaining"] = avail - take
+            remaining -= take
             if remaining > 0:
                 return jsonify({"error": f"Insufficient FG stock for delta of +{delta} units"}), 422
 
@@ -5636,18 +5574,18 @@ def edit_organic_sale(sale_id):
             for lot_info in reversed(lots):
                 if restore <= 0:
                     break
-                for fg_entry in fg:
-                    if fg_entry.get("lot") == lot_info.get("lot") and restore > 0:
-                        fg_entry["quantity_remaining"] = int(fg_entry.get("quantity_remaining") or 0) + restore
-                        restore = 0
-                        break
+            for fg_entry in fg:
+                if fg_entry.get("lot") == lot_info.get("lot") and restore > 0:
+                    fg_entry["quantity_remaining"] = int(fg_entry.get("quantity_remaining") or 0) + restore
+            restore = 0
+            break
             # If we couldn't trace back to a specific LOT, restore to most recent entry
             if restore > 0:
                 sku_key = sale.get("sku_key", "")
-                matching = [f for f in fg if _sku_key(f.get("brand",""), f.get("recipe",""), f.get("format","")) == sku_key]
-                if matching:
-                    matching.sort(key=lambda e: e.get("created_at",""), reverse=True)
-                    matching[0]["quantity_remaining"] = int(matching[0].get("quantity_remaining") or 0) + restore
+            matching = [f for f in fg if _sku_key(f.get("brand",""), f.get("recipe",""), f.get("format","")) == sku_key]
+            if matching:
+                matching.sort(key=lambda e: e.get("created_at",""), reverse=True)
+            matching[0]["quantity_remaining"] = int(matching[0].get("quantity_remaining") or 0) + restore
 
         sale["quantity"] = new_qty
         _save_json(ORGANIC_FG_PATH, fg)
@@ -5681,17 +5619,17 @@ def delete_organic_sale(sale_id):
             if breakdown:
                 for b in breakdown:
                     target = next((f for f in fg if f.get("id") == b.get("fg_id")), None)
-                    if target:
-                        target["quantity_remaining"] = int(target.get("quantity_remaining") or 0) + int(b.get("quantity") or 0)
-                continue
+            if target:
+                target["quantity_remaining"] = int(target.get("quantity_remaining") or 0) + int(b.get("quantity") or 0)
+            continue
             # Fallback: legacy lot record without breakdown — restore everything
             # to the first matching fg_id (best-effort; preserves SKU total).
             fg_ids = lot_entry.get("fg_ids") or []
             for fid in fg_ids:
                 target = next((f for f in fg if f.get("id") == fid), None)
-                if target:
-                    target["quantity_remaining"] = int(target.get("quantity_remaining") or 0) + qty_to_restore
-                    break
+            if target:
+                target["quantity_remaining"] = int(target.get("quantity_remaining") or 0) + qty_to_restore
+            break
     elif sale.get("fg_id"):
         # Pre-multi-LOT legacy shape
         target = next((f for f in fg if f.get("id") == sale["fg_id"]), None)
@@ -5721,9 +5659,9 @@ def _migrate_legacy_sales():
         # Old shape — wrap in single-LOT array
         if s.get("fg_id") or s.get("fg_lot"):
             s["lots"] = [{
-                "lot": s.get("fg_lot", ""),
-                "quantity": int(s.get("quantity") or 0),
-                "fg_ids": [s["fg_id"]] if s.get("fg_id") else [],
+            "lot": s.get("fg_lot", ""),
+            "quantity": int(s.get("quantity") or 0),
+            "fg_ids": [s["fg_id"]] if s.get("fg_id") else [],
             }]
             # Add sku_key for completeness
             if not s.get("sku_key"):
@@ -5756,7 +5694,7 @@ def _all_sku_catalog():
             continue
         seen.add(key)
         catalog.append({"brand": brand, "recipe": rname, "format": fmt,
-                         "sku_key": key, "display": _sku_display(brand, rname, fmt)})
+            "sku_key": key, "display": _sku_display(brand, rname, fmt)})
     catalog.sort(key=lambda s: (s["brand"].lower(), s["recipe"].lower()))
     return catalog
 
@@ -5858,11 +5796,11 @@ def update_buyer(bid):
         locs = data["locations"]
         if isinstance(locs, list):
             buyers[idx]["locations"] = [
-                {"id": l.get("id") or str(i),
-                 "name": (l.get("name") or "").strip(),
-                 "address": (l.get("address") or "").strip()}
-                for i, l in enumerate(locs)
-                if (l.get("name") or "").strip()
+            {"id": l.get("id") or str(i),
+            "name": (l.get("name") or "").strip(),
+            "address": (l.get("address") or "").strip()}
+            for i, l in enumerate(locs)
+            if (l.get("name") or "").strip()
             ]
     _save_buyers(buyers)
     return jsonify(buyers[idx])
@@ -5924,220 +5862,6 @@ def delete_buyer(bid):
     return jsonify({"ok": True})
 
 
-# ── Sale documents ────────────────────────────────────────────────────────
-@app.route("/api/organic/sales/<sale_id>/packing-slip", methods=["GET"])
-@login_required
-def get_packing_slip(sale_id):
-    sales = _load_json(ORGANIC_SALES_PATH, [])
-    sale = next((s for s in sales if s.get("id") == sale_id), None)
-    if not sale:
-        return jsonify({"error": "Sale not found"}), 404
-
-    # Collect all lines for this order (order_id groups multi-SKU transactions)
-    order_id = sale.get("order_id")
-    if order_id:
-        order_lines = [s for s in sales if s.get("order_id") == order_id]
-        order_lines.sort(key=lambda s: s.get("created_at", ""))
-    else:
-        order_lines = [sale]  # legacy single-line sale
-
-    company = _load_company_info()
-    buyers = _load_buyers()
-    buyer_name = sale.get("buyer") or "—"
-    buyer_rec = next((b for b in buyers if b.get("name") == buyer_name), {})
-    buyer_address = sale.get("location_address") or buyer_rec.get("address") or ""
-    buyer_contact = sale.get("location_name") or ""
-    buyer_phone = buyer_rec.get("phone") or ""
-    buyer_email = buyer_rec.get("email") or ""
-
-    from reportlab.lib.pagesizes import letter
-    from reportlab.lib import colors
-    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
-                                    Paragraph, Spacer, HRFlowable, Image)
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch
-    from reportlab.lib.enums import TA_RIGHT, TA_LEFT, TA_CENTER
-    import io as _io
-
-    DARK_GREEN  = colors.HexColor("#1b5e20")
-    MID_GREEN   = colors.HexColor("#2e7d32")
-    LIGHT_GREEN = colors.HexColor("#e8f5e9")
-    BORDER      = colors.HexColor("#c8d8c8")
-    GREY_TEXT   = colors.HexColor("#555555")
-    LIGHT_ROW   = colors.HexColor("#f5f9f5")
-
-    buf = _io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=letter,
-                            rightMargin=0.65*inch, leftMargin=0.65*inch,
-                            topMargin=0.55*inch, bottomMargin=0.65*inch)
-    styles = getSampleStyleSheet()
-
-    def _ps(name, **kw):
-        base = styles.get(name, styles["Normal"])
-        return ParagraphStyle("_"+name+"_"+str(abs(hash(str(kw)))), parent=base, **kw)
-
-    story = []
-
-    # Header: logo left, company info right
-    logo_path = os.path.join(os.path.dirname(__file__), "static", "logo.jpg")
-    if not os.path.exists(logo_path):
-        logo_path = os.path.join(os.path.dirname(__file__), "static", "logo.png")
-
-    company_lines = [company.get("name") or "Soma Bone Broth"]
-    for fld in ("address", "city", "phone", "email", "website"):
-        if company.get(fld): company_lines.append(company[fld])
-
-    company_para = Paragraph(
-        "<br/>".join(company_lines),
-        _ps("Normal", fontSize=8, textColor=GREY_TEXT, alignment=TA_RIGHT, leading=12)
-    )
-
-    if os.path.exists(logo_path):
-        logo_img = Image(logo_path, width=1.4*inch, height=1.4*inch, kind="proportional")
-        header_tbl = Table([[logo_img, company_para]], colWidths=[2.5*inch, 5.0*inch])
-        header_tbl.setStyle(TableStyle([
-            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-            ("ALIGN",  (1,0), (1,0),  "RIGHT"),
-        ]))
-    else:
-        header_tbl = Table(
-            [[Paragraph(company.get("name") or "Soma Bone Broth",
-                        _ps("Normal", fontSize=18, textColor=DARK_GREEN, fontName="Helvetica-Bold")),
-              company_para]],
-            colWidths=[3.0*inch, 4.5*inch]
-        )
-    story.append(header_tbl)
-    story.append(Spacer(1, 0.1*inch))
-    story.append(HRFlowable(width="100%", thickness=2, color=MID_GREEN, spaceAfter=6))
-    story.append(Paragraph("PACKING SLIP",
-        _ps("Normal", fontSize=20, fontName="Helvetica-Bold", textColor=DARK_GREEN, spaceAfter=2)))
-
-    # Ship To / Order Info block
-    sale_date = sale.get("sale_date") or "—"
-    po        = sale.get("po_number") or sale.get("case_lot") or "—"
-    ref       = sale_id[-10:]
-
-    lbl   = _ps("Normal", fontSize=8, textColor=GREY_TEXT, fontName="Helvetica-Bold", leading=11, spaceBefore=2)
-    val   = _ps("Normal", fontSize=10, leading=13)
-    val_s = _ps("Normal", fontSize=9, textColor=GREY_TEXT, leading=12)
-
-    ship_lines = [f"<b>{buyer_name}</b>"]
-    if buyer_contact: ship_lines.append(buyer_contact)
-    if buyer_address: ship_lines.append(buyer_address)
-    if buyer_phone:   ship_lines.append(buyer_phone)
-    if buyer_email:   ship_lines.append(buyer_email)
-    ship_para = Paragraph("<br/>".join(ship_lines), val)
-
-    order_info = Table([
-        [Paragraph("SHIP TO", lbl), ship_para,
-         Paragraph("DATE",      lbl), Paragraph(sale_date, val)],
-        ["", "", Paragraph("ORDER REF", lbl), Paragraph(ref, val_s)],
-        ["", "", Paragraph("PO #",      lbl), Paragraph(po,  val_s)],
-    ], colWidths=[0.9*inch, 3.6*inch, 1.0*inch, 2.0*inch])
-    order_info.setStyle(TableStyle([
-        ("VALIGN",        (0,0), (-1,-1), "TOP"),
-        ("SPAN",          (0,0), (0,2)),
-        ("SPAN",          (1,0), (1,2)),
-        ("BACKGROUND",    (0,0), (1,2),  LIGHT_GREEN),
-        ("BOX",           (0,0), (1,2),  0.5, BORDER),
-        ("BOX",           (2,0), (3,2),  0.5, BORDER),
-        ("TOPPADDING",    (0,0), (-1,-1), 7),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 7),
-        ("LEFTPADDING",   (0,0), (-1,-1), 8),
-        ("RIGHTPADDING",  (0,0), (-1,-1), 8),
-    ]))
-    story.append(Spacer(1, 0.15*inch))
-    story.append(order_info)
-    story.append(Spacer(1, 0.2*inch))
-
-    # Items table — one row per SKU line across all order lines
-    hdr_s  = _ps("Normal", fontSize=9, fontName="Helvetica-Bold", textColor=colors.white, alignment=TA_CENTER)
-    cell_l = _ps("Normal", fontSize=10, alignment=TA_LEFT)
-    cell_c = _ps("Normal", fontSize=10, alignment=TA_CENTER)
-    tot_s  = _ps("Normal", fontSize=10, fontName="Helvetica-Bold", alignment=TA_CENTER)
-
-    rows = [[Paragraph("PRODUCT", hdr_s), Paragraph("FORMAT", hdr_s),
-             Paragraph("LOT #", hdr_s),   Paragraph("QTY (units)", hdr_s)]]
-    total_units = 0
-
-    for line in order_lines:
-        lp  = ((line.get("brand","")+" " if line.get("brand") else "") + (line.get("recipe") or "")).strip()
-        lf  = line.get("format") or ""
-        ll  = line.get("lots") or []
-        if ll:
-            for lot in ll:
-                qty = int(lot.get("quantity") or 0)
-                total_units += qty
-                rows.append([Paragraph(lp, cell_l), Paragraph(lf, cell_c),
-                             Paragraph(lot.get("lot") or "—", cell_c), Paragraph(str(qty), cell_c)])
-        else:
-            qty = int(line.get("quantity") or 0)
-            total_units += qty
-            rows.append([Paragraph(lp, cell_l), Paragraph(lf, cell_c),
-                         Paragraph(line.get("fg_lot") or "—", cell_c), Paragraph(str(qty), cell_c)])
-    total_cases = total_units // 12
-    rows.append(["", "", Paragraph("TOTAL", tot_s),
-                 Paragraph(f"{total_units} units  ({total_cases} cases)", tot_s)])
-
-    rc = len(rows)
-    items_tbl = Table(rows, colWidths=[3.2*inch, 1.1*inch, 1.4*inch, 1.8*inch])
-    items_tbl.setStyle(TableStyle([
-        ("BACKGROUND",    (0,0),  (-1,0),    MID_GREEN),
-        ("TEXTCOLOR",     (0,0),  (-1,0),    colors.white),
-        ("ROWBACKGROUNDS",(0,1),  (-1,rc-2), [colors.white, LIGHT_ROW]),
-        ("BACKGROUND",    (0,-1), (-1,-1),   LIGHT_GREEN),
-        ("GRID",          (0,0),  (-1,rc-2), 0.5, BORDER),
-        ("LINEABOVE",     (0,-1), (-1,-1),   1.0, MID_GREEN),
-        ("TOPPADDING",    (0,0),  (-1,-1),   8),
-        ("BOTTOMPADDING", (0,0),  (-1,-1),   8),
-        ("LEFTPADDING",   (0,0),  (-1,-1),   8),
-        ("RIGHTPADDING",  (0,0),  (-1,-1),   8),
-        ("VALIGN",        (0,0),  (-1,-1),   "MIDDLE"),
-    ]))
-    story.append(items_tbl)
-    story.append(Spacer(1, 0.3*inch))
-
-    # Footer
-    story.append(HRFlowable(width="100%", thickness=0.5, color=BORDER, spaceAfter=8))
-    footer = ["Thank you for your business."]
-    if company.get("registration"): footer.append(f"Reg: {company['registration']}")
-    story.append(Paragraph("  |  ".join(footer),
-                            _ps("Normal", fontSize=8, textColor=GREY_TEXT, alignment=TA_CENTER)))
-
-    doc.build(story)
-    buf.seek(0)
-    safe_buyer = "".join(c for c in buyer_name if c.isalnum() or c in "-_ ")[:20]
-    return send_file(buf, mimetype="application/pdf", as_attachment=False,
-                     download_name=f"packing-slip-{safe_buyer}-{sale_date}.pdf")
-
-
-@app.route("/api/organic/sales/<sale_id>/qbo-csv", methods=["GET"])
-@login_required
-def get_qbo_csv(sale_id):
-    sales = _load_json(ORGANIC_SALES_PATH, [])
-    sale = next((s for s in sales if s.get("id") == sale_id), None)
-    if not sale:
-        return jsonify({"error": "Sale not found"}), 404
-    import csv
-    import io as _io
-    buf = _io.StringIO()
-    writer = csv.writer(buf)
-    writer.writerow(["InvoiceNo","Customer","InvoiceDate","DueDate",
-                     "Item(Product/Service)","ItemQuantity","ItemRate","ItemAmount","Memo"])
-    lots = sale.get("lots") or []
-    product = ((sale.get("brand","")+" " if sale.get("brand") else "") +
-               (sale.get("recipe") or "") +
-               (" "+sale.get("format") if sale.get("format") else "")).strip()
-    lot_str = ", ".join(l.get("lot","") for l in lots if l.get("lot"))
-    total_qty = sum(int(l.get("quantity") or 0) for l in lots)
-    writer.writerow([sale_id[-8:].upper(), sale.get("buyer",""),
-                     sale.get("sale_date",""), sale.get("sale_date",""),
-                     product, total_qty, "", "", f"LOT#: {lot_str}" if lot_str else ""])
-    buf.seek(0)
-    from flask import Response
-    return Response(buf.getvalue(), mimetype="text/csv",
-                    headers={"Content-Disposition": f"attachment; filename=invoice-{sale_id[-8:].upper()}.csv"})
-
 
 _migrate_legacy_sales()
 _autotag_existing_organic_data()
@@ -6178,7 +5902,7 @@ def organic_trace():
             for ing in run.get("ingredients_used", []):
                 if ing.get("supplier_lot", "").lower() == query.lower():
                     matched_runs.append(run)
-                    break
+            break
         # Find finished goods from those runs
         run_ids = {r["id"] for r in matched_runs}
         matched_fg = [f for f in fg if f.get("run_id") in run_ids]
@@ -6262,59 +5986,8 @@ def _check_organic_schedule(week_id, schedule):
             continue
         key = (run.get("day_idx"), run.get("vessel"))
         if key in desired:
-            # Schedule still wants this slot. Update recipe if it changed.
-            new_recipe = desired[key]
-            if run.get("recipe") != new_recipe:
-                rdata = recipes.get(new_recipe) or {}
-                run["recipe"] = new_recipe
-                run["brand"] = rdata.get("brand", "")
-                # Recompute LOT from the new schedule context
-                try:
-                    date = week_start + timedelta(days=key[0])
-                    run["lot"] = date.strftime("%d%m%y")
-                except Exception:
-                    pass
-            seen_keys.add(key)
-            out.append(run)
-        # else: scheduled run no longer matches — drop it (orphan removal)
-
-    # Add any newly-scheduled organic slots that don't yet have a run
-    for (day_idx, vessel), recipe_name in desired.items():
-        if (day_idx, vessel) in seen_keys:
-            continue
-        # Check if a completed run already exists for this slot (don't duplicate)
-        if any(r.get("week_id") == week_id and r.get("day_idx") == day_idx
-               and r.get("vessel") == vessel for r in out):
-            continue
-        date = week_start + timedelta(days=day_idx)
-        lot = date.strftime("%d%m%y")
-        rdata = recipes.get(recipe_name) or {}
-        run = {
-            "id": f"{week_id}_{day_idx}_{vessel}",
-            "week_id": week_id,
-            "day_idx": day_idx,
-            "day_name": DAYS[day_idx] if 0 <= day_idx < 7 else "",
-            "vessel": vessel,
-            "recipe": recipe_name,
-            "lot": lot,
-            "brand": rdata.get("brand", ""),
-            "status": "scheduled",
-            "ingredients_used": [],
-            "amount_produced": 0,
-            "created_at": datetime.now().isoformat(),
-        }
-        out.append(run)
-
-    _save_json(ORGANIC_RUNS_PATH, out)
-
-
-# ── Hook: Complete organic runs when daily production is filed ─────────
-def _check_organic_completion(finish_week_id, finish_day_idx, checklist_data):
-    """When daily production is saved on the FINISH day, process any organic
-    runs that were scheduled on the PREVIOUS day (which are now finishing).
-    Returns a list of warning dicts for the UI to surface."""
-    runs = _load_json(ORGANIC_RUNS_PATH, [])
-    start_week_id, start_day_idx = _previous_day_coords(finish_week_id, finish_day_idx)
+            # Schedule still wants this slot
+            pass
     has_organic = any(
         r.get("week_id") == start_week_id and r.get("day_idx") == start_day_idx
         for r in runs
@@ -6375,68 +6048,8 @@ def _backfill_organic_finished_goods():
                 checklist = json.load(f)
         except (OSError, ValueError):
             continue
-        if not (checklist or {}).get("produced"):
+        if not (checklist.get("complete")):
             continue
-        try:
-            _check_organic_completion(fw, fd, checklist)
-            backfilled += 1
-        except Exception:
-            pass
-    if backfilled:
-        try:
-            print(f"[startup] organic finished-goods backfill processed {backfilled} day(s)")
-        except Exception:
-            pass
-
-
-_backfill_organic_finished_goods()
-
-
-# ── Ripe order scheduled sale deduction ───────────────────────────────────────
-# Sale records from Ripe orders carry:
-#   deduction_date  — date inventory should be deducted (delivery/pickup date)
-#   deducted        — False until FIFO deduction runs
-#   payment_pending — True for Net14 until Stripe confirms payment
-#
-# This function runs on startup and is callable via API. It processes any
-# sale records whose deduction_date has arrived but deduction hasn't run yet.
-
-def _run_scheduled_deductions():
-    """FIFO-deduct any Ripe sale records whose deduction_date <= today."""
-    sales = _load_json(ORGANIC_SALES_PATH, [])
-    fg = _load_json(ORGANIC_FG_PATH, [])
-    today = datetime.now().date().isoformat()
-    changed = False
-
-    for sale in sales:
-        if sale.get("deducted", True):
-            continue  # already done or legacy (legacy has no deducted field → default True)
-        deduction_date = sale.get("deduction_date", "")
-        if not deduction_date or deduction_date > today:
-            continue  # not yet due
-
-        # Run FIFO deduction for this sale
-        units_needed = int(sale.get("quantity", 0))
-        recipe = sale.get("recipe", "")
-        fmt = (sale.get("format") or "").upper()
-
-        candidates = [
-            f for f in fg
-            if (f.get("recipe") or "") == recipe
-            and (f.get("format") or "").upper() == fmt
-            and int(f.get("quantity_remaining") or 0) > 0
-        ]
-
-        # Sort FIFO
-        def _prod_date(e):
-            wid = e.get("week_id")
-            d_idx = e.get("day_idx")
-            if wid and d_idx is not None:
-                try:
-                    return (datetime.strptime(wid, "%Y-%m-%d") + timedelta(days=int(d_idx))).strftime("%Y-%m-%d")
-                except Exception:
-                    pass
-            return (e.get("created_at") or "")[:10]
 
         candidates.sort(key=lambda e: (_prod_date(e), e.get("lot", ""), e.get("id", "")))
 
@@ -6497,15 +6110,146 @@ def _seed_sku_meta_defaults():
         _save_json(SKU_META_PATH, meta)
 
 
-_seed_sku_meta_defaults()
-
-
-@app.route("/api/ripe-orders/run-deductions", methods=["POST"])
+@app.route("/api/organic/finished-goods/grouped", methods=["GET"])
 @login_required
-def api_run_deductions():
-    """Manually trigger scheduled deductions (also runs on startup)."""
-    _run_scheduled_deductions()
-    return jsonify({"ok": True})
+def get_finished_goods_grouped():
+    """Return finished goods grouped by SKU with PAR levels."""
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    meta = _load_json(SKU_META_PATH, {})
+    grouped = {}
+    for entry in fg:
+        sk = _sku_key(entry.get("brand",""), entry.get("recipe",""), entry.get("format",""))
+        if sk not in grouped:
+            grouped[sk] = {"sku_key": sk, "brand": entry.get("brand",""),
+                           "recipe": entry.get("recipe",""), "format": entry.get("format",""),
+                           "lots": [], "total_remaining": 0,
+                           "par": meta.get(sk, {}).get("par")}
+        grouped[sk]["lots"].append(entry)
+        grouped[sk]["total_remaining"] += max(0, int(entry.get("quantity_remaining") or 0))
+    return jsonify(list(grouped.values()))
+
+
+@app.route("/api/organic/sales/<sale_id>/packing-slip", methods=["GET"])
+@login_required
+def get_packing_slip(sale_id):
+    """Return a printable HTML packing slip for a sale order."""
+    from flask import Response
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    # Find all lines for this order (grouped by order_id or single sale)
+    order_lines = [s for s in sales if s.get("order_id") == sale_id or s.get("id") == sale_id]
+    if not order_lines:
+        return "Sale not found", 404
+    first = order_lines[0]
+    buyer        = first.get("buyer", "")
+    sale_date    = first.get("sale_date", "")
+    po_number    = first.get("po_number", "")
+    location     = first.get("location_name", "")
+    delivery_addr= first.get("location_address", "") or first.get("delivery_address", "")
+
+    rows = ""
+    subtotal = 0.0
+    for s in order_lines:
+        qty   = int(s.get("quantity") or 0)
+        price = float(s.get("unit_price") or 0)
+        total = float(s.get("line_total") or qty * price)
+        subtotal += total
+        lots  = ", ".join(lo.get("lot","") for lo in (s.get("lots") or []) if lo.get("lot")) or s.get("fg_lot","") or "—"
+        rows += f"""<tr>
+            <td>{s.get("recipe","")}</td>
+            <td style="text-align:center">{s.get("format","")}</td>
+            <td style="text-align:center">{s.get("certification","")}</td>
+            <td style="text-align:right">{qty}</td>
+            <td style="text-align:right">${price:.2f}</td>
+            <td style="text-align:right">${total:.2f}</td>
+            <td>{lots}</td>
+        </tr>"""
+
+    company = _load_json(COMPANY_INFO_PATH, {})
+    company_name = company.get("company_name", "Soma Bone Broth Co.")
+    company_addr = company.get("address", "")
+
+    html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Packing Slip</title>
+<style>
+  body {{ font-family: Arial, sans-serif; font-size: 13px; margin: 32px; color: #1a1a1a; }}
+  h1 {{ font-size: 22px; margin-bottom: 4px; }}
+  .meta {{ display: flex; justify-content: space-between; margin-bottom: 24px; }}
+  .meta-block {{ line-height: 1.7; }}
+  table {{ width: 100%; border-collapse: collapse; margin-top: 16px; }}
+  th {{ background: #1a1a2e; color: #fff; padding: 8px 10px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }}
+  td {{ padding: 8px 10px; border-bottom: 1px solid #e0e0d8; }}
+  .total-row td {{ font-weight: 700; background: #f5f5f0; border-top: 2px solid #1a1a2e; }}
+  .footer {{ margin-top: 40px; font-size: 11px; color: #888; border-top: 1px solid #e0e0d8; padding-top: 12px; }}
+  @media print {{ body {{ margin: 16px; }} }}
+</style></head><body>
+<h1>&#128196; Packing Slip</h1>
+<div class="meta">
+  <div class="meta-block">
+    <strong>Bill To / Ship To</strong><br>
+    {buyer}<br>
+    {location}<br>
+    {delivery_addr}
+  </div>
+  <div class="meta-block" style="text-align:right">
+    <strong>{company_name}</strong><br>
+    {company_addr}<br>
+    <br>
+    <strong>Date:</strong> {sale_date}<br>
+    {"<strong>PO #:</strong> " + po_number + "<br>" if po_number else ""}
+    <strong>Order ID:</strong> {sale_id}
+  </div>
+</div>
+<table>
+  <thead><tr>
+    <th>Product</th><th>Format</th><th>Cert</th>
+    <th style="text-align:right">Qty</th>
+    <th style="text-align:right">Unit Price</th>
+    <th style="text-align:right">Total</th>
+    <th>LOT #</th>
+  </tr></thead>
+  <tbody>{rows}</tbody>
+  <tr class="total-row">
+    <td colspan="5" style="text-align:right">Subtotal</td>
+    <td style="text-align:right">${subtotal:.2f}</td>
+    <td></td>
+  </tr>
+</table>
+<div class="footer">
+  Soma Bone Broth &mdash; Organic Certified &mdash; Thank you for your order.
+</div>
+<script>window.onload = function(){{ window.print(); }}</script>
+</body></html>"""
+
+    return Response(html, mimetype="text/html")
+
+
+@app.route("/api/organic/sales/<sale_id>/qbo-csv", methods=["GET"])
+@login_required
+def get_qbo_csv(sale_id):
+    """Export a sale order as QuickBooks IIF-style CSV."""
+    import csv, io
+    from flask import Response
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    order_lines = [s for s in sales if s.get("order_id") == sale_id or s.get("id") == sale_id]
+    if not order_lines:
+        return jsonify({"error": "Sale not found"}), 404
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["Date", "Customer", "Product/Service", "Description",
+                     "Qty", "Unit Price", "Amount", "LOT"])
+    for s in order_lines:
+        qty   = int(s.get("quantity") or 0)
+        price = float(s.get("unit_price") or 0)
+        total = float(s.get("line_total") or qty * price)
+        lots  = ", ".join(lo.get("lot","") for lo in (s.get("lots") or []) if lo.get("lot")) or s.get("fg_lot","")
+        desc  = f"{s.get('recipe','')} {s.get('format','')} {s.get('certification','')}".strip()
+        writer.writerow([s.get("sale_date",""), s.get("buyer",""),
+                         s.get("recipe",""), desc, qty, f"{price:.2f}", f"{total:.2f}", lots])
+    buf.seek(0)
+    filename = f"sale-{sale_id[-8:].upper()}.csv"
+    return Response(buf.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename={filename}"})
+
 
 
 @app.route("/api/ripe-orders/settle-sale/<sale_id>", methods=["POST"])
