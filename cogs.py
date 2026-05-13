@@ -15,12 +15,10 @@ import logging
 
 from flask import Blueprint, request, jsonify, render_template
 
-# Shared helpers imported from app during incremental migration.
-# These will move to helpers.py when the full split is complete.
-from app import (
+from helpers import (
     _load_json, _save_json,
-    _normalize_format, load_recipes,
     login_required, _render,
+    load_recipes, _normalize_format,
     DATA_DIR,
 )
 
