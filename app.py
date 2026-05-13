@@ -365,6 +365,9 @@ def buyer_edit_page(bid):
 
 @app.route("/ccp-master")
 @login_required
+def ccp_master_page():
+    return _render("master_ccp.html")
+
 
 @app.route("/analytics")
 @login_required
