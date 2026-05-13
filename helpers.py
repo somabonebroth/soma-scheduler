@@ -95,6 +95,31 @@ def _normalize_format(fmt: str) -> str:
                  "880": "876", "500": "500"}
     canonical_size = size_map.get(size, size)
     return f"{prefix}-{canonical_size}ML"
+def require_valid_week(f):
+    """Decorator: validates that week_id path param is a valid YYYY-WNN string."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        week_id = kwargs.get("week_id") or (args[0] if args else None)
+        if not week_id or not __import__("re").match(r"^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$", str(week_id)):
+            return jsonify({"error": "Invalid week_id format. Expected YYYY-WNN."}), 400
+        return f(*args, **kwargs)
+    return wrapper
+def require_valid_day(f):
+    """Decorator: validates that day_idx path param is 0-6."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        day_idx = kwargs.get("day_idx")
+        try:
+            if day_idx is None or not (0 <= int(day_idx) <= 6):
+                raise ValueError
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid day_idx. Expected 0-6."}), 400
+        return f(*args, **kwargs)
+    return wrapper
+
+
+
+
 
 
 def load_recipes() -> dict:
