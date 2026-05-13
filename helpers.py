@@ -96,12 +96,12 @@ def _normalize_format(fmt: str) -> str:
     canonical_size = size_map.get(size, size)
     return f"{prefix}-{canonical_size}ML"
 def require_valid_week(f):
-    """Decorator: validates that week_id path param is a valid YYYY-WNN string."""
+    """Decorator: validates that week_id path param is a valid YYYY-MM-DD date string."""
     @wraps(f)
     def wrapper(*args, **kwargs):
         week_id = kwargs.get("week_id") or (args[0] if args else None)
-        if not week_id or not __import__("re").match(r"^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$", str(week_id)):
-            return jsonify({"error": "Invalid week_id format. Expected YYYY-WNN."}), 400
+        if not week_id or not __import__("re").match(r"^\d{4}-\d{2}-\d{2}$", str(week_id)):
+            return jsonify({"error": "Invalid week_id format. Expected YYYY-MM-DD."}), 400
         return f(*args, **kwargs)
     return wrapper
 def require_valid_day(f):

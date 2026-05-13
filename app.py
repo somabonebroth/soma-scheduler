@@ -6607,11 +6607,11 @@ def _run_scheduled_deductions():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def get_current_week_id():
-    """Return the current ISO week ID in YYYY-WNN format."""
-    from datetime import date
+    """Return the Monday of the current week as YYYY-MM-DD."""
+    from datetime import date, timedelta
     d = date.today()
-    iso = d.isocalendar()
-    return f"{iso[0]}-W{iso[1]:02d}"
+    monday = d - timedelta(days=d.weekday())
+    return monday.isoformat()
 
 
 def load_schedule(week_id):
