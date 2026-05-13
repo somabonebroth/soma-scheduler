@@ -10,6 +10,7 @@ from pdf_engine import generate_weekly_schedule_pdf, generate_daily_package_pdf,
 from functools import wraps
 import json
 import os
+import logging
 import threading
 import re
 import zipfile
