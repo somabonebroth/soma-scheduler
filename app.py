@@ -6600,6 +6600,173 @@ def _run_scheduled_deductions():
         _save_json(ORGANIC_FG_PATH, fg)
 
 
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RESTORED FUNCTIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_current_week_id():
+    """Return the current ISO week ID in YYYY-WNN format."""
+    from datetime import date
+    d = date.today()
+    iso = d.isocalendar()
+    return f"{iso[0]}-W{iso[1]:02d}"
+
+
+def load_schedule(week_id):
+    """Load schedule data for a given week. Returns {} if not found."""
+    path = os.path.join(SCHEDULES_DIR, f"{week_id}.json")
+    return _load_json(path, {})
+
+
+def save_schedule(week_id, data):
+    """Persist schedule data for a week."""
+    os.makedirs(SCHEDULES_DIR, exist_ok=True)
+    path = os.path.join(SCHEDULES_DIR, f"{week_id}.json")
+    _save_json(path, data)
+
+
+def list_schedules():
+    """Return a list of all week_ids that have saved schedule data."""
+    if not os.path.exists(SCHEDULES_DIR):
+        return []
+    weeks = []
+    for fn in sorted(os.listdir(SCHEDULES_DIR)):
+        if fn.endswith(".json"):
+            weeks.append(fn[:-5])  # strip .json
+    return weeks
+
+
+def load_checklist(week_id, day_idx):
+    """Load checklist data for a specific day. Returns {} if not found."""
+    path = os.path.join(CHECKLISTS_DIR, f"{week_id}_day{day_idx}.json")
+    return _load_json(path, {})
+
+
+def save_checklist_data(week_id, day_idx, data):
+    """Persist checklist data for a specific production day."""
+    os.makedirs(CHECKLISTS_DIR, exist_ok=True)
+    path = os.path.join(CHECKLISTS_DIR, f"{week_id}_day{day_idx}.json")
+    _save_json(path, data)
+
+
+def load_ccp_master():
+    """Load the master CCP document."""
+    return _load_json(CCP_MASTER_PATH, {})
+
+
+def save_ccp_master(sections):
+    """Persist the master CCP document."""
+    _save_json(CCP_MASTER_PATH, sections)
+
+
+def load_recipe_order():
+    """Load the user-defined recipe display order."""
+    return _load_json(RECIPE_ORDER_PATH, [])
+
+
+def save_recipe_order(order):
+    """Persist the recipe display order."""
+    _save_json(RECIPE_ORDER_PATH, order)
+
+
+def save_recipes(recipes):
+    """Persist recipes to disk. Accepts dict {name: recipe} or list."""
+    if isinstance(recipes, list):
+        data = recipes
+    else:
+        data = list(recipes.values())
+    with open(RECIPES_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def is_structured_ingredient(ing):
+    """Return True if ingredient is a dict with a name key."""
+    return isinstance(ing, dict) and "name" in ing
+
+
+def is_untracked_ingredient(ing):
+    """Return True if ingredient has no tracking mode set."""
+    if not isinstance(ing, dict):
+        return True
+    return not ing.get("tracking_mode") and not ing.get("unit")
+
+
+def halve_ingredient(ing):
+    """Return a copy of ingredient with quantity halved."""
+    if not isinstance(ing, dict):
+        return ing
+    result = dict(ing)
+    for key in ("quantity", "amount", "qty"):
+        if key in result and result[key] is not None:
+            try:
+                result[key] = round(float(result[key]) / 2, 4)
+            except (TypeError, ValueError):
+                pass
+    return result
+
+
+def ingredients_match(a, b):
+    """Return True if two ingredients refer to the same item."""
+    def _name(x):
+        if isinstance(x, dict):
+            return (x.get("name") or "").strip().lower()
+        return str(x).strip().lower()
+    return _name(a) == _name(b) and _name(a) != ""
+
+
+def _load_tracking_modes():
+    """Load tracking mode overrides from company info."""
+    info = _load_json(COMPANY_INFO_PATH, {})
+    return info.get("tracking_modes", {})
+
+
+def _check_organic_completion(run, checklist):
+    """Return True if a production run has a completed checklist."""
+    if not checklist:
+        return False
+    return bool(checklist.get("complete"))
+
+
+def build_display_name(rdata, rname):
+    """Build a human-readable display name for a recipe SKU."""
+    brand = (rdata.get("brand") or "").strip()
+    fmt   = (rdata.get("format") or "").strip()
+    if brand and brand.lower() not in rname.lower():
+        name = f"{brand} {rname}"
+    else:
+        name = rname
+    if fmt and fmt.upper() not in name.upper():
+        name = f"{name} {fmt}"
+    return name.strip()
+
+
+def parse_recipe_pdf_text(text):
+    """Parse extracted PDF text into a basic recipe dict. Best-effort."""
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    recipe = {"name": "", "ingredients": [], "instructions": ""}
+    if lines:
+        recipe["name"] = lines[0]
+    recipe["instructions"] = "\n".join(lines[1:])
+    return recipe
+
+
+def migrate_recipe_ingredients(recipe):
+    """Migrate old-style string ingredient lists to structured dicts."""
+    ingredients = recipe.get("ingredients", [])
+    migrated = []
+    for ing in ingredients:
+        if isinstance(ing, str):
+            migrated.append({"name": ing, "quantity": None, "unit": None,
+                             "tracking_mode": "weight"})
+        elif isinstance(ing, dict):
+            migrated.append(ing)
+    recipe["ingredients"] = migrated
+    return recipe
+
+
+
 _run_scheduled_deductions()  # run once on startup
 
 
