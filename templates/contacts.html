@@ -295,20 +295,10 @@ async function loadSups(){
     if(n) h+='<div class="cc-sub" style="margin-top:6px;font-size:11px;">'+prev+'</div>';
     if(s.notes) h+='<div class="cc-sub" style="font-style:italic;margin-top:4px;color:#999;">'+e(s.notes)+'</div>';
     h+='</div><div class="cc-actions">';
-    var editBtn=document.createElement('button');
-    editBtn.className='btn btn-primary';
-    editBtn.style.cssText='font-size:12px;padding:8px 16px;background:#2e7d32;border:none;';
-    editBtn.textContent='Edit';
-    editBtn.onclick=(function(id){return function(){openEditSup(id);};})(sid);
-    var delBtn=document.createElement('button');
-    delBtn.className='btn-r';
-    delBtn.textContent='Delete';
-    delBtn.onclick=(function(id,nm){return function(){delSup(id,nm);};})(sid,s.name);
-    var tmp=document.createElement('div');
-    tmp.innerHTML=h+'</div></div>';
-    tmp.querySelector('.cc-actions').appendChild(editBtn);
-    tmp.querySelector('.cc-actions').appendChild(delBtn);
-    return tmp.outerHTML;
+    h+='<button class="btn btn-primary" onclick="openEditSup(\''+sidE+'\')">Edit</button>';
+    h+='<button class="btn-r" onclick="delSup(\''+sidE+'\',\''+e(s.name)+'\')">Delete</button>';
+    h+='</div></div>';
+    return h;
   }).join('');
 }
 async function _fIng(){try{_ing=await(await fetch('/api/organic/ingredients')).json();}catch(ex){_ing=[];}}
