@@ -1330,7 +1330,9 @@ def buyer_edit_page(bid):
                 "skus":          skus_sorted,
             })
 
-    return render_template("buyer_edit.html", buyer=buyer, sku_catalog=sku_catalog)
+    # Build sku_map: {sku_key: sku_dict} for fast lookup in template
+    sku_map = {s["sku_key"]: s for s in buyer.get("skus", []) if s.get("sku_key")}
+    return render_template("buyer_edit.html", buyer=buyer, sku_catalog=sku_catalog, sku_map=sku_map)
 
 @app.route("/ccp-master")
 @login_required
@@ -6074,7 +6076,15 @@ def get_adjustments():
 # rm_receipt_photos/: <entry_id>.<ext> — one photo per add-inventory entry
 
 def _load_suppliers():
-    return _load_json(SUPPLIERS_PATH, [])
+    suppliers = _load_json(SUPPLIERS_PATH, [])
+    changed = False
+    for s in suppliers:
+        if not s.get("id"):
+            s["id"] = datetime.now().strftime("%Y%m%d%H%M%S%f") + s.get("name","")[:4]
+            changed = True
+    if changed:
+        _save_json(SUPPLIERS_PATH, suppliers)
+    return suppliers
 
 def _save_suppliers(data):
     _save_json(SUPPLIERS_PATH, data)
@@ -7146,7 +7156,16 @@ def _all_sku_catalog():
 
 
 def _load_buyers():
-    return _load_json(BUYERS_PATH, [])
+    buyers = _load_json(BUYERS_PATH, [])
+    # Backfill missing id fields
+    changed = False
+    for b in buyers:
+        if not b.get("id"):
+            b["id"] = datetime.now().strftime("%Y%m%d%H%M%S%f") + b.get("name","")[:4]
+            changed = True
+    if changed:
+        _save_json(BUYERS_PATH, buyers)
+    return buyers
 
 
 def _save_buyers(data):
