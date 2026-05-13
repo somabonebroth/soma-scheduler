@@ -1260,7 +1260,7 @@ def api_sales_by_buyer():
         if cutoff and sale_date and sale_date < cutoff.isoformat():
             continue
         if buyer not in by_buyer:
-            by_buyer[buyer] = {"buyer": buyer, "orders": set(), "units": 0, "revenue": 0.0, "by_sku": {}}
+            by_buyer[buyer] = {"buyer": buyer, "orders": set(), "units": 0, "revenue": 0.0, "by_sku": set()}
         qty   = int(sale.get("quantity") or 0)
         # unit_price may be None for pre-catalogue records — fall back to 0
         price = float(sale.get("unit_price") or sale.get("price") or sale.get("unit_selling_price") or 0)
@@ -3035,23 +3035,23 @@ _TEMPLATE_CONTRACTS: dict = {
     "buyer_edit.html":    {"buyer", "sku_catalog", "sku_map"},
     "analytics.html":     {"buyer_names"},
     "buyer_analytics.html": {"buyer_name"},
-    "contacts.html":      {},
-    "organic.html":       {},
-    "cogs.html":          {},
-    "dashboard.html":     {},
-    "recipes.html":       {},
+    "contacts.html": set(),
+    "organic.html": set(),
+    "cogs.html": set(),
+    "dashboard.html": set(),
+    "recipes.html": set(),
     "audit.html":         {"kind"},
-    "equipment.html":     {},
-    "company_settings.html": {},
-    "certifications.html": {},
-    "traceability.html":  {},
-    "production_tracker.html": {},
+    "equipment.html": set(),
+    "company_settings.html": set(),
+    "certifications.html": set(),
+    "traceability.html": set(),
+    "production_tracker.html": set(),
     "weekly_view.html":   {"week_id"},
     "daily_production.html": {"week_id", "day_idx"},
-    "create_schedule.html": {},
-    "master_ccp.html":    {},
-    "important_documents.html": {},
-    "login.html":         {},
+    "create_schedule.html": set(),
+    "master_ccp.html": set(),
+    "important_documents.html": set(),
+    "login.html": set(),
     "checklist.html":     {"week_id", "day_idx"},
 }
 
@@ -3223,7 +3223,7 @@ def _load_rm_sections():
                 {"id": s["id"], "name": s["name"], "order": i}
                 for i, s in enumerate(DEFAULT_RM_SECTIONS)
             ],
-            "assignments": {},
+            "assignments": set(),
         }
         _save_json(RM_SECTIONS_PATH, seed)
         return seed
@@ -3236,7 +3236,7 @@ def _load_rm_sections():
                 {"id": s["id"], "name": s["name"], "order": i}
                 for i, s in enumerate(DEFAULT_RM_SECTIONS)
             ],
-            "assignments": {},
+            "assignments": set(),
         }
         _save_json(RM_SECTIONS_PATH, seed)
         return seed
@@ -5826,7 +5826,7 @@ def start_audit():
         "started_at": datetime.now().isoformat(),
         "items":      items,
         "current_idx": 0,
-        "results":    {},  # {item_id: {counted, system_qty, ...}}
+        "results": set(),  # {item_id: {counted, system_qty, ...}}
     }
     audits.append(audit)
     _save_audits(audits)
