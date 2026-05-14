@@ -5,3 +5,5 @@ data/
 *.egg-info/
 dist/
 build/
+venv/
+.DS_Store
