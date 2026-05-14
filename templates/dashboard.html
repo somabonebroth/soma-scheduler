@@ -115,6 +115,7 @@
             <a href="/contacts?tab=settings" class="dash-btn"><span class="icon">&#9881;</span><span class="label">Company Settings</span><span class="sublabel">Info, address, Ripe buffer</span></a>
             <a href="/important-documents" class="dash-btn"><span class="icon">&#128196;</span><span class="label">Important Documents</span><span class="sublabel">Contract &amp; certifications</span></a>
             <a href="/ccp-master" class="dash-btn"><span class="icon">&#9989;</span><span class="label">CCP Checklist</span><span class="sublabel">Master reference</span></a>
+            <div class="dash-btn" onclick="downloadBackup()" style="cursor:pointer;"><span class="icon">&#128190;</span><span class="label">Data Backup</span><span class="sublabel">Download a zip of all data</span></div>
         </div>
         </details>
     </div>
@@ -462,6 +463,38 @@ function dashReceiveNext(){
   var supplierName = decodeURIComponent(parts[1] || '');
   var params = '?action=receive&date='+encodeURIComponent(date)+'&supplier_id='+encodeURIComponent(supplierId)+'&supplier_name='+encodeURIComponent(supplierName);
   window.location.href = '/organic' + params;
+}
+
+// Data backup — prompts for manager password, downloads zip of DATA_DIR
+async function downloadBackup(){
+  var pwd = prompt('Manager password to authorize backup download:');
+  if(!pwd) return;
+  try {
+    var res = await fetch('/api/admin/backup', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({password: pwd}),
+    });
+    if(!res.ok){
+      var err = await res.json().catch(function(){ return {error: 'Backup failed'}; });
+      alert(err.error || 'Backup failed (HTTP ' + res.status + ')');
+      return;
+    }
+    var blob = await res.blob();
+    var disposition = res.headers.get('Content-Disposition') || '';
+    var match = disposition.match(/filename="?([^";]+)"?/);
+    var filename = match ? match[1] : 'soma-backup.zip';
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch(e){
+    alert('Backup failed: ' + e.message);
+  }
 }
 
 // Close modals on backdrop click

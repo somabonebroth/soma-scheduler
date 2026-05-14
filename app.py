@@ -811,6 +811,36 @@ def verify_manager():
     ok = bool(submitted) and _hmac.compare_digest(submitted.encode(), MANAGER_PASSWORD.encode())
     return jsonify({"ok": ok})
 
+@app.route("/api/admin/backup", methods=["POST"])
+@login_required
+def admin_backup():
+    """Return a zip of the entire DATA_DIR as a download.
+    Requires manager password in JSON body: {"password": "..."}.
+    """
+    if not MANAGER_PASSWORD:
+        return jsonify({"error": "MANAGER_PASSWORD not configured"}), 403
+    payload = request.get_json() or {}
+    submitted = (payload.get("password") or "").strip()
+    import hmac as _hmac
+    if not (submitted and _hmac.compare_digest(submitted.encode(), MANAGER_PASSWORD.encode())):
+        return jsonify({"error": "Invalid manager password"}), 401
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for root, _dirs, files in os.walk(DATA_DIR):
+            for fname in files:
+                full = os.path.join(root, fname)
+                rel = os.path.relpath(full, DATA_DIR)
+                zf.write(full, rel)
+    buf.seek(0)
+    stamp = datetime.now().strftime("%Y-%m-%d-%H%M")
+    return send_file(
+        buf,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=f"soma-backup-{stamp}.zip",
+    )
+
 @app.route("/certifications")
 @login_required
 def certifications_page():
@@ -6792,4 +6822,8 @@ def api_settle_by_order(order_id):
             settled += 1
     _save_json(ORGANIC_SALES_PATH, sales)
     return jsonify({"ok": True, "settled": settled})
+
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)
 
