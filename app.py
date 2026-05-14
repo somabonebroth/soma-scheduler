@@ -11,6 +11,8 @@ from functools import wraps
 import json
 import os
 import threading
+import logging
+logger = logging.getLogger(__name__)
 import re
 import zipfile
 import io
