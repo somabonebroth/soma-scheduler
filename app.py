@@ -76,7 +76,6 @@ DEFAULT_CCP_SECTIONS = [
     ]},
 ]
 
-
 # ── Auth ───────────────────────────────────────────────────────────────
 def login_required(f):
     @wraps(f)
@@ -88,7 +87,6 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
-
 def validate_week_id(week_id):
     """Ensure week_id is a valid YYYY-MM-DD date string."""
     if not re.match(r'^\d{4}-\d{2}-\d{2}$', week_id):
@@ -99,11 +97,9 @@ def validate_week_id(week_id):
     except ValueError:
         return False
 
-
 def validate_day_idx(day_idx):
     """Ensure day_idx is 0-6."""
     return 0 <= day_idx <= 6
-
 
 def require_valid_week(f):
     """Decorator: reject requests with invalid week_id."""
@@ -115,7 +111,6 @@ def require_valid_week(f):
         return f(*args, **kwargs)
     return decorated
 
-
 def require_valid_day(f):
     """Decorator: reject requests with day_idx outside 0-6."""
     @wraps(f)
@@ -125,7 +120,6 @@ def require_valid_day(f):
             return jsonify({"error": "Invalid day index"}), 400
         return f(*args, **kwargs)
     return decorated
-
 
 # ── Data helpers ───────────────────────────────────────────────────────
 def _load_tracking_modes():
@@ -149,12 +143,10 @@ def _load_tracking_modes():
                 return {}
     return {}
 
-
 def load_recipes():
     if os.path.exists(RECIPES_PATH):
         with open(RECIPES_PATH, "r") as f:
             recipes = json.load(f)
-        # Auto-migrate in-memory (disk unchanged until explicit save).
         # Pass tracking_modes for smart pack conversion.
         tracking_modes = _load_tracking_modes()
         for name, data in recipes.items():
@@ -224,7 +216,6 @@ def get_current_week_id():
     monday = today - timedelta(days=today.weekday())
     return monday.strftime("%Y-%m-%d")
 
-
 # ── Structured Ingredient Helpers ──────────────────────────────────────
 VALID_UNITS = ["kg", "g", "L", "ml", "lbs", "Bunch", "Pack", "Adjunct", "per L"]
 # Units where the raw recipe amount IS deducted directly (halved for 115L).
@@ -266,7 +257,6 @@ INGREDIENT_LINE_RE = re.compile(
     r"^\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s+(.+?)\s*$"
 )
 
-
 def parse_ingredient_line(line):
     """Parse a free-text ingredient line into a structured ingredient object.
     Returns dict: {name, amount, unit, process, needs_review}.
@@ -278,12 +268,10 @@ def parse_ingredient_line(line):
     # Strip "per jar / per bottle / per can / per container" phrases anywhere
     # in the line — they don't affect amount/unit interpretation, just clutter the name.
     original = PER_CONTAINER_RE.sub(" ", original).strip()
-    # Collapse any double spaces / trailing commas left after stripping
     original = re.sub(r"\s{2,}", " ", original).rstrip(",").strip()
     if not original:
         return None
 
-    # Detect "per L" items first — these keep their amount but are never halved.
     # Strip leading unit + per-L phrase from name so "4g per liter Pink Salt" -> "Pink Salt".
     if PER_L_RE.search(original):
         m = re.match(r"^\s*(\d+(?:\.\d+)?)\s*(.+)$", original)
@@ -311,18 +299,15 @@ def parse_ingredient_line(line):
             "needs_review": True,
         }
 
-    # Split out process hints after a comma or em-dash/hyphen
     # e.g. "2.5 kg Celery, diced" -> name="Celery", process="diced"
     process = ""
     body = original
-    # Try em-dash / en-dash / " - " separator first
     for sep in [" — ", " – ", " - "]:
         if sep in body:
             parts = body.split(sep, 1)
             body = parts[0].strip()
             process = parts[1].strip()
             break
-    # Then try comma (only if not already split and comma is late in the string)
     if not process and "," in body:
         parts = body.split(",", 1)
         # Only treat as process if the first part looks like "<num> <unit> <name>"
@@ -350,7 +335,6 @@ def parse_ingredient_line(line):
     except ValueError:
         amount = 0
 
-    # Resolve unit
     if unit_token and unit_token in UNIT_ALIASES:
         unit = UNIT_ALIASES[unit_token]
         needs_review = False
@@ -365,7 +349,6 @@ def parse_ingredient_line(line):
         unit = ""
         needs_review = True
 
-    # Clean int display
     if amount == int(amount):
         amount = int(amount)
 
@@ -376,7 +359,6 @@ def parse_ingredient_line(line):
         "process": process,
         "needs_review": needs_review,
     }
-
 
 def format_ingredient(ing):
     """Render a structured ingredient back to a display string."""
@@ -389,7 +371,6 @@ def format_ingredient(ing):
 
     parts = []
     if amount:
-        # Display clean int when whole number
         if isinstance(amount, float) and amount == int(amount):
             parts.append(str(int(amount)))
         else:
@@ -403,7 +384,6 @@ def format_ingredient(ing):
     if process:
         return base + " — " + process
     return base
-
 
 def halve_ingredient(ing):
     """Return a new ingredient with amount halved. 'per L' items are not halved."""
@@ -421,7 +401,6 @@ def halve_ingredient(ing):
     except (ValueError, TypeError):
         pass
     return new
-
 
 def ingredients_match(raw_item_name, recipe_ing_name):
     """Strict-equivalence ingredient matcher.
@@ -451,7 +430,6 @@ def ingredients_match(raw_item_name, recipe_ing_name):
     b = " ".join(recipe_ing_name.lower().split())
     return a == b
 
-
 def is_untracked_ingredient(name):
     """Returns True for ingredients that should never be tracked as raw material
     inventory or trigger insufficient-stock warnings. Water is treated as
@@ -461,11 +439,9 @@ def is_untracked_ingredient(name):
         return False
     return "water" in name.lower()
 
-
 def is_structured_ingredient(item):
     """Check if an item is already in structured object form."""
     return isinstance(item, dict) and "name" in item and "amount" in item
-
 
 def _smart_upgrade_ingredient(item, tracking_modes):
     """Upgrade an already-structured ingredient to the new unit scheme.
@@ -500,7 +476,6 @@ def _smart_upgrade_ingredient(item, tracking_modes):
             unit,
         ) if amount_f > 0 and unit else ""
         if pack_label and line_label and pack_label.lower() == line_label.lower():
-            # Exact match — auto-convert
             new = dict(item)
             new["amount"] = 1
             new["unit"] = "Pack"
@@ -536,7 +511,6 @@ def _smart_upgrade_ingredient(item, tracking_modes):
     # No change
     return item, False
 
-
 def migrate_recipe_ingredients(recipe_data, tracking_modes=None):
     """In-place: convert string-format ingredient lines to structured objects,
     and upgrade structured items per the new unit scheme.
@@ -560,7 +534,6 @@ def migrate_recipe_ingredients(recipe_data, tracking_modes=None):
             elif isinstance(item, str):
                 parsed = parse_ingredient_line(item)
                 if parsed:
-                    # Apply smart upgrades to freshly-parsed items too
                     upgraded, _ = _smart_upgrade_ingredient(parsed, tracking_modes)
                     new_items.append(upgraded)
                     changed = True
@@ -577,7 +550,6 @@ def migrate_recipe_ingredients(recipe_data, tracking_modes=None):
         recipe_data[section] = new_items
     return changed
 
-
 # ── Recipe parser ──────────────────────────────────────────────────────
 # Canonical prefix casing for known format families.
 # Only formats that actually appear as product SKUs belong here.
@@ -592,14 +564,12 @@ FORMAT_PREFIX_CANONICAL = {
 # Separator can be nothing, a dash, or whitespace.
 FORMAT_RE = re.compile(r"\b([A-Za-z]{1,4})[\s-]*(\d+)\s*ML\b", re.IGNORECASE)
 
-
 # Suffix regex used when stripping a trailing format from a recipe name.
 # Matches "<separator><letters><separator><digits>ML" at end of string.
 _FORMAT_SUFFIX_RE = re.compile(
     r"[\s\-]*[A-Za-z]{1,4}[\s\-]*\d+\s*ML\s*$",
     re.IGNORECASE,
 )
-
 
 def _strip_format_suffix(name):
     """Remove ALL trailing format suffixes from a recipe name.
@@ -613,7 +583,6 @@ def _strip_format_suffix(name):
         prev = out
         out = _FORMAT_SUFFIX_RE.sub("", out).rstrip(" -")
     return out
-
 
 def build_display_name(recipe_data, recipe_name=""):
     """Canonical display string used by every UI surface.
@@ -633,7 +602,6 @@ def build_display_name(recipe_data, recipe_name=""):
     fmt = _normalize_format((recipe_data.get("format") or "").strip())
     name = (recipe_name or recipe_data.get("name") or "").strip()
 
-    # Strip any format suffix(es) from the name
     core = _strip_format_suffix(name)
     # If stripping removed everything (e.g. name was literally "SS-750ML"),
     # fall back to the original name
@@ -649,7 +617,6 @@ def build_display_name(recipe_data, recipe_name=""):
         parts.append(fmt)
     return "-".join(parts) if parts else name
 
-
 def _normalize_format(text):
     """Turn any 'SS-473ML', 'ss473ml', 'SS 473 ml', etc. into canonical 'SS-473ML'."""
     if not text:
@@ -661,7 +628,6 @@ def _normalize_format(text):
     canonical_prefix = FORMAT_PREFIX_CANONICAL.get(prefix_raw.upper(), prefix_raw.upper())
     return f"{canonical_prefix}-{m.group(2)}ML"
 
-
 def _detect_format_in_text(text):
     """Return the canonical format found in text, or '' if none."""
     if not text:
@@ -670,7 +636,6 @@ def _detect_format_in_text(text):
     if not m:
         return ""
     return _normalize_format(m.group(0))
-
 
 def parse_recipe_pdf_text(text):
     lines = [l.strip() for l in text.strip().split("\n") if l.strip()]
@@ -718,11 +683,9 @@ def parse_recipe_pdf_text(text):
     if recipe["yield"] is None:
         recipe["yield"] = 190 if "FZ" in recipe["format"] else 150
 
-    # Append format to name for unique storage key — case-insensitive check
     if recipe["format"] and not name.upper().endswith(recipe["format"].upper()):
         name = name + " " + recipe["format"]
 
-    # Parse recipe body
     current_section = None
     in_special = False
 
@@ -767,7 +730,6 @@ def parse_recipe_pdf_text(text):
 
     return {"name": name, "data": recipe}
 
-
 # ── Auth routes ────────────────────────────────────────────────────────
 @app.route("/login")
 def login_page():
@@ -788,12 +750,10 @@ def logout():
     session.clear()
     return jsonify({"success": True})
 
-
 # ── PWA manifest ──────────────────────────────────────────────────────
 @app.route("/manifest.json")
 def manifest():
     return send_from_directory(app.static_folder, "manifest.json", mimetype="application/manifest+json")
-
 
 # ── Page routes ────────────────────────────────────────────────────────
 @app.route("/")
@@ -947,7 +907,6 @@ def buyer_analytics_page(buyer_name):
                            buyer_name=display_name,
                            buyer_names=[b["name"] for b in buyers])
 
-
 @app.route("/api/analytics/buyer/<path:buyer_name>")
 @login_required
 def api_buyer_analytics(buyer_name):
@@ -1091,7 +1050,6 @@ def api_buyer_analytics(buyer_name):
         },
     })
 
-
 @app.route("/api/analytics/backfill-sale-prices", methods=["POST"])
 @login_required
 def backfill_sale_prices():
@@ -1103,7 +1061,6 @@ def backfill_sale_prices():
     sales   = _load_json(ORGANIC_SALES_PATH, [])
     buyers  = _load_buyers()
 
-    # Build a lookup: (buyer_name.lower(), sku_key) → price
     price_map = {}
     for b in buyers:
         bname = (b.get("name") or "").strip().lower()
@@ -1140,8 +1097,6 @@ def backfill_sale_prices():
         "skipped_no_price": no_price,
         "message": f"Updated {updated} records. {no_price} records had no matching buyer price and were left unchanged.",
     })
-
-
 
 @app.route("/api/analytics/sales-by-buyer", methods=["GET"])
 @login_required
@@ -1217,7 +1172,6 @@ def buyer_edit_page(bid):
     FORMAT_ORDER = ["SS", "FZ", "BB"]
     FORMAT_LABELS = {"SS": "Shelf Stable", "FZ": "Frozen", "BB": "Back Bar"}
 
-    # Collect brands in sorted order
     brand_fmt_dict = {}  # {brand: {fmt_prefix: [skus]}}
     for sku in flat:
         brand = (sku.get("brand") or "Other").strip() or "Other"
@@ -1260,7 +1214,6 @@ def traceability_page():
 @login_required
 def production_tracker_page():
     return render_template("production_tracker.html")
-
 
 # ── Recipe API ─────────────────────────────────────────────────────────
 @app.route("/api/recipes", methods=["GET"])
@@ -1322,7 +1275,6 @@ def update_recipe(name):
     new_format = _normalize_format((recipe_data.get("format") or "").strip())
     new_sku_key = _sku_key(new_brand, new_name, new_format)
 
-    # Save the recipe first
     if new_name != name:
         del recipes[name]
     recipes[new_name] = recipe_data
@@ -1479,7 +1431,6 @@ def delete_recipe(name):
     save_recipes(recipes)
     return jsonify({"success": True})
 
-
 def _schedules_using_recipe(recipe_name):
     """Return list of (week_id, day_idx, vessel) tuples where recipe_name is scheduled."""
     refs = []
@@ -1506,7 +1457,6 @@ def _schedules_using_recipe(recipe_name):
                         d_idx = -1
                     refs.append({"week_id": week_id, "day_idx": d_idx, "vessel": vessel})
     return refs
-
 
 @app.route("/api/recipes/<path:name>/duplicate", methods=["POST"])
 @login_required
@@ -1555,7 +1505,6 @@ def duplicate_recipe(name):
     save_recipes(recipes)
     return jsonify({"success": True, "name": new_name, "data": new_data})
 
-
 @app.route("/api/recipes/<path:name>/archive", methods=["POST"])
 @login_required
 def archive_recipe(name):
@@ -1571,7 +1520,6 @@ def archive_recipe(name):
     refs = _schedules_using_recipe(name)
     return jsonify({"success": True, "schedule_refs": refs})
 
-
 @app.route("/api/recipes/<path:name>/unarchive", methods=["POST"])
 @login_required
 def unarchive_recipe(name):
@@ -1582,7 +1530,6 @@ def unarchive_recipe(name):
     recipes[name]["archived"] = False
     save_recipes(recipes)
     return jsonify({"success": True})
-
 
 @app.route("/api/recipes/migrate-all", methods=["POST"])
 @login_required
@@ -1701,7 +1648,6 @@ def get_recipes_grouped():
             "display": display,
             "certification": data.get("certification", ""),
         })
-    # Apply stored order if available, otherwise sort SS first
     if order:
         ordered_groups = {}
         for brand in order.get("brand_order", []):
@@ -1739,7 +1685,6 @@ def update_recipe_order():
 @app.route("/api/recipes/upload", methods=["POST"])
 @login_required
 def upload_recipe():
-    # Handle PDF file upload
     if request.files and "file" in request.files:
         file = request.files["file"]
         if not file.filename:
@@ -1780,7 +1725,6 @@ def upload_recipe():
     save_recipes(recipes)
     return jsonify({"success": True, "name": parsed["name"], "data": parsed["data"]})
 
-
 # Upload recipe via JSON (manual add)
 @app.route("/api/recipes/upload-json", methods=["POST"])
 @login_required
@@ -1796,7 +1740,6 @@ def upload_recipe_json():
     recipes[name] = recipe_data
     save_recipes(recipes)
     return jsonify({"success": True, "name": name})
-
 
 # ── Schedule API ───────────────────────────────────────────────────────
 @app.route("/api/schedule/<week_id>", methods=["GET"])
@@ -1833,7 +1776,6 @@ def delete_schedule(week_id):
         pass
     return jsonify({"success": True})
 
-
 # ── Generate PDFs ──────────────────────────────────────────────────────
 @app.route("/api/generate", methods=["POST"])
 @login_required
@@ -1860,13 +1802,11 @@ def generate_pdfs():
 
         generated = []
 
-        # Weekly schedule PDF
         filename = "Weekly_Schedule.pdf"
         filepath = os.path.join(week_pdf_dir, filename)
         generate_weekly_schedule_pdf(filepath, week_start, schedule, recipes, notes, logo_path)
         generated.append(filename)
 
-        # Daily production packages
         for day_idx in range(7):
             day_key = str(day_idx)
             day_schedule = schedule.get(day_key, {})
@@ -1882,15 +1822,12 @@ def generate_pdfs():
 
         return jsonify({"success": True, "files": generated, "week_id": week_id})
     except Exception as e:
-        # Schedule is already saved above, so organic check can still run
         return jsonify({"success": False, "error": str(e)}), 500
     finally:
-        # Always check for organic recipes in the schedule
         try:
             _check_organic_schedule(week_id, schedule)
         except Exception:
             pass
-
 
 # ── PDF downloads ──────────────────────────────────────────────────────
 @app.route("/api/pdf/<week_id>/<filename>", methods=["GET"])
@@ -1928,7 +1865,6 @@ def download_all_pdfs(week_id):
     return send_file(zip_buffer, mimetype="application/zip", as_attachment=True,
                      download_name=f"Soma_Production_{week_id}.zip")
 
-
 # ── 115L Halving Helper ──────────────────────────────────────────────
 def _halve_for_115L(recipe_data):
     """Return a copy of recipe_data with quantities halved for the 115L vessel.
@@ -1937,7 +1873,6 @@ def _halve_for_115L(recipe_data):
     import copy
     halved = copy.deepcopy(recipe_data)
 
-    # Halve yield
     if halved.get("yield"):
         try:
             halved["yield"] = round(int(halved["yield"]) / 2)
@@ -1947,7 +1882,6 @@ def _halve_for_115L(recipe_data):
     # Migrate first (safety: in case a legacy recipe slipped through)
     migrate_recipe_ingredients(halved)
 
-    # Halve each structured ingredient
     for section in INGREDIENT_SECTIONS:
         items = halved.get(section, [])
         if isinstance(items, list):
@@ -1955,7 +1889,6 @@ def _halve_for_115L(recipe_data):
 
     halved["_halved"] = True
     return halved
-
 
 # ── Daily Production API ──────────────────────────────────────────────
 @app.route("/api/daily-production/<week_id>/<int:day_idx>", methods=["GET"])
@@ -2019,7 +1952,6 @@ def get_daily_production(week_id, day_idx):
     date = week_start + timedelta(days=day_idx)
     prev_date = date - timedelta(days=1)
 
-    # Get daily notes for this day
     daily_notes = ""
     if schedule_data and schedule_data.get("daily_notes"):
         daily_notes = schedule_data["daily_notes"].get(str(day_idx), "")
@@ -2061,7 +1993,6 @@ def save_daily_production(week_id, day_idx):
         pass
     return jsonify({"success": True, "warnings": warnings})
 
-
 # ── Label Generation ──────────────────────────────────────────────────
 @app.route("/api/label", methods=["POST"])
 @login_required
@@ -2083,7 +2014,6 @@ def generate_label():
 
     best_before = prod_date + timedelta(days=365)
 
-    # Build the canonical 'recipe-format' portion using the shared helper.
     # Brand is passed as a separate field to the label PDF (own line above).
     recipe_format_display = build_display_name(
         {"brand": "", "format": recipe_format},
@@ -2097,7 +2027,6 @@ def generate_label():
     safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', recipe_name)
     return send_file(label_buffer, mimetype="application/pdf", as_attachment=True,
                      download_name="Label_" + safe_name + "_" + lot + ".pdf")
-
 
 # ── Digital Checklists ─────────────────────────────────────────────────
 @app.route("/api/checklist/<week_id>/<int:day_idx>", methods=["GET"])
@@ -2160,7 +2089,6 @@ def complete_checklist(week_id, day_idx):
     pdf_path = os.path.join(week_pdf_dir, filename)
     generate_filled_checklist_pdf(pdf_path, date, active_vessels, data, logo_path)
 
-    # Check if any organic runs need completing
     warnings = []
     try:
         warnings = _check_organic_completion(week_id, day_idx, data) or []
@@ -2168,7 +2096,6 @@ def complete_checklist(week_id, day_idx):
         pass
 
     return jsonify({"success": True, "filename": filename, "warnings": warnings})
-
 
 # ── Checklist Status ──────────────────────────────────────────────────
 def _has_meaningful_data(checklist_data):
@@ -2194,7 +2121,6 @@ def _has_meaningful_data(checklist_data):
     for key, val in production.items():
         if val and str(val).strip() and str(val).strip() != "0":
             return True
-    # Check produced and bb_produced
     for field in ["produced", "bb_produced"]:
         prod = checklist_data.get(field, {})
         for key, val in prod.items():
@@ -2219,7 +2145,6 @@ def checklist_status(week_id):
             statuses[str(d_idx)] = "not_started"
     return jsonify(statuses)
 
-
 # ── Master CCP ─────────────────────────────────────────────────────────
 @app.route("/api/ccp-master", methods=["GET"])
 @login_required
@@ -2233,18 +2158,14 @@ def update_ccp_master():
     save_ccp_master(data)
     return jsonify({"success": True})
 
-
 # ── Traceability ──────────────────────────────────────────────────────
 WEEKLY_SIGNOFFS_PATH = os.path.join(DATA_DIR, "weekly_signoffs.json")
-
 
 def _load_weekly_signoffs():
     return _load_json(WEEKLY_SIGNOFFS_PATH, {})
 
-
 def _save_weekly_signoffs(data):
     _save_json(WEEKLY_SIGNOFFS_PATH, data)
-
 
 def _week_completion_state(week_id):
     """Return ('all_complete' | 'partial' | 'none') for a week, plus the
@@ -2274,7 +2195,6 @@ def _week_completion_state(week_id):
         return "all_complete", complete, incomplete
     return "partial", complete, incomplete
 
-
 @app.route("/api/traceability/<week_id>/summary", methods=["GET"])
 @login_required
 @require_valid_week
@@ -2300,14 +2220,11 @@ def get_week_summary(week_id):
         day_info = sched.get(str(d_idx), {}) or {}
         day_name = DAYS[d_idx]
 
-        # Scheduled vessels
         scheduled = {v: day_info.get(v, "").strip() for v in VESSELS if day_info.get(v, "").strip()}
 
-        # Production recorded
         produced = cl.get("produced", {}) or {}
         bb_produced = cl.get("bb_produced", {}) or {}
 
-        # Aggregate production
         day_prod = {}
         for v, recipe in scheduled.items():
             if recipe:
@@ -2316,12 +2233,10 @@ def get_week_summary(week_id):
                     day_prod[recipe] = day_prod.get(recipe, 0) + qty
                     total_produced[recipe] = total_produced.get(recipe, 0) + qty
 
-        # Notes
         notes = (cl.get("notes") or "").strip()
         if notes:
             all_notes.append({"day": day_name, "note": notes})
 
-        # Check CCP sections — look for any items explicitly marked No/False
         sections = cl.get("sections", {}) or {}
         day_ccp_issues = []
         for sec_key, sec_data in sections.items():
@@ -2347,7 +2262,6 @@ def get_week_summary(week_id):
             "has_ccp_flags": len(day_ccp_issues) > 0,
         })
 
-    # Build inconsistency flags
     flags = []
     if missing_signoffs:
         flags.append(f"Missing kitchen sign-off: {', '.join(missing_signoffs)}")
@@ -2364,7 +2278,6 @@ def get_week_summary(week_id):
         "ccp_flags": ccp_flags,
         "all_clear": len(flags) == 0 and len(all_notes) == 0,
     })
-
 
 @app.route("/api/traceability", methods=["GET"])
 @login_required
@@ -2399,7 +2312,6 @@ def get_traceability():
                     "certification": certification,
                 })
         if week_record["days"]:
-            # Annotate with completion state + HOO signoff
             state, complete_idxs, incomplete_idxs = _week_completion_state(week_id)
             week_record["completion_state"] = state
             week_record["scheduled_complete_days"] = complete_idxs
@@ -2409,7 +2321,6 @@ def get_traceability():
             week_record["hoo_signoff"] = signoffs.get(week_id) or None
             records.append(week_record)
     return jsonify(records)
-
 
 @app.route("/api/traceability/<week_id>/<int:day_idx>", methods=["DELETE"])
 @login_required
@@ -2424,7 +2335,6 @@ def delete_traceability_record(week_id, day_idx):
             os.unlink(pdf_path)
         return jsonify({"success": True})
     return jsonify({"error": "Record not found"}), 404
-
 
 @app.route("/api/weekly-signoff/<week_id>", methods=["POST"])
 @login_required
@@ -2459,7 +2369,6 @@ def sign_off_week(week_id):
     _save_weekly_signoffs(signoffs)
     return jsonify({"success": True, "signoff": signoffs[week_id]})
 
-
 @app.route("/api/weekly-signoff/<week_id>", methods=["DELETE"])
 @login_required
 @require_valid_week
@@ -2471,13 +2380,11 @@ def unsign_week(week_id):
         _save_weekly_signoffs(signoffs)
     return jsonify({"success": True})
 
-
 # ── Production Tracker ────────────────────────────────────────────────
 # ── Production tracker helpers ────────────────────────────────────────
 # Buckets that appear in the tracker breakdown. Ordered for stacked-bar rendering
 # (bottom to top): SS sizes first, then Frozen, Other, Kettle's End, BB.
 TRACKER_BUCKETS = ["SS-876ML", "SS-750ML", "SS-473ML", "FZ", "Other", "Kettles End", "BB"]
-
 
 def _classify_format(recipe_format):
     """Map any format string (canonical or not) to a bucket.
@@ -2490,7 +2397,6 @@ def _classify_format(recipe_format):
     """
     if not recipe_format:
         return "Other"
-    # Use the shared parser regex to pull out prefix + size
     m = FORMAT_RE.search(recipe_format)
     if not m:
         return "Other"
@@ -2508,10 +2414,8 @@ def _classify_format(recipe_format):
         return "FZ"
     return "Other"         # BB-*, iQ-*, or any other prefix
 
-
 def _empty_buckets():
     return {b: 0 for b in TRACKER_BUCKETS}
-
 
 def _get_previous_day_schedule(week_id, d_idx, schedule_cache=None):
     """Return the schedule dict for the day BEFORE (week_id, d_idx).
@@ -2527,7 +2431,6 @@ def _get_previous_day_schedule(week_id, d_idx, schedule_cache=None):
         if sched and sched.get("schedule"):
             return sched["schedule"].get(str(d_idx - 1), {}) or {}
         return {}
-    # Monday → look back to last week's Sunday
     try:
         prev_week_start = datetime.strptime(week_id, "%Y-%m-%d") - timedelta(days=7)
         prev_week_id = prev_week_start.strftime("%Y-%m-%d")
@@ -2537,7 +2440,6 @@ def _get_previous_day_schedule(week_id, d_idx, schedule_cache=None):
     if prev_sched and prev_sched.get("schedule"):
         return prev_sched["schedule"].get("6", {}) or {}
     return {}
-
 
 def _day_buckets(week_id, d_idx, recipes_cache=None, schedule_cache=None):
     """Return per-bucket totals for a single (week_id, day_idx).
@@ -2553,7 +2455,6 @@ def _day_buckets(week_id, d_idx, recipes_cache=None, schedule_cache=None):
     if not cl:
         return buckets, False
 
-    # Resolve recipes (cached across week)
     if recipes_cache is None:
         recipes = load_recipes()
     else:
@@ -2578,7 +2479,6 @@ def _day_buckets(week_id, d_idx, recipes_cache=None, schedule_cache=None):
         bucket = _classify_format(fmt)
         buckets[bucket] = buckets.get(bucket, 0) + amt
 
-    # BB produced (all into BB regardless of format)
     bb = cl.get("bb_produced") or {}
     for vessel_id, amount in bb.items():
         try:
@@ -2588,7 +2488,6 @@ def _day_buckets(week_id, d_idx, recipes_cache=None, schedule_cache=None):
         if amt > 0:
             buckets["BB"] += amt
 
-    # Kettle's End
     try:
         ke = int(cl.get("kettles_end", 0) or 0)
     except (ValueError, TypeError):
@@ -2598,16 +2497,13 @@ def _day_buckets(week_id, d_idx, recipes_cache=None, schedule_cache=None):
 
     return buckets, _has_meaningful_data(cl)
 
-
 def _sum_buckets(target, source):
     """Add all bucket values from source into target in-place."""
     for k, v in source.items():
         target[k] = target.get(k, 0) + v
 
-
 def _bucket_total(buckets):
     return sum(buckets.values())
-
 
 def _week_totals(week_id):
     """Calculate bucketed totals for a single week. Returns dict with bucket
@@ -2623,7 +2519,6 @@ def _week_totals(week_id):
     out = dict(buckets)
     out["total"] = _bucket_total(buckets)
     return out
-
 
 @app.route("/api/production-tracker/<week_id>", methods=["GET"])
 @login_required
@@ -2649,7 +2544,6 @@ def get_production_tracker(week_id):
         }
         daily_totals.append(entry)
     return jsonify(daily_totals)
-
 
 @app.route("/api/production-tracker/<week_id>/other-details", methods=["GET"])
 @login_required
@@ -2702,7 +2596,6 @@ def get_tracker_other_details(week_id):
             })
     return jsonify(rows)
 
-
 @app.route("/api/production-tracker/month/<year_month>", methods=["GET"])
 @login_required
 def get_production_tracker_month(year_month):
@@ -2711,13 +2604,11 @@ def get_production_tracker_month(year_month):
         return jsonify({"error": "Invalid month format, use YYYY-MM"}), 400
     try:
         year, month = int(year_month[:4]), int(year_month[5:7])
-        # Find all Mondays in this month
         from calendar import monthrange
         _, days_in_month = monthrange(year, month)
         first_day = datetime(year, month, 1)
         last_day = datetime(year, month, days_in_month)
 
-        # Find the Monday on or before the 1st
         start_monday = first_day - timedelta(days=first_day.weekday())
         weeks = []
         current = start_monday
@@ -2728,7 +2619,6 @@ def get_production_tracker_month(year_month):
             totals["buckets"] = {b: totals.get(b, 0) for b in TRACKER_BUCKETS}
             totals["week_id"] = wid
             totals["label"] = current.strftime("%b %d") + " - " + end_date.strftime("%b %d")
-            # Strip raw bucket keys now that they're nested under 'buckets'
             for b in TRACKER_BUCKETS:
                 totals.pop(b, None)
             weeks.append(totals)
@@ -2736,7 +2626,6 @@ def get_production_tracker_month(year_month):
         return jsonify(weeks)
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
 
 @app.route("/api/production-tracker/year/<int:year>", methods=["GET"])
 @login_required
@@ -2775,7 +2664,6 @@ def get_production_tracker_year(year):
         months.append(month_total)
     return jsonify(months)
 
-
 # ── Init ──────────────────────────────────────────────────────────────
 
 # Inventory data paths.
@@ -2808,7 +2696,6 @@ _DEFAULT_COMPANY_INFO = {
     "registration": "",
     "notes": "",
     "ripe_inventory_buffer": 12,   # units withheld from Ripe's visible stock
-    # Ripe order rules — editable in Company Settings
     "ss_min_cases_delivery": 40,   # min SS cases for delivery orders
     "fzbb_small_lead_days":  3,    # min days notice for FZ/BB ≤ threshold
     "fzbb_large_lead_days":  7,    # min days notice for FZ/BB ≥ threshold
@@ -2829,7 +2716,6 @@ os.makedirs(RM_RECEIPT_PHOTOS_DIR, exist_ok=True)
 # Raw material section organization. User-defined sections + per-ingredient
 # assignment. Pre-seeded with the 6-section structure on first load.
 RM_SECTIONS_PATH = os.path.join(INVENTORY_DIR, "rm_sections.json")
-
 
 def _migrate_organic_to_inventory():
     """One-time migration: rename data/organic/ → data/inventory/ if applicable.
@@ -2856,11 +2742,9 @@ def _migrate_organic_to_inventory():
         print(f"[migration] WARNING: both {legacy_path} and {new_path} exist. "
               f"Manual review needed. Using new path.")
 
-
 _migrate_organic_to_inventory()
 os.makedirs(INVENTORY_DIR, exist_ok=True)
 _ripe_init_paths(INVENTORY_DIR)  # wire Ripe orders sale logic to Soma's inventory
-
 
 def _autotag_existing_organic_data():
     """One-time data tag: stamp existing pre-merge entries with
@@ -2894,7 +2778,6 @@ def _autotag_existing_organic_data():
         except Exception as e:
             print(f"[autotag] Failed for {path}: {e}")
 
-
 # Per-path threading locks — one lock per file, created on demand.
 _FILE_LOCKS: dict = {}
 _FILE_LOCKS_LOCK = threading.Lock()
@@ -2906,7 +2789,6 @@ def _get_file_lock(path: str) -> threading.Lock:
             _FILE_LOCKS[path] = threading.Lock()
         return _FILE_LOCKS[path]
 
-
 def _load_json(path, default=None):
     """Read a JSON file under a per-path threading lock.
     Returns `default` (or [] if not given) when the file is missing.
@@ -2916,7 +2798,6 @@ def _load_json(path, default=None):
             with open(path, "r") as f:
                 return json.load(f)
         return default if default is not None else []
-
 
 def _save_json(path, data):
     """Write JSON atomically under a per-path threading lock.
@@ -2929,13 +2810,11 @@ def _save_json(path, data):
             json.dump(data, f, indent=2)
         os.replace(tmp, path)
 
-
 # ── Organic Page ──────────────────────────────────────────────────────
 @app.route("/organic")
 @login_required
 def organic_page():
     return render_template("organic.html")
-
 
 # ── Organic: Get ingredient list from organic recipes ─────────────────
 # Fallback master list used only if no organic recipes exist yet.
@@ -2951,7 +2830,6 @@ ORGANIC_INGREDIENTS_FALLBACK = [
 
 ORGANIC_CUSTOM_ITEMS_PATH = os.path.join(ORGANIC_DIR, "custom_ingredients.json")
 
-
 def _format_pack_label(amount, unit):
     """Format a label like '750 ml' or '8 kg' from amount+unit. Used by the
     migrator's smart-upgrade step to recognize pack labels from legacy config."""
@@ -2960,7 +2838,6 @@ def _format_pack_label(amount, unit):
     if unit:
         return f"{amount} {unit}"
     return str(amount)
-
 
 def _jar_volume_liters(recipe_data):
     """Parse the jar volume in liters from a recipe's format string.
@@ -2974,7 +2851,6 @@ def _jar_volume_liters(recipe_data):
     if m:
         return float(m.group(1))
     return None
-
 
 @app.route("/api/organic/ingredients", methods=["GET"])
 @login_required
@@ -3044,7 +2920,6 @@ def organic_ingredients():
     all_items.sort(key=lambda x: (x["name"], x["unit"]))
     return jsonify(all_items)
 
-
 # ── Raw material section organization ─────────────────────────────────
 # User-defined sections (created via /api/organic/raw-materials/sections)
 # replace the previous hardcoded heuristic. Each ingredient is explicitly
@@ -3067,11 +2942,9 @@ DEFAULT_RM_SECTIONS = [
 UNASSIGNED_SECTION_ID = "_unassigned"
 UNASSIGNED_SECTION_NAME = "Unassigned"
 
-
 def _ingredient_section_key(name, unit):
     """Storage key for ingredient assignment lookups."""
     return f"{(name or '').strip()}|{(unit or '').strip()}"
-
 
 def _load_rm_sections():
     """Load the sections+assignments file, seeding defaults on first access."""
@@ -3088,7 +2961,6 @@ def _load_rm_sections():
 
     data = _load_json(RM_SECTIONS_PATH, None)
     if not isinstance(data, dict):
-        # Corrupt or unexpected — re-seed
         seed = {
             "sections": [
                 {"id": s["id"], "name": s["name"], "order": i}
@@ -3099,7 +2971,6 @@ def _load_rm_sections():
         _save_json(RM_SECTIONS_PATH, seed)
         return seed
 
-    # Defensive normalization
     sections = data.get("sections")
     if not isinstance(sections, list):
         sections = []
@@ -3107,7 +2978,6 @@ def _load_rm_sections():
     if not isinstance(assignments, dict):
         assignments = {}
     return {"sections": sections, "assignments": assignments}
-
 
 def _section_for_ingredient(name, unit, sections_data):
     """Return the section id this ingredient is assigned to, or None."""
@@ -3120,13 +2990,11 @@ def _section_for_ingredient(name, unit, sections_data):
         return None
     return section_id
 
-
 @app.route("/api/organic/raw-materials/sections", methods=["GET"])
 @login_required
 def get_rm_sections():
     """Return the section list + per-ingredient assignments."""
     return jsonify(_load_rm_sections())
-
 
 @app.route("/api/organic/raw-materials/sections", methods=["PUT"])
 @login_required
@@ -3142,7 +3010,6 @@ def update_rm_sections():
     if not isinstance(sections_in, list):
         return jsonify({"error": "sections must be a list"}), 400
 
-    # Validate + deduplicate ids
     seen_ids = set()
     cleaned = []
     for i, s in enumerate(sections_in):
@@ -3169,7 +3036,6 @@ def update_rm_sections():
     saved = {"sections": cleaned, "assignments": new_assignments}
     _save_json(RM_SECTIONS_PATH, saved)
     return jsonify({"success": True, **saved})
-
 
 @app.route("/api/organic/raw-materials/assignments", methods=["PUT"])
 @login_required
@@ -3203,7 +3069,6 @@ def update_rm_assignments():
     _save_json(RM_SECTIONS_PATH, existing)
     return jsonify({"success": True, "assignments": merged})
 
-
 @app.route("/api/organic/raw-materials/grouped", methods=["GET"])
 @login_required
 def get_raw_materials_grouped():
@@ -3219,7 +3084,6 @@ def get_raw_materials_grouped():
 
     The response includes a 'category' field for display grouping.
     """
-    # Get the canonical ingredient list (same as the picker dropdown)
     recipes = load_recipes()
     derived = {}  # key: (name_lower, unit) -> {name, unit}
     for rname, rdata in recipes.items():
@@ -3241,7 +3105,6 @@ def get_raw_materials_grouped():
                 if key not in derived:
                     derived[key] = {"name": ing_name, "unit": unit}
 
-    # Merge custom user-added items
     custom = _load_json(ORGANIC_CUSTOM_ITEMS_PATH, [])
     for c in custom:
         name = c.get("name", "")
@@ -3290,7 +3153,6 @@ def get_raw_materials_grouped():
         if key not in derived:
             derived[key] = {"name": item, "unit": unit}
 
-    # Merge: every catalog item gets a row (even with no receipts)
     sections_data = _load_rm_sections()
     sections_list = sections_data.get("sections", [])
     section_order = {s["id"]: i for i, s in enumerate(sections_list)}
@@ -3299,7 +3161,6 @@ def get_raw_materials_grouped():
     rows = []
     for key, ing in derived.items():
         agg = aggregates.get(key, {})
-        # Round to 2 decimals for display; keep as float for sums
         total_received = round(agg.get("total_received", 0.0), 3)
         total_remaining = round(agg.get("total_remaining", 0.0), 3)
         # Trim trailing zeros — show 50 not 50.000, but keep 2.5 as 2.5
@@ -3333,11 +3194,9 @@ def get_raw_materials_grouped():
 
     # Sort: by section order first, then alphabetically by name within each
     rows.sort(key=lambda r: (r["_sort_idx"], r["name"].lower(), r["unit"]))
-    # Strip internal sort field before returning
     for r in rows:
         r.pop("_sort_idx", None)
     return jsonify(rows)
-
 
 @app.route("/api/organic/raw-materials/by-ingredient/<path:item>/<unit>", methods=["GET"])
 @login_required
@@ -3352,7 +3211,6 @@ def get_raw_material_lots(item, unit):
                 and (m.get("unit") or "").strip() == unit]
     matching.sort(key=lambda m: (m.get("date_received") or "", m.get("created_at") or ""))
     return jsonify(matching)
-
 
 @app.route("/api/organic/ingredients", methods=["POST"])
 @login_required
@@ -3374,13 +3232,11 @@ def add_organic_ingredient():
     _save_json(ORGANIC_CUSTOM_ITEMS_PATH, custom)
     return jsonify({"success": True})
 
-
 # ── Organic: Raw Material Inventory (FIFO) ────────────────────────────
 @app.route("/api/organic/raw-materials", methods=["GET"])
 @login_required
 def get_raw_materials():
     return jsonify(_load_json(ORGANIC_RAW_PATH, []))
-
 
 @app.route("/api/organic/raw-materials", methods=["POST"])
 @login_required
@@ -3407,7 +3263,6 @@ def add_raw_material():
     is_baseline = bool(data.get("baseline"))
     supplier_lot = (data.get("supplier_lot") or "").strip()
     if is_baseline and not supplier_lot:
-        # Auto-generate BL-DDMMYY
         supplier_lot = "BL-" + datetime.now().strftime("%d%m%y")
 
     entry = {
@@ -3429,7 +3284,6 @@ def add_raw_material():
     if supplier:
         _add_contact("supplier", supplier)
     return jsonify({"success": True, "entry": entry})
-
 
 @app.route("/api/organic/raw-materials/bulk", methods=["POST"])
 @login_required
@@ -3458,7 +3312,6 @@ def add_raw_materials_bulk():
     if not isinstance(entries_in, list):
         return jsonify({"error": "entries must be a list"}), 400
 
-    # Build the canonical ingredient set: {(name_lower, unit): canonical_name}
     # This is the same set the picker populates from — recipes + custom items.
     canonical = {}
     recipes = load_recipes()
@@ -3511,7 +3364,6 @@ def add_raw_materials_bulk():
         if key not in canonical:
             errors.append(f"row {idx}: ingredient '{item}' ({unit}) not in catalog")
             continue
-        # Use the canonical casing so storage stays consistent
         to_create.append({
             "item": canonical[key],
             "unit": unit,
@@ -3536,13 +3388,11 @@ def add_raw_materials_bulk():
     created = []
 
     for i, item in enumerate(to_create):
-        # Resolve per-entry fields based on mode
         if is_baseline:
             supplier = item["supplier"] or "(physical count)"
             supplier_lot = shared_baseline_lot
             date_received = item["date_received"] or today_str
         else:
-            # Receipt mode (future scan): each entry uses its own supplier + lot
             supplier = item["supplier"]
             supplier_lot = item["supplier_lot"] or ("MAN-" + base_ts.strftime("%d%m%y"))
             date_received = item["date_received"] or today_str
@@ -3579,7 +3429,6 @@ def add_raw_materials_bulk():
         "entries": created,
     })
 
-
 def _runs_using_raw_material(entry_id):
     """Return list of completed organic runs that have deducted from this raw material entry."""
     runs = _load_json(ORGANIC_RUNS_PATH, [])
@@ -3600,7 +3449,6 @@ def _runs_using_raw_material(entry_id):
                 })
                 break
     return matches
-
 
 @app.route("/api/organic/raw-materials/<entry_id>", methods=["PUT"])
 @login_required
@@ -3626,14 +3474,12 @@ def update_raw_material(entry_id):
     _save_json(ORGANIC_RAW_PATH, materials)
     return jsonify({"success": True, "entry": entry})
 
-
 @app.route("/api/organic/raw-materials/<entry_id>/usage", methods=["GET"])
 @login_required
 def get_raw_material_usage(entry_id):
     """Return list of completed runs that deducted from this entry. Frontend
     uses this to warn the user before deletion."""
     return jsonify({"used_in": _runs_using_raw_material(entry_id)})
-
 
 @app.route("/api/organic/raw-materials/<entry_id>", methods=["DELETE"])
 @login_required
@@ -3642,7 +3488,6 @@ def delete_raw_material(entry_id):
     materials = [m for m in materials if m.get("id") != entry_id]
     _save_json(ORGANIC_RAW_PATH, materials)
     return jsonify({"success": True})
-
 
 # ── Organic: Invoices (standalone module, keyed by supplier + date + LOT#s) ──
 INVOICES_DIR = os.path.join(ORGANIC_DIR, "invoices")
@@ -3662,11 +3507,9 @@ INVOICE_MIME_MAP = {
     ".heif": "image/heif",
 }
 
-
 def _invoice_mime(filename):
     ext = os.path.splitext(filename)[1].lower()
     return INVOICE_MIME_MAP.get(ext, "application/octet-stream")
-
 
 def _save_invoice_file_bytes(prefix, file_storage):
     """Save uploaded invoice, return (filename, metadata). Raises ValueError on bad input."""
@@ -3700,7 +3543,6 @@ def _save_invoice_file_bytes(prefix, file_storage):
         "mime_type": _invoice_mime(stored_name),
     }
 
-
 def _remove_invoice_file(filename):
     if not filename:
         return False
@@ -3716,12 +3558,10 @@ def _remove_invoice_file(filename):
         pass
     return False
 
-
 def _parse_lots_field(form_data):
     """Pull LOT#s from a multipart form. Accepts repeated 'lots[]' or 'lots' fields,
     or a single comma-separated 'lots' string."""
     lots = []
-    # Flask's MultiDict supports getlist
     try:
         for v in form_data.getlist("lots[]"):
             if v and v.strip():
@@ -3746,7 +3586,6 @@ def _parse_lots_field(form_data):
             seen.add(l)
             out.append(l)
     return out
-
 
 @app.route("/api/organic/invoices", methods=["POST"])
 @login_required
@@ -3790,7 +3629,6 @@ def upload_invoice():
         _add_contact("supplier", supplier)
     return jsonify({"success": True, "invoice": record})
 
-
 @app.route("/api/organic/invoices", methods=["GET"])
 @login_required
 def list_invoices():
@@ -3804,7 +3642,6 @@ def list_invoices():
     invoices.sort(key=lambda r: (r.get("invoice_date", ""), r.get("uploaded_at", "")),
                   reverse=True)
     return jsonify(invoices)
-
 
 @app.route("/api/organic/invoices/<inv_id>/file", methods=["GET"])
 @login_required
@@ -3824,7 +3661,6 @@ def serve_invoice(inv_id):
     return send_file(path, mimetype=_invoice_mime(safe),
                      as_attachment=False, download_name=safe)
 
-
 @app.route("/api/organic/invoices/<inv_id>", methods=["DELETE"])
 @login_required
 def delete_invoice(inv_id):
@@ -3836,7 +3672,6 @@ def delete_invoice(inv_id):
     invoices = [i for i in invoices if i.get("id") != inv_id]
     _save_json(INVOICES_INDEX_PATH, invoices)
     return jsonify({"success": True})
-
 
 def _cleanup_legacy_invoices():
     """One-time cleanup on startup: wipe old per-raw-material invoices and files."""
@@ -3861,9 +3696,7 @@ def _cleanup_legacy_invoices():
     except Exception:
         pass
 
-
 _cleanup_legacy_invoices()
-
 
 # ── Organic: Contacts (suppliers, buyers, distributors) ───────────────
 def _add_contact(contact_type, name):
@@ -3874,19 +3707,16 @@ def _add_contact(contact_type, name):
         contacts[contact_type].append(name)
         _save_json(ORGANIC_CONTACTS_PATH, contacts)
 
-
 @app.route("/api/organic/contacts", methods=["GET"])
 @login_required
 def get_organic_contacts():
     return jsonify(_load_json(ORGANIC_CONTACTS_PATH, {}))
-
 
 # ── Organic: Production Runs ──────────────────────────────────────────
 @app.route("/api/organic/production-runs", methods=["GET"])
 @login_required
 def get_organic_runs():
     return jsonify(_load_json(ORGANIC_RUNS_PATH, []))
-
 
 def _previous_day_coords(week_id, day_idx):
     """Return (prev_week_id, prev_day_idx) for the day BEFORE (week_id, day_idx).
@@ -3898,7 +3728,6 @@ def _previous_day_coords(week_id, day_idx):
     except ValueError:
         return week_id, day_idx
     return prev_week_start.strftime("%Y-%m-%d"), 6
-
 
 def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
     """Process organic production amounts entered on the FINISH day.
@@ -3919,13 +3748,10 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
     sales = _load_json(ORGANIC_SALES_PATH, []) if os.path.exists(ORGANIC_SALES_PATH) else []
     recipes = load_recipes()
 
-    # Warnings surfaced to the user via the save endpoint response
     warnings = []
 
-    # Find runs scheduled on the START day (yesterday relative to finish day)
     start_week_id, start_day_idx = _previous_day_coords(finish_week_id, finish_day_idx)
 
-    # Compute finish-day expiry LOT# (packaging-day + 365 days)
     try:
         finish_date = datetime.strptime(finish_week_id, "%Y-%m-%d") + timedelta(days=finish_day_idx)
         expiry_lot = (finish_date + timedelta(days=365)).strftime("%d%m%y")
@@ -3948,14 +3774,12 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
 
         vessel = run["vessel"]
 
-        # Get amount produced for this vessel from the FINISH day's checklist
         vid = vessel.replace("(", "").replace(")", "")
         try:
             amount = int(produced.get(vid, 0))
         except (ValueError, TypeError):
             amount = 0
 
-        # Find existing finished goods entry for this run (idempotency key:
         # finish_week + finish_day + vessel)
         fg_id = f"fg_{finish_week_id}_{finish_day_idx}_{vessel}"
         existing_fg = next((f for f in fg if f.get("id") == fg_id), None)
@@ -4115,7 +3939,6 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
                         except (ValueError, TypeError):
                             pass
 
-        # Detect manual lot-adjust collision: if an existing FG entry shows a
         # remaining quantity inconsistent with (produced - sold), the user has
         # manually adjusted it (e.g., for breakage). Re-saving daily production
         # will overwrite that adjustment — warn the user.
@@ -4160,14 +3983,12 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
             }
             if existing_fg:
                 # Update in place — but explicitly clear last_adjusted_at since
-                # the re-save resets the manual adjustment
                 for k, v in new_fg.items():
                     existing_fg[k] = v
                 existing_fg.pop("last_adjusted_at", None)
             else:
                 fg.append(new_fg)
         else:
-            # Amount went to zero — drop the FG entry (no production after all)
             if existing_fg:
                 fg = [f for f in fg if f.get("id") != fg_id]
 
@@ -4176,7 +3997,6 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
     _save_json(ORGANIC_FG_PATH, fg)
     return warnings
 
-
 # ── Organic: Finished Goods ──────────────────────────────────────────
 def _sku_key(brand, recipe, fmt):
     """Stable identifier for a SKU group: 'BRAND|RECIPE|FORMAT'.
@@ -4184,11 +4004,9 @@ def _sku_key(brand, recipe, fmt):
     Separator chosen so it can't appear in any of the components."""
     return "|".join([(brand or ""), (recipe or ""), _normalize_format(fmt or "")])
 
-
 def _sku_display(brand, recipe, fmt):
     """Human-readable SKU label using the canonical helper."""
     return build_display_name({"brand": brand, "format": fmt}, recipe_name=recipe)
-
 
 def _group_fg_by_sku(fg):
     """Aggregate FG entries into one dict per (brand, recipe, format).
@@ -4204,7 +4022,6 @@ def _group_fg_by_sku(fg):
     for entry in fg:
         key = _sku_key(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", ""))
         if key not in groups:
-            # Pull certification from the entry itself, or look up the recipe
             cert = (entry.get("certification") or "").strip()
             if not cert:
                 if recipes_cache is None:
@@ -4233,7 +4050,6 @@ def _group_fg_by_sku(fg):
         if entry.get("migration_baseline"):
             g["has_baseline"] = True
 
-    # Compute lot counts per group (distinct LOT#s)
     lots_per_group = {}
     for entry in fg:
         key = _sku_key(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", ""))
@@ -4252,7 +4068,6 @@ def _group_fg_by_sku(fg):
     out = list(groups.values())
     out.sort(key=lambda r: (r["brand"], r["recipe"], r["format"]))
     return out
-
 
 def _group_fg_with_catalog(fg, recipes):
     """Like _group_fg_by_sku, but joins against the recipe catalog so EVERY
@@ -4274,7 +4089,6 @@ def _group_fg_with_catalog(fg, recipes):
         cert = (recipe.get("certification") or "").strip()
         key = _sku_key(brand, recipe_name, fmt)
         if key in base:
-            # Existing FG group — just ensure cert is set if it was missing
             if not base[key].get("certification") and cert:
                 base[key]["certification"] = cert
             continue
@@ -4309,7 +4123,6 @@ def _group_fg_with_catalog(fg, recipes):
     ))
     return out
 
-
 def _aggregate_lots_for_sku(fg, sku_key):
     """Return LOT-level rollup for a given SKU. One row per distinct LOT#,
     aggregating across all kettles that share that LOT.
@@ -4340,7 +4153,6 @@ def _aggregate_lots_for_sku(fg, sku_key):
             r["vessels"].add(entry["vessel"])
         r["fg_ids"].append(entry.get("id"))
 
-        # Compute production_date from finish_week_id + day_idx (preferred)
         # falling back to created_at
         prod_date = None
         wid = entry.get("week_id")
@@ -4356,7 +4168,6 @@ def _aggregate_lots_for_sku(fg, sku_key):
         if prod_date and (r["production_date"] is None or prod_date < r["production_date"]):
             r["production_date"] = prod_date
 
-        # Parse best-before from LOT (ddmmyy → dd/mm/yyyy)
         if lot and len(lot) == 6 and lot.isdigit():
             r["best_before"] = f"{lot[0:2]}/{lot[2:4]}/20{lot[4:6]}"
 
@@ -4367,7 +4178,6 @@ def _aggregate_lots_for_sku(fg, sku_key):
     # FIFO: oldest production date first; depleted lots sorted within their date
     out.sort(key=lambda r: (r["production_date"] or "9999-99-99", r["lot"]))
     return out
-
 
 # ── Organic: Finished Goods endpoints ──────────────────────────────────
 # ORDERING NOTE: Flask matches routes top-to-bottom, but the methods
@@ -4381,7 +4191,6 @@ def _aggregate_lots_for_sku(fg, sku_key):
 def get_finished_goods():
     """Returns raw per-kettle FG entries. Used by traceability/legacy callers."""
     return jsonify(_load_json(ORGANIC_FG_PATH, []))
-
 
 @app.route("/api/organic/finished-goods/<fg_id>", methods=["PUT"])
 @login_required
@@ -4407,7 +4216,6 @@ def update_finished_good(fg_id):
     _save_json(ORGANIC_FG_PATH, fg)
     return jsonify({"success": True, "entry": entry})
 
-
 @app.route("/api/organic/finished-goods/<fg_id>", methods=["DELETE"])
 @login_required
 def delete_finished_good(fg_id):
@@ -4420,7 +4228,6 @@ def delete_finished_good(fg_id):
     fg = [f for f in fg if f.get("id") != fg_id]
     _save_json(ORGANIC_FG_PATH, fg)
     return jsonify({"success": True})
-
 
 @app.route("/api/organic/finished-goods/lot-adjust", methods=["POST"])
 @login_required
@@ -4476,7 +4283,6 @@ def adjust_lot_remaining():
             f["last_adjusted_at"] = datetime.now().isoformat()
             to_remove -= take
     else:
-        # Increasing — add to first entry (it's an inventory correction; we
         # don't try to redistribute proportionally because the user's intent
         # is "the LOT total should be N", and the bucket is logically one).
         first = matching[0]
@@ -4486,7 +4292,6 @@ def adjust_lot_remaining():
     _save_json(ORGANIC_FG_PATH, fg)
     return jsonify({"success": True, "previous_total": current_total,
                     "new_total": new_remaining, "warnings": warnings})
-
 
 @app.route("/api/organic/finished-goods/baseline", methods=["POST"])
 @login_required
@@ -4535,7 +4340,6 @@ def add_baseline_finished_good():
     fg.append(entry)
     _save_json(ORGANIC_FG_PATH, fg)
     return jsonify({"success": True, "entry": entry})
-
 
 @app.route("/api/organic/finished-goods/baseline-bulk", methods=["POST"])
 @login_required
@@ -4623,7 +4427,6 @@ def add_baseline_finished_goods_bulk():
     _save_json(ORGANIC_FG_PATH, fg)
     return jsonify({"success": True, "created": len(created), "lot": lot, "entries": created})
 
-
 # ── Manual inventory adjustments ────────────────────────────────────
 # These cover everyday cases AFTER day-zero migration: returns, found stock,
 # breakage, spillage, theft, sampling, donations, recount discrepancies.
@@ -4634,13 +4437,11 @@ VALID_SUBTRACT_REASONS = [
     "Spillage", "Waste", "Theft", "Sample", "Donation", "Recount", "Other"
 ]
 
-
 def _record_adjustment(record):
     """Append an adjustment record to the audit log."""
     log = _load_json(ADJUSTMENTS_PATH, [])
     log.append(record)
     _save_json(ADJUSTMENTS_PATH, log)
-
 
 @app.route("/api/organic/finished-goods/manual-add", methods=["POST"])
 @login_required
@@ -4706,7 +4507,6 @@ def manual_add_finished_good():
     })
 
     return jsonify({"success": True, "entry": entry, "lot": lot})
-
 
 @app.route("/api/organic/finished-goods/manual-subtract", methods=["POST"])
 @login_required
@@ -4781,7 +4581,6 @@ def manual_subtract_finished_good():
         "remaining_total": available - qty,
     })
 
-
 # ══════════════════════════════════════════════════════════════════════════════
 # EQUIPMENT & MAINTENANCE ROUTES
 # ══════════════════════════════════════════════════════════════════════════════
@@ -4792,24 +4591,20 @@ def _load_equipment():
 def _save_equipment(data):
     _save_json(EQUIPMENT_PATH, data)
 
-
 @app.route("/important-documents")
 @login_required
 def important_documents_page():
     return render_template("important_documents.html")
-
 
 @app.route("/equipment")
 @login_required
 def equipment_page():
     return render_template("equipment.html")
 
-
 @app.route("/api/equipment", methods=["GET"])
 @login_required
 def get_equipment():
     return jsonify(_load_equipment())
-
 
 @app.route("/api/equipment", methods=["POST"])
 @login_required
@@ -4846,7 +4641,6 @@ def add_equipment():
     _save_equipment(items)
     return jsonify({"ok": True, "entry": entry})
 
-
 @app.route("/api/equipment/<eq_id>", methods=["PUT"])
 @login_required
 def update_equipment(eq_id):
@@ -4869,7 +4663,6 @@ def update_equipment(eq_id):
     _save_equipment(items)
     return jsonify({"ok": True, "entry": entry})
 
-
 @app.route("/api/equipment/<eq_id>", methods=["DELETE"])
 @login_required
 def delete_equipment(eq_id):
@@ -4877,7 +4670,6 @@ def delete_equipment(eq_id):
     items = [e for e in items if e["id"] != eq_id]
     _save_equipment(items)
     return jsonify({"ok": True})
-
 
 @app.route("/api/equipment/<eq_id>/log", methods=["POST"])
 @login_required
@@ -4901,13 +4693,11 @@ def add_service_log(eq_id):
     if not entry.get("service_log"):
         entry["service_log"] = []
     entry["service_log"].append(log_entry)
-    # Auto-update last service date
     if log_entry["date"]:
         entry["last_service_date"] = log_entry["date"]
     entry["updated_at"] = datetime.now().isoformat()
     _save_equipment(items)
     return jsonify({"ok": True, "log_entry": log_entry})
-
 
 @app.route("/api/equipment/<eq_id>/log/<log_id>", methods=["DELETE"])
 @login_required
@@ -4919,7 +4709,6 @@ def delete_service_log(eq_id, log_id):
     entry["service_log"] = [l for l in (entry.get("service_log") or []) if l["id"] != log_id]
     _save_equipment(items)
     return jsonify({"ok": True})
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # INVENTORY AUDIT ROUTES
@@ -4936,7 +4725,6 @@ def _active_audit(kind):
     return next((a for a in _load_audits()
                  if a.get("kind") == kind and a.get("status") == "in_progress"), None)
 
-
 @app.route("/audit/<kind>")
 @login_required
 def audit_page(kind):
@@ -4944,7 +4732,6 @@ def audit_page(kind):
     if kind not in ("rm", "fg"):
         return "Invalid audit type", 400
     return render_template("audit.html", kind=kind)
-
 
 @app.route("/api/audit/start", methods=["POST"])
 @login_required
@@ -4959,13 +4746,11 @@ def start_audit():
 
     audits = _load_audits()
 
-    # Abandon any previous in-progress audit of the same kind
     audits = [a for a in audits
               if not (a.get("kind") == kind and a.get("status") == "in_progress")]
 
     categories = data.get("categories", [])
 
-    # Build the items list
     if kind == "rm":
         items = _build_rm_audit_items(categories)
     else:
@@ -4985,7 +4770,6 @@ def start_audit():
     _save_audits(audits)
     return jsonify({"ok": True, "audit": audit})
 
-
 def _build_rm_audit_items(categories):
     """Build ordered list of RM items for the audit, filtered by section categories."""
     materials = _load_json(ORGANIC_RAW_PATH, [])
@@ -4993,7 +4777,6 @@ def _build_rm_audit_items(categories):
     assignments = sections_data.get("assignments", {})
     sections = {s["id"]: s["name"] for s in sections_data.get("sections", [])}
 
-    # Group by ingredient name, filter by selected categories
     seen = {}  # item_name -> {total_remaining, lots, unit, section}
     for mat in materials:
         remaining = float(mat.get("remaining") or 0)
@@ -5023,10 +4806,8 @@ def _build_rm_audit_items(categories):
             "remaining":    remaining,
         })
 
-    # Sort by section then name
     items = sorted(seen.values(), key=lambda x: (x["section"], x["name"]))
     return items
-
 
 def _build_fg_audit_items(categories):
     """Build ordered list of FG lots for the audit, filtered by brand."""
@@ -5051,7 +4832,6 @@ def _build_fg_audit_items(categories):
             "system_qty": int(entry.get("quantity_remaining") or 0),
             "created_at": entry.get("created_at", ""),
         })
-    # Sort: brand → format (SS/FZ/BB) → recipe → lot date
     fmt_order = {"SS": 0, "FZ": 1, "BB": 2}
     items.sort(key=lambda x: (
         x["brand"],
@@ -5061,14 +4841,12 @@ def _build_fg_audit_items(categories):
     ))
     return items
 
-
 @app.route("/api/audit/active/<kind>", methods=["GET"])
 @login_required
 def get_active_audit(kind):
     """Return the current in-progress audit for rm or fg, or null."""
     audit = _active_audit(kind)
     return jsonify({"audit": audit})
-
 
 @app.route("/api/audit/<audit_id>/save", methods=["POST"])
 @login_required
@@ -5087,7 +4865,6 @@ def save_audit_progress(audit_id):
     _save_audits(audits)
     return jsonify({"ok": True})
 
-
 @app.route("/api/audit/<audit_id>/complete", methods=["POST"])
 @login_required
 def complete_audit(audit_id):
@@ -5100,7 +4877,6 @@ def complete_audit(audit_id):
     if not audit:
         return jsonify({"error": "Audit not found"}), 404
 
-    # Merge final results
     audit["results"].update(data.get("results", {}))
     kind = audit["kind"]
     adjustments = []
@@ -5116,7 +4892,6 @@ def complete_audit(audit_id):
     _save_audits(audits)
     return jsonify({"ok": True, "adjustments": len(adjustments), "audit": audit})
 
-
 def _apply_rm_audit(audit):
     """Apply RM audit results — adjust remaining on individual lots."""
     materials = _load_json(ORGANIC_RAW_PATH, [])
@@ -5128,7 +4903,6 @@ def _apply_rm_audit(audit):
             continue  # skipped
 
         counted = round(float(counted), 4)
-        # Find all non-depleted lots for this item
         lots = sorted(
             [m for m in materials if (m.get("item") or "").strip() == item_name
              and float(m.get("remaining") or 0) > 0],
@@ -5153,7 +4927,6 @@ def _apply_rm_audit(audit):
                 lot["remaining"] = round(avail - take, 4)
                 to_remove = round(to_remove - take, 4)
         else:
-            # Increase: add to most recent lot
             lots[-1]["remaining"] = round(float(lots[-1].get("remaining") or 0) + diff, 4)
 
         adjustments.append({
@@ -5165,7 +4938,6 @@ def _apply_rm_audit(audit):
 
     _save_json(ORGANIC_RAW_PATH, materials)
 
-    # Record in adjustments log
     for adj in adjustments:
         _record_adjustment({
             "id":         "audit_rm_" + datetime.now().strftime("%Y%m%d%H%M%S") + str(abs(int(adj["diff"]*100))),
@@ -5179,7 +4951,6 @@ def _apply_rm_audit(audit):
         })
 
     return adjustments
-
 
 def _apply_fg_audit(audit):
     """Apply FG audit results — direct per-lot overwrite."""
@@ -5225,7 +4996,6 @@ def _apply_fg_audit(audit):
 
     return adjustments
 
-
 @app.route("/api/audit/history", methods=["GET"])
 @login_required
 def audit_history():
@@ -5237,7 +5007,6 @@ def audit_history():
         completed = [a for a in completed if a.get("kind") == kind]
     completed.sort(key=lambda a: a.get("completed_at", ""), reverse=True)
     return jsonify(completed)
-
 
 @app.route("/api/audit/categories/<kind>", methods=["GET"])
 @login_required
@@ -5277,13 +5046,11 @@ def audit_categories(kind):
                          for f in fg if int(f.get("quantity_remaining") or 0) > 0})
         return jsonify(brands or ["All"])
 
-
 @app.route("/api/organic/adjustments", methods=["GET"])
 @login_required
 def get_adjustments():
     """Return the full audit log of manual adjustments (additions + subtractions)."""
     return jsonify(_load_json(ADJUSTMENTS_PATH, []))
-
 
 # ── Supplier catalog ────────────────────────────────────────────────────
 # suppliers.json: list of {id, name, ingredients: [{name, unit}]}
@@ -5295,12 +5062,10 @@ def _load_suppliers():
 def _save_suppliers(data):
     _save_json(SUPPLIERS_PATH, data)
 
-
 @app.route("/api/suppliers", methods=["GET"])
 @login_required
 def get_suppliers():
     return jsonify(_load_suppliers())
-
 
 @app.route("/api/suppliers", methods=["POST"])
 @login_required
@@ -5320,7 +5085,6 @@ def create_supplier():
     suppliers.append(supplier)
     _save_suppliers(suppliers)
     return jsonify(supplier), 201
-
 
 @app.route("/api/suppliers/<sid>", methods=["PUT"])
 @login_required
@@ -5345,7 +5109,6 @@ def update_supplier(sid):
     _save_suppliers(suppliers)
     return jsonify(suppliers[idx])
 
-
 @app.route("/api/suppliers/<sid>", methods=["DELETE"])
 @login_required
 def delete_supplier(sid):
@@ -5353,7 +5116,6 @@ def delete_supplier(sid):
     suppliers = [s for s in suppliers if s["id"] != sid]
     _save_suppliers(suppliers)
     return jsonify({"ok": True})
-
 
 @app.route("/api/suppliers/<sid>/ingredients", methods=["PUT"])
 @login_required
@@ -5368,11 +5130,9 @@ def update_supplier_ingredients(sid):
     _save_suppliers(suppliers)
     return jsonify(suppliers[idx])
 
-
 # ── RM receipt photo upload ──────────────────────────────────────────────
 _RM_PHOTO_ALLOWED = {"jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "pdf"}
 _RM_PHOTO_MAX_BYTES = 20 * 1024 * 1024  # 20 MB
-
 
 @app.route("/api/organic/raw-materials/receipt-photo/<entry_id>", methods=["POST"])
 @login_required
@@ -5394,7 +5154,6 @@ def upload_rm_receipt_photo(entry_id):
         fh.write(data)
     return jsonify({"ok": True, "filename": filename})
 
-
 @app.route("/api/organic/raw-materials/receipt-photo/<entry_id>", methods=["GET"])
 @login_required
 def get_rm_receipt_photo(entry_id):
@@ -5402,7 +5161,6 @@ def get_rm_receipt_photo(entry_id):
         if fn.startswith(entry_id + "."):
             return send_from_directory(RM_RECEIPT_PHOTOS_DIR, fn)
     return jsonify({"error": "Not found"}), 404
-
 
 @app.route("/api/organic/raw-materials/receipt-photo/<entry_id>", methods=["DELETE"])
 @login_required
@@ -5413,7 +5171,6 @@ def delete_rm_receipt_photo(entry_id):
             return jsonify({"ok": True})
     return jsonify({"error": "Not found"}), 404
 
-
 @app.route("/api/organic/raw-materials/receipt-photo-exists/<entry_id>", methods=["GET"])
 @login_required
 def rm_receipt_photo_exists(entry_id):
@@ -5421,7 +5178,6 @@ def rm_receipt_photo_exists(entry_id):
         if fn.startswith(entry_id + "."):
             return jsonify({"exists": True, "filename": fn})
     return jsonify({"exists": False})
-
 
 @app.route("/api/organic/finished-goods/grouped", methods=["GET"])
 @login_required
@@ -5433,14 +5189,12 @@ def get_finished_goods_grouped():
     if cert_filter:
         grouped = [g for g in grouped
                    if (g.get("certification") or "").lower() == cert_filter.lower()]
-    # Merge PAR levels and prices from sku_meta.json
     meta = _load_json(SKU_META_PATH, {})
     for g in grouped:
         m = meta.get(g["sku_key"], {})
         g["par"] = m.get("par")          # None = no PAR; int = PAR level
         g["price"] = m.get("price")      # None = unset; float = price per unit
     return jsonify(grouped)
-
 
 @app.route("/api/internal/catalogue", methods=["GET"])
 def internal_buyer_catalogue():
@@ -5470,7 +5224,6 @@ def internal_buyer_catalogue():
     if not buyer:
         return jsonify({"error": f"Buyer '{buyer_ref}' not found"}), 404
 
-    # Build stock map
     fg = _load_json(ORGANIC_FG_PATH, [])
     sales = _load_json(ORGANIC_SALES_PATH, [])
     meta = _load_json(SKU_META_PATH, {})
@@ -5482,7 +5235,6 @@ def internal_buyer_catalogue():
         key = _sku_key(entry.get("brand",""), entry.get("recipe",""), entry.get("format",""))
         stock_map[key] = stock_map.get(key, 0) + int(entry.get("quantity_remaining") or 0)
 
-    # Subtract committed (not yet deducted) sales
     lower_map = {k.lower(): k for k in stock_map}
     for sale in sales:
         if sale.get("deducted") is False:
@@ -5491,7 +5243,6 @@ def internal_buyer_catalogue():
             if canonical:
                 stock_map[canonical] = max(0, stock_map[canonical] - int(sale.get("quantity") or 0))
 
-    # Build catalogue from buyer's assigned SKUs
     catalogue = []
     for sku in (buyer.get("skus") or []):
         sk = sku.get("sku_key", "")
@@ -5505,7 +5256,6 @@ def internal_buyer_catalogue():
             "format":      sku.get("format", ""),
             "display":     sku.get("display", ""),
             "position":    sku.get("position", 999),
-            # Buyer-specific pricing (set in Soma buyer record)
             "price":       sku.get("price"),
             "cogs":        sku.get("cogs"),
             "margin_pct":  sku.get("margin_pct"),
@@ -5525,7 +5275,6 @@ def internal_buyer_catalogue():
         "catalogue": catalogue,
         "units_per_case": 12,
         "buffer_units": buffer_units,
-        # Order rules — sourced from Soma company settings
         "rules": {
             "ss_min_cases_delivery": int(company.get("ss_min_cases_delivery") or 40),
             "fzbb_small_lead_days":  int(company.get("fzbb_small_lead_days")  or 3),
@@ -5533,7 +5282,6 @@ def internal_buyer_catalogue():
             "fzbb_large_threshold":  int(company.get("fzbb_large_threshold")  or 8),
         },
     })
-
 
 @app.route("/api/internal/sku-audit", methods=["GET"])
 def internal_sku_audit():
@@ -5546,7 +5294,6 @@ def internal_sku_audit():
     if not internal_key or not _hmac.compare_digest(provided.encode(), internal_key.encode()):
         return jsonify({"error": "Unauthorized"}), 401
 
-    # Build Soma side: all active recipe sku_keys
     recipes = load_recipes()
     soma_keys = {}  # sku_key -> {recipe_name, brand, format, display}
     for rname, rdata in recipes.items():
@@ -5563,14 +5310,12 @@ def internal_sku_audit():
             "has_format_in_name": bool(FORMAT_RE.search(rname)),
         }
 
-    # Build FG side: which sku_keys actually have inventory
     fg = _load_json(ORGANIC_FG_PATH, [])
     fg_stock = {}
     for entry in fg:
         key = _sku_key(entry.get("brand",""), entry.get("recipe",""), entry.get("format",""))
         fg_stock[key] = fg_stock.get(key, 0) + int(entry.get("quantity_remaining") or 0)
 
-    # Build Ripe side: fetch their product list
     ripe_url = os.environ.get("RIPE_PORTAL_URL", "").rstrip("/")
     ikey     = os.environ.get("INTERNAL_API_KEY", "")
     ripe_products = []
@@ -5588,7 +5333,6 @@ def internal_sku_audit():
         except Exception as e:
             ripe_error = str(e)
 
-    # Audit each Ripe product
     ripe_audit = []
     ripe_matched_keys = set()
     for p in ripe_products:
@@ -5609,14 +5353,12 @@ def internal_sku_audit():
             result["fg_units"]    = fg_stock.get(sk, 0)
             result["fg_cases"]    = fg_stock.get(sk, 0) // 12
             ripe_matched_keys.add(sk)
-            # Warn if recipe name has dirty format suffix
             if soma_keys[sk]["has_format_in_name"]:
                 result["status"] = "matched_dirty_name"
                 result["issue"]  = f"Recipe name '{soma_keys[sk]['recipe_name']}' contains format suffix — should be cleaned"
         else:
             result["status"] = "broken"
             result["issue"]  = f"soma_sku_key '{sk}' not found in Soma recipes"
-            # Suggest closest match
             suggestions = []
             sk_lower = sk.lower()
             for k, v in soma_keys.items():
@@ -5626,7 +5368,6 @@ def internal_sku_audit():
                 result["suggestions"] = suggestions
         ripe_audit.append(result)
 
-    # Soma recipes with no Ripe product mapping
     unlinked_soma = []
     for key, info in soma_keys.items():
         if key not in ripe_matched_keys:
@@ -5640,7 +5381,6 @@ def internal_sku_audit():
                 "has_format_in_name": info["has_format_in_name"],
             })
 
-    # Summary
     matched  = sum(1 for r in ripe_audit if r["status"] in ("matched","matched_dirty_name"))
     broken   = sum(1 for r in ripe_audit if r["status"] == "broken")
     no_key   = sum(1 for r in ripe_audit if r["status"] == "no_key")
@@ -5661,7 +5401,6 @@ def internal_sku_audit():
         "ripe_error": ripe_error,
     })
 
-
 @app.route("/api/internal/fg-stock", methods=["GET"])
 def internal_fg_stock():
     """Return available FG stock per SKU for Ripe portal.
@@ -5680,7 +5419,6 @@ def internal_fg_stock():
     company = _load_company_info()
     buffer_units = int(company.get("ripe_inventory_buffer") or 0)
 
-    # Gross stock per SKU
     stock = {}
     for entry in fg:
         key = _sku_key(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", ""))
@@ -5702,7 +5440,6 @@ def internal_fg_stock():
                 continue
             stock[matched_key] = max(0, stock[matched_key] - int(sale.get("quantity") or 0))
 
-    # Build response — apply buffer so Ripe sees conservative numbers
     result = {}
     for key, gross in stock.items():
         m = meta.get(key, {})
@@ -5712,7 +5449,6 @@ def internal_fg_stock():
             "par": m.get("par"),
         }
     return jsonify(result)
-
 
 @app.route("/api/sku-meta/<path:sku_key>", methods=["PATCH"])
 @login_required
@@ -5735,12 +5471,10 @@ def update_sku_meta(sku_key):
             except (ValueError, TypeError):
                 return jsonify({"error": "par must be an integer or null"}), 400
     # Silently ignore any price field — price lives in buyer catalogue now
-    # Clean up empty entries
     if not meta[sku_key]:
         del meta[sku_key]
     _save_json(SKU_META_PATH, meta)
     return jsonify({"ok": True, "meta": meta.get(sku_key, {})})
-
 
 @app.route("/api/sku-meta", methods=["GET"])
 @login_required
@@ -5766,7 +5500,6 @@ def get_all_sku_meta():
                 })
     return jsonify({"meta": meta, "par_warnings": warnings})
 
-
 @app.route("/api/organic/finished-goods/sku/<path:sku_key>", methods=["GET"])
 @login_required
 def get_finished_goods_sku_detail(sku_key):
@@ -5775,11 +5508,9 @@ def get_finished_goods_sku_detail(sku_key):
     fg = _load_json(ORGANIC_FG_PATH, [])
     lots = _aggregate_lots_for_sku(fg, sku_key)
     if not lots:
-        # Validate that the SKU exists at all
         groups = _group_fg_by_sku(fg)
         if not any(g["sku_key"] == sku_key for g in groups):
             return jsonify({"error": "SKU not found"}), 404
-    # Pull the SKU's display info from any matching FG entry
     display_info = None
     for entry in fg:
         if _sku_key(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", "")) == sku_key:
@@ -5796,7 +5527,6 @@ def get_finished_goods_sku_detail(sku_key):
         "lots": lots,
     })
 
-
 # ── Company Info ──────────────────────────────────────────────────────────────
 def _load_company_info():
     info = _load_json(COMPANY_INFO_PATH, {})
@@ -5804,12 +5534,10 @@ def _load_company_info():
     merged.update(info)
     return merged
 
-
 @app.route("/api/company-info", methods=["GET"])
 @login_required
 def get_company_info():
     return jsonify(_load_company_info())
-
 
 @app.route("/api/company-info", methods=["PATCH"])
 @login_required
@@ -5829,7 +5557,6 @@ def update_company_info():
     _save_json(COMPANY_INFO_PATH, info)
     return jsonify({"ok": True, "info": info})
 
-
 # ── Organic: Sales ───────────────────────────────────────────────────
 @app.route("/api/organic/sales", methods=["GET"])
 @login_required
@@ -5843,7 +5570,6 @@ def get_organic_sales():
         sales = [s for s in sales
                  if (s.get("certification") or "").lower() == cert_filter.lower()]
     return jsonify(sales)
-
 
 @app.route("/api/organic/sales", methods=["POST"])
 @login_required
@@ -5916,7 +5642,6 @@ def add_organic_sale():
         fmt = first.get("format", "")
 
         remaining_to_deduct = quantity
-        # Group same-LOT deductions for the sale's lots[] summary
         lot_summary = {}
         for entry in candidates:
             if remaining_to_deduct <= 0:
@@ -5999,7 +5724,6 @@ def add_organic_sale():
         _add_contact("buyer", buyer)
     return jsonify({"success": True, "id": sale["id"], "sale": sale})
 
-
 @app.route("/api/organic/sales/order", methods=["POST"])
 @login_required
 def add_sale_order():
@@ -6037,7 +5761,6 @@ def add_sale_order():
     location_name    = (data.get("location_name") or "").strip()
     location_address = (data.get("location_address") or "").strip()
 
-    # One order_id shared across all lines in this transaction
     order_id = "ORD-" + datetime.now().strftime("%Y%m%d%H%M%S")
 
     saved_ids   = []
@@ -6095,7 +5818,6 @@ def add_sale_order():
             errors.append(f"Insufficient stock for {sku_key}: need {quantity}, have {total_available}")
             continue
 
-        # Deduct
         remaining = quantity
         lot_summary = {}
         for entry in candidates:
@@ -6114,7 +5836,6 @@ def add_sale_order():
 
         sale_lots = list(lot_summary.values())
 
-        # Certification from first lot
         sale_cert = ""
         for lot_entry in sale_lots:
             for b in (lot_entry.get("breakdown") or []):
@@ -6125,7 +5846,6 @@ def add_sale_order():
             if sale_cert:
                 break
 
-        # Pull canonical brand/recipe/format from FG entry
         first = candidates[0]
         brand   = first.get("brand",   brand)
         recipe  = first.get("recipe",  recipe)
@@ -6175,7 +5895,6 @@ def add_sale_order():
         "saved":    len(saved_ids),
         "errors":   errors,
     })
-
 
 @app.route("/api/organic/sales/<sale_id>", methods=["PATCH"])
 @login_required
@@ -6257,7 +5976,6 @@ def edit_organic_sale(sale_id):
     _save_json(ORGANIC_SALES_PATH, sales)
     return jsonify({"ok": True, "sale": sale})
 
-
 @app.route("/api/organic/sales/<sale_id>", methods=["DELETE"])
 @login_required
 def delete_organic_sale(sale_id):
@@ -6269,7 +5987,6 @@ def delete_organic_sale(sale_id):
     if not sale:
         return jsonify({"success": True})  # Already gone
 
-    # Restore inventory
     if sale.get("lots"):
         for lot_entry in sale["lots"]:
             qty_to_restore = int(lot_entry.get("quantity") or 0)
@@ -6303,8 +6020,6 @@ def delete_organic_sale(sale_id):
     _save_json(ORGANIC_FG_PATH, fg)
     return jsonify({"success": True})
 
-
-
 def _migrate_legacy_sales():
     """Convert old-style sales (single fg_id) to new lots[] shape.
     Idempotent: only migrates entries that don't already have a 'lots' field."""
@@ -6318,14 +6033,12 @@ def _migrate_legacy_sales():
     for s in sales:
         if s.get("lots"):
             continue
-        # Old shape — wrap in single-LOT array
         if s.get("fg_id") or s.get("fg_lot"):
             s["lots"] = [{
                 "lot": s.get("fg_lot", ""),
                 "quantity": int(s.get("quantity") or 0),
                 "fg_ids": [s["fg_id"]] if s.get("fg_id") else [],
             }]
-            # Add sku_key for completeness
             if not s.get("sku_key"):
                 s["sku_key"] = _sku_key(s.get("brand", ""), s.get("recipe", ""), s.get("format", ""))
             changed = True
@@ -6336,11 +6049,8 @@ def _migrate_legacy_sales():
         except Exception:
             pass
 
-
-
 # ── Buyer catalog ────────────────────────────────────────────────────────
 BUYERS_PATH = os.path.join(INVENTORY_DIR, "buyers.json")
-
 
 def _all_sku_catalog():
     recipes = load_recipes()
@@ -6360,20 +6070,16 @@ def _all_sku_catalog():
     catalog.sort(key=lambda s: (s["brand"].lower(), s["recipe"].lower()))
     return catalog
 
-
 def _load_buyers():
     return _load_json(BUYERS_PATH, [])
 
-
 def _save_buyers(data):
     _save_json(BUYERS_PATH, data)
-
 
 @app.route("/api/buyers", methods=["GET"])
 @login_required
 def get_buyers():
     return jsonify(_load_buyers())
-
 
 @app.route("/api/buyers/sku-catalog", methods=["GET"])
 @login_required
@@ -6386,7 +6092,6 @@ def get_buyer_sku_catalog():
             groups[b] = []
         groups[b].append(sku)
     return jsonify([{"brand": b, "skus": groups[b]} for b in sorted(groups.keys())])
-
 
 @app.route("/api/buyers", methods=["POST"])
 @login_required
@@ -6405,7 +6110,6 @@ def create_buyer():
     buyers.append(buyer)
     _save_buyers(buyers)
     return jsonify(buyer), 201
-
 
 @app.route("/api/buyers/<bid>", methods=["PUT"])
 @login_required
@@ -6432,7 +6136,6 @@ def update_buyer(bid):
             existing = existing_by_key.get(key, {})
             merged = dict(existing)
             merged.update(sku)
-            # Validate and round pricing fields
             for pf in ("price", "cogs", "margin_pct"):
                 if pf in merged and merged[pf] is not None:
                     try:
@@ -6445,7 +6148,6 @@ def update_buyer(bid):
         if field in data:
             buyers[idx][field] = (data[field] or "").strip()
     if "locations" in data:
-        # locations: [{id, name, address}] — client manages IDs
         locs = data["locations"]
         if isinstance(locs, list):
             buyers[idx]["locations"] = [
@@ -6457,7 +6159,6 @@ def update_buyer(bid):
             ]
     _save_buyers(buyers)
     return jsonify(buyers[idx])
-
 
 @app.route("/api/buyers/<bid>/skus/<path:sku_key>/pricing", methods=["PATCH"])
 @login_required
@@ -6505,13 +6206,11 @@ def update_buyer_sku_pricing(bid, sku_key):
     _save_buyers(buyers)
     return jsonify({"ok": True, "sku": sku})
 
-
 @app.route("/api/buyers/<bid>", methods=["DELETE"])
 @login_required
 def delete_buyer(bid):
     _save_buyers([b for b in _load_buyers() if b["id"] != bid])
     return jsonify({"ok": True})
-
 
 # ── Sale documents ────────────────────────────────────────────────────────
 @app.route("/api/organic/sales/<sale_id>/packing-slip", methods=["GET"])
@@ -6567,7 +6266,6 @@ def get_packing_slip(sale_id):
 
     story = []
 
-    # Header: logo left, company info right
     logo_path = os.path.join(os.path.dirname(__file__), "static", "logo.jpg")
     if not os.path.exists(logo_path):
         logo_path = os.path.join(os.path.dirname(__file__), "static", "logo.png")
@@ -6639,7 +6337,6 @@ def get_packing_slip(sale_id):
     story.append(order_info)
     story.append(Spacer(1, 0.2*inch))
 
-    # Items table — one row per SKU line across all order lines
     hdr_s  = _ps("Normal", fontSize=9, fontName="Helvetica-Bold", textColor=colors.white, alignment=TA_CENTER)
     cell_l = _ps("Normal", fontSize=10, alignment=TA_LEFT)
     cell_c = _ps("Normal", fontSize=10, alignment=TA_CENTER)
@@ -6686,7 +6383,6 @@ def get_packing_slip(sale_id):
     story.append(items_tbl)
     story.append(Spacer(1, 0.3*inch))
 
-    # Footer
     story.append(HRFlowable(width="100%", thickness=0.5, color=BORDER, spaceAfter=8))
     footer = ["Thank you for your business."]
     if company.get("registration"): footer.append(f"Reg: {company['registration']}")
@@ -6698,7 +6394,6 @@ def get_packing_slip(sale_id):
     safe_buyer = "".join(c for c in buyer_name if c.isalnum() or c in "-_ ")[:20]
     return send_file(buf, mimetype="application/pdf", as_attachment=False,
                      download_name=f"packing-slip-{safe_buyer}-{sale_date}.pdf")
-
 
 @app.route("/api/organic/sales/<sale_id>/qbo-csv", methods=["GET"])
 @login_required
@@ -6727,10 +6422,8 @@ def get_qbo_csv(sale_id):
     return Response(buf.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": f"attachment; filename=invoice-{sale_id[-8:].upper()}.csv"})
 
-
 _migrate_legacy_sales()
 _autotag_existing_organic_data()
-
 
 # ── Organic: Search / Trace ──────────────────────────────────────────
 def _sale_touches_fg(s, fids):
@@ -6747,7 +6440,6 @@ def _sale_touches_fg(s, fids):
                 return True
     return False
 
-
 @app.route("/api/organic/trace", methods=["GET"])
 @login_required
 def organic_trace():
@@ -6761,14 +6453,12 @@ def organic_trace():
     sales = _load_json(ORGANIC_SALES_PATH, [])
 
     if search_type == "raw_lot":
-        # Find all runs that used this raw material LOT
         matched_runs = []
         for run in runs:
             for ing in run.get("ingredients_used", []):
                 if ing.get("supplier_lot", "").lower() == query.lower():
                     matched_runs.append(run)
                     break
-        # Find finished goods from those runs
         run_ids = {r["id"] for r in matched_runs}
         matched_fg = [f for f in fg if f.get("run_id") in run_ids]
         # Find sales of those finished goods (handle both new lots[] and legacy fg_id)
@@ -6783,9 +6473,7 @@ def organic_trace():
         })
 
     elif search_type == "fg_lot":
-        # Find finished goods with this LOT
         matched_fg = [f for f in fg if f.get("lot", "").lower() == query.lower()]
-        # Find runs that produced them
         run_ids = {f.get("run_id") for f in matched_fg}
         matched_runs = [r for r in runs if r.get("id") in run_ids]
         # Find sales (handle both new lots[] and legacy fg_id)
@@ -6800,7 +6488,6 @@ def organic_trace():
         })
 
     return jsonify({"results": []})
-
 
 # ── Hook: Auto-create organic runs when schedule is generated ─────────
 def _check_organic_schedule(week_id, schedule):
@@ -6819,7 +6506,6 @@ def _check_organic_schedule(week_id, schedule):
     recipes = load_recipes()
     week_start = datetime.strptime(week_id, "%Y-%m-%d")
 
-    # Build the set of (day_idx, vessel) → desired organic recipe for this week
     desired = {}  # (day_idx, vessel) -> recipe_name
     for day_key, vessels in (schedule or {}).items():
         try:
@@ -6830,10 +6516,8 @@ def _check_organic_schedule(week_id, schedule):
             if not recipe_name:
                 continue
             recipe_data = recipes.get(recipe_name) or {}
-            # Universal inventory: every scheduled recipe gets a production run
             # tracked, regardless of certification (Organic, Pasture Raised,
             # Conventional, or untagged). The certification flows from the
-            # recipe to the FG entry at completion time.
             if not recipe_data:
                 continue
             desired[(day_idx, vessel)] = recipe_name
@@ -6845,7 +6529,6 @@ def _check_organic_schedule(week_id, schedule):
         if run.get("week_id") != week_id:
             out.append(run)
             continue
-        # Completed runs are immutable from the schedule side
         if run.get("status") == "completed":
             out.append(run)
             continue
@@ -6857,7 +6540,6 @@ def _check_organic_schedule(week_id, schedule):
                 rdata = recipes.get(new_recipe) or {}
                 run["recipe"] = new_recipe
                 run["brand"] = rdata.get("brand", "")
-                # Recompute LOT from the new schedule context
                 try:
                     date = week_start + timedelta(days=key[0])
                     run["lot"] = date.strftime("%d%m%y")
@@ -6871,7 +6553,6 @@ def _check_organic_schedule(week_id, schedule):
     for (day_idx, vessel), recipe_name in desired.items():
         if (day_idx, vessel) in seen_keys:
             continue
-        # Check if a completed run already exists for this slot (don't duplicate)
         if any(r.get("week_id") == week_id and r.get("day_idx") == day_idx
                and r.get("vessel") == vessel for r in out):
             continue
@@ -6896,7 +6577,6 @@ def _check_organic_schedule(week_id, schedule):
 
     _save_json(ORGANIC_RUNS_PATH, out)
 
-
 # ── Hook: Complete organic runs when daily production is filed ─────────
 def _check_organic_completion(finish_week_id, finish_day_idx, checklist_data):
     """When daily production is saved on the FINISH day, process any organic
@@ -6912,14 +6592,12 @@ def _check_organic_completion(finish_week_id, finish_day_idx, checklist_data):
         return _complete_organic_run(finish_week_id, finish_day_idx, checklist_data) or []
     return []
 
-
 if not os.path.exists(RECIPES_PATH):
     from default_recipes import DEFAULT_RECIPES
     save_recipes(DEFAULT_RECIPES)
 
 if not os.path.exists(CCP_MASTER_PATH):
     save_ccp_master(DEFAULT_CCP_SECTIONS)
-
 
 def _backfill_organic_finished_goods():
     """One-time, idempotent: scan past checklists and build finished goods entries
@@ -6942,13 +6620,11 @@ def _backfill_organic_finished_goods():
         sd = run.get("day_idx")
         if sw is None or sd is None:
             continue
-        # Compute finish day = start day + 1 (with Sunday→next Monday rollover)
         try:
             start_dt = datetime.strptime(sw, "%Y-%m-%d") + timedelta(days=int(sd))
         except (ValueError, TypeError):
             continue
         finish_dt = start_dt + timedelta(days=1)
-        # Find the Monday of finish_dt's week
         finish_monday = finish_dt - timedelta(days=finish_dt.weekday())
         finish_week = finish_monday.strftime("%Y-%m-%d")
         finish_day = (finish_dt - finish_monday).days
@@ -6977,9 +6653,7 @@ def _backfill_organic_finished_goods():
         except Exception:
             pass
 
-
 _backfill_organic_finished_goods()
-
 
 # ── Ripe order scheduled sale deduction ───────────────────────────────────────
 # Sale records from Ripe orders carry:
@@ -7047,9 +6721,7 @@ def _run_scheduled_deductions():
         _save_json(ORGANIC_SALES_PATH, sales)
         _save_json(ORGANIC_FG_PATH, fg)
 
-
 _run_scheduled_deductions()  # run once on startup
-
 
 def _seed_sku_meta_defaults():
     """Seed defaults for any SKU that has never had meta set.
@@ -7075,9 +6747,7 @@ def _seed_sku_meta_defaults():
     if changed:
         _save_json(SKU_META_PATH, meta)
 
-
 _seed_sku_meta_defaults()
-
 
 @app.route("/api/ripe-orders/run-deductions", methods=["POST"])
 @login_required
@@ -7085,7 +6755,6 @@ def api_run_deductions():
     """Manually trigger scheduled deductions (also runs on startup)."""
     _run_scheduled_deductions()
     return jsonify({"ok": True})
-
 
 @app.route("/api/ripe-orders/settle-sale/<sale_id>", methods=["POST"])
 @login_required
@@ -7099,7 +6768,6 @@ def api_settle_ripe_sale(sale_id):
     sales[idx]["settled_at"] = datetime.now().isoformat()
     _save_json(ORGANIC_SALES_PATH, sales)
     return jsonify({"ok": True})
-
 
 @app.route("/api/ripe-orders/settle-by-order/<order_id>", methods=["POST"])
 def api_settle_by_order(order_id):
