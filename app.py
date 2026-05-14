@@ -10,6 +10,7 @@ from pdf_engine import generate_weekly_schedule_pdf, generate_daily_package_pdf,
 from functools import wraps
 import json
 import os
+import threading
 import re
 import zipfile
 import io
@@ -2894,28 +2895,39 @@ def _autotag_existing_organic_data():
             print(f"[autotag] Failed for {path}: {e}")
 
 
-def _load_json(path, default=None):
-    """Read a JSON file. Returns `default` (or [] if not given) when the file
-    is missing.
+# Per-path threading locks — one lock per file, created on demand.
+_FILE_LOCKS: dict = {}
+_FILE_LOCKS_LOCK = threading.Lock()
 
-    CONCURRENCY: This is a plain read with no file locking. The Soma app uses
-    JSON files for all persistent state and assumes a single-user, low-
-    concurrency environment. Two simultaneous writes are LAST-WRITE-WINS and
-    can lose data — but in practice the kitchen has one user editing at a
-    time, so this constraint is acceptable. If multi-user concurrent editing
-    becomes a requirement, switch to SQLite (file-locked) or a real DB.
+def _get_file_lock(path: str) -> threading.Lock:
+    """Return (creating if needed) the threading lock for a given file path."""
+    with _FILE_LOCKS_LOCK:
+        if path not in _FILE_LOCKS:
+            _FILE_LOCKS[path] = threading.Lock()
+        return _FILE_LOCKS[path]
+
+
+def _load_json(path, default=None):
+    """Read a JSON file under a per-path threading lock.
+    Returns `default` (or [] if not given) when the file is missing.
     """
-    if os.path.exists(path):
-        with open(path, "r") as f:
-            return json.load(f)
-    return default if default is not None else []
+    with _get_file_lock(path):
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                return json.load(f)
+        return default if default is not None else []
 
 
 def _save_json(path, data):
-    """Write JSON. See _load_json's docstring for the concurrency caveat —
-    no locking, last-write-wins on simultaneous writes."""
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
+    """Write JSON atomically under a per-path threading lock.
+    Writes to .tmp first then renames — so a crash mid-write
+    leaves the original intact rather than a truncated file.
+    """
+    tmp = path + ".tmp"
+    with _get_file_lock(path):
+        with open(tmp, "w") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, path)
 
 
 # ── Organic Page ──────────────────────────────────────────────────────
@@ -7005,16 +7017,6 @@ def _run_scheduled_deductions():
         ]
 
         # Sort FIFO
-        def _prod_date(e):
-            wid = e.get("week_id")
-            d_idx = e.get("day_idx")
-            if wid and d_idx is not None:
-                try:
-                    return (datetime.strptime(wid, "%Y-%m-%d") + timedelta(days=int(d_idx))).strftime("%Y-%m-%d")
-                except Exception:
-                    pass
-            return (e.get("created_at") or "")[:10]
-
         candidates.sort(key=lambda e: (_prod_date(e), e.get("lot", ""), e.get("id", "")))
 
         remaining = units_needed
