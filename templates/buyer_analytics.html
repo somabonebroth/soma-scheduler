@@ -18,12 +18,8 @@ body.ba-page { background:var(--bg); }
 
 /* Period selector */
 .seg-row { display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; align-items:center; }
-.filter-btn { padding:7px 14px; border:1.5px solid var(--border); border-radius:7px; font-size:12px; font-weight:600; background:#fff; cursor:pointer; color:var(--text-light); transition:all .15s; }
-.filter-btn.active { border-color:var(--accent); color:var(--accent); background:#f0f7f0; }
-/* Location tabs */
-.loc-tabs { display:flex; gap:0; background:#fff; border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:20px; }
-.loc-tab { flex:1; padding:12px 14px; font-size:13px; font-weight:600; border:none; background:none; cursor:pointer; color:var(--text-light); border-bottom:3px solid transparent; transition:all .15s; white-space:nowrap; }
-.loc-tab.active { color:var(--accent); border-bottom-color:var(--accent); background:#f9faf7; }
+.seg-btn { padding:7px 14px; border:1.5px solid var(--border); border-radius:7px; font-size:12px; font-weight:600; background:#fff; cursor:pointer; color:var(--text-light); transition:all .15s; }
+.seg-btn.active { border-color:var(--accent); color:var(--accent); background:#f0f7f0; }
 
 /* Section card */
 .section { background:#fff; border:1px solid var(--border); border-radius:var(--r-lg); margin-bottom:20px; overflow:hidden; }
@@ -44,7 +40,7 @@ body.ba-page { background:var(--bg); }
 
 /* SKU table */
 .sku-tbl { width:100%; border-collapse:collapse; font-size:13px; }
-.sku-tbl th { text-align:left; padding:9px 14px; background:var(--bg); font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; border-bottom:2px solid var(--border); }
+.sku-tbl th { text-align:left; padding:9px 14px; background:#f5f5f0; font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; border-bottom:2px solid var(--border); }
 .sku-tbl td { padding:10px 14px; border-bottom:1px solid var(--border); }
 .sku-tbl tr:last-child td { border-bottom:none; }
 .sku-tbl td.r { text-align:right; font-weight:600; }
@@ -56,8 +52,8 @@ body.ba-page { background:var(--bg); }
 .pred-val { font-size:20px; font-weight:700; color:var(--dark); }
 .pred-lbl { font-size:11px; color:var(--text-light); margin-bottom:6px; }
 .pred-note { font-size:11px; color:var(--text-light); margin-top:6px; font-style:italic; }
-.growth-pos { color:var(--action-green); font-weight:700; }
-.growth-neg { color:var(--action-red); font-weight:700; }
+.growth-pos { color:#2e7d32; font-weight:700; }
+.growth-neg { color:#c62828; font-weight:700; }
 .insufficient { background:#fff8e1; border:1px solid #ffe082; border-radius:var(--r-md); padding:14px 16px; font-size:13px; color:#6d4c00; }
 
 /* Year tabs */
@@ -89,15 +85,10 @@ body.ba-page { background:var(--bg); }
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
     <h1 style="font-size:26px;font-weight:800;margin:0;">{{ buyer_name }}</h1>
     <div class="seg-row" style="margin:0;">
-      <button class="filter-btn active" onclick="setSeg('all',this)">All time</button>
-      <button class="filter-btn" onclick="setSeg('ytd',this)">YTD</button>
-      <button class="filter-btn" onclick="setSeg('12m',this)">12 months</button>
+      <button class="seg-btn active" onclick="setSeg('all',this)">All time</button>
+      <button class="seg-btn" onclick="setSeg('ytd',this)">YTD</button>
+      <button class="seg-btn" onclick="setSeg('12m',this)">12 months</button>
     </div>
-  </div>
-
-  <!-- Location tabs — shown only when buyer has multiple locations -->
-  <div id="loc-tabs-wrap" style="display:none;">
-    <div class="loc-tabs" id="loc-tabs"></div>
   </div>
 
   <div id="loading" style="text-align:center;padding:48px;color:var(--text-light);">Loading…</div>
@@ -140,7 +131,6 @@ body.ba-page { background:var(--bg); }
 <script>
 var BUYER = {{ buyer_name | tojson }};
 var _seg = 'all';
-var _loc = 'all';  // 'all' or a location name
 var _data = null;
 
 async function load() {
@@ -157,7 +147,7 @@ async function load() {
 
 function setSeg(seg, btn) {
   _seg = seg;
-  document.querySelectorAll('.filter-btn').forEach(function(b){ b.classList.remove('active'); });
+  document.querySelectorAll('.seg-btn').forEach(function(b){ b.classList.remove('active'); });
   btn.classList.add('active');
   render();
 }
@@ -183,57 +173,11 @@ function filterMonthly(monthly) {
 
 function render() {
   if (!_data) return;
-  renderLocTabs(_data);
-  var monthly = filterMonthly(filterByLoc(_data.monthly || []));
+  var monthly = filterMonthly(_data.monthly || []);
   renderKPIs(monthly);
   renderChart(monthly);
-  renderSkus(filterSkusByLoc(_data.by_sku || []), monthly);
+  renderSkus(_data.by_sku || [], monthly);
   renderPredictive(_data.predictive || {});
-}
-
-function renderLocTabs(data) {
-  var wrap = document.getElementById('loc-tabs-wrap');
-  var tabs = document.getElementById('loc-tabs');
-  if (!data.has_locations) { wrap.style.display = 'none'; return; }
-  wrap.style.display = '';
-  var locs = data.locations || [];
-  var html = '<button class="loc-tab'+(_loc==='all'?' active':'')+'" onclick="setLoc(&quot;all&quot;,this)">All Locations</button>';
-  locs.forEach(function(l) {
-    var active = _loc === l.name ? ' active' : '';
-    html += '<button class="loc-tab'+active+'" onclick="setLoc('+JSON.stringify(l.name)+',this)">'+e(l.name)+'</button>';
-  });
-  tabs.innerHTML = html;
-}
-
-function setLoc(loc, btn) {
-  _loc = loc;
-  render();
-}
-
-function filterByLoc(monthly) {
-  if (_loc === 'all') return monthly;
-  return monthly.map(function(m) {
-    var locData = (m.by_location || {})[_loc] || {revenue:0, cases:0, units:0, orders:0};
-    return Object.assign({}, m, {
-      revenue: locData.revenue,
-      cases:   locData.cases,
-      units:   locData.units,
-      orders:  locData.orders || 0,
-    });
-  }).filter(function(m){ return m.cases > 0 || m.revenue > 0; });
-}
-
-function filterSkusByLoc(skus) {
-  if (_loc === 'all') return skus;
-  return skus.map(function(s) {
-    var locData = (s.by_location || {})[_loc] || {units:0, cases:0, revenue:0};
-    return Object.assign({}, s, {
-      units:   locData.units,
-      cases:   locData.cases,
-      revenue: locData.revenue,
-    });
-  }).filter(function(s){ return s.cases > 0 || s.revenue > 0; })
-    .sort(function(a,b){ return b.revenue - a.revenue; });
 }
 
 function renderKPIs(monthly) {
@@ -242,7 +186,7 @@ function renderKPIs(monthly) {
   var orders= new Set(monthly.map(function(m){ return m.orders; })).size; // approx
   var t = _data.totals;
   var kpis = [
-    { val: fmt$(rev),       lbl: 'Revenue',       sub: (_loc !== 'all' ? _loc+' · ' : '') + (_seg === 'all' ? 'All time' : _seg.toUpperCase()) },
+    { val: fmt$(rev),       lbl: 'Revenue',       sub: _seg === 'all' ? 'All time' : _seg.toUpperCase() },
     { val: fmtN(cases),     lbl: 'Cases',          sub: cases * 12 + ' units' },
     { val: t.orders,        lbl: 'Orders',         sub: 'avg ' + fmt$(t.avg_order_revenue) + ' each' },
     { val: fmt$(t.avg_order_revenue), lbl: 'Avg Order Value', sub: t.avg_order_cases + ' cases avg' },

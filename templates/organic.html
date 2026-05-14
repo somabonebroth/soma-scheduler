@@ -39,11 +39,16 @@ body.inv-page .card h2 .count-badge {
 body.inv-page .card > p { font-size: 12px; line-height: 1.5; color: var(--text-light); margin-bottom: 14px; }
 
 /* Tabs */
-
-
+.tab-bar { display: flex; gap: 0; margin-bottom: 24px; overflow-x: auto; }
+.tab-btn {
+    padding: 12px 20px; border: 1px solid var(--border);
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    background: var(--card-bg); color: var(--text); white-space: nowrap;
+    min-height: 44px;
+}
 .tab-btn:first-child { border-radius: 6px 0 0 6px; }
 .tab-btn:last-child { border-radius: 0 6px 6px 0; }
-
+.tab-btn.active { background: #2e7d32; color: #fff; border-color: #2e7d32; }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
@@ -121,7 +126,7 @@ body.inv-page .btn-outline {
     font-weight: 500;
 }
 body.inv-page .btn-outline:hover {
-    background: var(--bg);
+    background: #f5f5f0;
     border-color: #c0c0b8;
 }
 
@@ -139,9 +144,17 @@ body.inv-page .filter-bar {
     display: flex; gap: 8px; flex-wrap: wrap;
     margin: 0 0 16px 0;
 }
-body.inv-page 
+body.inv-page .filter-btn {
+    padding: 8px 16px; min-height: 38px;
+    border: 1px solid var(--border); border-radius: 20px;
+    background: #fff; color: var(--text-light);
+    font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+}
 body.inv-page .filter-btn:hover { background: var(--row-alt); color: var(--text); }
-body.inv-page 
+body.inv-page .filter-btn.active {
+    background: var(--dark); color: #fff; border-color: var(--dark);
+}
 
 /* Tables — more vertical room per row */
 /* Tables — more vertical room per row */
@@ -194,7 +207,7 @@ body.inv-page .btn-danger {
 body.inv-page .btn-danger:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
 
 /* Badges */
-.organic-badge { background: var(--action-green-bg); color: var(--action-green); font-size: 10px; padding: 3px 9px; border-radius: 10px; font-weight: 700; }
+.organic-badge { background: #e8f5e9; color: #2e7d32; font-size: 10px; padding: 3px 9px; border-radius: 10px; font-weight: 700; }
 body.inv-page .baseline-badge {
     display: inline-block;
     font-size: 10px; font-weight: 700;
@@ -250,8 +263,8 @@ body.inv-page .cert-badge {
     border-left: 3px solid var(--text-light);
 }
 .run-week-header.current {
-    background: var(--action-green-bg);
-    border-left-color: var(--action-green);
+    background: #e8f5e9;
+    border-left-color: #2e7d32;
     color: #1b5e20;
 }
 .run-week-header .run-week-meta {
@@ -261,7 +274,7 @@ body.inv-page .cert-badge {
     letter-spacing: 0.4px;
 }
 .run-week-header.current .run-week-meta {
-    color: var(--action-green);
+    color: #2e7d32;
 }
 .run-completed-toggle {
     display: block;
@@ -554,8 +567,8 @@ body.inv-page .modal-actions {
     body.inv-page .card > p { font-size: 12px; margin-bottom: 10px; }
 
     /* Tab bar — compress tabs on mobile */
-    
-    
+    .tab-bar { margin-bottom: 16px; }
+    .tab-btn { padding: 10px 13px; font-size: 12px; }
 
     /* Forms */
     body.inv-page .form-row { gap: 10px; grid-template-columns: 1fr; }
@@ -678,7 +691,7 @@ body.inv-page .modal-actions {
     }
 
     /* Tab bar — 6 tabs, shrink further on mobile */
-    
+    .tab-btn { padding: 10px 10px; font-size: 11px; white-space: nowrap; }
 
     /* FG action button row — stack on very narrow */
     #tab-fg .card > div:first-child {
@@ -721,7 +734,7 @@ body.inv-page .modal-actions {
 
 /* Extra small phones (< 390px) */
 @media (max-width: 390px) {
-    
+    .tab-btn { padding: 8px 8px; font-size: 10px; min-height: 38px; }
     body.inv-page .card { padding: 12px; }
     body.inv-page .card h2 { font-size: 14px; }
     /* Hide label text on smallest tabs, keep tappable */
@@ -731,7 +744,7 @@ body.inv-page .modal-actions {
         position: absolute; left: 50%; transform: translateX(-50%);
         font-size: 8px; top: 50%; margin-top: -4px;
     }
-    
+    .tab-btn.active { color: #fff; }
 }
 </style>
 </head>
@@ -750,7 +763,6 @@ body.inv-page .modal-actions {
         <button class="tab-btn" onclick="showTab('runs')">Production Runs</button>
         <button class="tab-btn" onclick="showTab('fg')">Finished Goods</button>
         <button class="tab-btn" onclick="showTab('records')">Records</button>
-        <button class="tab-btn" onclick="showTab('audit-history');loadAuditHistory()">Audit History</button>
 
     </div>
 
@@ -761,7 +773,6 @@ body.inv-page .modal-actions {
                 <button class="btn btn-primary" onclick="openAddInventoryModal()" style="background:#2e7d32;border-color:#2e7d32;">&#128230; Add Inventory</button>
                 <button class="btn-outline" onclick="openAdjustmentModal()" style="font-size:13px;">&#9881; Adjust Inventory</button>
                 <button class="btn-outline" onclick="addCustomIngredient()" style="font-size:13px;">+ New Ingredient</button>
-                <button class="btn btn-outline" onclick="autoAssignSections()" style="font-size:13px;">🔧 Auto-Assign Sections</button>
                 <a href="/audit/rm" class="btn btn-outline" style="font-size:13px;text-decoration:none;margin-left:auto;">📋 Audit Inventory</a>
             </div>
             <div id="rm-status" class="status" style="margin-top:8px;"></div>
@@ -1219,7 +1230,54 @@ body.inv-page .modal-actions {
             </div>
         </div>
     </div>
-</div>
+
+    <!-- Scan Packing Slip modal — Record Sale via camera -->
+    <div class="modal-overlay" id="scan-sale-modal">
+        <div class="modal" style="max-width:780px;">
+            <button class="modal-close" onclick="closeScanSale()">&times;</button>
+            <h2 style="color:#0288d1;">📷 Record Sale</h2>
+            <p style="font-size:12px;color:var(--text-light);margin-bottom:14px;line-height:1.5;">
+                Take a photo of the packing slip or PO. We'll extract product lines and FIFO-drain inventory after you review. <span id="scan-sale-usage" style="color:var(--text-light);font-weight:600;"></span>
+            </p>
+
+            <!-- Step 1: Camera capture -->
+            <div id="scan-sale-capture-step">
+                <div style="background:#e3f2fd;border:2px dashed #81d4fa;border-radius:10px;padding:32px 16px;text-align:center;margin-bottom:16px;">
+                    <div style="font-size:48px;margin-bottom:8px;">📷</div>
+                    <input type="file" id="scan-sale-file" accept="image/*" capture="environment" style="display:block;margin:0 auto;font-size:14px;">
+                    <p style="font-size:11px;color:var(--text-light);margin-top:10px;">JPG, PNG, WebP, or HEIC. Max 10 MB.</p>
+                </div>
+                <div id="scan-sale-msg" class="status" style="margin:8px 0;"></div>
+                <div class="modal-actions">
+                    <button class="btn btn-outline" onclick="closeScanSale()">Cancel</button>
+                    <button class="btn btn-primary" id="scan-sale-go" onclick="runScanSale()" style="background:#0288d1;">Extract Line Items</button>
+                </div>
+                <div style="margin-top:14px;text-align:center;">
+                    <button onclick="closeScanSale();showTab('fg');" style="background:none;border:none;color:var(--accent);text-decoration:underline;font-size:13px;cursor:pointer;">Or use the per-SKU Sell buttons</button>
+                </div>
+            </div>
+
+            <!-- Step 2: Review -->
+            <div id="scan-sale-review-step" style="display:none;">
+                <div style="background:#e3f2fd;border-left:3px solid #0288d1;padding:12px 14px;border-radius:6px;margin-bottom:14px;font-size:13px;">
+                    <strong>Review extraction:</strong> verify each product matches a SKU. Sales draw from oldest LOT first (FIFO).
+                </div>
+                <div class="form-row">
+                    <div class="form-field"><label>Buyer</label><input id="scan-sale-buyer" placeholder="Buyer / distributor"></div>
+                    <div class="form-field"><label>Sale Date</label><input type="date" id="scan-sale-date"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-field" style="grid-column: 1 / -1;"><label>PO # / Case LOT (optional)</label><input id="scan-sale-po" placeholder="PO number or case LOT"></div>
+                </div>
+                <div id="scan-sale-rows" style="margin-top:12px;max-height:50vh;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:#fff;"></div>
+                <div id="scan-sale-submit-msg" class="status" style="margin:10px 0;"></div>
+                <div class="modal-actions">
+                    <button class="btn btn-outline" onclick="resetScanSale()">← Re-scan</button>
+                    <button class="btn btn-primary" id="scan-sale-submit" onclick="submitScanSale()" style="background:#0288d1;">Save All Sales</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Sections Management Modal — edit list + assign ingredients -->
     <div class="modal-overlay" id="sections-modal">
@@ -1468,28 +1526,6 @@ body.inv-page .modal-actions {
                 <button class="btn btn-outline" onclick="closeBuyerModal()">Cancel</button>
                 <button class="btn btn-primary" id="buyer-save-btn" onclick="saveBuyer()" style="background:#0288d1;border-color:#0288d1;">Save Buyer</button>
             </div>
-        </div>
-    </div>
-
-    <!-- TAB: Audit History -->
-    <div class="tab-content" id="tab-audit-history">
-        <div class="card">
-            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
-                <div>
-                    <h2 style="margin:0;">Audit History</h2>
-                    <div style="font-size:13px;color:var(--text-light);margin-top:2px;">Completed inventory audits — Raw Materials and Finished Goods</div>
-                </div>
-                <div style="display:flex;gap:8px;">
-                    <select id="audit-kind-filter" onchange="loadAuditHistory()" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;">
-                        <option value="">All types</option>
-                        <option value="rm">Raw Materials</option>
-                        <option value="fg">Finished Goods</option>
-                    </select>
-                    <a href="/audit/rm" class="btn btn-outline" style="font-size:13px;text-decoration:none;">📋 New RM Audit</a>
-                    <a href="/audit/fg" class="btn btn-outline" style="font-size:13px;text-decoration:none;">📋 New FG Audit</a>
-                </div>
-            </div>
-            <div id="audit-history-list"><div style="color:var(--text-light);font-size:14px;">Click the tab to load audit history.</div></div>
         </div>
     </div>
 
@@ -1746,24 +1782,6 @@ function toggleRMSection(sectionId){
     state[sectionId] = !state[sectionId];
     _setCollapsedSections(state);
     loadRawMaterials();
-}
-
-async function autoAssignSections(){
-  if(!confirm('Auto-assign all unassigned ingredients to sections based on ingredient name? Already-assigned ingredients will not be changed.')) return;
-  try {
-    var res  = await fetch('/api/organic/raw-materials/auto-assign-sections', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({overwrite:false})});
-    var data = await res.json();
-    var msg  = '\u2713 Assigned '+data.assigned+' ingredient'+(data.assigned===1?'':'s')+' to sections.';
-    if(data.skipped)    msg += '\n'+data.skipped+' already assigned (skipped).';
-    if(data.unresolved) msg += '\n'+data.unresolved+' could not be auto-assigned \u2014 assign these manually in Edit Sections.';
-    if(data.details && data.details.unresolved && data.details.unresolved.length){
-      msg += '\nUnresolved: '+data.details.unresolved.map(function(u){return u.name;}).join(', ');
-    }
-    alert(msg);
-    await loadRawMaterials();
-  } catch(e) {
-    alert('Error: '+e.message);
-  }
 }
 
 async function loadRawMaterials(){
@@ -3660,6 +3678,452 @@ async function deleteSupplier(sid, name){
     } catch(e){ alert('Delete failed: '+e.message); }
 }
 
+// ── Scan Packing Slip (Sale) ─────────────────────────────────────────────
+var scanSaleData = null;
+var scanSaleCatalog = [];
+
+async function refreshScanUsage(kind){
+    // Stub — scan usage display removed with invoice scanning
+}
+
+function openScanSale(){
+    resetScanSale();
+    document.getElementById('scan-sale-modal').classList.add('active');
+}
+
+function closeScanSale(){
+    document.getElementById('scan-sale-modal').classList.remove('active');
+}
+
+function resetScanSale(){
+    scanSaleData = null;
+    document.getElementById('scan-sale-capture-step').style.display = '';
+    document.getElementById('scan-sale-review-step').style.display = 'none';
+    document.getElementById('scan-sale-msg').textContent = '';
+    document.getElementById('scan-sale-file').value = '';
+}
+
+async function runScanSale(){
+    var file = document.getElementById('scan-sale-file').files[0];
+    var msg = document.getElementById('scan-sale-msg');
+    var btn = document.getElementById('scan-sale-go');
+    if(!file){ msg.className='status error'; msg.textContent='Please select a file.'; return; }
+    msg.className='status'; msg.textContent='Scanning…';
+    btn.disabled=true; btn.textContent='Scanning…';
+    var fd = new FormData();
+    fd.append('file', file);
+    try {
+        var res = await fetch('/api/scan/packing-slip', {method:'POST', body:fd});
+        var data = await res.json();
+        if(!res.ok){ throw new Error(data.error || 'Scan failed'); }
+        scanSaleData = data;
+        scanSaleCatalog = data.catalog || [];
+        renderScanSaleReview(data);
+        document.getElementById('scan-sale-capture-step').style.display='none';
+        document.getElementById('scan-sale-review-step').style.display='';
+        msg.textContent='';
+    } catch(e){
+        msg.className='status error'; msg.textContent=e.message;
+    }
+    btn.disabled=false; btn.textContent='Extract Line Items';
+}
+
+function renderScanSaleReview(data){
+    document.getElementById('scan-sale-buyer').value = data.buyer || '';
+    document.getElementById('scan-sale-date').value = data.ship_date || '';
+    document.getElementById('scan-sale-po').value = data.po_number || '';
+    var rows = document.getElementById('scan-sale-rows');
+    if(!data.line_items || !data.line_items.length){
+        rows.innerHTML='<div style="padding:12px;color:var(--text-light);">No line items found.</div>';
+        return;
+    }
+    var html='';
+    data.line_items.forEach(function(line, i){
+        var matched = line.match && line.confidence !== 'none';
+        var borderCol = matched ? '#a5d6a7' : '#ef9a9a';
+        html += '<div style="border:1px solid '+borderCol+';border-radius:6px;padding:10px 12px;margin-bottom:8px;background:#fff;">';
+        html += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">';
+        html += '<div style="flex:1;min-width:160px;"><label style="font-size:11px;color:var(--text-light);">SKU</label>';
+        html += '<select data-sale-sku="'+i+'" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:13px;">';
+        var matchKey = line.match ? line.match.sku_key : '';
+        scanSaleCatalog.forEach(function(sku){
+            var sel = sku.sku_key === matchKey ? 'selected' : '';
+            html += '<option value="'+sku.sku_key+'" '+sel+'>'+sku.display+'</option>';
+        });
+        html += '</select></div>';
+        html += '<div style="width:80px;"><label style="font-size:11px;color:var(--text-light);">Qty</label>';
+        html += '<input type="number" data-sale-qty="'+i+'" value="'+(line.quantity||'')+'" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:13px;" inputmode="decimal"></div>';
+        html += '<div style="flex:1;min-width:120px;"><label style="font-size:11px;color:var(--text-light);">Case LOT (opt)</label>';
+        html += '<input type="text" data-sale-lot="'+i+'" value="'+(line.case_lot||'')+'" placeholder="Case LOT" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:13px;"></div>';
+        html += '</div></div>';
+    });
+    rows.innerHTML = html;
+}
+
+async function submitScanSale(){
+    var buyer = document.getElementById('scan-sale-buyer').value.trim();
+    var date = document.getElementById('scan-sale-date').value;
+    var po = document.getElementById('scan-sale-po').value.trim();
+    var msg = document.getElementById('scan-sale-submit-msg');
+    var btn = document.getElementById('scan-sale-submit');
+    msg.textContent=''; msg.className='status';
+
+    var skuEls = document.querySelectorAll('[data-sale-sku]');
+    var sales = [];
+    skuEls.forEach(function(el){
+        var i = el.getAttribute('data-sale-sku');
+        var skuKey = el.value;
+        var qty = parseFloat(document.querySelector('[data-sale-qty="'+i+'"]').value);
+        var lot = (document.querySelector('[data-sale-lot="'+i+'"]').value||'').trim();
+        if(skuKey && !isNaN(qty) && qty > 0){
+            var sku = scanSaleCatalog.find(function(s){ return s.sku_key===skuKey; }) || {};
+            sales.push({
+                brand: sku.brand||'', recipe: sku.recipe||'', format: sku.format||'',
+                quantity: qty, buyer: buyer, sale_date: date, case_lot: lot, po_number: po,
+            });
+        }
+    });
+
+    if(!sales.length){ msg.className='status error'; msg.textContent='No valid lines to save.'; return; }
+    if(!buyer){ msg.className='status error'; msg.textContent='Buyer name required.'; return; }
+    if(!date){ msg.className='status error'; msg.textContent='Sale date required.'; return; }
+
+    btn.disabled=true; btn.textContent='Saving…';
+    var saved=0, errors=[];
+    for(var i=0;i<sales.length;i++){
+        try{
+            var res = await fetch('/api/organic/sales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sales[i])});
+            var data = await res.json();
+            if(data.success) saved++;
+            else errors.push('Line '+(i+1)+': '+(data.error||'failed'));
+        }catch(e){ errors.push('Line '+(i+1)+': '+e.message); }
+    }
+    if(errors.length){
+        msg.className='status error';
+        msg.textContent='Saved '+saved+' of '+sales.length+'. Errors: '+errors.join('; ');
+        btn.disabled=false; btn.textContent='Save All Sales';
+        loadFinishedGoods(); loadSales(); return;
+    }
+    closeScanSale();
+    loadFinishedGoods(); loadSales();
+}
+
+// Lets the user define raw-material sections, reorder them, and assign each
+// canonical ingredient to a section (or leave as Unassigned).
+//
+// State model: we hold a working copy of sections + assignments while the
+// modal is open. Changes are committed to the server on Save Changes.
+var sectionsWorking = null;       // {sections: [...], assignments: {...}}
+var sectionsCatalog = [];         // [{name, unit}] from grouped endpoint
+var sectionsNextLocalId = 0;      // for new sections that haven't been saved
+
+function _newSectionId(){
+    return 'sec_'+Date.now().toString(36)+'_'+(sectionsNextLocalId++);
+}
+
+async function openSectionsModal(){
+    var msg = document.getElementById('sections-msg');
+    msg.textContent=''; msg.className='status';
+    document.getElementById('new-section-name').value='';
+    document.getElementById('assignment-search').value='';
+
+    // Fetch fresh state every time (sections may have changed elsewhere)
+    try{
+        var [secRes, gridRes] = await Promise.all([
+            fetch('/api/organic/raw-materials/sections'),
+            fetch('/api/organic/raw-materials/grouped'),
+        ]);
+        var secData = await secRes.json();
+        var rows = await gridRes.json();
+        sectionsWorking = {
+            sections: (secData.sections || []).map(function(s){
+                return {id: s.id, name: s.name, order: s.order || 0};
+            }),
+            assignments: Object.assign({}, secData.assignments || {}),
+        };
+        // Build catalog for the assignment grid: dedupe by name|unit
+        var seen = {};
+        sectionsCatalog = [];
+        rows.forEach(function(r){
+            var k = r.name+'|'+r.unit;
+            if(!seen[k]){
+                seen[k] = true;
+                sectionsCatalog.push({name: r.name, unit: r.unit});
+            }
+        });
+        sectionsCatalog.sort(function(a,b){
+            return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+        });
+    }catch(e){
+        alert('Could not load sections data: '+e.message);
+        return;
+    }
+    renderSectionsList();
+    renderBulkAssignDropdown();
+    renderAssignmentGrid();
+    document.getElementById('sections-modal').classList.add('active');
+}
+
+function closeSectionsModal(){
+    document.getElementById('sections-modal').classList.remove('active');
+}
+
+function renderSectionsList(){
+    var container = document.getElementById('sections-list');
+    if(!sectionsWorking.sections.length){
+        container.innerHTML = '<div style="padding:14px;color:var(--text-light);font-size:13px;text-align:center;">No sections yet. Add one below.</div>';
+        return;
+    }
+    var html = '';
+    sectionsWorking.sections.forEach(function(s, idx){
+        var disableUp = idx === 0;
+        var disableDown = idx === sectionsWorking.sections.length-1;
+        html += '<div class="section-edit-row" style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid #f0f0eb;">';
+        html += '<input type="text" data-sid="'+escSku(s.id)+'" class="section-edit-name" value="'+escSku(s.name)+'" oninput="updateSectionName(\''+escSku(s.id)+'\',this.value)" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:5px;font-size:14px;min-height:36px;">';
+        html += '<button class="btn-sm" onclick="moveSection(\''+escSku(s.id)+'\',-1)" '+(disableUp?'disabled style="opacity:0.3;"':'')+' title="Move up">▲</button>';
+        html += '<button class="btn-sm" onclick="moveSection(\''+escSku(s.id)+'\',1)" '+(disableDown?'disabled style="opacity:0.3;"':'')+' title="Move down">▼</button>';
+        html += '<button class="btn-danger" onclick="deleteSection(\''+escSku(s.id)+'\')" title="Delete (its ingredients become Unassigned)" style="font-size:12px;">Del</button>';
+        html += '</div>';
+    });
+    container.innerHTML = html;
+}
+
+function updateSectionName(sectionId, newName){
+    var s = sectionsWorking.sections.find(function(x){return x.id === sectionId;});
+    if(s) s.name = newName;
+    // Don't re-render — that would steal focus from the input
+    renderBulkAssignDropdown();
+    renderAssignmentGrid();
+}
+
+function moveSection(sectionId, delta){
+    var idx = sectionsWorking.sections.findIndex(function(s){return s.id === sectionId;});
+    if(idx < 0) return;
+    var newIdx = idx + delta;
+    if(newIdx < 0 || newIdx >= sectionsWorking.sections.length) return;
+    var arr = sectionsWorking.sections;
+    var tmp = arr[idx]; arr[idx] = arr[newIdx]; arr[newIdx] = tmp;
+    // Refresh order field
+    arr.forEach(function(s, i){ s.order = i; });
+    renderSectionsList();
+    renderBulkAssignDropdown();
+    renderAssignmentGrid();
+}
+
+async function deleteSection(sectionId){
+    var s = sectionsWorking.sections.find(function(x){return x.id === sectionId;});
+    if(!s) return;
+    var assignedCount = 0;
+    Object.keys(sectionsWorking.assignments).forEach(function(k){
+        if(sectionsWorking.assignments[k] === sectionId) assignedCount++;
+    });
+    var confirmMsg = 'Delete section "'+s.name+'"?';
+    if(assignedCount){
+        confirmMsg += ' '+assignedCount+' ingredient'+(assignedCount===1?'':'s')+' will become Unassigned.';
+    }
+    var ok = await mobileConfirm(confirmMsg, {title:'Delete section?', okLabel:'Delete', danger:true});
+    if(!ok) return;
+    sectionsWorking.sections = sectionsWorking.sections.filter(function(x){return x.id !== sectionId;});
+    // Clear assignments pointing at the deleted section
+    Object.keys(sectionsWorking.assignments).forEach(function(k){
+        if(sectionsWorking.assignments[k] === sectionId){
+            delete sectionsWorking.assignments[k];
+        }
+    });
+    renderSectionsList();
+    renderBulkAssignDropdown();
+    renderAssignmentGrid();
+}
+
+function addNewSection(){
+    var nameEl = document.getElementById('new-section-name');
+    var name = (nameEl.value || '').trim();
+    if(!name){
+        document.getElementById('sections-msg').className='status error';
+        document.getElementById('sections-msg').textContent='Section name required.';
+        return;
+    }
+    // Reject duplicates (case-insensitive)
+    var lc = name.toLowerCase();
+    if(sectionsWorking.sections.some(function(s){ return s.name.toLowerCase() === lc; })){
+        document.getElementById('sections-msg').className='status error';
+        document.getElementById('sections-msg').textContent='A section named "'+name+'" already exists.';
+        return;
+    }
+    sectionsWorking.sections.push({
+        id: _newSectionId(),
+        name: name,
+        order: sectionsWorking.sections.length,
+    });
+    nameEl.value='';
+    document.getElementById('sections-msg').textContent='';
+    renderSectionsList();
+    renderBulkAssignDropdown();
+    renderAssignmentGrid();
+}
+
+function renderBulkAssignDropdown(){
+    var sel = document.getElementById('assignment-bulk-section');
+    var prev = sel.value;
+    var html = '<option value="">— Bulk assign visible to… —</option>';
+    sectionsWorking.sections.forEach(function(s){
+        html += '<option value="'+escSku(s.id)+'">'+escSku(s.name)+'</option>';
+    });
+    html += '<option value="__unassign">— Unassigned —</option>';
+    sel.innerHTML = html;
+    if(prev) sel.value = prev;
+}
+
+function renderAssignmentGrid(){
+    var container = document.getElementById('assignment-grid');
+    var search = (document.getElementById('assignment-search').value || '').toLowerCase().trim();
+    var visible = sectionsCatalog.filter(function(it){
+        if(!search) return true;
+        return it.name.toLowerCase().indexOf(search) >= 0;
+    });
+    if(!visible.length){
+        container.innerHTML = '<div style="padding:14px;color:var(--text-light);font-size:13px;text-align:center;">No ingredients match.</div>';
+        return;
+    }
+
+    // Build dropdown options once
+    var opts = '<option value="">Unassigned</option>';
+    sectionsWorking.sections.forEach(function(s){
+        opts += '<option value="'+escSku(s.id)+'">'+escSku(s.name)+'</option>';
+    });
+
+    var html = '';
+    visible.forEach(function(it){
+        var key = it.name+'|'+it.unit;
+        var current = sectionsWorking.assignments[key] || '';
+        var rowOpts = opts;
+        if(current){
+            // Mark current as selected
+            rowOpts = opts.replace('value="'+escSku(current)+'"', 'value="'+escSku(current)+'" selected');
+        } else {
+            // Mark Unassigned as selected
+            rowOpts = opts.replace('<option value="">Unassigned</option>', '<option value="" selected>Unassigned</option>');
+        }
+        html += '<div class="assign-row" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid #f5f5f0;">';
+        html += '<div style="flex:1;font-size:13px;">'+escSku(it.name)+' <span style="font-size:11px;color:var(--text-light);">('+escSku(it.unit)+')</span></div>';
+        html += '<select onchange="updateAssignment(\''+escSku(key)+'\',this.value)" data-key="'+escSku(key)+'" style="padding:6px 10px;border:1px solid var(--border);border-radius:5px;font-size:12px;min-height:34px;">'+rowOpts+'</select>';
+        html += '</div>';
+    });
+    container.innerHTML = html;
+}
+
+function updateAssignment(key, sectionId){
+    if(sectionId){
+        sectionsWorking.assignments[key] = sectionId;
+    } else {
+        delete sectionsWorking.assignments[key];
+    }
+}
+
+function bulkAssignVisible(){
+    var sel = document.getElementById('assignment-bulk-section');
+    var target = sel.value;
+    if(!target){
+        document.getElementById('sections-msg').className='status error';
+        document.getElementById('sections-msg').textContent='Pick a target section first.';
+        return;
+    }
+    var search = (document.getElementById('assignment-search').value || '').toLowerCase().trim();
+    var visible = sectionsCatalog.filter(function(it){
+        if(!search) return true;
+        return it.name.toLowerCase().indexOf(search) >= 0;
+    });
+    var changed = 0;
+    visible.forEach(function(it){
+        var key = it.name+'|'+it.unit;
+        if(target === '__unassign'){
+            if(sectionsWorking.assignments[key]){
+                delete sectionsWorking.assignments[key];
+                changed++;
+            }
+        } else {
+            if(sectionsWorking.assignments[key] !== target){
+                sectionsWorking.assignments[key] = target;
+                changed++;
+            }
+        }
+    });
+    document.getElementById('sections-msg').className='status success';
+    document.getElementById('sections-msg').textContent='Updated '+changed+' assignment'+(changed===1?'':'s')+'. Click Save Changes to commit.';
+    renderAssignmentGrid();
+}
+
+async function saveSections(){
+    var msg = document.getElementById('sections-msg');
+    var btn = document.getElementById('sections-save-btn');
+    btn.disabled = true; btn.textContent='Saving…';
+
+    // Validate locally: all section names non-empty + no duplicates
+    for(var i=0;i<sectionsWorking.sections.length;i++){
+        var s = sectionsWorking.sections[i];
+        if(!s.name || !s.name.trim()){
+            msg.className='status error';
+            msg.textContent='Section #'+(i+1)+' has an empty name.';
+            btn.disabled = false; btn.textContent='Save Changes';
+            return;
+        }
+    }
+    var lcSeen = {};
+    for(var i=0;i<sectionsWorking.sections.length;i++){
+        var lc = sectionsWorking.sections[i].name.trim().toLowerCase();
+        if(lcSeen[lc]){
+            msg.className='status error';
+            msg.textContent='Two sections share the name "'+sectionsWorking.sections[i].name+'".';
+            btn.disabled = false; btn.textContent='Save Changes';
+            return;
+        }
+        lcSeen[lc] = true;
+    }
+
+    try{
+        // Step 1: save section list (orphan assignments are cleared server-side)
+        var secPayload = sectionsWorking.sections.map(function(s, i){
+            return {id: s.id, name: s.name.trim(), order: i};
+        });
+        var r1 = await fetch('/api/organic/raw-materials/sections', {
+            method:'PUT',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({sections: secPayload}),
+        });
+        var d1 = await r1.json();
+        if(!d1.success){
+            msg.className='status error';
+            msg.textContent = d1.error || 'Saving sections failed.';
+            btn.disabled = false; btn.textContent='Save Changes';
+            return;
+        }
+        // Step 2: send full assignment map for every catalog ingredient,
+        // using empty string for unassigned (server clears them).
+        var fullAssignments = {};
+        sectionsCatalog.forEach(function(it){
+            var key = it.name+'|'+it.unit;
+            fullAssignments[key] = sectionsWorking.assignments[key] || '';
+        });
+        var r2 = await fetch('/api/organic/raw-materials/assignments', {
+            method:'PUT',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({assignments: fullAssignments}),
+        });
+        var d2 = await r2.json();
+        if(!d2.success){
+            msg.className='status error';
+            msg.textContent = d2.error || 'Saving assignments failed.';
+            btn.disabled = false; btn.textContent='Save Changes';
+            return;
+        }
+        closeSectionsModal();
+        loadRawMaterials();
+    }catch(e){
+        msg.className='status error';
+        msg.textContent='Error: '+e.message;
+        btn.disabled = false; btn.textContent='Save Changes';
+    }
+}
 
 // ── Baseline finished goods entry ─────────────────────────────────────
 // Two flows:
@@ -4116,7 +4580,7 @@ async function loadFinishedGoods(){
             html+='<div class="fg-info" style="flex:1;min-width:160px;">';
             html+='<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;"><strong>'+displaySafe+'</strong>'+certBadge(s.certification)+baselineBadge+stockBadge+parWarningBadge+'</div>';
             html+='<div style="font-size:11px;color:var(--text-light);margin-top:3px;">'+lotNote+(s.total_produced?' • '+s.total_produced+' produced lifetime':'')+'</div>';
-            html+='<div style="font-size:10px;color:#b8b8b0;font-family:monospace;margin-top:2px;user-select:all;" title="Soma SKU Key — copy into Ripe portal">'+escSku(s.sku_key)+'</div>';
+            html+='<div style="font-size:10px;color:#b8b8b0;font-family:ui-monospace,monospace;margin-top:2px;user-select:all;" title="Soma SKU Key — copy into Ripe portal">'+escSku(s.sku_key)+'</div>';
             html+='</div>';
 
             // Stock pill
@@ -4770,57 +5234,6 @@ function doTraceDebounced(){
     clearTimeout(_traceDebounceTimer);
     _traceDebounceTimer = setTimeout(doTrace, 350);
 }
-
-async function loadAuditHistory() {
-    var kind = (document.getElementById('audit-kind-filter')||{}).value || '';
-    var list = document.getElementById('audit-history-list');
-    if (!list) return;
-    list.innerHTML = '<div style="color:var(--text-light);font-size:14px;">Loading…</div>';
-    try {
-        var url = '/api/audit/history' + (kind ? '?kind='+kind : '');
-        var res = await fetch(url);
-        var audits = await res.json();
-        if (!audits.length) {
-            list.innerHTML = '<div style="color:var(--text-light);font-size:14px;">No completed audits yet.</div>';
-            return;
-        }
-        var html = '';
-        audits.forEach(function(a) {
-            var dt = a.completed_at ? a.completed_at.replace('T',' ').slice(0,16) : '—';
-            var cats = (a.categories||[]).join(', ') || 'All';
-            var adjs = (a.adjustments||[]).length;
-            var kindLabel = a.kind === 'rm' ? 'Raw Materials' : 'Finished Goods';
-            var badgeCol = a.kind === 'rm' ? '#e8f5e9' : '#e3f2fd';
-            var badgeTxt = a.kind === 'rm' ? '#2e7d32' : '#0277bd';
-            html += '<div style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:10px;background:#fff;">'
-                +'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:8px;">'
-                +'<div><span style="background:'+badgeCol+';color:'+badgeTxt+';font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;margin-right:8px;">'+kindLabel+'</span>'
-                +'<span style="font-size:13px;color:var(--text-light);">'+dt+'</span></div>'
-                +'<span style="font-size:13px;font-weight:600;color:'+(adjs>0?'#c62828':'#2e7d32')+'">'
-                +(adjs>0 ? adjs+' adjustment'+(adjs===1?'':'s') : '✓ No adjustments')+'</span></div>'
-                +'<div style="font-size:12px;color:var(--text-light);">Categories: '+escAudit(cats)+'</div>';
-            if (adjs > 0) {
-                html += '<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">';
-                (a.adjustments||[]).forEach(function(adj) {
-                    var name = adj.item || adj.recipe || '—';
-                    var lot  = adj.lot ? ' · LOT '+adj.lot : '';
-                    var diff = adj.diff;
-                    var col  = diff > 0 ? '#2e7d32' : '#c62828';
-                    html += '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border);">'
-                        +'<span>'+escAudit(name)+escAudit(lot)+'</span>'
-                        +'<span style="font-weight:700;color:'+col+'">'+(diff>0?'+':'')+diff+'</span></div>';
-                });
-                html += '</div>';
-            }
-            html += '</div>';
-        });
-        list.innerHTML = html;
-    } catch(err) {
-        list.innerHTML = '<div style="color:#c62828;font-size:14px;">Error: '+err.message+'</div>';
-    }
-}
-
-function escAudit(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 async function doTrace(){
     var q=document.getElementById('trace-query').value.trim();

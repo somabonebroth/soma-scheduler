@@ -29,12 +29,12 @@ body.be-page { background:var(--bg); }
 .loc-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; font-size:12px; font-weight:600; color:var(--text-light); }
 
 /* SKU assignment table */
-.sku-section-hdr { font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.06em; padding:8px 14px 6px; background:var(--bg); border-bottom:1px solid var(--border); }
-.sku-row { display:grid; grid-template-columns:32px 1fr 100px 90px 76px 90px 44px; gap:10px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--border); background:#fff; }
+.sku-section-hdr { font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.06em; padding:8px 14px 6px; background:#f5f5f0; border-bottom:1px solid var(--border); }
+.sku-row { display:grid; grid-template-columns:32px 1fr 80px 80px 75px 60px; gap:8px; align-items:center; padding:9px 14px; border-bottom:1px solid var(--border); background:#fff; }
 .sku-row:last-child { border-bottom:none; }
 .sku-row:hover { background:#f9faf7; }
 .sku-row.assigned { background:#f0f7f0; }
-.sku-hdr { display:grid; grid-template-columns:32px 1fr 100px 90px 76px 90px 44px; gap:10px; padding:8px 16px; background:var(--bg); border-bottom:2px solid var(--border); font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
+.sku-hdr { display:grid; grid-template-columns:32px 1fr 80px 80px 75px 60px; gap:8px; padding:8px 14px; background:#f5f5f0; border-bottom:2px solid var(--border); font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
 .sku-hdr span, .sku-row span.hdr { text-align:right; }
 .sku-hdr span:nth-child(2), .sku-row .sku-name { text-align:left; }
 .sku-check { width:17px; height:17px; accent-color:var(--accent); cursor:pointer; }
@@ -42,10 +42,8 @@ body.be-page { background:var(--bg); }
 .sku-fmt { font-size:11px; color:var(--text-light); }
 .p-input { width:100%; box-sizing:border-box; padding:6px 8px; border:1.5px solid var(--border); border-radius:7px; font-size:13px; font-weight:600; text-align:right; outline:none; }
 .p-input:focus { border-color:var(--accent); box-shadow:0 0 0 2px rgba(74,103,65,.1); }
-.p-input:disabled { background:var(--bg); opacity:.5; }
+.p-input:disabled { background:#f5f5f0; opacity:.5; }
 .p-margin { font-size:12px; color:var(--text-light); text-align:right; }
-.price-display { cursor:default; }
-.cost-display  { cursor:help; }
 .p-active-tog { width:34px; height:18px; border-radius:9px; border:none; cursor:pointer; transition:background .2s; position:relative; flex-shrink:0; }
 .p-active-tog::after { content:''; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; transition:transform .2s; }
 .p-active-tog.on { background:var(--accent); }
@@ -61,14 +59,14 @@ body.be-page { background:var(--bg); }
 /* Sticky save bar */
 .save-bar { position:sticky; bottom:0; background:#fff; border-top:1px solid var(--border); padding:14px 22px; display:flex; align-items:center; justify-content:space-between; gap:12px; box-shadow:0 -4px 16px rgba(0,0,0,.07); z-index:10; }
 .save-status { font-size:13px; color:var(--text-light); }
-.save-status.ok { color:var(--action-green); font-weight:600; }
-.save-status.err { color:var(--action-red); font-weight:600; }
+.save-status.ok { color:#2e7d32; font-weight:600; }
+.save-status.err { color:#c62828; font-weight:600; }
 
 @media(max-width:640px){
   .g2,.g3 { grid-template-columns:1fr; }
-  .sku-row,.sku-hdr { grid-template-columns:28px 1fr 80px 0 60px 0 0; }
-  .sku-row>:nth-child(4),.sku-row>:nth-child(6),.sku-row>:nth-child(7),
-  .sku-hdr>:nth-child(4),.sku-hdr>:nth-child(6),.sku-hdr>:nth-child(7) { display:none; }
+  .sku-row,.sku-hdr { grid-template-columns:28px 1fr 70px 70px 0 0; }
+  .sku-row>:nth-child(5),.sku-row>:nth-child(6),
+  .sku-hdr>:nth-child(5),.sku-hdr>:nth-child(6) { display:none; }
 }
 </style>
 </head>
@@ -112,7 +110,7 @@ body.be-page { background:var(--bg); }
   <div class="be-card">
     <div class="be-card-head">
       <h2>Delivery Locations</h2>
-      <button class="btn btn-outline" style="font-size:12px;padding:7px 14px;" onclick="addLoc()">+ Add Location</button>
+      <button class="btn btn-o" style="font-size:12px;padding:7px 14px;" onclick="addLoc()">+ Add Location</button>
     </div>
     <div class="be-card-body" id="loc-list">
       {% if buyer.locations %}
@@ -138,7 +136,7 @@ body.be-page { background:var(--bg); }
   <div class="be-card">
     <div class="be-card-head">
       <h2>Catalogue &amp; Pricing</h2>
-      <div style="font-size:12px;color:var(--text-light);">Cost (COGS model) → Label by buyer → Margin % → Price</div>
+      <div style="font-size:12px;color:var(--text-light);">Tick to assign · Enter price per unit · COGS &amp; margin are internal only</div>
     </div>
 
     {% set ns = namespace(cur_fmt='') %}
@@ -149,10 +147,9 @@ body.be-page { background:var(--bg); }
       <div class="sku-hdr">
         <span></span>
         <span style="text-align:left;">Product</span>
-        <span>Cost</span>
-        <span>Label by buyer</span>
-        <span>Margin %</span>
-        <span>Price / unit</span>
+        <span>Price/unit</span>
+        <span>COGS</span>
+        <span>Margin</span>
         <span>Active</span>
       </div>
 
@@ -170,60 +167,34 @@ body.be-page { background:var(--bg); }
         {% set margin = assigned.get('margin_pct') %}
         {% set is_active = assigned.get('active', True) if is_assigned else True %}
 
-        <div class="sku-row {% if is_assigned %}assigned{% endif %}" data-sku="{{ sku.sku_key|e }}" data-recipe="{{ sku.recipe|e }}">
-
-          <!-- Col 1: Assign checkbox -->
+        <div class="sku-row {% if is_assigned %}assigned{% endif %}" data-sku="{{ sku.sku_key|e }}">
           <input type="checkbox" class="sku-check" {% if is_assigned %}checked{% endif %}
             onchange="toggleSku('{{ sku.sku_key|e }}', this.checked)">
-
-          <!-- Col 2: Product name + SKU key -->
           <div>
             <div class="sku-name">{{ sku.recipe }}</div>
-            <div class="sku-fmt" style="font-family: 'Courier New', monospace,monospace;font-size:10px;color:var(--text-light);margin-top:2px;">{{ sku.sku_key }}</div>
+            <div class="sku-fmt" style="font-family:ui-monospace,monospace;font-size:10px;">{{ sku.sku_key }}</div>
           </div>
-
-          <!-- Col 3: Cost — read-only, from COGS model -->
-          <div class="cost-display" data-sku="{{ sku.sku_key|e }}"
-            style="background:#f5f5f0;border:1.5px solid var(--border);border-radius:7px;padding:6px 8px;font-size:13px;font-weight:600;text-align:right;color:var(--dark);min-height:32px;font-family:'JetBrains Mono',monospace;">
-            {{ '%.2f'|format(cogs) if cogs is not none else '—' }}
-          </div>
-
-          <!-- Col 4: Label supplied checkbox -->
-          <div style="display:flex;align-items:center;justify-content:center;">
-            <label style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;">
-              <input type="checkbox" class="label-supplied-tog" data-sku="{{ sku.sku_key|e }}"
-                {% if assigned.get('label_supplied') %}checked{% endif %}
-                onchange="onLabelSuppliedChange(this)"
-                style="width:16px;height:16px;accent-color:var(--accent);">
-              <span style="font-size:9px;color:var(--text-light);text-align:center;line-height:1.2;">Buyer<br>supplies</span>
-            </label>
-          </div>
-
-          <!-- Col 5: Margin % — only manual input -->
           <div>
-            <div style="position:relative;">
-              <input type="number" class="p-input margin-input" step="0.1" min="0" max="99.9" placeholder="—"
-                value="{{ '%.1f'|format(margin) if margin is not none else '' }}"
-                data-sku="{{ sku.sku_key|e }}"
-                {% if not is_assigned %}disabled{% endif %}>
-              <span style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-light);pointer-events:none;">%</span>
-            </div>
+            <input type="number" class="p-input price-input" step="0.01" min="0" placeholder="—"
+              value="{{ '%.2f'|format(price) if price is not none else '' }}"
+              data-sku="{{ sku.sku_key|e }}" data-field="price"
+              {% if not is_assigned %}disabled{% endif %}>
           </div>
-
-          <!-- Col 6: Price — calculated output, read-only -->
-          <div class="price-display" data-sku="{{ sku.sku_key|e }}"
-            style="background:#e8f5e9;border:1.5px solid #a5d6a7;border-radius:7px;padding:6px 8px;font-size:13px;font-weight:700;text-align:right;color:#1b5e20;min-height:32px;font-family:'JetBrains Mono',monospace;">
-            {{ '%.2f'|format(price) if price is not none else '—' }}
+          <div>
+            <input type="number" class="p-input cogs-input" step="0.01" min="0" placeholder="—"
+              value="{{ '%.2f'|format(cogs) if cogs is not none else '' }}"
+              data-sku="{{ sku.sku_key|e }}" data-field="cogs"
+              {% if not is_assigned %}disabled{% endif %}>
           </div>
-
-          <!-- Col 7: Active toggle -->
-          <div style="display:flex;justify-content:center;">
+          <div class="p-margin" data-sku-margin="{{ sku.sku_key|e }}">
+            {{ '%.1f'|format(margin) + '%' if margin is not none else '—' }}
+          </div>
+          <div>
             <button class="p-active-tog {% if is_active %}on{% else %}off{% endif %}"
               data-sku="{{ sku.sku_key|e }}"
               {% if not is_assigned %}disabled style="opacity:.4;"{% endif %}
               onclick="toggleActive('{{ sku.sku_key|e }}', this)"></button>
           </div>
-
         </div>
       {% endfor %}
       {% else %}
@@ -238,8 +209,8 @@ body.be-page { background:var(--bg); }
   <div class="save-bar">
     <div class="save-status" id="save-status"></div>
     <div style="display:flex;gap:10px;">
-      <a href="/contacts?tab=buyers" class="btn btn-outline" style="text-decoration:none;display:inline-flex;align-items:center;">Cancel</a>
-      <button class="btn btn-primary" onclick="saveBuyer()" style="background:#0288d1;border:none;min-width:120px;">Save Buyer</button>
+      <a href="/contacts?tab=buyers" class="btn btn-o" style="text-decoration:none;display:inline-flex;align-items:center;">Cancel</a>
+      <button class="btn btn-p" onclick="saveBuyer()" style="background:#0288d1;border:none;min-width:120px;">Save Buyer</button>
     </div>
   </div>
 </div>
@@ -250,127 +221,28 @@ var _locs = {{ (buyer.locations or [])|tojson }};
 var _skuData = {};  // sku_key -> {price, cogs, margin_pct, active, assigned}
 
 // Init _skuData from server-rendered state
-// Price is read from the price-display div (green box) — calculated output
 document.querySelectorAll('.sku-row').forEach(function(row) {
   var sk = row.dataset.sku;
-  var chk    = row.querySelector('.sku-check');
-  var togEl  = row.querySelector('.p-active-tog');
-  var lblTog = row.querySelector('.label-supplied-tog');
-  var priceBox = row.querySelector('.price-display[data-sku="'+sk+'"]');
-  var marginEl = row.querySelector('.margin-input[data-sku="'+sk+'"]');
-  var price0   = priceBox  ? parseFloat(priceBox.textContent)  || null : null;
-  var margin0  = marginEl  ? parseFloat(marginEl.value) || null : null;
+  var chk = row.querySelector('.sku-check');
+  var priceEl = row.querySelector('.price-input');
+  var cogsEl = row.querySelector('.cogs-input');
+  var togEl = row.querySelector('.p-active-tog');
   _skuData[sk] = {
-    assigned:       chk ? chk.checked : false,
-    price:          price0,
-    cogs:           null,  // populated by loadComputedCogs()
-    margin_pct:     margin0,
-    active:         togEl ? togEl.classList.contains('on') : true,
-    label_supplied: lblTog ? lblTog.checked : false,
+    assigned: chk ? chk.checked : false,
+    price:    priceEl && priceEl.value ? parseFloat(priceEl.value) : null,
+    cogs:     cogsEl && cogsEl.value  ? parseFloat(cogsEl.value)  : null,
+    margin_pct: null,
+    active:   togEl ? togEl.classList.contains('on') : true,
   };
 });
-
-// Load computed COGS for all SKUs from COGS calculator
-(async function loadComputedCogs(){
-  try {
-    var recipes = await (await fetch('/api/recipes')).json();
-    var cogsRes = await fetch('/api/cogs');
-    var cogsData = await cogsRes.json();
-    // For each sku-row, find the recipe and compute COGS
-    document.querySelectorAll('.sku-row').forEach(function(row){
-      var sk = row.dataset.sku;
-      var recipeName = (row.dataset.recipe || '').trim();
-      var format = (sk.split('|')[2]||'').trim().toUpperCase();
-      var labelSupplied = _skuData[sk] && _skuData[sk].label_supplied;
-      // Find recipe
-      var recipe = recipes[recipeName];
-      if(!recipe || !recipe.broth_type) {
-        // Show hint in cost box instead
-        var hintEl = row.querySelector('.cost-display[data-sku="'+sk+'"]');
-        if(hintEl) {
-          hintEl.textContent = 'Set broth type';
-          hintEl.style.color = '#b38b00';
-          hintEl.style.fontSize = '11px';
-          hintEl.style.fontWeight = '500';
-          hintEl.title = 'Edit this recipe card and set the Broth Type to enable cost calculation';
-        }
-        return;
-      }
-      // Make per-recipe COGS request
-      fetch('/api/cogs/recipe/'+encodeURIComponent(recipeName)+(labelSupplied?'?label_supplied=true':''))
-        .then(function(r){return r.json();})
-        .then(function(d){
-          if(d.unit_cogs != null){
-            var costEl = row.querySelector('.cost-display[data-sku="'+sk+'"]');
-            if(costEl) {
-              costEl.textContent = d.unit_cogs.toFixed(2);
-              costEl.title = formatCogsBreakdown(d.breakdown);
-            }
-            if(_skuData[sk]) {
-              _skuData[sk].cogs = d.unit_cogs;
-              // If we have a stored price, back-calculate margin from it
-              // Then recalculate price from that margin going forward
-              var storedPrice = _skuData[sk].price;
-              if(storedPrice && storedPrice > 0 && !_skuData[sk].margin_pct) {
-                var backcalcMargin = Math.round(((storedPrice - d.unit_cogs) / storedPrice) * 1000) / 10;
-                _skuData[sk].margin_pct = backcalcMargin;
-                var mEl = document.querySelector('.margin-input[data-sku="'+sk+'"]');
-                if(mEl) mEl.value = backcalcMargin.toFixed(1);
-              }
-              updatePriceFromMargin(sk);
-            }
-          } else {
-            var costElErr = row.querySelector('.cost-display[data-sku="'+sk+'"]');
-            if(costElErr && !costElErr.textContent.trim()) {
-              costElErr.textContent = 'Format not mapped';
-              costElErr.style.color = '#999';
-              costElErr.style.fontSize = '10px';
-            }
-          }
-        }).catch(function(){});
-    });
-  } catch(e){}
-})();
-
-function formatCogsBreakdown(b){
-  if(!b) return '';
-  return 'Fixed: $'+(b.fixed||0).toFixed(2)
-    +' | Bones: $'+(b.bones||0).toFixed(2)
-    +' | Mushroom: $'+(b.mushroom||0).toFixed(2)
-    +' | Other: $'+(b.other_ingredients||0).toFixed(2)
-    +' | Packaging: $'+(b.packaging||0).toFixed(2)
-    +' | Label: $'+(b.label||0).toFixed(2);
-}
-
-function onLabelSuppliedChange(el){
-  var sk = el.dataset.sku;
-  if(_skuData[sk]) _skuData[sk].label_supplied = el.checked;
-  // Refresh computed COGS display
-  var row = document.querySelector('.sku-row[data-sku="'+sk+'"]');
-  if(!row) return;
-  var recipeName = (row.dataset.recipe || '').trim();
-
-  fetch('/api/cogs/recipe/'+encodeURIComponent(recipeName)+(el.checked?'?label_supplied=true':''))
-    .then(function(r){return r.json();})
-    .then(function(d){
-      if(d.unit_cogs != null){
-        var costEl2 = row.querySelector('.cost-display[data-sku="'+sk+'"]');
-        if(costEl2) {
-          costEl2.textContent = d.unit_cogs.toFixed(2);
-          costEl2.title = formatCogsBreakdown(d.breakdown);
-        }
-        if(_skuData[sk]){ _skuData[sk].cogs=d.unit_cogs; updatePriceFromMargin(sk); }
-      }
-    }).catch(function(){});
-}
 
 function toggleSku(sk, checked) {
   var row = document.querySelector('.sku-row[data-sku="'+sk+'"]');
   if(!row) return;
   _skuData[sk] = _skuData[sk] || {};
   _skuData[sk].assigned = checked;
-  // Enable/disable margin input only
-  row.querySelectorAll('.margin-input').forEach(function(inp){ inp.disabled = !checked; });
+  // Enable/disable inputs
+  row.querySelectorAll('.p-input').forEach(function(inp){ inp.disabled = !checked; });
   var tog = row.querySelector('.p-active-tog');
   if(tog){ tog.disabled = !checked; tog.style.opacity = checked ? '' : '.4'; }
   row.classList.toggle('assigned', checked);
@@ -385,35 +257,24 @@ function toggleActive(sk, btn) {
   _skuData[sk].active = !isOn;
 }
 
-// Delegated input listener — margin is the only manual input
+// Delegated input listener for price/cogs
 document.getElementById('sku-table').addEventListener('input', function(ev) {
   var el = ev.target;
   var sk = el.getAttribute('data-sku');
-  if(!sk || !el.classList.contains('margin-input')) return;
+  var field = el.getAttribute('data-field');
+  if(!sk || !field) return;
   _skuData[sk] = _skuData[sk] || {};
-  var margin = el.value.trim() ? parseFloat(el.value) : null;
-  _skuData[sk].margin_pct = margin;
-  updatePriceFromMargin(sk);
-});
-
-// Calculate price from cost × margin, write to green price-display box
-function updatePriceFromMargin(sk) {
-  var d = _skuData[sk];
-  if(!d) return;
-  var cost = d.cogs;
-  if(cost == null) {
-    var costBox = document.querySelector('.cost-display[data-sku="'+sk+'"]');
-    if(costBox) cost = parseFloat(costBox.textContent) || null;
+  var val = el.value.trim() ? parseFloat(el.value) : null;
+  _skuData[sk][field] = val;
+  // Recalculate margin
+  var p = _skuData[sk].price, c = _skuData[sk].cogs;
+  if(p && c && c > 0) {
+    var m = ((p / c) - 1) * 100;
+    _skuData[sk].margin_pct = Math.round(m * 100) / 100;
+    var mEl = document.querySelector('[data-sku-margin="'+sk+'"]');
+    if(mEl) mEl.textContent = m.toFixed(1) + '%';
   }
-  var margin = d.margin_pct;
-  if(cost == null || cost <= 0 || margin == null || margin >= 100) return;
-  var price = Math.round(cost / (1 - margin / 100) * 100) / 100;
-  d.price = price;
-  var pBox = document.querySelector('.price-display[data-sku="'+sk+'"]');
-  if(pBox) pBox.textContent = price.toFixed(2);
-}
-
-function onMarginChange(el) {}  // handled by delegated listener above
+});
 
 function updateSkuBadge() {
   var n = Object.values(_skuData).filter(function(d){ return d.assigned; }).length;
@@ -446,7 +307,7 @@ function syncLocs() {
 
 async function saveBuyer() {
   syncLocs();
-  var btn = document.querySelector('.save-bar button');
+  var btn = document.querySelector('.save-bar .btn-p');
   var status = document.getElementById('save-status');
   btn.disabled = true; btn.textContent = 'Saving…'; status.textContent = ''; status.className = 'save-status';
 
@@ -458,15 +319,14 @@ async function saveBuyer() {
     var d = _skuData[sk] || {};
     if(d.assigned) {
       skus.push({
-        sku_key:        sk,
-        recipe:         (document.querySelector('.sku-row[data-sku="'+sk+'"'+(']'||'')).dataset||{}).recipe||'',
-        display:        (document.querySelector('.sku-row[data-sku="'+sk+'"] .sku-name')||{}).textContent||'',
-        position:       idx + 1,
-        price:          d.price,          // calculated: cost / (1 - margin/100)
-        cogs:           d.cogs,           // from COGS model — display cache only
-        margin_pct:     d.margin_pct,     // the one manual input
-        active:         d.active !== false,
-        label_supplied: d.label_supplied || false,
+        sku_key:    sk,
+        recipe:     (document.querySelector('.sku-row[data-sku="'+sk+'"] .sku-name')||{}).textContent||'',
+        display:    (document.querySelector('.sku-row[data-sku="'+sk+'"] .sku-name')||{}).textContent||'',
+        position:   idx + 1,
+        price:      d.price,
+        cogs:       d.cogs,
+        margin_pct: d.margin_pct,
+        active:     d.active !== false,
       });
     }
   });

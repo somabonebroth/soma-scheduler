@@ -10,25 +10,13 @@ from pdf_engine import generate_weekly_schedule_pdf, generate_daily_package_pdf,
 from functools import wraps
 import json
 import os
-import logging
-import threading
 import re
 import zipfile
 import io
-from helpers import (
-    _load_json, _save_json, _get_file_lock,
-    _FILE_LOCKS, _FILE_LOCKS_LOCK,
-    login_required, require_valid_week, require_valid_day,
-    _render, _render_logger,
-    _TEMPLATE_CONTRACTS, DATA_DIR,
-    load_recipes, _normalize_format, FORMAT_RE,
-)
 from ripe_orders import ripe_orders_bp, init_paths as _ripe_init_paths
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ.get("SECRET_KEY", "soma-bone-broth-2026-change-me")
-from cogs import cogs_bp
-app.register_blueprint(cogs_bp)
 app.register_blueprint(ripe_orders_bp)
 
 # Session lifetime — 4 hours. After this the user must log in again.
@@ -89,6 +77,700 @@ DEFAULT_CCP_SECTIONS = [
 
 
 # ── Auth ───────────────────────────────────────────────────────────────
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("authenticated"):
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Not authenticated"}), 401
+            return redirect(url_for("login_page"))
+        return f(*args, **kwargs)
+    return decorated
+
+
+def validate_week_id(week_id):
+    """Ensure week_id is a valid YYYY-MM-DD date string."""
+    if not re.match(r'^\d{4}-\d{2}-\d{2}$', week_id):
+        return False
+    try:
+        datetime.strptime(week_id, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
+
+
+def validate_day_idx(day_idx):
+    """Ensure day_idx is 0-6."""
+    return 0 <= day_idx <= 6
+
+
+def require_valid_week(f):
+    """Decorator: reject requests with invalid week_id."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        week_id = kwargs.get("week_id") or (args[0] if args else None)
+        if week_id and not validate_week_id(week_id):
+            return jsonify({"error": "Invalid week ID"}), 400
+        return f(*args, **kwargs)
+    return decorated
+
+
+def require_valid_day(f):
+    """Decorator: reject requests with day_idx outside 0-6."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        day_idx = kwargs.get("day_idx")
+        if day_idx is not None and not validate_day_idx(day_idx):
+            return jsonify({"error": "Invalid day index"}), 400
+        return f(*args, **kwargs)
+    return decorated
+
+
+# ── Data helpers ───────────────────────────────────────────────────────
+def _load_tracking_modes():
+    """Read tracking_modes.json directly (used during recipe migration).
+    Returns {} if missing.
+
+    Path note: this file moved from data/organic/ to data/inventory/ as part
+    of the universal-inventory merge. After the one-time directory rename
+    on startup, the file lives under INVENTORY_DIR. INVENTORY_DIR is defined
+    later in the module — fall back to the legacy path if not yet bound."""
+    inv_dir = globals().get("INVENTORY_DIR") or os.path.join(DATA_DIR, "inventory")
+    path = os.path.join(inv_dir, "tracking_modes.json")
+    # Legacy fallback for the brief window before the rename runs
+    legacy_path = os.path.join(DATA_DIR, "organic", "tracking_modes.json")
+    for p in (path, legacy_path):
+        if os.path.exists(p):
+            try:
+                with open(p, "r") as f:
+                    return json.load(f)
+            except Exception:
+                return {}
+    return {}
+
+
+def load_recipes():
+    if os.path.exists(RECIPES_PATH):
+        with open(RECIPES_PATH, "r") as f:
+            recipes = json.load(f)
+        # Auto-migrate in-memory (disk unchanged until explicit save).
+        # Pass tracking_modes for smart pack conversion.
+        tracking_modes = _load_tracking_modes()
+        for name, data in recipes.items():
+            try:
+                migrate_recipe_ingredients(data, tracking_modes)
+            except Exception:
+                pass
+        return recipes
+    return {}
+
+def save_recipes(recipes):
+    with open(RECIPES_PATH, "w") as f:
+        json.dump(recipes, f, indent=2)
+
+def load_schedule(week_id):
+    path = os.path.join(SCHEDULES_DIR, week_id + ".json")
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            return json.load(f)
+    return None
+
+def save_schedule(week_id, data):
+    path = os.path.join(SCHEDULES_DIR, week_id + ".json")
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+
+def list_schedules():
+    if not os.path.exists(SCHEDULES_DIR):
+        return []
+    files = sorted([f.replace(".json", "") for f in os.listdir(SCHEDULES_DIR) if f.endswith(".json")], reverse=True)
+    return files
+
+def load_checklist(week_id, day_idx):
+    path = os.path.join(CHECKLISTS_DIR, week_id + "_day" + str(day_idx) + ".json")
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            return json.load(f)
+    return None
+
+def save_checklist_data(week_id, day_idx, data):
+    path = os.path.join(CHECKLISTS_DIR, week_id + "_day" + str(day_idx) + ".json")
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+
+def load_ccp_master():
+    if os.path.exists(CCP_MASTER_PATH):
+        with open(CCP_MASTER_PATH, "r") as f:
+            return json.load(f)
+    return DEFAULT_CCP_SECTIONS
+
+def save_ccp_master(sections):
+    with open(CCP_MASTER_PATH, "w") as f:
+        json.dump(sections, f, indent=2)
+
+def load_recipe_order():
+    if os.path.exists(RECIPE_ORDER_PATH):
+        with open(RECIPE_ORDER_PATH, "r") as f:
+            return json.load(f)
+    return None
+
+def save_recipe_order(order):
+    with open(RECIPE_ORDER_PATH, "w") as f:
+        json.dump(order, f, indent=2)
+
+def get_current_week_id():
+    today = datetime.today()
+    monday = today - timedelta(days=today.weekday())
+    return monday.strftime("%Y-%m-%d")
+
+
+# ── Structured Ingredient Helpers ──────────────────────────────────────
+VALID_UNITS = ["kg", "g", "L", "ml", "lbs", "Bunch", "Pack", "Adjunct", "per L"]
+# Units where the raw recipe amount IS deducted directly (halved for 115L).
+# Only "per L" has special math (amount × batch_liters).
+INGREDIENT_SECTIONS = ["kettle_overnight", "after_skim", "finishing", "add_to_jar"]
+
+# Unit aliases for parsing (lowercase input -> canonical unit)
+UNIT_ALIASES = {
+    "kg": "kg", "kgs": "kg", "kilogram": "kg", "kilograms": "kg",
+    "g": "g", "gr": "g", "gram": "g", "grams": "g",
+    "l": "L", "lt": "L", "ltr": "L", "liter": "L", "liters": "L", "litre": "L", "litres": "L",
+    "ml": "ml", "millilitre": "ml", "milliliter": "ml",
+    "lb": "lbs", "lbs": "lbs", "pound": "lbs", "pounds": "lbs",
+    "bunch": "Bunch", "bunches": "Bunch",
+    "pack": "Pack", "packs": "Pack", "packet": "Pack", "packets": "Pack", "bottle": "Pack", "bottles": "Pack",
+    "adjunct": "Adjunct", "adjuncts": "Adjunct",
+}
+
+# Units that were valid in prior versions but are now retired.
+# During migration these either convert to "Pack" (for "each") or get flagged
+# for manual review (tbsp/tsp/pinch — no safe auto-conversion to Pack).
+RETIRED_UNITS_TO_PACK = {"each"}
+RETIRED_UNITS_TO_REVIEW = {"tbsp", "tsp", "pinch"}
+
+# Patterns that signal a "per L" (non-halving) item
+PER_L_RE = re.compile(r"\b(per\s*l(?:iter|itre)?|g\s*/\s*l|ml\s*/\s*l)\b", re.IGNORECASE)
+
+# Phrases like "per jar", "per bottle", "per can", "per container" that are
+# inventory-counted normally — we strip these from the ingredient name without
+# changing the unit interpretation.
+PER_CONTAINER_RE = re.compile(
+    r"\s*\bper\s+(?:jar|bottle|can|container|pack|bag|unit|piece)s?\b[\s,.\-]*",
+    re.IGNORECASE,
+)
+
+# Leading amount + unit + name pattern
+# Matches: "2.5 kg Celery", "4g Salt", "8 each Lemons", "1.5 L Water"
+INGREDIENT_LINE_RE = re.compile(
+    r"^\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s+(.+?)\s*$"
+)
+
+
+def parse_ingredient_line(line):
+    """Parse a free-text ingredient line into a structured ingredient object.
+    Returns dict: {name, amount, unit, process, needs_review}.
+    Flags needs_review=True if parsing is ambiguous."""
+    original = line.strip()
+    if not original:
+        return None
+
+    # Strip "per jar / per bottle / per can / per container" phrases anywhere
+    # in the line — they don't affect amount/unit interpretation, just clutter the name.
+    original = PER_CONTAINER_RE.sub(" ", original).strip()
+    # Collapse any double spaces / trailing commas left after stripping
+    original = re.sub(r"\s{2,}", " ", original).rstrip(",").strip()
+    if not original:
+        return None
+
+    # Detect "per L" items first — these keep their amount but are never halved.
+    # Strip leading unit + per-L phrase from name so "4g per liter Pink Salt" -> "Pink Salt".
+    if PER_L_RE.search(original):
+        m = re.match(r"^\s*(\d+(?:\.\d+)?)\s*(.+)$", original)
+        if m:
+            amount = float(m.group(1))
+            rest = m.group(2).strip()
+            rest = re.sub(
+                r"^\s*(?:g|ml|kg|l)?\s*(?:per\s*l(?:iter|itre)?|g\s*/\s*l|ml\s*/\s*l)\b[\s,.\-]*",
+                "",
+                rest,
+                flags=re.IGNORECASE,
+            ).strip()
+            return {
+                "name": rest or original,
+                "amount": amount if amount != int(amount) else int(amount),
+                "unit": "per L",
+                "process": "",
+                "needs_review": not bool(rest),
+            }
+        return {
+            "name": original,
+            "amount": 0,
+            "unit": "per L",
+            "process": "",
+            "needs_review": True,
+        }
+
+    # Split out process hints after a comma or em-dash/hyphen
+    # e.g. "2.5 kg Celery, diced" -> name="Celery", process="diced"
+    process = ""
+    body = original
+    # Try em-dash / en-dash / " - " separator first
+    for sep in [" — ", " – ", " - "]:
+        if sep in body:
+            parts = body.split(sep, 1)
+            body = parts[0].strip()
+            process = parts[1].strip()
+            break
+    # Then try comma (only if not already split and comma is late in the string)
+    if not process and "," in body:
+        parts = body.split(",", 1)
+        # Only treat as process if the first part looks like "<num> <unit> <name>"
+        if re.match(r"^\s*\d+(?:\.\d+)?\s+\S+", parts[0]):
+            body = parts[0].strip()
+            process = parts[1].strip()
+
+    m = INGREDIENT_LINE_RE.match(body)
+    if not m:
+        # No leading number — flag for review, keep original text as name
+        return {
+            "name": original,
+            "amount": 0,
+            "unit": "",
+            "process": "",
+            "needs_review": True,
+        }
+
+    amount_str = m.group(1)
+    unit_token = (m.group(2) or "").strip().lower()
+    name = m.group(3).strip()
+
+    try:
+        amount = float(amount_str)
+    except ValueError:
+        amount = 0
+
+    # Resolve unit
+    if unit_token and unit_token in UNIT_ALIASES:
+        unit = UNIT_ALIASES[unit_token]
+        needs_review = False
+    elif unit_token:
+        # Token is not a recognized unit — fold it back into the name
+        name = unit_token + " " + name
+        unit = ""
+        needs_review = True
+    else:
+        # Bare number with no unit ("8 Lemons"). Can't safely guess unit
+        # in the new scheme (no 'each'). Flag for manual review.
+        unit = ""
+        needs_review = True
+
+    # Clean int display
+    if amount == int(amount):
+        amount = int(amount)
+
+    return {
+        "name": name,
+        "amount": amount,
+        "unit": unit,
+        "process": process,
+        "needs_review": needs_review,
+    }
+
+
+def format_ingredient(ing):
+    """Render a structured ingredient back to a display string."""
+    if not isinstance(ing, dict):
+        return str(ing)
+    amount = ing.get("amount", 0)
+    unit = ing.get("unit", "")
+    name = ing.get("name", "")
+    process = ing.get("process", "")
+
+    parts = []
+    if amount:
+        # Display clean int when whole number
+        if isinstance(amount, float) and amount == int(amount):
+            parts.append(str(int(amount)))
+        else:
+            parts.append(str(amount))
+    if unit:
+        parts.append(unit)
+    if name:
+        parts.append(name)
+
+    base = " ".join(parts) if parts else name
+    if process:
+        return base + " — " + process
+    return base
+
+
+def halve_ingredient(ing):
+    """Return a new ingredient with amount halved. 'per L' items are not halved."""
+    if not isinstance(ing, dict):
+        return ing
+    new = dict(ing)
+    if new.get("unit") == "per L":
+        return new
+    amt = new.get("amount", 0)
+    try:
+        halved = float(amt) / 2
+        if halved == int(halved):
+            halved = int(halved)
+        new["amount"] = halved
+    except (ValueError, TypeError):
+        pass
+    return new
+
+
+def ingredients_match(raw_item_name, recipe_ing_name):
+    """Strict-equivalence ingredient matcher.
+
+    Returns True if the raw material name exactly matches the recipe
+    ingredient name after normalizing case and collapsing internal whitespace.
+
+    Distinct ingredients with similar names ARE NOT matched. Examples:
+      "Organic Chicken Bones" vs "Chicken Bones"     → False
+      "Organic Chicken Bones" vs "Chicken Bones, Organic" → False
+      "Beef Bones" vs "Pasture-Raised Beef Bones"    → False
+
+    Tolerated variations (treated as equivalent):
+      "Organic Chicken Bones" vs "organic chicken bones"  → True
+      "Organic Chicken Bones" vs "ORGANIC CHICKEN BONES"  → True
+      "Organic  Chicken  Bones" vs "Organic Chicken Bones" → True (extra spaces)
+      " Organic Chicken Bones " vs "Organic Chicken Bones" → True (trim)
+
+    This strictness is intentional: each certification tier ("Organic",
+    "Pasture Raised", "Conventional") gets its own ingredient name, and we
+    never want a recipe calling for the organic version to silently pull
+    from a non-organic lot just because the names overlap word-wise.
+    """
+    if not raw_item_name or not recipe_ing_name:
+        return False
+    a = " ".join(raw_item_name.lower().split())
+    b = " ".join(recipe_ing_name.lower().split())
+    return a == b
+
+
+def is_untracked_ingredient(name):
+    """Returns True for ingredients that should never be tracked as raw material
+    inventory or trigger insufficient-stock warnings. Water is treated as
+    unlimited — it's a measured recipe ingredient but not an inventoried supply.
+    Match: any ingredient name containing the word 'water' (case-insensitive)."""
+    if not name:
+        return False
+    return "water" in name.lower()
+
+
+def is_structured_ingredient(item):
+    """Check if an item is already in structured object form."""
+    return isinstance(item, dict) and "name" in item and "amount" in item
+
+
+def _smart_upgrade_ingredient(item, tracking_modes):
+    """Upgrade an already-structured ingredient to the new unit scheme.
+
+    Returns (new_item, changed).
+
+    Rules:
+      1. If name matches a tracking_modes pack entry with matching pack_label,
+         convert to {amount: 1, unit: 'Pack', process: '<original>'}.
+      2. If unit is 'each', force to 'Pack' (same deduction, flag for review).
+      3. If unit is tbsp/tsp/pinch, clear unit and flag for review.
+      4. Otherwise leave alone.
+    """
+    if not is_structured_ingredient(item):
+        return item, False
+
+    name = (item.get("name") or "").strip()
+    name_key = name.lower()
+    unit = (item.get("unit") or "").strip()
+    amount = item.get("amount", 0)
+    try:
+        amount_f = float(amount or 0)
+    except (ValueError, TypeError):
+        amount_f = 0
+
+    # Rule 1: smart pack conversion via tracking_modes
+    tm = tracking_modes.get(name_key) if tracking_modes else None
+    if tm and tm.get("mode") == "pack" and unit not in ("", "Pack", "Adjunct", "Bunch", "per L"):
+        pack_label = (tm.get("pack_label") or "").strip()
+        line_label = _format_pack_label(
+            amount_f if amount_f == int(amount_f) else amount_f,
+            unit,
+        ) if amount_f > 0 and unit else ""
+        if pack_label and line_label and pack_label.lower() == line_label.lower():
+            # Exact match — auto-convert
+            new = dict(item)
+            new["amount"] = 1
+            new["unit"] = "Pack"
+            existing_process = (new.get("process") or "").strip()
+            # Preserve original pack size as process note
+            new["process"] = existing_process if existing_process else pack_label
+            new["needs_review"] = False
+            return new, True
+        else:
+            # Pack-tracked ingredient but label mismatch — flag for review
+            new = dict(item)
+            new["needs_review"] = True
+            return new, True
+
+    # Rule 2: 'each' → Pack, flagged for review
+    if unit in RETIRED_UNITS_TO_PACK:
+        new = dict(item)
+        new["unit"] = "Pack"
+        new["needs_review"] = True
+        return new, True
+
+    # Rule 3: tbsp/tsp/pinch → clear unit, flag for review
+    if unit in RETIRED_UNITS_TO_REVIEW:
+        new = dict(item)
+        # Preserve the retired unit in process so user can decide
+        retired_note = f"was {unit}"
+        existing_process = (new.get("process") or "").strip()
+        new["process"] = existing_process + (" — " if existing_process else "") + retired_note
+        new["unit"] = ""
+        new["needs_review"] = True
+        return new, True
+
+    # No change
+    return item, False
+
+
+def migrate_recipe_ingredients(recipe_data, tracking_modes=None):
+    """In-place: convert string-format ingredient lines to structured objects,
+    and upgrade structured items per the new unit scheme.
+    Returns True if any changes were made."""
+    if not isinstance(recipe_data, dict):
+        return False
+    if tracking_modes is None:
+        tracking_modes = {}
+    changed = False
+    for section in INGREDIENT_SECTIONS:
+        items = recipe_data.get(section, [])
+        if not isinstance(items, list):
+            continue
+        new_items = []
+        for item in items:
+            if is_structured_ingredient(item):
+                upgraded, item_changed = _smart_upgrade_ingredient(item, tracking_modes)
+                new_items.append(upgraded)
+                if item_changed:
+                    changed = True
+            elif isinstance(item, str):
+                parsed = parse_ingredient_line(item)
+                if parsed:
+                    # Apply smart upgrades to freshly-parsed items too
+                    upgraded, _ = _smart_upgrade_ingredient(parsed, tracking_modes)
+                    new_items.append(upgraded)
+                    changed = True
+            elif isinstance(item, dict):
+                # Dict without required fields — coerce
+                new_items.append({
+                    "name": item.get("name", str(item)),
+                    "amount": item.get("amount", 0),
+                    "unit": item.get("unit", ""),
+                    "process": item.get("process", ""),
+                    "needs_review": True,
+                })
+                changed = True
+        recipe_data[section] = new_items
+    return changed
+
+
+# ── Recipe parser ──────────────────────────────────────────────────────
+# Canonical prefix casing for known format families.
+# Only formats that actually appear as product SKUs belong here.
+# SS = Shelf-Stable, FZ = Frozen, BB = Back Bar label variant.
+FORMAT_PREFIX_CANONICAL = {
+    "SS": "SS",
+    "FZ": "FZ",
+    "BB": "BB",
+}
+
+# Any <letters>[sep]<number>ML suffix — case-insensitive.
+# Separator can be nothing, a dash, or whitespace.
+FORMAT_RE = re.compile(r"\b([A-Za-z]{1,4})[\s-]*(\d+)\s*ML\b", re.IGNORECASE)
+
+
+# Suffix regex used when stripping a trailing format from a recipe name.
+# Matches "<separator><letters><separator><digits>ML" at end of string.
+_FORMAT_SUFFIX_RE = re.compile(
+    r"[\s\-]*[A-Za-z]{1,4}[\s\-]*\d+\s*ML\s*$",
+    re.IGNORECASE,
+)
+
+
+def _strip_format_suffix(name):
+    """Remove ALL trailing format suffixes from a recipe name.
+    Repeats until no more remove — handles double-appended legacy names like
+    'Beef SS-750ML SS-750ML' -> 'Beef'."""
+    if not name:
+        return ""
+    prev = None
+    out = name
+    while prev != out:
+        prev = out
+        out = _FORMAT_SUFFIX_RE.sub("", out).rstrip(" -")
+    return out
+
+
+def build_display_name(recipe_data, recipe_name=""):
+    """Canonical display string used by every UI surface.
+
+    Shape: '{brand}-{name-without-format}-{format}'
+    Example: 'Ripe-Big Kahuna-SS-750ML'
+
+    If brand is missing, drops that segment. If format is missing, uses the
+    raw recipe_name as-is.
+
+    Accepts either a recipe dict with keys brand/format plus a separate
+    recipe_name, OR a single dict containing 'name' field for convenience.
+    """
+    if not isinstance(recipe_data, dict):
+        return recipe_name or ""
+    brand = (recipe_data.get("brand") or "").strip()
+    fmt = _normalize_format((recipe_data.get("format") or "").strip())
+    name = (recipe_name or recipe_data.get("name") or "").strip()
+
+    # Strip any format suffix(es) from the name
+    core = _strip_format_suffix(name)
+    # If stripping removed everything (e.g. name was literally "SS-750ML"),
+    # fall back to the original name
+    if not core:
+        core = name
+
+    parts = []
+    if brand:
+        parts.append(brand)
+    if core:
+        parts.append(core)
+    if fmt:
+        parts.append(fmt)
+    return "-".join(parts) if parts else name
+
+
+def _normalize_format(text):
+    """Turn any 'SS-473ML', 'ss473ml', 'SS 473 ml', etc. into canonical 'SS-473ML'."""
+    if not text:
+        return ""
+    m = FORMAT_RE.search(text)
+    if not m:
+        return text.strip().upper()
+    prefix_raw = m.group(1)
+    canonical_prefix = FORMAT_PREFIX_CANONICAL.get(prefix_raw.upper(), prefix_raw.upper())
+    return f"{canonical_prefix}-{m.group(2)}ML"
+
+
+def _detect_format_in_text(text):
+    """Return the canonical format found in text, or '' if none."""
+    if not text:
+        return ""
+    m = FORMAT_RE.search(text)
+    if not m:
+        return ""
+    return _normalize_format(m.group(0))
+
+
+def parse_recipe_pdf_text(text):
+    lines = [l.strip() for l in text.strip().split("\n") if l.strip()]
+    if not lines:
+        return None
+
+    recipe = {
+        "yield": None, "format": "", "brand": "", "certification": "",
+        "special_instructions": [], "kettle_overnight": [],
+        "after_skim": [], "finishing": [], "add_to_jar": [],
+    }
+    name = ""
+
+    # First pass: extract labelled fields
+    header_lines_used = set()
+    for i, line in enumerate(lines):
+        ll = line.lower().strip()
+        if ll.startswith("brand name:"):
+            recipe["brand"] = line.split(":", 1)[1].strip()
+            header_lines_used.add(i)
+        elif ll.startswith("recipe name:"):
+            name = line.split(":", 1)[1].strip()
+            header_lines_used.add(i)
+        elif ll.startswith("certification:"):
+            recipe["certification"] = line.split(":", 1)[1].strip()
+            header_lines_used.add(i)
+        elif ll.startswith("format:"):
+            fmt = line.split(":", 1)[1].strip()
+            recipe["format"] = _normalize_format(fmt)
+            header_lines_used.add(i)
+        elif "target yield" in ll:
+            m = re.search(r"(\d+)", line)
+            if m:
+                recipe["yield"] = int(m.group(1))
+            header_lines_used.add(i)
+
+    # Fallback: if no labelled fields, use first line as name
+    if not name:
+        name = lines[0]
+        header_lines_used.add(0)
+        detected = _detect_format_in_text(name)
+        if detected:
+            recipe["format"] = detected
+
+    if recipe["yield"] is None:
+        recipe["yield"] = 190 if "FZ" in recipe["format"] else 150
+
+    # Append format to name for unique storage key — case-insensitive check
+    if recipe["format"] and not name.upper().endswith(recipe["format"].upper()):
+        name = name + " " + recipe["format"]
+
+    # Parse recipe body
+    current_section = None
+    in_special = False
+
+    def _append_ing(section, raw_line):
+        parsed = parse_ingredient_line(raw_line)
+        if parsed:
+            recipe[section].append(parsed)
+
+    for i, line in enumerate(lines):
+        if i in header_lines_used:
+            continue
+        ll = line.lower().strip()
+        if "target yield" in ll:
+            continue
+        if ll == "special instructions:" or ll.startswith("special instructions"):
+            in_special = True
+            continue
+        if "add to kettle overnight" in ll or ll == "start:":
+            in_special = False
+            current_section = "kettle_overnight"
+            continue
+        if "add directly to kettle after skim" in ll or "add to kettle after skim" in ll or ll == "finish:":
+            current_section = "after_skim"
+            continue
+        if ll.startswith("water") and ("removing solids" in ll or "top kettle" in ll):
+            current_section = "finishing"
+            _append_ing("finishing", line)
+            continue
+        if "add to jar" in ll or "add to container" in ll:
+            current_section = "add_to_jar"
+            continue
+        if any(ll.startswith(p) for p in ["no salt", "g per liter", "ml per liter"]) or "per liter" in ll or "per litre" in ll:
+            if current_section != "finishing":
+                current_section = "finishing"
+            _append_ing("finishing", line)
+            continue
+        if in_special:
+            recipe["special_instructions"].append(line)
+            continue
+        if current_section and current_section in recipe:
+            _append_ing(current_section, line)
+
+    return {"name": name, "data": recipe}
+
+
+# ── Auth routes ────────────────────────────────────────────────────────
+@app.route("/login")
+def login_page():
+    return render_template("login.html")
 
 @app.route("/api/login", methods=["POST"])
 def login():
@@ -116,41 +798,41 @@ def manifest():
 @app.route("/")
 @login_required
 def dashboard():
-    return _render("dashboard.html")
+    return render_template("dashboard.html")
 
 @app.route("/create-schedule")
 @login_required
 def create_schedule_page():
-    return _render("create_schedule.html")
+    return render_template("create_schedule.html")
 
 @app.route("/weekly-schedule")
 @login_required
 def weekly_schedule_page():
-    return _render("weekly_view.html")
+    return render_template("weekly_view.html")
 
 @app.route("/daily-production/<week_id>/<int:day_idx>")
 @login_required
 @require_valid_week
 @require_valid_day
 def daily_production_page(week_id, day_idx):
-    return _render("daily_production.html", week_id=week_id, day_idx=day_idx)
+    return render_template("daily_production.html", week_id=week_id, day_idx=day_idx)
 
 @app.route("/checklist/<week_id>/<int:day_idx>")
 @login_required
 @require_valid_week
 @require_valid_day
 def checklist_page(week_id, day_idx):
-    return _render("checklist.html", week_id=week_id, day_idx=day_idx)
+    return render_template("checklist.html", week_id=week_id, day_idx=day_idx)
 
 @app.route("/recipes")
 @login_required
 def recipes_page():
-    return _render("recipes.html")
+    return render_template("recipes.html")
 
 @app.route("/contacts")
 @login_required
 def contacts_page():
-    return _render("contacts.html")
+    return render_template("contacts.html")
 
 @app.route("/api/verify-manager", methods=["POST"])
 @login_required
@@ -170,7 +852,7 @@ def verify_manager():
 @login_required
 def certifications_page():
     """Organic & compliance document storage page."""
-    return _render("certifications.html")
+    return render_template("certifications.html")
 
 @app.route("/api/certifications", methods=["GET"])
 @login_required
@@ -251,7 +933,7 @@ def analytics_page():
     """
     buyers = _load_buyers()
     buyer_names = [b["name"] for b in buyers]
-    return _render("analytics.html", buyer_names=buyer_names)
+    return render_template("analytics.html", buyer_names=buyer_names)
 
 @app.route("/analytics/buyer/<path:buyer_name>")
 @login_required
@@ -260,7 +942,7 @@ def buyer_analytics_page(buyer_name):
     buyers = _load_buyers()
     buyer = next((b for b in buyers if b["name"].lower() == buyer_name.lower()), None)
     display_name = buyer["name"] if buyer else buyer_name
-    return _render("buyer_analytics.html",
+    return render_template("buyer_analytics.html",
                            buyer_name=display_name,
                            buyer_names=[b["name"] for b in buyers])
 
@@ -336,109 +1018,24 @@ def api_buyer_analytics(buyer_name):
         for y in sorted(by_year.keys())
     ]
 
-    # ── By location ──────────────────────────────────────────────────────────
-    # Get registered locations from buyer record
-    buyers_list = _load_buyers()
-    buyer_rec   = next((b for b in buyers_list
-                        if (b.get("name") or "").strip().lower() == buyer_name.lower()), None)
-    registered_locs = [l.get("name","").strip() for l in (buyer_rec or {}).get("locations", []) if l.get("name","").strip()]
-
-    # Build per-location sales breakdown
-    by_location = defaultdict(lambda: {"revenue": 0.0, "cases": 0, "units": 0, "orders": set()})
-    for s in buyer_sales:
-        loc = (s.get("location_name") or s.get("delivery_label") or "").strip() or "Pickup / Other"
-        by_location[loc]["revenue"] += _revenue(s)
-        by_location[loc]["cases"]   += _cases(s)
-        by_location[loc]["units"]   += int(s.get("quantity") or 0)
-        by_location[loc]["orders"].add(s.get("order_id") or s.get("id"))
-
-    # Order locations: registered ones first (in their defined order), then any others
-    loc_names_ordered = []
-    for rl in registered_locs:
-        if rl in by_location:
-            loc_names_ordered.append(rl)
-    for loc in by_location:
-        if loc not in loc_names_ordered:
-            loc_names_ordered.append(loc)
-
-    locations = [
-        {
-            "name":    loc,
-            "revenue": round(by_location[loc]["revenue"], 2),
-            "cases":   by_location[loc]["cases"],
-            "units":   by_location[loc]["units"],
-            "orders":  len(by_location[loc]["orders"]),
-        }
-        for loc in loc_names_ordered
-    ]
-    has_locations = len(locations) > 1  # only show tabs if >1 location
-
-    # ── By month (also per-location) ──────────────────────────────────────────
-    # Store location on each monthly entry so JS can filter
-    by_month_loc = defaultdict(lambda: defaultdict(lambda: {"revenue": 0.0, "cases": 0, "units": 0, "orders": set()}))
-    for s in buyer_sales:
-        d   = (s.get("sale_date") or "")[:7]
-        loc = (s.get("location_name") or s.get("delivery_label") or "").strip() or "Pickup / Other"
-        if not d:
-            continue
-        by_month_loc[d][loc]["revenue"] += _revenue(s)
-        by_month_loc[d][loc]["cases"]   += _cases(s)
-        by_month_loc[d][loc]["units"]   += int(s.get("quantity") or 0)
-        by_month_loc[d][loc]["orders"].add(s.get("order_id") or s.get("id"))
-
-    # Build monthly with per-location breakdown embedded
-    monthly = []
-    for m in months_sorted:
-        entry = {
-            "month":   m,
-            "label":   _dt.strptime(m, "%Y-%m").strftime("%b %Y"),
-            "revenue": round(by_month[m]["revenue"], 2),
-            "cases":   by_month[m]["cases"],
-            "units":   by_month[m]["units"],
-            "orders":  len(by_month[m]["orders"]),
-            "by_location": {
-                loc: {
-                    "revenue": round(by_month_loc[m][loc]["revenue"], 2),
-                    "cases":   by_month_loc[m][loc]["cases"],
-                    "units":   by_month_loc[m][loc]["units"],
-                    "orders":  len(by_month_loc[m][loc]["orders"]),
-                }
-                for loc in by_month_loc[m]
-            }
-        }
-        monthly.append(entry)
-
-    # ── By SKU (also per-location) ────────────────────────────────────────────
+    # ── By SKU ────────────────────────────────────────────────────────────────
     by_sku = defaultdict(lambda: {"recipe": "", "format": "", "units": 0,
-                                   "cases": 0, "revenue": 0.0, "months": defaultdict(int),
-                                   "by_location": defaultdict(lambda: {"units": 0, "cases": 0, "revenue": 0.0})})
+                                   "cases": 0, "revenue": 0.0, "months": defaultdict(int)})
     for s in buyer_sales:
-        sk  = s.get("sku_key") or s.get("recipe") or "Unknown"
-        loc = (s.get("location_name") or s.get("delivery_label") or "").strip() or "Pickup / Other"
+        sk = s.get("sku_key") or s.get("recipe") or "Unknown"
         by_sku[sk]["recipe"]  = s.get("recipe", "")
         by_sku[sk]["format"]  = s.get("format", "")
         by_sku[sk]["units"]  += int(s.get("quantity") or 0)
         by_sku[sk]["cases"]  += _cases(s)
         by_sku[sk]["revenue"]+= _revenue(s)
-        by_sku[sk]["by_location"][loc]["units"]   += int(s.get("quantity") or 0)
-        by_sku[sk]["by_location"][loc]["cases"]   += _cases(s)
-        by_sku[sk]["by_location"][loc]["revenue"] += _revenue(s)
         m = (s.get("sale_date") or "")[:7]
         if m:
             by_sku[sk]["months"][m] += _cases(s)
 
     skus = sorted(
-        [{"sku": k,
-          "recipe":  v["recipe"],
-          "format":  v["format"],
-          "units":   v["units"],
-          "cases":   v["cases"],
+        [{"sku": k, **{kk: vv for kk, vv in v.items() if kk != "months"},
           "revenue": round(v["revenue"], 2),
-          "monthly_cases": dict(v["months"]),
-          "by_location": {loc: {kk: round(vv,2) if kk=="revenue" else vv
-                                for kk,vv in ldata.items()}
-                          for loc, ldata in v["by_location"].items()},
-         }
+          "monthly_cases": dict(v["months"])}
          for k, v in by_sku.items()],
         key=lambda x: -x["revenue"]
     )
@@ -470,8 +1067,6 @@ def api_buyer_analytics(buyer_name):
 
     return jsonify({
         "buyer": buyer_name,
-        "locations":     locations,
-        "has_locations": has_locations,
         "totals": {
             "revenue":          round(total_revenue, 2),
             "cases":            total_cases,
@@ -576,7 +1171,7 @@ def api_sales_by_buyer():
         if cutoff and sale_date and sale_date < cutoff.isoformat():
             continue
         if buyer not in by_buyer:
-            by_buyer[buyer] = {"buyer": buyer, "orders": set(), "units": 0, "revenue": 0.0, "by_sku": set()}
+            by_buyer[buyer] = {"buyer": buyer, "orders": set(), "units": 0, "revenue": 0.0, "by_sku": {}}
         qty   = int(sale.get("quantity") or 0)
         # unit_price may be None for pre-catalogue records — fall back to 0
         price = float(sale.get("unit_price") or sale.get("price") or sale.get("unit_selling_price") or 0)
@@ -648,24 +1243,22 @@ def buyer_edit_page(bid):
                 "skus":          skus_sorted,
             })
 
-    # Build sku_map: {sku_key: sku_dict} for fast lookup in template
-    sku_map = {s["sku_key"]: s for s in buyer.get("skus", []) if s.get("sku_key")}
-    return _render("buyer_edit.html", buyer=buyer, sku_catalog=sku_catalog, sku_map=sku_map)
+    return render_template("buyer_edit.html", buyer=buyer, sku_catalog=sku_catalog)
 
 @app.route("/ccp-master")
 @login_required
 def ccp_master_page():
-    return _render("master_ccp.html")
+    return render_template("master_ccp.html")
 
 @app.route("/traceability")
 @login_required
 def traceability_page():
-    return _render("traceability.html")
+    return render_template("traceability.html")
 
 @app.route("/production-tracker")
 @login_required
 def production_tracker_page():
-    return _render("production_tracker.html")
+    return render_template("production_tracker.html")
 
 
 # ── Recipe API ─────────────────────────────────────────────────────────
@@ -2227,7 +2820,6 @@ SKU_META_PATH = os.path.join(INVENTORY_DIR, "sku_meta.json")  # PAR levels + pri
 ADJUSTMENTS_PATH = os.path.join(INVENTORY_DIR, "adjustments.json")
 AUDITS_PATH      = os.path.join(INVENTORY_DIR, "audits.json")
 EQUIPMENT_PATH   = os.path.join(DATA_DIR, "equipment.json")
-COGS_PATH        = os.path.join(DATA_DIR, "cogs.json")
 # Camera-scan request log: per-day rolling counter for daily-limit enforcement
 # plus an audit trail of every scan (success or failure).
 SUPPLIERS_PATH = os.path.join(INVENTORY_DIR, "suppliers.json")
@@ -2302,13 +2894,35 @@ def _autotag_existing_organic_data():
             print(f"[autotag] Failed for {path}: {e}")
 
 
+def _load_json(path, default=None):
+    """Read a JSON file. Returns `default` (or [] if not given) when the file
+    is missing.
+
+    CONCURRENCY: This is a plain read with no file locking. The Soma app uses
+    JSON files for all persistent state and assumes a single-user, low-
+    concurrency environment. Two simultaneous writes are LAST-WRITE-WINS and
+    can lose data — but in practice the kitchen has one user editing at a
+    time, so this constraint is acceptable. If multi-user concurrent editing
+    becomes a requirement, switch to SQLite (file-locked) or a real DB.
+    """
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            return json.load(f)
+    return default if default is not None else []
+
+
+def _save_json(path, data):
+    """Write JSON. See _load_json's docstring for the concurrency caveat —
+    no locking, last-write-wins on simultaneous writes."""
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
 
 
 # ── Organic Page ──────────────────────────────────────────────────────
 @app.route("/organic")
 @login_required
 def organic_page():
-    return _render("organic.html")
+    return render_template("organic.html")
 
 
 # ── Organic: Get ingredient list from organic recipes ─────────────────
@@ -2428,10 +3042,10 @@ def organic_ingredients():
 # Default section list seeded on first load. User can rename/reorder/add/
 # delete after that — these are just a starting point.
 DEFAULT_RM_SECTIONS = [
-    {"id": "bones",     "name": "Bones"},
-    {"id": "fresh_veg", "name": "Fresh Vegetables"},
-    {"id": "herbs",     "name": "Herbs"},
-    {"id": "adjuncts",  "name": "Adjuncts, Packs, & Juice"},
+    {"id": "bones", "name": "Bones"},
+    {"id": "mirepoix", "name": "Mirepoix"},
+    {"id": "herbs", "name": "Herbs"},
+    {"id": "adjuncts", "name": "Adjuncts & Pre-Packs"},
     {"id": "mushrooms", "name": "Mushrooms"},
     {"id": "spices_other", "name": "Spices & Other"},
 ]
@@ -2455,7 +3069,7 @@ def _load_rm_sections():
                 {"id": s["id"], "name": s["name"], "order": i}
                 for i, s in enumerate(DEFAULT_RM_SECTIONS)
             ],
-            "assignments": set(),
+            "assignments": {},
         }
         _save_json(RM_SECTIONS_PATH, seed)
         return seed
@@ -2468,7 +3082,7 @@ def _load_rm_sections():
                 {"id": s["id"], "name": s["name"], "order": i}
                 for i, s in enumerate(DEFAULT_RM_SECTIONS)
             ],
-            "assignments": set(),
+            "assignments": {},
         }
         _save_json(RM_SECTIONS_PATH, seed)
         return seed
@@ -2493,146 +3107,6 @@ def _section_for_ingredient(name, unit, sections_data):
     if not any(s.get("id") == section_id for s in sections_data.get("sections", [])):
         return None
     return section_id
-
-
-# Bone broth domain keyword → section_id mapping for auto-assignment
-# Keys are section NAMES (not IDs) — matched case-insensitively against live sections.
-# This makes the mapping robust regardless of what section IDs were used when
-# the sections were first created in the UI on Render.
-_RM_KEYWORD_MAP = {
-    "Bones": [
-        "bone", "knuckle", "neck", "back", "foot", "feet", "marrow", "oxtail",
-        "chicken carcass", "carcass", "beef", "bison", "pork", "lamb",
-        "drumstick", "wing", "frame", "rib", "femur", "tibia",
-    ],
-    "Fresh Vegetables": [
-        "onion", "carrot", "celery", "leek", "parsnip", "turnip",
-        "fennel", "shallot", "garlic", "tomato", "potato",
-        "cabbage", "kale", "spinach", "zucchini", "squash",
-        "beet", "beetroot", "capsicum", "celeriac",
-        "vegetable", "veg",
-    ],
-    "Herbs": [
-        "thyme", "rosemary", "parsley", "bay leaf", "bay leaves", "sage",
-        "oregano", "tarragon", "chive", "basil", "dill", "mint",
-        "herb", "bouquet garni", "savory", "marjoram", "lovage",
-    ],
-    "Mushrooms": [
-        "mushroom", "shiitake", "porcini", "portobello", "cremini",
-        "reishi", "chaga", "lion's mane", "oyster mushroom",
-        "maitake", "enoki", "chanterelle",
-    ],
-    "Adjuncts, Packs, & Juice": [
-        "apple cider vinegar", "vinegar", "kombu", "seaweed", "kelp",
-        "miso", "tamari", "soy", "coconut aminos", "fish sauce",
-        "nutritional yeast", "yeast", "salt", "peppercorn",
-        "adjunct", "pre-pack", "pack", "pouch", "sachet", "juice",
-        "turmeric", "ginger", "lemon", "lime", "citrus",
-        "pink himalayan", "sea salt", "black salt", "apple juice",
-        "coconut water", "broth concentrate", "gelatin",
-    ],
-    "Spices & Other": [
-        "spice", "cinnamon", "clove", "star anise", "cardamom",
-        "cumin", "coriander", "paprika", "chili", "chilli",
-        "allspice", "nutmeg", "mace", "juniper", "fennel seed",
-        "mustard seed", "fenugreek", "curry", "sumac",
-        "black pepper", "white pepper", "cayenne", "smoked paprika",
-    ],
-}
-
-
-def _infer_section_for_ingredient(name):
-    """Infer the best-match section NAME for an ingredient name using keyword mapping.
-    Returns a section name string (e.g. 'Bones', 'Fresh Vegetables') or None.
-    """
-    name_lower = (name or "").lower()
-    for section_name, keywords in _RM_KEYWORD_MAP.items():
-        for kw in keywords:
-            if kw in name_lower:
-                return section_name
-    return None
-
-
-@app.route("/api/organic/raw-materials/auto-assign-sections", methods=["POST"])
-@login_required
-def auto_assign_rm_sections():
-    """Auto-assign RM ingredients to sections based on ingredient name keywords.
-    Only assigns ingredients that are currently Unassigned — does not overwrite
-    existing manual assignments.
-    Body: { overwrite: bool } — if true, reassigns everything including already-assigned.
-    Returns a summary of what was assigned.
-    """
-    overwrite = (request.get_json() or {}).get("overwrite", False)
-    sections_data = _load_rm_sections()
-    assignments   = sections_data.get("assignments", {})
-    sections_list = sections_data.get("sections", [])
-
-    # Get all known ingredients from raw materials
-    materials = _load_json(ORGANIC_RAW_PATH, [])
-    seen = set()
-    for mat in materials:
-        name = (mat.get("item") or "").strip()
-        unit = (mat.get("unit") or "").strip()
-        if name and unit:
-            seen.add((name, unit))
-
-    # Also include custom items
-    custom = _load_json(ORGANIC_CUSTOM_ITEMS_PATH, [])
-    for c in custom:
-        name = c.get("name","").strip()
-        unit = c.get("unit","").strip()
-        if name and unit:
-            seen.add((name, unit))
-
-    # Verify all sections exist
-    valid_section_ids = {s["id"] for s in sections_list}
-
-    assigned   = []
-    skipped    = []
-    unresolved = []
-
-    for name, unit in sorted(seen):
-        key = _ingredient_section_key(name, unit)
-        existing = assignments.get(key)
-
-        # Skip if already assigned to a REAL section (not Unassigned) and not overwriting
-        existing_is_real = (existing and existing in valid_section_ids
-                            and existing != UNASSIGNED_SECTION_ID)
-        if existing_is_real and not overwrite:
-            skipped.append({"name": name, "unit": unit, "section": existing})
-            continue
-
-        inferred_name = _infer_section_for_ingredient(name)
-        if inferred_name:
-            # Find section ID by matching name case-insensitively against live sections
-            matched = next(
-                (s for s in sections_list
-                 if s.get("name","").strip().lower() == inferred_name.lower()),
-                None
-            )
-            if matched:
-                assignments[key] = matched["id"]
-                assigned.append({"name": name, "unit": unit, "section": matched["name"]})
-            else:
-                # Section name from keyword map doesn't exist on Render — unresolved
-                unresolved.append({"name": name, "unit": unit,
-                                   "note": f"Section '{inferred_name}' not found"})
-        else:
-            unresolved.append({"name": name, "unit": unit})
-
-    sections_data["assignments"] = assignments
-    _save_json(RM_SECTIONS_PATH, sections_data)
-
-    return jsonify({
-        "ok":         True,
-        "assigned":   len(assigned),
-        "skipped":    len(skipped),
-        "unresolved": len(unresolved),
-        "details": {
-            "assigned":   assigned,
-            "unresolved": unresolved,
-        },
-    })
 
 
 @app.route("/api/organic/raw-materials/sections", methods=["GET"])
@@ -4307,22 +4781,16 @@ def _save_equipment(data):
     _save_json(EQUIPMENT_PATH, data)
 
 
-@app.route("/company-settings")
-@login_required
-def company_settings_page():
-    return _render("company_settings.html")
-
-
 @app.route("/important-documents")
 @login_required
 def important_documents_page():
-    return _render("important_documents.html")
+    return render_template("important_documents.html")
 
 
 @app.route("/equipment")
 @login_required
 def equipment_page():
-    return _render("equipment.html")
+    return render_template("equipment.html")
 
 
 @app.route("/api/equipment", methods=["GET"])
@@ -4463,7 +4931,7 @@ def audit_page(kind):
     """Render the audit page for 'rm' or 'fg'."""
     if kind not in ("rm", "fg"):
         return "Invalid audit type", 400
-    return _render("audit.html", kind=kind)
+    return render_template("audit.html", kind=kind)
 
 
 @app.route("/api/audit/start", methods=["POST"])
@@ -4499,7 +4967,7 @@ def start_audit():
         "started_at": datetime.now().isoformat(),
         "items":      items,
         "current_idx": 0,
-        "results": set(),  # {item_id: {counted, system_qty, ...}}
+        "results":    {},  # {item_id: {counted, system_qty, ...}}
     }
     audits.append(audit)
     _save_audits(audits)
@@ -4522,10 +4990,7 @@ def _build_rm_audit_items(categories):
         item_name = (mat.get("item") or "").strip()
         if not item_name:
             continue
-        # assignments keyed as "name|unit" — must match _ingredient_section_key format
-        unit = (mat.get("unit") or "").strip()
-        assignment_key = f"{item_name}|{unit}"
-        section_id = assignments.get(assignment_key, "")
+        section_id = assignments.get(item_name, "")
         section_name = sections.get(section_id, "") or "Unassigned"
         if categories and section_name not in categories:
             continue
@@ -4813,15 +5278,7 @@ def get_adjustments():
 # rm_receipt_photos/: <entry_id>.<ext> — one photo per add-inventory entry
 
 def _load_suppliers():
-    suppliers = _load_json(SUPPLIERS_PATH, [])
-    changed = False
-    for s in suppliers:
-        if not s.get("id"):
-            s["id"] = datetime.now().strftime("%Y%m%d%H%M%S%f") + s.get("name","")[:4]
-            changed = True
-    if changed:
-        _save_json(SUPPLIERS_PATH, suppliers)
-    return suppliers
+    return _load_json(SUPPLIERS_PATH, [])
 
 def _save_suppliers(data):
     _save_json(SUPPLIERS_PATH, data)
@@ -4964,12 +5421,12 @@ def get_finished_goods_grouped():
     if cert_filter:
         grouped = [g for g in grouped
                    if (g.get("certification") or "").lower() == cert_filter.lower()]
-    # Merge PAR levels from sku_meta.json
+    # Merge PAR levels and prices from sku_meta.json
     meta = _load_json(SKU_META_PATH, {})
     for g in grouped:
         m = meta.get(g["sku_key"], {})
         g["par"] = m.get("par")          # None = no PAR; int = PAR level
-        # price lives in buyers.json — not surfaced here
+        g["price"] = m.get("price")      # None = unset; float = price per unit
     return jsonify(grouped)
 
 
@@ -5893,16 +6350,7 @@ def _all_sku_catalog():
 
 
 def _load_buyers():
-    buyers = _load_json(BUYERS_PATH, [])
-    # Backfill missing id fields
-    changed = False
-    for b in buyers:
-        if not b.get("id"):
-            b["id"] = datetime.now().strftime("%Y%m%d%H%M%S%f") + b.get("name","")[:4]
-            changed = True
-    if changed:
-        _save_json(BUYERS_PATH, buyers)
-    return buyers
+    return _load_json(BUYERS_PATH, [])
 
 
 def _save_buyers(data):
@@ -6024,14 +6472,12 @@ def update_buyer_sku_pricing(bid, sku_key):
     cogs       = float(data["cogs"])       if "cogs"       in data and data["cogs"]       is not None else sku.get("cogs")
     margin_pct = float(data["margin_pct"]) if "margin_pct" in data and data["margin_pct"] is not None else sku.get("margin_pct")
 
-    # Gross margin formula: margin = (price - cost) / price × 100
-    # Consistent with buyer_edit.html
     if price is not None and cogs is not None:
-        margin_pct = round(((price - cogs) / price) * 100, 2) if price > 0 else 0.0
+        margin_pct = round(((price / cogs) - 1) * 100, 2) if cogs > 0 else 0.0
     elif price is not None and margin_pct is not None:
-        cogs = round(price * (1 - margin_pct / 100), 2)
+        cogs = round(price / (1 + margin_pct / 100), 2) if (1 + margin_pct / 100) > 0 else price
     elif cogs is not None and margin_pct is not None:
-        price = round(cogs / (1 - margin_pct / 100), 2) if margin_pct < 100 else cogs
+        price = round(cogs * (1 + margin_pct / 100), 2)
 
     if price      is not None: sku["price"]      = round(price, 2)
     if cogs       is not None: sku["cogs"]        = round(cogs, 2)
@@ -6598,174 +7044,6 @@ def _run_scheduled_deductions():
     if changed:
         _save_json(ORGANIC_SALES_PATH, sales)
         _save_json(ORGANIC_FG_PATH, fg)
-
-
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# RESTORED FUNCTIONS
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def get_current_week_id():
-    """Return the Monday of the current week as YYYY-MM-DD."""
-    from datetime import date, timedelta
-    d = date.today()
-    monday = d - timedelta(days=d.weekday())
-    return monday.isoformat()
-
-
-def load_schedule(week_id):
-    """Load schedule data for a given week. Returns {} if not found."""
-    path = os.path.join(SCHEDULES_DIR, f"{week_id}.json")
-    return _load_json(path, {})
-
-
-def save_schedule(week_id, data):
-    """Persist schedule data for a week."""
-    os.makedirs(SCHEDULES_DIR, exist_ok=True)
-    path = os.path.join(SCHEDULES_DIR, f"{week_id}.json")
-    _save_json(path, data)
-
-
-def list_schedules():
-    """Return a list of all week_ids that have saved schedule data."""
-    if not os.path.exists(SCHEDULES_DIR):
-        return []
-    weeks = []
-    for fn in sorted(os.listdir(SCHEDULES_DIR)):
-        if fn.endswith(".json"):
-            weeks.append(fn[:-5])  # strip .json
-    return weeks
-
-
-def load_checklist(week_id, day_idx):
-    """Load checklist data for a specific day. Returns {} if not found."""
-    path = os.path.join(CHECKLISTS_DIR, f"{week_id}_day{day_idx}.json")
-    return _load_json(path, {})
-
-
-def save_checklist_data(week_id, day_idx, data):
-    """Persist checklist data for a specific production day."""
-    os.makedirs(CHECKLISTS_DIR, exist_ok=True)
-    path = os.path.join(CHECKLISTS_DIR, f"{week_id}_day{day_idx}.json")
-    _save_json(path, data)
-
-
-def load_ccp_master():
-    """Load the master CCP document."""
-    return _load_json(CCP_MASTER_PATH, {})
-
-
-def save_ccp_master(sections):
-    """Persist the master CCP document."""
-    _save_json(CCP_MASTER_PATH, sections)
-
-
-def load_recipe_order():
-    """Load the user-defined recipe display order."""
-    return _load_json(RECIPE_ORDER_PATH, [])
-
-
-def save_recipe_order(order):
-    """Persist the recipe display order."""
-    _save_json(RECIPE_ORDER_PATH, order)
-
-
-def save_recipes(recipes):
-    """Persist recipes to disk. Accepts dict {name: recipe} or list."""
-    if isinstance(recipes, list):
-        data = recipes
-    else:
-        data = list(recipes.values())
-    with open(RECIPES_PATH, "w") as f:
-        json.dump(data, f, indent=2)
-
-
-def is_structured_ingredient(ing):
-    """Return True if ingredient is a dict with a name key."""
-    return isinstance(ing, dict) and "name" in ing
-
-
-def is_untracked_ingredient(ing):
-    """Return True if ingredient has no tracking mode set."""
-    if not isinstance(ing, dict):
-        return True
-    return not ing.get("tracking_mode") and not ing.get("unit")
-
-
-def halve_ingredient(ing):
-    """Return a copy of ingredient with quantity halved."""
-    if not isinstance(ing, dict):
-        return ing
-    result = dict(ing)
-    for key in ("quantity", "amount", "qty"):
-        if key in result and result[key] is not None:
-            try:
-                result[key] = round(float(result[key]) / 2, 4)
-            except (TypeError, ValueError):
-                pass
-    return result
-
-
-def ingredients_match(a, b):
-    """Return True if two ingredients refer to the same item."""
-    def _name(x):
-        if isinstance(x, dict):
-            return (x.get("name") or "").strip().lower()
-        return str(x).strip().lower()
-    return _name(a) == _name(b) and _name(a) != ""
-
-
-def _load_tracking_modes():
-    """Load tracking mode overrides from company info."""
-    info = _load_json(COMPANY_INFO_PATH, {})
-    return info.get("tracking_modes", {})
-
-
-def _check_organic_completion(run, checklist):
-    """Return True if a production run has a completed checklist."""
-    if not checklist:
-        return False
-    return bool(checklist.get("complete"))
-
-
-def build_display_name(rdata, rname=None, recipe_name=None):
-    """Build a human-readable display name for a recipe SKU."""
-    name_str = rname or recipe_name or ""
-    brand = (rdata.get("brand") or "").strip()
-    fmt   = (rdata.get("format") or "").strip()
-    if brand and brand.lower() not in name_str.lower():
-        display = f"{brand} {name_str}"
-    else:
-        display = name_str
-    if fmt and fmt.upper() not in display.upper():
-        display = f"{display} {fmt}"
-    return display.strip()
-
-
-def parse_recipe_pdf_text(text):
-    """Parse extracted PDF text into a basic recipe dict. Best-effort."""
-    lines = [l.strip() for l in text.split("\n") if l.strip()]
-    recipe = {"name": "", "ingredients": [], "instructions": ""}
-    if lines:
-        recipe["name"] = lines[0]
-    recipe["instructions"] = "\n".join(lines[1:])
-    return recipe
-
-
-def migrate_recipe_ingredients(recipe):
-    """Migrate old-style string ingredient lists to structured dicts."""
-    ingredients = recipe.get("ingredients", [])
-    migrated = []
-    for ing in ingredients:
-        if isinstance(ing, str):
-            migrated.append({"name": ing, "quantity": None, "unit": None,
-                             "tracking_mode": "weight"})
-        elif isinstance(ing, dict):
-            migrated.append(ing)
-    recipe["ingredients"] = migrated
-    return recipe
-
 
 
 _run_scheduled_deductions()  # run once on startup

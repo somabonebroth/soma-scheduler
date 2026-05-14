@@ -8,14 +8,14 @@
 <style>
 body.an-page { background:var(--bg); }
 .an-wrap { max-width:1040px; margin:0 auto; padding:24px 16px 60px; }
-
-
-
+.tab-bar { display:flex; gap:0; background:#fff; border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:20px; }
+.tab-btn { flex:1; padding:13px 16px; font-size:13px; font-weight:600; border:none; background:none; cursor:pointer; color:var(--text-light); border-bottom:3px solid transparent; transition:all .15s; }
+.tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); background:#f9faf7; }
 .tab-pane { display:none; }
 .tab-pane.active { display:block; }
 .period-row { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; align-items:center; }
-.filter-btn { padding:7px 14px; border:1.5px solid var(--border); border-radius:7px; font-size:12px; font-weight:600; background:#fff; cursor:pointer; color:var(--text-light); transition:all .15s; }
-.filter-btn.active { border-color:var(--accent); color:var(--accent); background:#f0f7f0; }
+.period-btn { padding:7px 14px; border:1.5px solid var(--border); border-radius:7px; font-size:12px; font-weight:600; background:#fff; cursor:pointer; color:var(--text-light); transition:all .15s; }
+.period-btn.active { border-color:var(--accent); color:var(--accent); background:#f0f7f0; }
 .buyer-filter { padding:8px 12px; border:1.5px solid var(--border); border-radius:7px; font-size:13px; outline:none; }
 .buyer-filter:focus { border-color:var(--accent); }
 .buyer-card { background:#fff; border:1px solid var(--border); border-radius:12px; margin-bottom:12px; overflow:hidden; cursor:pointer; transition:box-shadow .15s; }
@@ -62,10 +62,10 @@ body.an-page { background:var(--bg); }
     </div>
     <div class="period-row">
       <div style="font-size:12px;font-weight:600;color:var(--text-light);margin-right:4px;">Period:</div>
-      <button class="filter-btn active" onclick="setPeriod('all',this)">All time</button>
-      <button class="filter-btn" onclick="setPeriod('ytd',this)">YTD</button>
-      <button class="filter-btn" onclick="setPeriod('90d',this)">90 days</button>
-      <button class="filter-btn" onclick="setPeriod('30d',this)">30 days</button>
+      <button class="period-btn active" onclick="setPeriod('all',this)">All time</button>
+      <button class="period-btn" onclick="setPeriod('ytd',this)">YTD</button>
+      <button class="period-btn" onclick="setPeriod('90d',this)">90 days</button>
+      <button class="period-btn" onclick="setPeriod('30d',this)">30 days</button>
       <select class="buyer-filter" id="buyer-filter" onchange="loadSales()">
         <option value="">All buyers</option>
         {% for name in buyer_names %}
@@ -99,7 +99,7 @@ function showTab(id) {
 
 function setPeriod(p, btn) {
   _period = p;
-  document.querySelectorAll('.filter-btn').forEach(function(b){ b.classList.remove('active'); });
+  document.querySelectorAll('.period-btn').forEach(function(b){ b.classList.remove('active'); });
   btn.classList.add('active');
   loadSales();
 }

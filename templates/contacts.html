@@ -16,9 +16,9 @@
 <style>
 body.cp { background: var(--bg); }
 .cp .main { padding: 0 0 40px; max-width: 860px; margin: 0 auto; }
-
-
-
+.tab-bar { display:flex; gap:0; overflow-x:auto; background:var(--card-bg); border-bottom:2px solid var(--border); padding:0 20px; }
+.tab-btn { padding:14px 20px; font-size:13px; font-weight:500; border:none; background:none; cursor:pointer; color:var(--text-light); border-bottom:3px solid transparent; margin-bottom:-2px; white-space:nowrap; transition:color .15s; }
+.tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
 .tab-content { display:none; padding:24px 20px 0; }
 .tab-content.active { display:block; }
 .cc { background:#fff; border:1px solid var(--border); border-radius:12px; padding:18px 20px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:flex-start; gap:16px; transition:box-shadow .15s; }
@@ -27,16 +27,16 @@ body.cp { background: var(--bg); }
 .cc-sub { font-size:12px; color:var(--text-light); margin-bottom:2px; line-height:1.5; }
 .cc-sub a { color:var(--accent); text-decoration:none; }
 .cc-badge { display:inline-block; padding:2px 9px; border-radius:20px; font-size:10px; font-weight:600; margin-top:5px; margin-right:4px; }
-.bg-g { background:var(--action-green-bg); color:var(--action-green); border:1px solid #a5d6a7; }
-.bg-b { background:var(--action-blue-bg); color:#0a4081; border:1px solid #90caf9; }
-.bg-k { background:var(--bg); color:#666; border:1px solid #d8d8d0; }
+.bg-g { background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7; }
+.bg-b { background:#e3f2fd; color:#0a4081; border:1px solid #90caf9; }
+.bg-k { background:#f5f5f0; color:#666; border:1px solid #d8d8d0; }
 .cc-actions { display:flex; gap:8px; flex-shrink:0; }
 .mo { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200; align-items:center; justify-content:center; padding:16px; }
 .mo.open { display:flex; }
 .mo-box { background:#fff; border-radius:16px; width:100%; max-width:580px; max-height:92vh; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,.18); }
 .mo-head { padding:20px 22px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
 .mo-head h2 { margin:0; font-size:17px; font-weight:700; color:var(--dark); }
-.mo-x { background:var(--bg); border:none; border-radius:50%; width:32px; height:32px; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center; color:#666; flex-shrink:0; transition:background .15s; }
+.mo-x { background:#f5f5f0; border:none; border-radius:50%; width:32px; height:32px; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center; color:#666; flex-shrink:0; transition:background .15s; }
 .mo-x:hover { background:#ebe9e4; }
 .mo-body { padding:20px 22px; overflow-y:auto; flex:1; }
 .mo-foot { padding:14px 22px; border-top:1px solid var(--border); display:flex; gap:10px; flex-shrink:0; background:#fafaf8; }
@@ -53,7 +53,7 @@ body.cp { background: var(--bg); }
 .btn-p:hover { filter:brightness(1.08); }
 .btn-o { background:#fff; color:var(--dark); border:1.5px solid var(--border); }
 .btn-o:hover { background:var(--bg); }
-.btn-r { background:none; border:1.5px solid #fca5a5; color:var(--action-red); font-size:12px; padding:7px 12px; min-height:36px; border-radius:7px; cursor:pointer; }
+.btn-r { background:none; border:1.5px solid #fca5a5; color:#c62828; font-size:12px; padding:7px 12px; min-height:36px; border-radius:7px; cursor:pointer; }
 .btn-sm { font-size:11px; padding:5px 12px; min-height:30px; border-radius:7px; border:1.5px solid var(--accent); color:var(--accent); background:#fff; cursor:pointer; font-weight:600; }
 .btn-sm:hover { background:#f0f7f0; }
 .loc-card { background:#f9f9f7; border:1.5px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:8px; }
@@ -61,22 +61,22 @@ body.cp { background: var(--bg); }
 .sku-chk { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:6px; cursor:pointer; font-size:13px; transition:background .1s; }
 .sku-chk:hover { background:#f0f7f0; }
 .sku-chk input { width:17px; height:17px; accent-color:var(--accent); cursor:pointer; flex-shrink:0; }
-.sku-bhdr { font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.06em; padding:8px 10px 4px; background:var(--bg); border-bottom:1px solid var(--border); }
+.sku-bhdr { font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.06em; padding:8px 10px 4px; background:#f5f5f0; border-bottom:1px solid var(--border); }
 .sku-orow { display:flex; align-items:center; gap:8px; padding:9px 10px; border-bottom:1px solid var(--border); background:#fff; }
 .sku-orow:nth-child(even) { background:#fafaf8; }
 .mv { width:26px; height:22px; border:1.5px solid var(--border); background:#fff; border-radius:5px; cursor:pointer; font-size:10px; display:flex; align-items:center; justify-content:center; }
 .mv:hover:not([disabled]) { background:var(--bg); }
 .mv[disabled] { opacity:.3; cursor:not-allowed; }
 .smsg { font-size:13px; margin:6px 0; min-height:18px; }
-.smsg.err { color:var(--action-red); }
-.sflash { font-size:12px; color:var(--action-green); display:none; margin-top:10px; font-weight:600; }
+.smsg.err { color:#c62828; }
+.sflash { font-size:12px; color:#2e7d32; display:none; margin-top:10px; font-weight:600; }
 .empty { text-align:center; padding:48px 24px; color:var(--text-light); font-size:14px; border:2px dashed var(--border); border-radius:12px; }
 .scard { background:#fff; border:1px solid var(--border); border-radius:12px; padding:22px 24px; margin-bottom:14px; }
 .scard h3 { font-size:14px; font-weight:700; margin:0 0 16px; color:var(--dark); }
 .price-row { display:grid; grid-template-columns:1fr 80px 80px 70px 60px; gap:6px; align-items:center; padding:9px 12px; border-bottom:1px solid var(--border); background:#fff; font-size:13px; }
 .price-row:nth-child(even) { background:#fafaf8; }
 .price-row:last-child { border-bottom:none; }
-.price-hdr { display:grid; grid-template-columns:1fr 80px 80px 70px 60px; gap:6px; padding:7px 12px; background:var(--bg); border-bottom:1px solid var(--border); font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.05em; }
+.price-hdr { display:grid; grid-template-columns:1fr 80px 80px 70px 60px; gap:6px; padding:7px 12px; background:#f5f5f0; border-bottom:1px solid var(--border); font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.05em; }
 .p-input { width:100%; box-sizing:border-box; padding:5px 7px; border:1.5px solid var(--border); border-radius:6px; font-size:13px; font-weight:600; text-align:right; outline:none; }
 .p-input:focus { border-color:var(--accent); }
 .p-margin { font-size:12px; color:var(--text-light); text-align:right; }
@@ -91,7 +91,7 @@ body.cp { background: var(--bg); }
   .mo-foot button { width:100%; }
   .mo { padding:0; align-items:flex-end; }
   .mo-box { border-radius:16px 16px 0 0; max-height:92vh; }
-  
+  .tab-btn { padding:12px 14px; font-size:12px; }
   .tab-content { padding:16px 14px 0; }
 }
 </style>
@@ -115,7 +115,7 @@ body.cp { background: var(--bg); }
 <div class="tab-content" id="tab-suppliers">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
     <div><div style="font-size:20px;font-weight:700;color:var(--dark);">Suppliers</div><div id="sup-count" style="font-size:12px;color:var(--text-light);margin-top:2px;"></div></div>
-    <button class="btn btn-primary" onclick="openAddSup()" style="background:#2e7d32;border:none;">+ Add Supplier</button>
+    <button class="btn btn-p" onclick="openAddSup()" style="background:#2e7d32;border:none;">+ Add Supplier</button>
   </div>
   <div id="sup-list"><div class="empty">Loading…</div></div>
 </div>
@@ -124,28 +124,9 @@ body.cp { background: var(--bg); }
 <div class="tab-content active" id="tab-buyers">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
     <div><div style="font-size:20px;font-weight:700;color:var(--dark);">Buyers</div><div id="buy-count" style="font-size:12px;color:var(--text-light);margin-top:2px;"></div></div>
-    <div style="display:flex;gap:8px;">
-      <button class="btn btn-outline" onclick="openCatalogueModal()" style="font-size:13px;">📋 View Catalogue</button>
-      <button class="btn btn-primary" onclick="openAddBuy()" style="background:#0288d1;border:none;">+ Add Buyer</button>
-    </div>
+    <button class="btn btn-p" onclick="openAddBuy()" style="background:#0288d1;border:none;">+ Add Buyer</button>
   </div>
   <div id="buy-list"><div class="empty">Loading…</div></div>
-
-<!-- Catalogue Modal -->
-<div id="catalogue-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center;padding:16px;">
-  <div style="background:#fff;border-radius:14px;width:100%;max-width:760px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.18);">
-    <div style="padding:18px 22px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#fff;z-index:1;">
-      <div>
-        <div style="font-size:16px;font-weight:700;">Full SKU Catalogue</div>
-        <div style="font-size:12px;color:var(--text-light);margin-top:2px;">All active SKUs and pricing across all buyers — read only</div>
-      </div>
-      <button onclick="closeCatalogueModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-light);line-height:1;padding:0;">×</button>
-    </div>
-    <div style="padding:20px 22px;" id="catalogue-body">
-      <div style="text-align:center;padding:32px;color:var(--text-light);">Loading…</div>
-    </div>
-  </div>
-</div>
 </div>
 
 <!-- Settings -->
@@ -177,8 +158,8 @@ body.cp { background: var(--bg); }
       <div class="smsg" id="s-msg"></div>
     </div>
     <div class="mo-foot">
-      <button class="btn btn-outline" onclick="closeSup()">Cancel</button>
-      <button class="btn btn-primary" id="s-save" onclick="saveSup()" style="background:#2e7d32;border:none;">Save Supplier</button>
+      <button class="btn btn-o" onclick="closeSup()">Cancel</button>
+      <button class="btn btn-p" id="s-save" onclick="saveSup()" style="background:#2e7d32;border:none;">Save Supplier</button>
     </div>
   </div>
 </div>
@@ -212,8 +193,8 @@ body.cp { background: var(--bg); }
           <div id="b-sku-list" style="max-height:240px;overflow-y:auto;border:1.5px solid var(--border);border-radius:10px;background:#fff;"></div>
           <div style="display:flex;justify-content:flex-end;margin-top:10px;">
             <div style="display:flex;gap:8px;">
-              <button class="btn btn-primary" onclick="goOrder()" style="background:#0288d1;border:none;font-size:13px;">Set Display Order →</button>
-              <button class="btn btn-primary" onclick="goOrder();goPricingStep();" style="background:#2e7d32;border:none;font-size:13px;">Set Pricing →</button>
+              <button class="btn btn-p" onclick="goOrder()" style="background:#0288d1;border:none;font-size:13px;">Set Display Order →</button>
+              <button class="btn btn-p" onclick="goOrder();goPricingStep();" style="background:#2e7d32;border:none;font-size:13px;">Set Pricing →</button>
             </div>
           </div>
         </div>
@@ -229,7 +210,7 @@ body.cp { background: var(--bg); }
         <div style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Products appear in this order in the sale grid. Click Set Pricing to assign buyer-specific prices.</div>
         <div id="b-ord-list" style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden;"></div>
         <div style="display:flex;justify-content:flex-end;margin-top:10px;">
-          <button class="btn btn-primary" onclick="goPricingStep()" style="background:#0288d1;border:none;font-size:13px;">Set Pricing →</button>
+          <button class="btn btn-p" onclick="goPricingStep()" style="background:#0288d1;border:none;font-size:13px;">Set Pricing →</button>
         </div>
       </div>
 
@@ -247,8 +228,8 @@ body.cp { background: var(--bg); }
       <div class="smsg" id="b-msg"></div>
     </div>
     <div class="mo-foot">
-      <button class="btn btn-outline" onclick="closeBuy()">Cancel</button>
-      <button class="btn btn-primary" id="b-save" onclick="saveBuy()" style="background:#0288d1;border:none;">Save Buyer</button>
+      <button class="btn btn-o" onclick="closeBuy()">Cancel</button>
+      <button class="btn btn-p" id="b-save" onclick="saveBuy()" style="background:#0288d1;border:none;">Save Buyer</button>
     </div>
   </div>
 </div>
@@ -295,10 +276,20 @@ async function loadSups(){
     if(n) h+='<div class="cc-sub" style="margin-top:6px;font-size:11px;">'+prev+'</div>';
     if(s.notes) h+='<div class="cc-sub" style="font-style:italic;margin-top:4px;color:#999;">'+e(s.notes)+'</div>';
     h+='</div><div class="cc-actions">';
-    h+='<button class="btn btn-primary" onclick="openEditSup(\''+sidE+'\')">Edit</button>';
-    h+='<button class="btn-r" onclick="delSup(\''+sidE+'\',\''+e(s.name)+'\')">Delete</button>';
-    h+='</div></div>';
-    return h;
+    var editBtn=document.createElement('button');
+    editBtn.className='btn btn-p';
+    editBtn.style.cssText='font-size:12px;padding:8px 16px;background:#2e7d32;border:none;';
+    editBtn.textContent='Edit';
+    editBtn.onclick=(function(id){return function(){openEditSup(id);};})(sid);
+    var delBtn=document.createElement('button');
+    delBtn.className='btn-r';
+    delBtn.textContent='Delete';
+    delBtn.onclick=(function(id,nm){return function(){delSup(id,nm);};})(sid,s.name);
+    var tmp=document.createElement('div');
+    tmp.innerHTML=h+'</div></div>';
+    tmp.querySelector('.cc-actions').appendChild(editBtn);
+    tmp.querySelector('.cc-actions').appendChild(delBtn);
+    return tmp.outerHTML;
   }).join('');
 }
 async function _fIng(){try{_ing=await(await fetch('/api/organic/ingredients')).json();}catch(ex){_ing=[];}}
@@ -367,7 +358,7 @@ async function loadBuys(){
       +(b.notes?'<div class="cc-sub" style="font-style:italic;margin-top:4px;color:#999;">'+e(b.notes)+'</div>':'')
       +'</div>'
       +'<div class="cc-actions" onclick="event.stopPropagation();">'
-      +'<a class="btn btn-primary" href="/buyers/'+bid+'/edit" style="font-size:12px;padding:8px 16px;text-decoration:none;background:#0288d1;border:none;display:inline-flex;align-items:center;gap:4px;">✎ Edit</a>'
+      +'<a class="btn btn-p" href="/buyers/'+bid+'/edit" style="font-size:12px;padding:8px 16px;text-decoration:none;background:#0288d1;border:none;display:inline-flex;align-items:center;gap:4px;">✎ Edit</a>'
       +'<button class="btn-r" onclick="delBuy(\''+bid+'\',\''+e(b.name)+'\')" >Delete</button>'
       +'</div></div>';
   }).join('');
@@ -588,76 +579,6 @@ async function saveCI(){
 
 /* ════════ BACKDROP CLOSE ════════ */
 ['sup-mo','buy-mo'].forEach(function(id){G(id).addEventListener('click',function(ev){if(ev.target===this)this.classList.remove('open');});});
-
-/* ════════ CATALOGUE MODAL ════════ */
-async function openCatalogueModal() {
-  var modal = document.getElementById('catalogue-modal');
-  var body  = document.getElementById('catalogue-body');
-  modal.style.display = 'flex';
-  body.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-light);">Loading…</div>';
-  try {
-    var res  = await fetch('/api/buyers/sku-catalog');
-    var data = await res.json();
-    renderCatalogue(data);
-  } catch(err) {
-    body.innerHTML = '<div style="color:#c62828;padding:20px;">Could not load catalogue: ' + err.message + '</div>';
-  }
-}
-
-function closeCatalogueModal() {
-  document.getElementById('catalogue-modal').style.display = 'none';
-}
-
-document.getElementById('catalogue-modal').addEventListener('click', function(ev){
-  if (ev.target === this) closeCatalogueModal();
-});
-
-function renderCatalogue(groups) {
-  var body = document.getElementById('catalogue-body');
-  if (!groups || !groups.length) {
-    body.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-light);">No SKUs in catalogue yet. Add buyers and assign pricing to see them here.</div>';
-    return;
-  }
-  var html = '';
-  // Get all unique buyer names from data
-  var allBuyers = new Set();
-  groups.forEach(function(g) {
-    (g.skus||[]).forEach(function(s){ if(s.buyer) allBuyers.add(s.buyer); });
-  });
-  var buyers = Array.from(allBuyers).sort();
-
-  // Header
-  html += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
-  html += '<thead><tr style="background:#f5f5f0;">'
-    + '<th style="text-align:left;padding:10px 12px;border-bottom:2px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-light);">SKU</th>'
-    + '<th style="text-align:left;padding:10px 12px;border-bottom:2px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-light);">Format</th>'
-    + buyers.map(function(b){
-        return '<th style="text-align:right;padding:10px 12px;border-bottom:2px solid var(--border);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-light);">'
-          + e(b) + '</th>';
-      }).join('')
-    + '</tr></thead><tbody>';
-
-  groups.forEach(function(g) {
-    // Brand header row
-    html += '<tr><td colspan="' + (2 + buyers.length) + '" style="background:#fafaf7;padding:9px 12px;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-light);border-top:2px solid var(--border);">'
-      + e(g.brand) + '</td></tr>';
-
-    (g.skus||[]).forEach(function(sku) {
-      html += '<tr style="border-bottom:1px solid var(--border);">'
-        + '<td style="padding:10px 12px;font-weight:600;">' + e(sku.recipe||sku.name||'—') + '</td>'
-        + '<td style="padding:10px 12px;color:var(--text-light);font-size:12px;">' + e(sku.format||'—') + '</td>';
-      buyers.forEach(function(b) {
-        var buyerSku = (g.skus||[]).find(function(s){ return s.buyer===b && s.recipe===sku.recipe && s.format===sku.format; });
-        var price = buyerSku && buyerSku.price != null ? '$' + parseFloat(buyerSku.price).toFixed(2) : '—';
-        html += '<td style="padding:10px 12px;text-align:right;font-weight:600;font-family:monospace;">' + price + '</td>';
-      });
-      html += '</tr>';
-    });
-  });
-
-  html += '</tbody></table>';
-  body.innerHTML = html;
-}
 
 /* ════════ INIT ════════ */
 // Load both tabs' data upfront so switching is instant
