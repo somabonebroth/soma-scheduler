@@ -6696,6 +6696,17 @@ _backfill_organic_finished_goods()
 # This function runs on startup and is callable via API. It processes any
 # sale records whose deduction_date has arrived but deduction hasn't run yet.
 
+def _prod_date(e):
+    """FIFO sort key: production date for a finished-goods entry.
+    Derives YYYY-MM-DD from week_id + day_idx; falls back to created_at."""
+    wid, d_idx = e.get("week_id"), e.get("day_idx")
+    if wid and d_idx is not None:
+        try:
+            return (datetime.strptime(wid, "%Y-%m-%d") + timedelta(days=int(d_idx))).strftime("%Y-%m-%d")
+        except Exception:
+            pass
+    return (e.get("created_at") or "")[:10]
+
 def _run_scheduled_deductions():
     """FIFO-deduct any Ripe sale records whose deduction_date <= today."""
     sales = _load_json(ORGANIC_SALES_PATH, [])
