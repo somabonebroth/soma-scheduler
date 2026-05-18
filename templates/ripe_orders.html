@@ -29,6 +29,15 @@
 .tag-fulfilled{background:#d4edda;color:#155724;}
 .tag-declined{background:#f8d7da;color:#721c24;}
 .tag-net14{background:#e8eaf6;color:#3949ab;}
+.tag-paid{background:#d4edda;color:#155724;}
+.tag-awaiting{background:#fff3cd;color:#856404;}
+.tag-invoice-sent{background:#e8eaf6;color:#3949ab;}
+.tag-failed{background:#f8d7da;color:#721c24;}
+.tag-voided{background:#eceff1;color:#546e7a;}
+.payment-stack{display:flex;flex-direction:column;gap:4px;align-items:flex-start;}
+.section-header td{background:var(--bg);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-light);padding:10px;border-bottom:2px solid var(--border);border-top:1px solid var(--border);}
+.section-header td .count{color:var(--text);font-weight:700;margin-left:6px;}
+.section-empty td{padding:18px;text-align:center;color:var(--text-light);font-size:12px;font-style:italic;}
 .items-list{font-size:12px;color:var(--text-light);margin:6px 0 0;}
 .items-list li{padding:3px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;}
 .items-list li:last-child{border-bottom:none;}
@@ -95,14 +104,7 @@
     <button class="filter-btn" onclick="setFilter('declined',this)">Declined</button>
   </div>
 
-  {% if orders %}
-  <div class="card" style="padding:0;overflow:hidden;">
-  <table class="orders-table">
-    <thead>
-      <tr><th>Order</th><th>Date</th><th>Delivery</th><th>Cases</th><th>Total</th><th>Payment</th><th>Status</th></tr>
-    </thead>
-    <tbody>
-    {% for o in orders %}
+  {% macro order_row(o) %}
     <tr class="order-row" data-id="{{ o.id }}" data-status="{{ o.status }}" onclick="toggleDetail('{{ o.id }}')">
       <td><strong>{{ o.id }}</strong></td>
       <td>{{ o.created_at[:10] }}</td>
@@ -110,8 +112,16 @@
       <td>{{ o.total_cases }}</td>
       <td>${{ "%.2f"|format(o.total) }}</td>
       <td>
-        {% if o.payment_key == 'etransfer' %}<span style="font-size:11px;color:var(--text-light);">E-Transfer</span>
-        {% else %}<span class="tag tag-net14">Net 14</span>{% endif %}
+        <div class="payment-stack">
+          {% if o.payment_key == 'etransfer' %}<span style="font-size:11px;color:var(--text-light);">E-Transfer</span>
+          {% else %}<span class="tag tag-net14">Net 14</span>{% endif %}
+          {% set ps = o.payment_status or 'n/a' %}
+          {% if ps == 'paid' %}<span class="tag tag-paid">paid{% if o.paid_at %} · {{ o.paid_at[:10] }}{% endif %}</span>
+          {% elif ps == 'invoice_sent' %}<span class="tag tag-invoice-sent">invoice sent</span>
+          {% elif ps in ['awaiting_etransfer', 'awaiting_invoice'] %}<span class="tag tag-awaiting">awaiting</span>
+          {% elif ps == 'payment_failed' %}<span class="tag tag-failed">payment failed</span>
+          {% elif ps == 'voided' %}<span class="tag tag-voided">voided</span>{% endif %}
+        </div>
       </td>
       <td>
         {% if o.status == 'pending' %}<span class="tag tag-pending">pending</span>
@@ -167,7 +177,29 @@
         </div>
       </td>
     </tr>
-    {% endfor %}
+  {% endmacro %}
+
+  {% if awaiting_orders or settled_orders %}
+  <div class="card" style="padding:0;overflow:hidden;">
+  <table class="orders-table">
+    <thead>
+      <tr><th>Order</th><th>Date</th><th>Delivery</th><th>Cases</th><th>Total</th><th>Payment</th><th>Status</th></tr>
+    </thead>
+    <tbody class="section-awaiting">
+      <tr class="section-header"><td colspan="7">Awaiting payment <span class="count">{{ awaiting_orders|length }}</span></td></tr>
+      {% if awaiting_orders %}
+        {% for o in awaiting_orders %}{{ order_row(o) }}{% endfor %}
+      {% else %}
+        <tr class="section-empty"><td colspan="7">All orders paid or declined.</td></tr>
+      {% endif %}
+    </tbody>
+    <tbody class="section-settled">
+      <tr class="section-header"><td colspan="7">Settled <span class="count">{{ settled_orders|length }}</span></td></tr>
+      {% if settled_orders %}
+        {% for o in settled_orders %}{{ order_row(o) }}{% endfor %}
+      {% else %}
+        <tr class="section-empty"><td colspan="7">No settled orders yet.</td></tr>
+      {% endif %}
     </tbody>
   </table>
   </div>
@@ -212,6 +244,13 @@ function setFilter(f, btn) {
     row.style.display = show ? '' : 'none';
     var det = document.getElementById('detail-' + row.dataset.id);
     if (det) det.style.display = show ? '' : 'none';
+  });
+  document.querySelectorAll('tbody.section-awaiting, tbody.section-settled').forEach(function(tb){
+    var rows = tb.querySelectorAll('.order-row');
+    if (rows.length === 0) return;
+    var anyVisible = Array.prototype.some.call(rows, function(r){ return r.style.display !== 'none'; });
+    var hdr = tb.querySelector('.section-header');
+    if (hdr) hdr.style.display = anyVisible ? '' : 'none';
   });
 }
 

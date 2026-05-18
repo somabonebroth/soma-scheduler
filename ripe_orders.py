@@ -226,16 +226,28 @@ def _soma_login_required(f):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+def _is_awaiting_payment(o):
+    """True when the order still needs money in. Declined orders are settled
+    (nothing to collect); paid orders are settled. Everything else — pending,
+    invoice-sent, payment-failed, awaiting-etransfer — counts as awaiting."""
+    if o.get("status") == "declined":
+        return False
+    return o.get("payment_status") != "paid"
+
+
 @ripe_orders_bp.route("/ripe-orders")
 @_soma_login_required
 def ripe_orders_page():
     status, data = _ripe_request("GET", "/api/internal/orders")
     orders = data if isinstance(data, list) else []
     orders.sort(key=lambda o: o.get("created_at", ""), reverse=True)
+    awaiting_orders = [o for o in orders if _is_awaiting_payment(o)]
+    settled_orders  = [o for o in orders if not _is_awaiting_payment(o)]
     pending_count = sum(1 for o in orders if o.get("status") == "pending")
     configured = _configured()
     error = None if status == 200 else (data.get("error") if isinstance(data, dict) else "Unknown error")
-    return render_template("ripe_orders.html", orders=orders,
+    return render_template("ripe_orders.html",
+        awaiting_orders=awaiting_orders, settled_orders=settled_orders,
         pending_count=pending_count, configured=configured, error=error)
 
 
