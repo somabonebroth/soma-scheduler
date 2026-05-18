@@ -5228,6 +5228,58 @@ def get_finished_goods_grouped():
         g["price"] = m.get("price")      # None = unset; float = price per unit
     return jsonify(grouped)
 
+
+def _compute_available_stock():
+    """Per-SKU FG stock available to buyer portals (e.g. Ripe).
+
+    Returns {sku_key: {"available", "gross", "pending", "buffer"}}:
+      gross     — sum of quantity_remaining across all FG lots for the SKU
+      pending   — units committed by Ripe sales not yet deducted (deducted=False).
+                  New sales deduct immediately at approval, so this is only
+                  non-zero for legacy records.
+      buffer    — company.ripe_inventory_buffer; units withheld from the buyer
+                  portal, reserved for in-house / on-site use.
+      available — max(0, gross - pending - buffer); what Ripe actually sees.
+
+    available can be 0 while physical stock equals or is below the buffer —
+    that's intentional, not a bug.
+    """
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    company = _load_company_info()
+    buffer_units = int(company.get("ripe_inventory_buffer") or 0)
+
+    gross_map = {}
+    for entry in fg:
+        key = _sku_key(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", ""))
+        gross_map[key] = gross_map.get(key, 0) + int(entry.get("quantity_remaining") or 0)
+
+    # Match sales exactly first, then case-insensitively for legacy lowercased keys.
+    pending_map = {}
+    lower_map = {k.lower(): k for k in gross_map}
+    for sale in sales:
+        if sale.get("deducted") is not False:
+            continue
+        sale_key = sale.get("sku_key", "")
+        if sale_key in gross_map:
+            matched = sale_key
+        elif sale_key.lower() in lower_map:
+            matched = lower_map[sale_key.lower()]
+        else:
+            continue
+        pending_map[matched] = pending_map.get(matched, 0) + int(sale.get("quantity") or 0)
+
+    return {
+        key: {
+            "available": max(0, gross - pending_map.get(key, 0) - buffer_units),
+            "gross":     gross,
+            "pending":   pending_map.get(key, 0),
+            "buffer":    buffer_units,
+        }
+        for key, gross in gross_map.items()
+    }
+
+
 @app.route("/api/internal/catalogue", methods=["GET"])
 def internal_buyer_catalogue():
     """Return the product catalogue for a specific buyer — their assigned SKUs
@@ -5256,30 +5308,16 @@ def internal_buyer_catalogue():
     if not buyer:
         return jsonify({"error": f"Buyer '{buyer_ref}' not found"}), 404
 
-    fg = _load_json(ORGANIC_FG_PATH, [])
-    sales = _load_json(ORGANIC_SALES_PATH, [])
+    stock_map = _compute_available_stock()
     meta = _load_json(SKU_META_PATH, {})
     company = _load_company_info()
     buffer_units = int(company.get("ripe_inventory_buffer") or 0)
 
-    stock_map = {}
-    for entry in fg:
-        key = _sku_key(entry.get("brand",""), entry.get("recipe",""), entry.get("format",""))
-        stock_map[key] = stock_map.get(key, 0) + int(entry.get("quantity_remaining") or 0)
-
-    lower_map = {k.lower(): k for k in stock_map}
-    for sale in sales:
-        if sale.get("deducted") is False:
-            sk = sale.get("sku_key", "")
-            canonical = stock_map.get(sk) and sk or lower_map.get(sk.lower())
-            if canonical:
-                stock_map[canonical] = max(0, stock_map[canonical] - int(sale.get("quantity") or 0))
-
     catalogue = []
     for sku in (buyer.get("skus") or []):
         sk = sku.get("sku_key", "")
-        gross = stock_map.get(sk, 0)
-        available = max(0, gross - buffer_units)
+        s = stock_map.get(sk, {})
+        available = s.get("available", 0)
         m = meta.get(sk, {})
         catalogue.append({
             "sku_key":     sk,
@@ -5436,8 +5474,9 @@ def internal_sku_audit():
 @app.route("/api/internal/fg-stock", methods=["GET"])
 def internal_fg_stock():
     """Return available FG stock per SKU for Ripe portal.
-    Key-gated via X-Internal-Key. Returns {sku_key: units_available}.
-    Excludes committed (scheduled-but-not-yet-deducted) Ripe sales.
+    Key-gated via X-Internal-Key. Returns {sku_key: {available, par}}.
+    Excludes committed (scheduled-but-not-yet-deducted) Ripe sales and the
+    ripe_inventory_buffer.
     """
     internal_key = os.environ.get("INTERNAL_API_KEY", "")
     provided = request.headers.get("X-Internal-Key", "")
@@ -5445,42 +5484,12 @@ def internal_fg_stock():
     if not internal_key or not _hmac.compare_digest(provided.encode(), internal_key.encode()):
         return jsonify({"error": "Unauthorized"}), 401
 
-    fg = _load_json(ORGANIC_FG_PATH, [])
-    sales = _load_json(ORGANIC_SALES_PATH, [])
+    stock_map = _compute_available_stock()
     meta = _load_json(SKU_META_PATH, {})
-    company = _load_company_info()
-    buffer_units = int(company.get("ripe_inventory_buffer") or 0)
-
-    stock = {}
-    for entry in fg:
-        key = _sku_key(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", ""))
-        stock[key] = stock.get(key, 0) + int(entry.get("quantity_remaining") or 0)
-
-    # Subtract scheduled (deducted=False) Ripe sales — inventory spoken for.
-    # Build a lowercase lookup so legacy sale records with lowercased sku_keys
-    # still correctly reduce the visible stock.
-    stock_lower = {k.lower(): k for k in stock}
-    for sale in sales:
-        if sale.get("deducted") is False:
-            sale_key = sale.get("sku_key", "")
-            # Try exact match first, then case-insensitive fallback
-            if sale_key in stock:
-                matched_key = sale_key
-            elif sale_key.lower() in stock_lower:
-                matched_key = stock_lower[sale_key.lower()]
-            else:
-                continue
-            stock[matched_key] = max(0, stock[matched_key] - int(sale.get("quantity") or 0))
-
-    result = {}
-    for key, gross in stock.items():
-        m = meta.get(key, {})
-        available = max(0, gross - buffer_units)
-        result[key] = {
-            "available": available,
-            "par": m.get("par"),
-        }
-    return jsonify(result)
+    return jsonify({
+        key: {"available": s["available"], "par": meta.get(key, {}).get("par")}
+        for key, s in stock_map.items()
+    })
 
 @app.route("/api/sku-meta/<path:sku_key>", methods=["PATCH"])
 @login_required
