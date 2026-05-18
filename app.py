@@ -6160,14 +6160,22 @@ def update_buyer(bid):
         buyers[idx]["name"] = name
     if "skus" in data:
         # Preserve pricing fields if they already exist and incoming data
-        # doesn't explicitly include them (allows partial SKU updates)
+        # doesn't explicitly include them (allows partial SKU updates).
+        # Backfill brand/format from the master catalog when missing — the
+        # buyer-edit JS doesn't send those fields, so newly-assigned SKUs
+        # would otherwise arrive empty and land in Ripe's "Other" bucket.
         existing_by_key = {s.get("sku_key",""): s for s in (buyers[idx].get("skus") or [])}
+        catalog_by_key  = {s["sku_key"]: s for s in _all_sku_catalog()}
         new_skus = []
         for sku in data["skus"]:
             key = sku.get("sku_key", "")
             existing = existing_by_key.get(key, {})
             merged = dict(existing)
             merged.update(sku)
+            cat = catalog_by_key.get(key, {})
+            for ident in ("brand", "format"):
+                if not merged.get(ident) and cat.get(ident):
+                    merged[ident] = cat[ident]
             for pf in ("price", "cogs", "margin_pct"):
                 if pf in merged and merged[pf] is not None:
                     try:
