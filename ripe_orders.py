@@ -89,13 +89,55 @@ def create_ripe_sale_records(order, delivery_date, payment_key):
 
     Returns (ok: bool, error: str|None).
     """
-    from app import _sku_key as _make_sku_key, timedelta
+    from app import _sku_key as _make_sku_key, timedelta, _compute_available_stock
 
     sales  = _load(_SALES_PATH, [])
     fg_all = _load(_FG_PATH, [])
     payment_pending = (payment_key == "cc_net14")
     created = []
     shortfalls = []
+
+    # Pre-flight stock check for SS items (shelf-stable / make-to-stock).
+    # FZ/BB are made-to-order and may legitimately fall short — those flow
+    # through unchanged below. For SS, refuse approval if the order would
+    # exceed currently-available stock (gross minus buffer), protecting
+    # against the read/write race where two buyers see the same stock and
+    # both order it.
+    stock_map = _compute_available_stock()
+    insufficient = []
+    for item in order.get("items", []):
+        units = int(item.get("units") or 0)
+        if units <= 0:
+            continue
+        fmt = (item.get("format") or "").upper()
+        if not fmt.startswith("SS"):
+            continue
+        product_name = (item.get("name") or "").strip()
+        fmt_prefix = fmt.split("-")[0]
+        match = next((
+            f for f in fg_all
+            if (f.get("recipe") or "").lower() == product_name.lower()
+            and (f.get("format") or "").upper().startswith(fmt_prefix)
+        ), None) or next((
+            f for f in fg_all
+            if product_name.lower() in (f.get("recipe") or "").lower()
+            and (f.get("format") or "").upper().startswith(fmt_prefix)
+        ), None)
+        if not match:
+            insufficient.append(f"{product_name} ({item.get('format','')}): no matching stock on hand")
+            continue
+        sku = _make_sku_key(match.get("brand",""), match.get("recipe",""), match.get("format",""))
+        available = stock_map.get(sku, {}).get("available", 0)
+        if units > available:
+            insufficient.append(
+                f"{product_name} ({item.get('format','')}): "
+                f"order needs {units} units, only {available} available"
+            )
+    if insufficient:
+        return False, (
+            "Insufficient SS stock to approve — another order may have been "
+            "approved since this one was submitted. " + "; ".join(insufficient)
+        )
 
     for item in order.get("items", []):
         product_name = (item.get("name") or "").strip()
