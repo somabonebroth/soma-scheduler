@@ -6869,6 +6869,304 @@ def shopify_debug():
     return jsonify(shopify_importer.debug_shop(client_id, client_secret, store))
 
 
+@app.route("/admin/shopify-import")
+@login_required
+def shopify_import_ui():
+    """Tiny control page for triggering preview + commit from the browser.
+    Avoids needing curl to POST. Renders inline HTML, no template file.
+    """
+    # Default to the Monday of the current week, Toronto time.
+    try:
+        from zoneinfo import ZoneInfo
+        now_local = datetime.now(ZoneInfo("America/Toronto"))
+    except Exception:
+        now_local = datetime.now()
+    monday = now_local - timedelta(days=now_local.weekday())
+    default_week = monday.strftime("%Y-%m-%d")
+
+    from flask import render_template_string
+    return render_template_string(SHOPIFY_IMPORT_HTML, default_week=default_week)
+
+
+SHOPIFY_IMPORT_HTML = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Shopify Import</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+  h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+  p.lede { color: #666; margin-top: 0; }
+  .controls { display: flex; gap: 0.5rem; align-items: center; margin: 1rem 0; }
+  input[type=date] { padding: 0.4rem; font-size: 1rem; }
+  button { padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer;
+           border: 1px solid #888; background: #f5f5f5; border-radius: 4px; }
+  button.primary { background: #2563eb; color: white; border-color: #1d4ed8; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  pre { background: #f7f7f7; padding: 1rem; border-radius: 4px; overflow: auto;
+        max-height: 60vh; font-size: 0.85rem; }
+  .status { padding: 0.5rem 0.75rem; margin: 0.5rem 0; border-radius: 4px; }
+  .status.ok { background: #d1fae5; color: #065f46; }
+  .status.err { background: #fee2e2; color: #991b1b; }
+</style>
+</head>
+<body>
+<h1>Shopify Weekly Import</h1>
+<p class="lede">
+  Preview shows what would be imported (read-only). Commit writes one sale row
+  per SKU to Soma, attributes them to buyer "SOMA (Shopify)", and FIFO-deducts
+  FG. Re-running Commit on the same week is safe — already-imported SKUs are
+  skipped.
+</p>
+
+<div class="controls">
+  <label for="week">Week (Monday):</label>
+  <input type="date" id="week" value="{{ default_week }}">
+  <button id="preview-btn">Preview</button>
+  <button id="commit-btn" class="primary">Commit</button>
+</div>
+
+<div id="status"></div>
+<pre id="result">(no result yet)</pre>
+
+<script>
+function run(endpoint, method) {
+  const week = document.getElementById('week').value;
+  if (!week) { setStatus('err', 'Pick a Monday first.'); return; }
+  const url = endpoint + '?week=' + encodeURIComponent(week);
+  setStatus('', 'Running ' + method + ' ' + url + ' …');
+  document.getElementById('preview-btn').disabled = true;
+  document.getElementById('commit-btn').disabled = true;
+  fetch(url, { method: method, credentials: 'same-origin' })
+    .then(r => r.json().then(data => ({ status: r.status, data: data })))
+    .then(({status, data}) => {
+      const ok = status >= 200 && status < 300;
+      setStatus(ok ? 'ok' : 'err',
+                (ok ? 'OK' : 'Error') + ' (HTTP ' + status + ')');
+      document.getElementById('result').textContent =
+        JSON.stringify(data, null, 2);
+    })
+    .catch(e => { setStatus('err', 'Network error: ' + e); })
+    .finally(() => {
+      document.getElementById('preview-btn').disabled = false;
+      document.getElementById('commit-btn').disabled = false;
+    });
+}
+function setStatus(cls, msg) {
+  const el = document.getElementById('status');
+  el.className = 'status ' + cls;
+  el.textContent = msg;
+}
+document.getElementById('preview-btn').onclick =
+  () => run('/admin/shopify-preview', 'GET');
+document.getElementById('commit-btn').onclick = () => {
+  if (!confirm('Commit Shopify orders for this week to Soma sales? ' +
+               'This will deduct FG inventory.')) return;
+  run('/admin/shopify-commit', 'POST');
+};
+</script>
+</body>
+</html>
+"""
+
+
+@app.route("/admin/shopify-commit", methods=["POST"])
+@login_required
+def shopify_commit():
+    """Commit Shopify orders for a given week as Soma sale records.
+
+    Query:
+        week=YYYY-MM-DD   — Monday of the target week
+
+    For each matched SKU in the preview:
+      - Skip if a sale already exists for (channel='shopify', week_id, sku_key)
+        (idempotent — safe to re-run).
+      - Else FIFO-deduct FG and append a sale row dated Sunday 23:59 of the
+        week, buyer='SOMA (Shopify)', channel='shopify'.
+
+    Refuses to commit anything if the preview has unparseable SKUs or any
+    matched SKU has no Soma recipe.
+    """
+    week_id = (request.args.get("week") or "").strip()
+    if not validate_week_id(week_id):
+        return jsonify({"error": "Invalid or missing 'week' parameter"}), 400
+
+    client_id = os.environ.get("SHOPIFY_CLIENT_ID", "").strip()
+    client_secret = os.environ.get("SHOPIFY_CLIENT_SECRET", "").strip()
+    store = os.environ.get("SHOPIFY_STORE", "").strip()
+    if not (client_id and client_secret and store):
+        return jsonify({"error": "Shopify config missing in environment"}), 500
+
+    # Step 1: fresh preview (don't trust cached state)
+    try:
+        recipes = _load_json(RECIPES_PATH, {})
+        preview = shopify_importer.preview_week(
+            week_id, recipes, client_id, client_secret, store
+        )
+    except Exception as e:
+        logger.exception("Shopify commit: preview phase failed for %s", week_id)
+        return jsonify({"error": str(e)}), 500
+
+    # Step 2: validate — refuse to write partial data on suspicious input
+    if preview["unparseable"]:
+        return jsonify({
+            "error": "Unparseable SKUs in this week; refusing to commit",
+            "unparseable": preview["unparseable"],
+        }), 400
+
+    unmapped = [m for m in preview["matched"] if not m["exists_in_soma"]]
+    if unmapped:
+        return jsonify({
+            "error": "Some Shopify SKUs do not map to existing Soma recipes; "
+                     "refusing to commit",
+            "unmapped": [{"sku": m["sku"], "attempted_key": m["soma_key"]}
+                         for m in unmapped],
+        }), 400
+
+    if not preview["matched"]:
+        return jsonify({
+            "ok": True,
+            "message": "No SKUs to commit for this week",
+            "week_id": week_id,
+            "preview": preview,
+        })
+
+    # Step 3: process each matched SKU
+    BUYER_NAME = "SOMA (Shopify)"
+    CHANNEL = "shopify"
+    sale_date = preview["range_end"][:10]  # YYYY-MM-DD (Sunday)
+
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    fg = _load_json(ORGANIC_FG_PATH, [])
+
+    created = []
+    skipped_idempotent = []
+    errors = []
+
+    for matched in preview["matched"]:
+        sku_str = matched["sku"]
+        soma_key = matched["soma_key"]
+        brand = matched["brand"]
+        recipe = matched["recipe"]
+        fmt = matched["format"]
+        quantity = matched["quantity"]
+        order_ids = matched["order_ids"]
+
+        # Idempotency: skip if already imported for this (channel, week, sku)
+        already = next(
+            (s for s in sales
+             if s.get("channel") == CHANNEL
+             and s.get("week_id") == week_id
+             and s.get("sku_key") == soma_key),
+            None,
+        )
+        if already:
+            skipped_idempotent.append({
+                "sku": sku_str,
+                "existing_sale_id": already.get("id"),
+                "existing_quantity": already.get("quantity"),
+            })
+            continue
+
+        # FIFO-deduct (mirrors add_organic_sale's logic)
+        candidates = [
+            f for f in fg
+            if _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")) == soma_key
+            and (f.get("quantity_remaining") or 0) > 0
+        ]
+        if not candidates:
+            errors.append({"sku": sku_str, "error": "No FG inventory available"})
+            continue
+
+        candidates.sort(key=lambda e: (_prod_date(e), e.get("lot", ""), e.get("id", "")))
+        total_available = sum(int(e.get("quantity_remaining") or 0) for e in candidates)
+        if quantity > total_available:
+            errors.append({
+                "sku": sku_str,
+                "error": f"Insufficient FG: requested {quantity}, available {total_available}",
+            })
+            continue
+
+        remaining = quantity
+        lot_summary = {}
+        for entry in candidates:
+            if remaining <= 0:
+                break
+            avail = int(entry.get("quantity_remaining") or 0)
+            if avail <= 0:
+                continue
+            take = min(avail, remaining)
+            entry["quantity_remaining"] = avail - take
+            remaining -= take
+            lot = entry.get("lot", "")
+            bucket = lot_summary.setdefault(lot, {
+                "lot": lot, "quantity": 0, "fg_ids": [], "breakdown": [],
+            })
+            bucket["quantity"] += take
+            bucket["fg_ids"].append(entry.get("id"))
+            bucket["breakdown"].append({"fg_id": entry.get("id"), "quantity": take})
+        sale_lots = list(lot_summary.values())
+
+        # Inherit certification from the first deducted FG entry (consistent
+        # within a SKU per existing convention).
+        sale_cert = ""
+        for lot_entry in sale_lots:
+            for b in (lot_entry.get("breakdown") or []):
+                target = next((f for f in fg if f.get("id") == b.get("fg_id")), None)
+                if target and target.get("certification"):
+                    sale_cert = target["certification"]
+                    break
+            if sale_cert:
+                break
+
+        sale = {
+            "id": datetime.now().strftime("%Y%m%d%H%M%S") + str(len(sales) + len(created)),
+            "sku_key": soma_key,
+            "brand": brand,
+            "recipe": recipe,
+            "format": fmt,
+            "certification": sale_cert,
+            "quantity": quantity,
+            "lots": sale_lots,
+            "fg_lot": (sale_lots[0]["lot"] if len(sale_lots) == 1 else ""),
+            "fg_id": (sale_lots[0]["fg_ids"][0]
+                      if len(sale_lots) == 1 and len(sale_lots[0]["fg_ids"]) == 1
+                      else ""),
+            "buyer": BUYER_NAME,
+            "sale_date": sale_date,
+            "case_lot": "",
+            "po_number": "",
+            "created_at": datetime.now().isoformat(),
+            # Shopify-import-specific fields
+            "channel": CHANNEL,
+            "week_id": week_id,
+            "source_order_ids": order_ids,
+        }
+        sales.append(sale)
+        created.append(sale)
+
+    # Step 4: persist (only if anything actually changed)
+    if created:
+        _save_json(ORGANIC_SALES_PATH, sales)
+        _save_json(ORGANIC_FG_PATH, fg)
+        _add_contact("buyer", BUYER_NAME)  # ensure buyer is registered as a contact
+
+    return jsonify({
+        "ok": True,
+        "week_id": week_id,
+        "sale_date": sale_date,
+        "buyer": BUYER_NAME,
+        "channel": CHANNEL,
+        "created_count": len(created),
+        "skipped_count": len(skipped_idempotent),
+        "error_count": len(errors),
+        "created": created,
+        "skipped_idempotent": skipped_idempotent,
+        "errors": errors,
+    })
+
+
 @app.route("/admin/shopify-preview")
 @login_required
 def shopify_preview():
