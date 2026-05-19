@@ -12,8 +12,14 @@ Two Flask apps deployed on Render:
 ## Repository structure
 
 ```
-app.py              — 6796 lines, 145 routes, 236 functions. Everything lives here.
+app.py              — ~7558 lines, ~150 routes, ~240 functions. Most code lives here.
 ripe_orders.py      — Flask Blueprint (591 lines) handling Ripe order workflow within Soma
+shopify_importer.py — Shopify Admin API client. Pulls orders for a week,
+                      parses SKUs, returns a structured preview. Auth via
+                      OAuth client_credentials (mandatory since Jan 2026).
+clover_importer.py  — Clover REST API client. Same preview shape as Shopify
+                      so app.py's commit logic is channel-symmetric. Bearer
+                      token auth using a Merchant Dashboard API token.
 pdf_engine.py       — PDF generation (labels, checklists, schedules)
 vision_scan.py      — Receipt photo OCR
 default_recipes.py  — Seed data
@@ -23,7 +29,7 @@ templates/          — Jinja2 HTML templates (one per page)
 static/             — CSS, JS, images
 ```
 
-No `helpers.py`, `cogs.py`, or `equipment.py` in this baseline — everything is in `app.py`.
+No `helpers.py`, `cogs.py`, or `equipment.py` in this baseline — non-importer code is all in `app.py`.
 
 ---
 
@@ -77,6 +83,16 @@ Both use `_FILE_LOCKS` (threading.Lock per path) added in the latest session.
 
 **FIFO deduction:** `_run_scheduled_deductions()` runs at startup — auto-deducts Ripe sale records from FG inventory when `deduction_date <= today`.
 
+**Sales channels:** Sale records optionally have a `channel` field (`'shopify'`, `'clover'`, or absent for legacy/manual). Channel-imported sales also carry `week_id`, `source_order_ids` (list of upstream Shopify/Clover order IDs for traceability), and a deterministic `order_id` of the form `ORD-{CHANNEL}-{week_id}` so multi-SKU imports group as one transaction in Soma's UI (matching the existing `add_sale_order` order_id grouping).
+
+**Cron-driven imports:** Two internal endpoints exist for Render Cron Jobs:
+- `POST /api/internal/shopify-import-week`
+- `POST /api/internal/clover-import-week`
+
+Both auth via `X-Internal-Key` matching `INTERNAL_API_KEY` (timing-safe via `hmac.compare_digest`). Each computes "last fully-completed Mon→Sun week" in `America/Toronto` and runs its channel's commit logic. Idempotent: re-runs skip SKUs already imported for `(channel, week_id, sku_key)`.
+
+**Brand prefix filter:** SKUs that don't start with `SOMA-` route to `skipped_other_brands[]` rather than `unparseable[]`. This matters for Clover (which sells non-SOMA retail items alongside the jars) — those items don't block the commit. Only SOMA-prefixed SKUs that fail to parse are treated as real errors.
+
 ---
 
 ## Environment variables
@@ -86,13 +102,45 @@ Both use `_FILE_LOCKS` (threading.Lock per path) added in the latest session.
 - `SECRET_KEY`
 - `APP_PASSWORD`
 - `MANAGER_PASSWORD`
-- `INTERNAL_API_KEY`
+- `INTERNAL_API_KEY` — used by Ripe→Soma calls AND by the Shopify/Clover cron jobs
 - `RIPE_PORTAL_URL`
+- `SHOPIFY_CLIENT_ID` — public hex from the custom app's API credentials
+- `SHOPIFY_CLIENT_SECRET` — `shpss_...` value from the same page
+- `SHOPIFY_STORE` — store handle only (e.g. `fat-top`); `.myshopify.com` is appended in code
+- `CLOVER_API_TOKEN` — Merchant Dashboard API token with `Orders: read` + `Inventory: read` scopes
+- `CLOVER_MERCHANT_ID` — alphanumeric merchant identifier (e.g. `2KC4HPQ71T6W1`), NOT the numerical MID used by card processors
+- `CLOVER_API_BASE` — optional; defaults to `https://api.clover.com/v3`
 
 **Ripe:**
 - `DATA_DIR`, `SECRET_KEY`, `RIPE_PASSWORD`, `INTERNAL_API_KEY`, `SOMA_APP_URL`
 - `SMTP_USER`, `SMTP_PASS`, `RIPE_CONTACT_EMAIL`, `SOMA_NOTIFY_EMAIL`, `SOMA_ETRANSFER_EMAIL`
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `RIPE_BILLING_EMAIL`
+
+---
+
+## Sales channel imports
+
+Two automated weekly imports run on Render Cron Jobs (separate services from the web service):
+
+| Cron Job service | Schedule | Hits | Writes |
+|---|---|---|---|
+| `soma-shopify-weekly` | `0 14 * * 1` (Mon 14:00 UTC) | `/api/internal/shopify-import-week` | buyer `SOMA (Shopify)`, channel `shopify`, `ORD-SHOPIFY-{week}` |
+| `soma-clover-weekly`  | `15 14 * * 1` (Mon 14:15 UTC) | `/api/internal/clover-import-week`  | buyer `SOMA (Clover)`, channel `clover`, `ORD-CLOVER-{week}` |
+
+Each channel has a matching set of routes for manual operation (in `app.py`):
+
+```
+/admin/{channel}-debug      diagnostic (auth + scope check, no order data)
+/admin/{channel}-preview    read-only JSON of what would be imported
+/admin/{channel}-commit     POST — writes sales + FIFO-deducts FG
+/admin/{channel}-import     browser control page (Preview + Commit buttons)
+```
+
+Where `{channel}` is `shopify` or `clover`. The two modules are deliberate near-duplicates rather than an abstracted base — each channel's behavior reads end-to-end in one place. If a third channel is added later, that's the moment to consider extracting.
+
+**Shopify line item snapshot gotcha:** Shopify captures `line_item.sku` at order-creation time as a snapshot of the variant. Adding a SKU to a variant later does not retroactively populate orders placed before. So only orders placed after SKUs were filled in will import. Clover does not have this issue — its line items carry SKUs at creation reliably.
+
+**Clover line item SKU extraction is defensive:** Clover's response shape varies by merchant config. `_line_item_sku()` in `clover_importer.py` checks `line_item.sku`, then `line_item.item.sku` (requires `?expand=lineItems.item`), then `line_item.itemCode` — first non-empty wins.
 
 ---
 
