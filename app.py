@@ -6856,6 +6856,18 @@ def api_settle_by_order(order_id):
 # ── Shopify weekly sales importer (preview-only, deploy 1) ─────────
 # Reads orders from Shopify for a given week, returns aggregated SKU
 # preview. Writes nothing. The 'commit' endpoint will follow in deploy 2.
+@app.route("/admin/shopify-debug")
+@login_required
+def shopify_debug():
+    """Diagnostic endpoint: hits Shopify's /shop.json with the configured
+    credentials and reports what came back. Use to isolate auth issues
+    without going through the orders code.
+    """
+    token = os.environ.get("SHOPIFY_API_TOKEN", "").strip()
+    store = os.environ.get("SHOPIFY_STORE", "").strip()
+    return jsonify(shopify_importer.debug_shop(token, store))
+
+
 @app.route("/admin/shopify-preview")
 @login_required
 def shopify_preview():

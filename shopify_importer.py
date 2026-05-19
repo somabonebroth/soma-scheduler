@@ -211,6 +211,58 @@ def aggregate_line_items(orders):
     return by_sku, skipped_no_sku
 
 
+def debug_shop(token, store):
+    """Diagnostic helper. Calls Shopify's /shop.json (the simplest endpoint —
+    any valid token can hit it) and returns a structured result with the
+    raw status code, response body excerpt, and a token fingerprint that
+    doesn't leak the secret.
+
+    Useful when /orders.json returns 401 — isolates "is the token valid"
+    from "is the orders code correct".
+    """
+    fingerprint = {
+        "token_present": bool(token),
+        "token_length": len(token) if token else 0,
+        "token_prefix": (token[:5] + "…") if token and len(token) > 5 else "",
+        "token_last4": ("…" + token[-4:]) if token and len(token) > 4 else "",
+        "store_present": bool(store),
+        "store_value": store,
+    }
+
+    if not token or not store:
+        return {"fingerprint": fingerprint, "api_result": "skipped (missing config)"}
+
+    url = f"https://{store}.myshopify.com/admin/api/{SHOPIFY_API_VERSION}/shop.json"
+    req = urllib.request.Request(url, headers={
+        "X-Shopify-Access-Token": token,
+        "Accept": "application/json",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+            return {
+                "fingerprint": fingerprint,
+                "api_result": {
+                    "status": resp.status,
+                    "body_excerpt": body[:300],
+                },
+            }
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        return {
+            "fingerprint": fingerprint,
+            "api_result": {
+                "status": e.code,
+                "body_excerpt": body[:500],
+            },
+        }
+    except Exception as e:
+        return {
+            "fingerprint": fingerprint,
+            "api_result": {"error": str(e)},
+        }
+
+
 def preview_week(week_id, recipes_data, token, store):
     """Produce a structured preview of what would be imported for `week_id`.
 
