@@ -10,9 +10,17 @@ deploy will add a 'commit' function that creates sale rows and triggers FIFO
 deduction.
 
 Configuration via environment variables:
-    SHOPIFY_API_TOKEN  — App automation token, e.g. 'atkn_...' or 'shpat_...'
-    SHOPIFY_STORE      — Store handle only (e.g. 'fat-top'); '.myshopify.com'
-                         is appended here, not in config.
+    SHOPIFY_CLIENT_ID      — Public app identifier (32-char hex).
+    SHOPIFY_CLIENT_SECRET  — Secret value starting with 'shpss_'.
+    SHOPIFY_STORE          — Store handle only (e.g. 'fat-top'); '.myshopify.com'
+                             is appended here, not in config.
+
+Auth model (changed Jan 2026):
+    Shopify deprecated permanent custom-app access tokens on Jan 1, 2026.
+    We now use the OAuth 2.0 'client_credentials' grant: each invocation
+    exchanges client_id + client_secret for a short-lived access token,
+    then uses that token in the X-Shopify-Access-Token header for the
+    actual API call. See `get_access_token()` below.
 """
 
 import os
@@ -90,6 +98,49 @@ def week_range_iso(week_id):
         monday = monday.replace(tzinfo=TIMEZONE)
     sunday_end = monday + timedelta(days=6, hours=23, minutes=59, seconds=59)
     return monday.isoformat(), sunday_end.isoformat()
+
+
+def get_access_token(client_id, client_secret, store):
+    """Exchange client credentials for a short-lived Admin API access token
+    via Shopify's OAuth 2.0 client_credentials grant.
+
+    POST https://{store}.myshopify.com/admin/oauth/access_token
+        body: {client_id, client_secret, grant_type: 'client_credentials'}
+        response: {access_token, scope}
+
+    Returns the access token string. Raises RuntimeError on failure, with
+    the response body included for diagnosis.
+    """
+    if not (client_id and client_secret and store):
+        raise RuntimeError(
+            "Missing SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET, or "
+            "SHOPIFY_STORE — cannot exchange for access token"
+        )
+
+    url = f"https://{store}.myshopify.com/admin/oauth/access_token"
+    body = json.dumps({
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "grant_type": "client_credentials",
+    }).encode("utf-8")
+    req = urllib.request.Request(url, data=body, method="POST", headers={
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            access_token = data.get("access_token")
+            if not access_token:
+                raise RuntimeError(
+                    f"Shopify OAuth returned no access_token: {data}"
+                )
+            return access_token
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"Shopify OAuth token exchange failed {e.code}: {err_body[:500]}"
+        ) from e
 
 
 def _shopify_request(token, store, path, params=None):
@@ -211,30 +262,53 @@ def aggregate_line_items(orders):
     return by_sku, skipped_no_sku
 
 
-def debug_shop(token, store):
-    """Diagnostic helper. Calls Shopify's /shop.json (the simplest endpoint —
-    any valid token can hit it) and returns a structured result with the
-    raw status code, response body excerpt, and a token fingerprint that
-    doesn't leak the secret.
+def debug_shop(client_id, client_secret, store):
+    """Diagnostic helper. Tests the full auth chain end-to-end:
+      1. Reports fingerprints of the configured credentials (no secrets leaked).
+      2. Exchanges client_id+client_secret for an access token.
+      3. Calls Shopify's /shop.json with that access token.
 
-    Useful when /orders.json returns 401 — isolates "is the token valid"
-    from "is the orders code correct".
+    Returns a structured result showing which step (if any) failed and the
+    raw Shopify response for diagnosis.
     """
     fingerprint = {
-        "token_present": bool(token),
-        "token_length": len(token) if token else 0,
-        "token_prefix": (token[:5] + "…") if token and len(token) > 5 else "",
-        "token_last4": ("…" + token[-4:]) if token and len(token) > 4 else "",
+        "client_id_present": bool(client_id),
+        "client_id_length": len(client_id) if client_id else 0,
+        "client_id_prefix": (client_id[:6] + "…") if client_id and len(client_id) > 6 else "",
+        "client_secret_present": bool(client_secret),
+        "client_secret_length": len(client_secret) if client_secret else 0,
+        "client_secret_prefix": (client_secret[:6] + "…") if client_secret and len(client_secret) > 6 else "",
         "store_present": bool(store),
         "store_value": store,
     }
 
-    if not token or not store:
-        return {"fingerprint": fingerprint, "api_result": "skipped (missing config)"}
+    if not (client_id and client_secret and store):
+        return {
+            "fingerprint": fingerprint,
+            "exchange_result": "skipped (missing config)",
+            "api_result": "skipped",
+        }
 
+    # Step 1: OAuth client_credentials exchange.
+    try:
+        access_token = get_access_token(client_id, client_secret, store)
+    except Exception as e:
+        return {
+            "fingerprint": fingerprint,
+            "exchange_result": {"error": str(e)},
+            "api_result": "skipped (exchange failed)",
+        }
+
+    exchange_result = {
+        "ok": True,
+        "access_token_length": len(access_token),
+        "access_token_prefix": (access_token[:6] + "…") if len(access_token) > 6 else "",
+    }
+
+    # Step 2: actual API call with exchanged token.
     url = f"https://{store}.myshopify.com/admin/api/{SHOPIFY_API_VERSION}/shop.json"
     req = urllib.request.Request(url, headers={
-        "X-Shopify-Access-Token": token,
+        "X-Shopify-Access-Token": access_token,
         "Accept": "application/json",
     })
     try:
@@ -242,6 +316,7 @@ def debug_shop(token, store):
             body = resp.read().decode("utf-8", errors="replace")
             return {
                 "fingerprint": fingerprint,
+                "exchange_result": exchange_result,
                 "api_result": {
                     "status": resp.status,
                     "body_excerpt": body[:300],
@@ -251,6 +326,7 @@ def debug_shop(token, store):
         body = e.read().decode("utf-8", errors="replace")
         return {
             "fingerprint": fingerprint,
+            "exchange_result": exchange_result,
             "api_result": {
                 "status": e.code,
                 "body_excerpt": body[:500],
@@ -259,11 +335,12 @@ def debug_shop(token, store):
     except Exception as e:
         return {
             "fingerprint": fingerprint,
+            "exchange_result": exchange_result,
             "api_result": {"error": str(e)},
         }
 
 
-def preview_week(week_id, recipes_data, token, store):
+def preview_week(week_id, recipes_data, client_id, client_secret, store):
     """Produce a structured preview of what would be imported for `week_id`.
 
     Does NOT write to Soma data. Returns a dict containing:
@@ -277,8 +354,11 @@ def preview_week(week_id, recipes_data, token, store):
     `exists_in_soma` flags whether the parsed SKU corresponds to an actual
     recipe in Soma's recipes.json — caught now rather than at sale-write time.
     """
+    # Exchange client credentials for a short-lived access token, then use
+    # that token for every API call in this preview run.
+    access_token = get_access_token(client_id, client_secret, store)
     start_iso, end_iso = week_range_iso(week_id)
-    orders = fetch_orders(token, store, start_iso, end_iso)
+    orders = fetch_orders(access_token, store, start_iso, end_iso)
     by_sku, skipped = aggregate_line_items(orders)
 
     # Build the set of legal Soma SKU keys for cross-reference.

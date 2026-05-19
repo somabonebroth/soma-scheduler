@@ -6859,13 +6859,14 @@ def api_settle_by_order(order_id):
 @app.route("/admin/shopify-debug")
 @login_required
 def shopify_debug():
-    """Diagnostic endpoint: hits Shopify's /shop.json with the configured
-    credentials and reports what came back. Use to isolate auth issues
-    without going through the orders code.
+    """Diagnostic endpoint: exchanges configured client credentials for an
+    access token, then hits Shopify's /shop.json. Reports each step's result
+    without leaking secrets.
     """
-    token = os.environ.get("SHOPIFY_API_TOKEN", "").strip()
+    client_id = os.environ.get("SHOPIFY_CLIENT_ID", "").strip()
+    client_secret = os.environ.get("SHOPIFY_CLIENT_SECRET", "").strip()
     store = os.environ.get("SHOPIFY_STORE", "").strip()
-    return jsonify(shopify_importer.debug_shop(token, store))
+    return jsonify(shopify_importer.debug_shop(client_id, client_secret, store))
 
 
 @app.route("/admin/shopify-preview")
@@ -6886,17 +6887,20 @@ def shopify_preview():
                      "expected YYYY-MM-DD (Monday of the target week)"
         }), 400
 
-    token = os.environ.get("SHOPIFY_API_TOKEN", "").strip()
+    client_id = os.environ.get("SHOPIFY_CLIENT_ID", "").strip()
+    client_secret = os.environ.get("SHOPIFY_CLIENT_SECRET", "").strip()
     store = os.environ.get("SHOPIFY_STORE", "").strip()
-    if not token or not store:
+    if not (client_id and client_secret and store):
         return jsonify({
-            "error": "SHOPIFY_API_TOKEN or SHOPIFY_STORE not configured "
-                     "in environment"
+            "error": "SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET, or "
+                     "SHOPIFY_STORE not configured in environment"
         }), 500
 
     try:
         recipes = _load_json(RECIPES_PATH, {})
-        result = shopify_importer.preview_week(week_id, recipes, token, store)
+        result = shopify_importer.preview_week(
+            week_id, recipes, client_id, client_secret, store
+        )
         return jsonify(result)
     except Exception as e:
         logger.exception("Shopify preview failed for week %s", week_id)
