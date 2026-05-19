@@ -17,6 +17,7 @@ import re
 import zipfile
 import io
 from ripe_orders import ripe_orders_bp, init_paths as _ripe_init_paths
+import shopify_importer
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ.get("SECRET_KEY", "soma-bone-broth-2026-change-me")
@@ -6850,6 +6851,44 @@ def api_settle_by_order(order_id):
             settled += 1
     _save_json(ORGANIC_SALES_PATH, sales)
     return jsonify({"ok": True, "settled": settled})
+
+
+# ── Shopify weekly sales importer (preview-only, deploy 1) ─────────
+# Reads orders from Shopify for a given week, returns aggregated SKU
+# preview. Writes nothing. The 'commit' endpoint will follow in deploy 2.
+@app.route("/admin/shopify-preview")
+@login_required
+def shopify_preview():
+    """Preview what would be imported from Shopify for a given week.
+
+    Query param:
+        week=YYYY-MM-DD   — Monday of the week to import (inclusive Mon→Sun)
+
+    Returns a JSON document showing matched SKUs, unparseable SKUs, and
+    line items skipped because they had no SKU value (bundle parents etc.).
+    """
+    week_id = (request.args.get("week") or "").strip()
+    if not validate_week_id(week_id):
+        return jsonify({
+            "error": "Invalid or missing 'week' parameter; "
+                     "expected YYYY-MM-DD (Monday of the target week)"
+        }), 400
+
+    token = os.environ.get("SHOPIFY_API_TOKEN", "").strip()
+    store = os.environ.get("SHOPIFY_STORE", "").strip()
+    if not token or not store:
+        return jsonify({
+            "error": "SHOPIFY_API_TOKEN or SHOPIFY_STORE not configured "
+                     "in environment"
+        }), 500
+
+    try:
+        recipes = _load_json(RECIPES_PATH, {})
+        result = shopify_importer.preview_week(week_id, recipes, token, store)
+        return jsonify(result)
+    except Exception as e:
+        logger.exception("Shopify preview failed for week %s", week_id)
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
