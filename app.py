@@ -6971,32 +6971,19 @@ document.getElementById('commit-btn').onclick = () => {
 """
 
 
-@app.route("/admin/shopify-commit", methods=["POST"])
-@login_required
-def shopify_commit():
-    """Commit Shopify orders for a given week as Soma sale records.
-
-    Query:
-        week=YYYY-MM-DD   — Monday of the target week
-
-    For each matched SKU in the preview:
-      - Skip if a sale already exists for (channel='shopify', week_id, sku_key)
-        (idempotent — safe to re-run).
-      - Else FIFO-deduct FG and append a sale row dated Sunday 23:59 of the
-        week, buyer='SOMA (Shopify)', channel='shopify'.
-
-    Refuses to commit anything if the preview has unparseable SKUs or any
-    matched SKU has no Soma recipe.
+def _shopify_commit_for_week(week_id):
+    """Worker shared by the admin commit route and the cron internal route.
+    Returns (response_dict, http_status_code). Pure function — no decorators,
+    no request access. Callers handle auth.
     """
-    week_id = (request.args.get("week") or "").strip()
     if not validate_week_id(week_id):
-        return jsonify({"error": "Invalid or missing 'week' parameter"}), 400
+        return {"error": "Invalid or missing 'week' parameter"}, 400
 
     client_id = os.environ.get("SHOPIFY_CLIENT_ID", "").strip()
     client_secret = os.environ.get("SHOPIFY_CLIENT_SECRET", "").strip()
     store = os.environ.get("SHOPIFY_STORE", "").strip()
     if not (client_id and client_secret and store):
-        return jsonify({"error": "Shopify config missing in environment"}), 500
+        return {"error": "Shopify config missing in environment"}, 500
 
     # Step 1: fresh preview (don't trust cached state)
     try:
@@ -7006,31 +6993,31 @@ def shopify_commit():
         )
     except Exception as e:
         logger.exception("Shopify commit: preview phase failed for %s", week_id)
-        return jsonify({"error": str(e)}), 500
+        return {"error": str(e)}, 500
 
     # Step 2: validate — refuse to write partial data on suspicious input
     if preview["unparseable"]:
-        return jsonify({
+        return {
             "error": "Unparseable SKUs in this week; refusing to commit",
             "unparseable": preview["unparseable"],
-        }), 400
+        }, 400
 
     unmapped = [m for m in preview["matched"] if not m["exists_in_soma"]]
     if unmapped:
-        return jsonify({
+        return {
             "error": "Some Shopify SKUs do not map to existing Soma recipes; "
                      "refusing to commit",
             "unmapped": [{"sku": m["sku"], "attempted_key": m["soma_key"]}
                          for m in unmapped],
-        }), 400
+        }, 400
 
     if not preview["matched"]:
-        return jsonify({
+        return {
             "ok": True,
             "message": "No SKUs to commit for this week",
             "week_id": week_id,
             "preview": preview,
-        })
+        }, 200
 
     # Step 3: process each matched SKU
     BUYER_NAME = "SOMA (Shopify)"
@@ -7158,7 +7145,7 @@ def shopify_commit():
         _save_json(ORGANIC_FG_PATH, fg)
         _add_contact("buyer", BUYER_NAME)  # ensure buyer is registered as a contact
 
-    return jsonify({
+    return {
         "ok": True,
         "week_id": week_id,
         "order_id": order_id,
@@ -7171,7 +7158,62 @@ def shopify_commit():
         "created": created,
         "skipped_idempotent": skipped_idempotent,
         "errors": errors,
-    })
+    }, 200
+
+
+@app.route("/admin/shopify-commit", methods=["POST"])
+@login_required
+def shopify_commit():
+    """Commit Shopify orders for a given week as Soma sale records.
+
+    Query:
+        week=YYYY-MM-DD   — Monday of the target week
+
+    Thin wrapper around _shopify_commit_for_week. Login-required for human
+    operators using the /admin/shopify-import control page. The cron job
+    uses /api/internal/shopify-import-week instead (auth via X-Internal-Key).
+    """
+    week_id = (request.args.get("week") or "").strip()
+    body, status = _shopify_commit_for_week(week_id)
+    return jsonify(body), status
+
+
+@app.route("/api/internal/shopify-import-week", methods=["POST"])
+def shopify_internal_import_last_week():
+    """Internal endpoint called by the weekly Render Cron Job.
+
+    Auth: X-Internal-Key header must match INTERNAL_API_KEY env var.
+
+    Computes "last fully-completed week" based on America/Toronto local time
+    (e.g. when run on Mon 2026-05-25 morning, imports Mon 2026-05-18 →
+    Sun 2026-05-24), then runs the same commit logic as the admin route.
+
+    Idempotent: re-running on the same day (or twice) is safe — the underlying
+    commit logic skips SKUs already imported for that (channel, week_id).
+    """
+    provided = (request.headers.get("X-Internal-Key") or "").strip()
+    internal_key = (os.environ.get("INTERNAL_API_KEY") or "").strip()
+    import hmac as _hmac
+    if not internal_key or not _hmac.compare_digest(
+        provided.encode(), internal_key.encode()
+    ):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    # Compute last Monday (Toronto time) — the start of the most recent
+    # fully-completed Mon–Sun block.
+    try:
+        from zoneinfo import ZoneInfo
+        today_local = datetime.now(ZoneInfo("America/Toronto")).date()
+    except Exception:
+        today_local = datetime.now().date()
+    last_monday = today_local - timedelta(days=today_local.weekday() + 7)
+    week_id = last_monday.strftime("%Y-%m-%d")
+
+    logger.info("Shopify weekly cron firing for week_id=%s", week_id)
+    body, status = _shopify_commit_for_week(week_id)
+    # Surface the computed week in the cron log even on errors
+    body["computed_week_id"] = week_id
+    return jsonify(body), status
 
 
 @app.route("/admin/shopify-preview")
