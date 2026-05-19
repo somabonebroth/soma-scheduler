@@ -45,6 +45,13 @@ TIMEZONE = ZoneInfo("America/Toronto") if ZoneInfo else None
 # consistent across both channels.
 _FORMAT_RE = re.compile(r"^([A-Z]{2})-(\d+)ML$")
 
+# Prefix that identifies a SKU as ours (i.e. one we should attempt to parse
+# and import). Clover in particular sells non-SOMA retail items alongside
+# SOMA jars; those use unrelated SKU schemes and must be skipped silently,
+# not flagged as unparseable. SKUs that start with this prefix but fail to
+# parse remain "unparseable" — that's still a real error worth surfacing.
+OUR_BRAND_PREFIX = "SOMA-"
+
 
 def parse_sku(sku):
     """Parse a Clover SKU like 'SOMA-Adaptogenic Mushroom-SS-876ML' into
@@ -301,8 +308,21 @@ def preview_week(week_id, recipes_data, token, merchant_id, api_base=None):
 
     matched = []
     unparseable = []
+    skipped_other_brands = []
 
     for sku, info in by_sku.items():
+        # Items that aren't ours (non-SOMA retail products on Clover) are
+        # tracked separately so they're visible in the preview but don't
+        # block the commit. Only SOMA-prefixed SKUs that fail to parse
+        # count as "unparseable" — those are real errors.
+        if not sku.startswith(OUR_BRAND_PREFIX):
+            skipped_other_brands.append({
+                "sku": sku,
+                "quantity": info["quantity"],
+                "order_ids": info["order_ids"],
+            })
+            continue
+
         try:
             brand, recipe, fmt = parse_sku(sku)
         except ValueError as e:
@@ -327,6 +347,7 @@ def preview_week(week_id, recipes_data, token, merchant_id, api_base=None):
 
     matched.sort(key=lambda x: x["sku"])
     unparseable.sort(key=lambda x: x["sku"])
+    skipped_other_brands.sort(key=lambda x: x["sku"])
 
     # Toronto-local ISO range for human-friendly display in the response
     # (same shape as Shopify preview so the UI doesn't need to branch).
@@ -356,4 +377,5 @@ def preview_week(week_id, recipes_data, token, merchant_id, api_base=None):
         "matched": matched,
         "unparseable": unparseable,
         "skipped_no_sku": skipped,
+        "skipped_other_brands": skipped_other_brands,
     }

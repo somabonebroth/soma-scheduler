@@ -49,6 +49,11 @@ TIMEZONE = ZoneInfo("America/Toronto") if ZoneInfo else None
 # Two uppercase letters, hyphen, digits, 'ML'.
 _FORMAT_RE = re.compile(r"^([A-Z]{2})-(\d+)ML$")
 
+# Prefix that identifies a SKU as ours (one we should attempt to parse and
+# import). Shopify currently only sells SOMA products so this is a no-op
+# safety net, but kept in sync with clover_importer for consistency.
+OUR_BRAND_PREFIX = "SOMA-"
+
 
 def parse_sku(sku):
     """Parse a Shopify SKU string like 'SOMA-Adaptogenic Mushroom-SS-876ML'
@@ -370,8 +375,20 @@ def preview_week(week_id, recipes_data, client_id, client_secret, store):
 
     matched = []
     unparseable = []
+    skipped_other_brands = []
 
     for sku, info in by_sku.items():
+        # Items that aren't ours (non-SOMA products) are tracked separately
+        # so they're visible in the preview but don't block the commit.
+        # Only SOMA-prefixed SKUs that fail to parse count as "unparseable".
+        if not sku.startswith(OUR_BRAND_PREFIX):
+            skipped_other_brands.append({
+                "sku": sku,
+                "quantity": info["quantity"],
+                "order_ids": info["order_ids"],
+            })
+            continue
+
         try:
             brand, recipe, fmt = parse_sku(sku)
         except ValueError as e:
@@ -396,6 +413,7 @@ def preview_week(week_id, recipes_data, client_id, client_secret, store):
 
     matched.sort(key=lambda x: x["sku"])
     unparseable.sort(key=lambda x: x["sku"])
+    skipped_other_brands.sort(key=lambda x: x["sku"])
 
     total_line_items = sum(len(o.get("line_items", [])) for o in orders)
 
@@ -408,4 +426,5 @@ def preview_week(week_id, recipes_data, client_id, client_secret, store):
         "matched": matched,
         "unparseable": unparseable,
         "skipped_no_sku": skipped,
+        "skipped_other_brands": skipped_other_brands,
     }
