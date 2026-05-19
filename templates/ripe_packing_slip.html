@@ -78,9 +78,9 @@ table.ps-tbl th.r, table.ps-tbl td.r { text-align:right; }
     {% endif %}
   {% endfor %}
   {% for key,cls in [('SS','ss'),('FZ','fz'),('BB','bb'),('OT','ot')] %}
-  {% if groups[key].items %}
-  <tr class="grp-hdr grp-{{ cls }}"><td colspan="4">{{ groups[key].n }}</td><td class="r">{{ groups[key].c }} cases</td><td class="r">{{ groups[key].u }} units</td></tr>
-  {% for li in groups[key].items %}
+  {% if groups[key]['items'] %}
+  <tr class="grp-hdr grp-{{ cls }}"><td colspan="4">{{ groups[key]['n'] }}</td><td class="r">{{ groups[key]['c'] }} cases</td><td class="r">{{ groups[key]['u'] }} units</td></tr>
+  {% for li in groups[key]['items'] %}
   <tr><td><strong>{{ li.name }}</strong><br><span style="font-size:12px;color:var(--text-light);">{{ li.format }}</span></td><td style="font-family:ui-monospace,monospace;font-size:11px;color:var(--text-light);">{{ li.sku }}</td><td class="r">{{ li.cases }}</td><td class="r">{{ li.units }}</td><td class="r">${{ "%.2f"|format(li.unit_price) }}</td><td class="r">${{ "%.2f"|format(li.line_total) }}</td></tr>
   {% endfor %}{% endif %}{% endfor %}
   <tr class="totals"><td colspan="2">Totals</td><td class="r">{{ ns.tc }}</td><td class="r">{{ ns.tu }}</td><td class="r">Subtotal</td><td class="r">${{ "%.2f"|format(order.subtotal) }}</td></tr>
