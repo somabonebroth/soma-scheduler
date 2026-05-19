@@ -160,10 +160,14 @@ def _clover_request(token, merchant_id, path, params=None, api_base=None):
 
 
 def debug_merchant(token, merchant_id, api_base=None):
-    """Diagnostic helper: hits Clover's /merchants/{mId} endpoint (the
-    simplest read — any valid token can access merchant metadata) and
-    reports the result with a credential fingerprint that doesn't leak
-    secrets.
+    """Diagnostic helper: tests the exact same auth path the importer uses
+    by hitting /merchants/{mId}/orders?limit=1. This proves three things
+    in one call: the token authenticates, the merchant ID is correct, and
+    the Orders: read scope is granted — all without needing the broader
+    Merchant: read scope.
+
+    Returns a structured result with a credential fingerprint that doesn't
+    leak secrets.
     """
     fingerprint = {
         "token_present": bool(token),
@@ -178,14 +182,19 @@ def debug_merchant(token, merchant_id, api_base=None):
         return {"fingerprint": fingerprint, "api_result": "skipped (missing config)"}
 
     try:
-        body = _clover_request(token, merchant_id, "", api_base=api_base)
+        body = _clover_request(
+            token, merchant_id, "/orders", params={"limit": 1}, api_base=api_base
+        )
+        elements = body.get("elements", []) or []
         return {
             "fingerprint": fingerprint,
             "api_result": {
                 "status": 200,
-                "merchant_name": body.get("name"),
-                "merchant_id_echo": body.get("id"),
-                "currency": body.get("currency"),
+                "endpoint_tested": "/orders?limit=1",
+                "order_count_in_response": len(elements),
+                "note": "200 OK confirms token auth + Orders:read scope. "
+                        "An empty response is fine — it just means no orders "
+                        "matched the trivial filter.",
             },
         }
     except Exception as e:
