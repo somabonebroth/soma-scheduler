@@ -18,6 +18,7 @@ import zipfile
 import io
 from ripe_orders import ripe_orders_bp, init_paths as _ripe_init_paths
 import shopify_importer
+import clover_importer
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ.get("SECRET_KEY", "soma-bone-broth-2026-change-me")
@@ -7252,6 +7253,304 @@ def shopify_preview():
     except Exception as e:
         logger.exception("Shopify preview failed for week %s", week_id)
         return jsonify({"error": str(e)}), 500
+
+
+# ── Clover weekly sales importer ─────────────────────────────────
+# Parallel to the Shopify importer. Reads from Clover's REST API, applies
+# the same per-SKU FIFO deduction + sale-row writing as Shopify imports,
+# attributes sales to buyer "SOMA (Clover)" with channel "clover".
+
+@app.route("/admin/clover-debug")
+@login_required
+def clover_debug():
+    """Diagnostic endpoint: hits Clover's /merchants/{mId} endpoint with the
+    configured token and reports what came back. Use to isolate auth /
+    merchant-ID issues without going through the orders code.
+    """
+    token = os.environ.get("CLOVER_API_TOKEN", "").strip()
+    merchant_id = os.environ.get("CLOVER_MERCHANT_ID", "").strip()
+    api_base = os.environ.get("CLOVER_API_BASE", "").strip() or None
+    return jsonify(clover_importer.debug_merchant(token, merchant_id, api_base))
+
+
+@app.route("/admin/clover-preview")
+@login_required
+def clover_preview():
+    """Preview what would be imported from Clover for a given week."""
+    week_id = (request.args.get("week") or "").strip()
+    if not validate_week_id(week_id):
+        return jsonify({
+            "error": "Invalid or missing 'week' parameter; "
+                     "expected YYYY-MM-DD (Monday of the target week)"
+        }), 400
+
+    token = os.environ.get("CLOVER_API_TOKEN", "").strip()
+    merchant_id = os.environ.get("CLOVER_MERCHANT_ID", "").strip()
+    api_base = os.environ.get("CLOVER_API_BASE", "").strip() or None
+    if not (token and merchant_id):
+        return jsonify({
+            "error": "CLOVER_API_TOKEN or CLOVER_MERCHANT_ID not configured"
+        }), 500
+
+    try:
+        recipes = _load_json(RECIPES_PATH, {})
+        result = clover_importer.preview_week(
+            week_id, recipes, token, merchant_id, api_base=api_base
+        )
+        return jsonify(result)
+    except Exception as e:
+        logger.exception("Clover preview failed for week %s", week_id)
+        return jsonify({"error": str(e)}), 500
+
+
+def _clover_commit_for_week(week_id):
+    """Worker shared by /admin/clover-commit and the cron internal route.
+    Returns (response_dict, http_status_code). Pure function — no decorators,
+    no request access. Callers handle auth.
+
+    Mirrors _shopify_commit_for_week exactly except for: which importer
+    module is called, which env vars are read, the channel name, the
+    buyer name, and the order_id prefix. Kept as a deliberate duplicate
+    (rather than an abstracted helper) so each channel's behavior is
+    readable end-to-end in one place.
+    """
+    if not validate_week_id(week_id):
+        return {"error": "Invalid or missing 'week' parameter"}, 400
+
+    token = os.environ.get("CLOVER_API_TOKEN", "").strip()
+    merchant_id = os.environ.get("CLOVER_MERCHANT_ID", "").strip()
+    api_base = os.environ.get("CLOVER_API_BASE", "").strip() or None
+    if not (token and merchant_id):
+        return {"error": "Clover config missing in environment"}, 500
+
+    try:
+        recipes = _load_json(RECIPES_PATH, {})
+        preview = clover_importer.preview_week(
+            week_id, recipes, token, merchant_id, api_base=api_base
+        )
+    except Exception as e:
+        logger.exception("Clover commit: preview phase failed for %s", week_id)
+        return {"error": str(e)}, 500
+
+    if preview["unparseable"]:
+        return {
+            "error": "Unparseable SKUs in this week; refusing to commit",
+            "unparseable": preview["unparseable"],
+        }, 400
+
+    unmapped = [m for m in preview["matched"] if not m["exists_in_soma"]]
+    if unmapped:
+        return {
+            "error": "Some Clover SKUs do not map to existing Soma recipes; "
+                     "refusing to commit",
+            "unmapped": [{"sku": m["sku"], "attempted_key": m["soma_key"]}
+                         for m in unmapped],
+        }, 400
+
+    if not preview["matched"]:
+        return {
+            "ok": True,
+            "message": "No SKUs to commit for this week",
+            "week_id": week_id,
+            "preview": preview,
+        }, 200
+
+    BUYER_NAME = "SOMA (Clover)"
+    CHANNEL = "clover"
+    sale_date = preview["range_end"][:10]
+    order_id = f"ORD-CLOVER-{week_id}"
+
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    fg = _load_json(ORGANIC_FG_PATH, [])
+
+    created = []
+    skipped_idempotent = []
+    errors = []
+
+    for matched in preview["matched"]:
+        sku_str = matched["sku"]
+        soma_key = matched["soma_key"]
+        brand = matched["brand"]
+        recipe = matched["recipe"]
+        fmt = matched["format"]
+        quantity = matched["quantity"]
+        order_ids = matched["order_ids"]
+
+        already = next(
+            (s for s in sales
+             if s.get("channel") == CHANNEL
+             and s.get("week_id") == week_id
+             and s.get("sku_key") == soma_key),
+            None,
+        )
+        if already:
+            skipped_idempotent.append({
+                "sku": sku_str,
+                "existing_sale_id": already.get("id"),
+                "existing_quantity": already.get("quantity"),
+            })
+            continue
+
+        candidates = [
+            f for f in fg
+            if _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")) == soma_key
+            and (f.get("quantity_remaining") or 0) > 0
+        ]
+        if not candidates:
+            errors.append({"sku": sku_str, "error": "No FG inventory available"})
+            continue
+
+        candidates.sort(key=lambda e: (_prod_date(e), e.get("lot", ""), e.get("id", "")))
+        total_available = sum(int(e.get("quantity_remaining") or 0) for e in candidates)
+        if quantity > total_available:
+            errors.append({
+                "sku": sku_str,
+                "error": f"Insufficient FG: requested {quantity}, available {total_available}",
+            })
+            continue
+
+        remaining = quantity
+        lot_summary = {}
+        for entry in candidates:
+            if remaining <= 0:
+                break
+            avail = int(entry.get("quantity_remaining") or 0)
+            if avail <= 0:
+                continue
+            take = min(avail, remaining)
+            entry["quantity_remaining"] = avail - take
+            remaining -= take
+            lot = entry.get("lot", "")
+            bucket = lot_summary.setdefault(lot, {
+                "lot": lot, "quantity": 0, "fg_ids": [], "breakdown": [],
+            })
+            bucket["quantity"] += take
+            bucket["fg_ids"].append(entry.get("id"))
+            bucket["breakdown"].append({"fg_id": entry.get("id"), "quantity": take})
+        sale_lots = list(lot_summary.values())
+
+        sale_cert = ""
+        for lot_entry in sale_lots:
+            for b in (lot_entry.get("breakdown") or []):
+                target = next((f for f in fg if f.get("id") == b.get("fg_id")), None)
+                if target and target.get("certification"):
+                    sale_cert = target["certification"]
+                    break
+            if sale_cert:
+                break
+
+        sale = {
+            "id": datetime.now().strftime("%Y%m%d%H%M%S") + str(len(sales) + len(created)),
+            "order_id": order_id,
+            "sku_key": soma_key,
+            "brand": brand,
+            "recipe": recipe,
+            "format": fmt,
+            "certification": sale_cert,
+            "quantity": quantity,
+            "lots": sale_lots,
+            "fg_lot": (sale_lots[0]["lot"] if len(sale_lots) == 1 else ""),
+            "fg_id": (sale_lots[0]["fg_ids"][0]
+                      if len(sale_lots) == 1 and len(sale_lots[0]["fg_ids"]) == 1
+                      else ""),
+            "buyer": BUYER_NAME,
+            "sale_date": sale_date,
+            "case_lot": "",
+            "po_number": "",
+            "created_at": datetime.now().isoformat(),
+            "channel": CHANNEL,
+            "week_id": week_id,
+            "source_order_ids": order_ids,
+        }
+        sales.append(sale)
+        created.append(sale)
+
+    if created:
+        _save_json(ORGANIC_SALES_PATH, sales)
+        _save_json(ORGANIC_FG_PATH, fg)
+        _add_contact("buyer", BUYER_NAME)
+
+    return {
+        "ok": True,
+        "week_id": week_id,
+        "order_id": order_id,
+        "sale_date": sale_date,
+        "buyer": BUYER_NAME,
+        "channel": CHANNEL,
+        "created_count": len(created),
+        "skipped_count": len(skipped_idempotent),
+        "error_count": len(errors),
+        "created": created,
+        "skipped_idempotent": skipped_idempotent,
+        "errors": errors,
+    }, 200
+
+
+@app.route("/admin/clover-commit", methods=["POST"])
+@login_required
+def clover_commit():
+    """Commit Clover orders for a given week as Soma sale records.
+    Thin wrapper around _clover_commit_for_week. Login-required for human
+    operators; cron uses /api/internal/clover-import-week instead.
+    """
+    week_id = (request.args.get("week") or "").strip()
+    body, status = _clover_commit_for_week(week_id)
+    return jsonify(body), status
+
+
+@app.route("/api/internal/clover-import-week", methods=["POST"])
+def clover_internal_import_last_week():
+    """Internal endpoint called by the weekly Render Cron Job for Clover.
+    Auth: X-Internal-Key header matched against INTERNAL_API_KEY env var.
+    Computes "last fully-completed week" in Toronto local time, then runs
+    the commit logic.
+    """
+    provided = (request.headers.get("X-Internal-Key") or "").strip()
+    internal_key = (os.environ.get("INTERNAL_API_KEY") or "").strip()
+    import hmac as _hmac
+    if not internal_key or not _hmac.compare_digest(
+        provided.encode(), internal_key.encode()
+    ):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        from zoneinfo import ZoneInfo
+        today_local = datetime.now(ZoneInfo("America/Toronto")).date()
+    except Exception:
+        today_local = datetime.now().date()
+    last_monday = today_local - timedelta(days=today_local.weekday() + 7)
+    week_id = last_monday.strftime("%Y-%m-%d")
+
+    logger.info("Clover weekly cron firing for week_id=%s", week_id)
+    body, status = _clover_commit_for_week(week_id)
+    body["computed_week_id"] = week_id
+    return jsonify(body), status
+
+
+@app.route("/admin/clover-import")
+@login_required
+def clover_import_ui():
+    """Tiny control page for triggering Clover preview + commit from the
+    browser — same shape as /admin/shopify-import.
+    """
+    try:
+        from zoneinfo import ZoneInfo
+        now_local = datetime.now(ZoneInfo("America/Toronto"))
+    except Exception:
+        now_local = datetime.now()
+    monday = now_local - timedelta(days=now_local.weekday())
+    default_week = monday.strftime("%Y-%m-%d")
+
+    from flask import render_template_string
+    # Reuse the Shopify control-page template but rewrite the endpoints
+    # and headings via simple string substitution. Keeps both UIs in sync.
+    clover_html = (SHOPIFY_IMPORT_HTML
+                   .replace("Shopify Weekly Import", "Clover Weekly Import")
+                   .replace('SOMA (Shopify)', 'SOMA (Clover)')
+                   .replace("'/admin/shopify-preview'", "'/admin/clover-preview'")
+                   .replace("'/admin/shopify-commit'", "'/admin/clover-commit'")
+                   .replace("Commit Shopify orders", "Commit Clover orders"))
+    return render_template_string(clover_html, default_week=default_week)
 
 
 if __name__ == "__main__":
