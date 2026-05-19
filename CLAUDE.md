@@ -122,11 +122,13 @@ Both use `_FILE_LOCKS` (threading.Lock per path) added in the latest session.
 
 ## Deployment workflow
 
-1. Make changes to local files
-2. `zip -r soma-ripe-update.zip . --exclude "*.pyc" --exclude "__pycache__/*" --exclude ".DS_Store" --exclude "*.tmp" --exclude "data/*"`
-3. Upload zip to Render → Soma service → Manual deploy
-4. Check Render logs for errors
-5. Confirm in browser before next change
+Render is connected to `github.com/somabonebroth/soma-scheduler` and auto-deploys on push to `main`. There is no manual zip upload.
+
+1. Make changes on a worktree/feature branch
+2. Commit
+3. `git push origin HEAD:main` (fast-forwards `main`; Render builds + deploys automatically)
+4. Watch Render logs through startup — confirm no traceback
+5. Smoke test in browser before the next change
 
 **One change at a time, deployed and confirmed before the next.**
 

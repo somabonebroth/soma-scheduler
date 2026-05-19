@@ -437,7 +437,13 @@ def ripe_packing_slip(order_id):
         from flask import abort
         abort(404)
     from datetime import datetime as _dt
-    return render_template("ripe_packing_slip.html", order=data, today=_dt.now().strftime("%B %d, %Y"))
+    from app import _load_company_info
+    return render_template(
+        "ripe_packing_slip.html",
+        order=data,
+        company=_load_company_info(),
+        today=_dt.now().strftime("%B %d, %Y"),
+    )
 
 
 @ripe_orders_bp.route("/ripe-orders/export.csv")
