@@ -7036,6 +7036,11 @@ def shopify_commit():
     BUYER_NAME = "SOMA (Shopify)"
     CHANNEL = "shopify"
     sale_date = preview["range_end"][:10]  # YYYY-MM-DD (Sunday)
+    # One order_id per weekly import — groups the per-SKU sale rows so they
+    # appear as one transaction in Soma's UI rather than N independent sales.
+    # Deterministic (not timestamped) so re-runs of the same week produce the
+    # same id, helping audit trails.
+    order_id = f"ORD-SHOPIFY-{week_id}"
 
     sales = _load_json(ORGANIC_SALES_PATH, [])
     fg = _load_json(ORGANIC_FG_PATH, [])
@@ -7122,6 +7127,7 @@ def shopify_commit():
 
         sale = {
             "id": datetime.now().strftime("%Y%m%d%H%M%S") + str(len(sales) + len(created)),
+            "order_id": order_id,  # groups all SKUs in this week's import
             "sku_key": soma_key,
             "brand": brand,
             "recipe": recipe,
@@ -7155,6 +7161,7 @@ def shopify_commit():
     return jsonify({
         "ok": True,
         "week_id": week_id,
+        "order_id": order_id,
         "sale_date": sale_date,
         "buyer": BUYER_NAME,
         "channel": CHANNEL,
