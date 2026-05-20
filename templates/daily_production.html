@@ -135,7 +135,7 @@ async function init(){
     ccpSections=await ccpRes.json();
     var clData=await clRes.json();
     document.getElementById('header-sub').textContent=productionData.day_name+' - '+productionData.date;
-    document.getElementById('info-bar').innerHTML='<strong>DATE:</strong> '+productionData.date+'&nbsp;&nbsp;&nbsp;<strong>START LOT#:</strong> '+productionData.lot+'&nbsp;&nbsp;&nbsp;<strong>FINISH LOT#:</strong> '+productionData.prev_lot;
+    document.getElementById('info-bar').innerHTML='<strong>DATE:</strong> '+productionData.date+'&nbsp;&nbsp;&nbsp;<strong>LOT#:</strong> '+productionData.lot;
     // Show daily notes if any
     if(productionData.daily_notes && productionData.daily_notes.trim()){
         var notesBanner=document.createElement('div');
