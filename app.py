@@ -2740,7 +2740,7 @@ _DEFAULT_COMPANY_INFO = {
     "fzbb_large_lead_days":  7,    # min days notice for FZ/BB ≥ threshold
     "fzbb_large_threshold":  8,    # cases at which large lead time applies
 }
-SKU_META_PATH = os.path.join(INVENTORY_DIR, "sku_meta.json")  # PAR levels + prices
+SKU_META_PATH = os.path.join(INVENTORY_DIR, "sku_meta.json")  # PAR levels
 # Manual inventory adjustments log (additions and subtractions outside of
 # production runs and sales). Each entry records what changed, why, and
 # which LOT(s) were drained or created. Used for audit traceability.
@@ -6946,10 +6946,10 @@ def _seed_sku_meta_defaults():
     for g in grouped:
         key = g["sku_key"]
         if key not in meta:
-            meta[key] = {"par": 100, "price": 10.00}
+            meta[key] = {"par": 100}
             changed = True
         # Never modify existing entries — user may have intentionally
-        # removed par (No PAR) or price fields
+        # removed par (No PAR)
     if changed:
         _save_json(SKU_META_PATH, meta)
 

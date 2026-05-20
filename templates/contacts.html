@@ -288,8 +288,7 @@ async function saveSup(){
 async function delSup(sid,name){if(!confirm('Delete supplier "'+name+'"?'))return;await fetch('/api/suppliers/'+sid,{method:'DELETE'});loadSups();}
 
 /* ════════ BUYERS ════════ */
-var _buys=[],_bMode='add',_bId=null,_bCk={},_bOrd={},_bLocs=[],_skus=[],_skuG=[];
-var _bPricing={}; // {sku_key: {price, cogs, margin_pct, active}}
+var _buys=[],_bMode='add',_bId=null,_bCk={},_bLocs=[],_skus=[],_skuG=[];
 
 async function loadBuys(){
   _buys=await(await fetch('/api/buyers')).json();
@@ -361,153 +360,8 @@ function rSkuList(){
   });
   list.innerHTML=html;
 }
-function goOrder(){
-  var c=_skus.filter(function(s){return _bCk[s.sku_key];});
-  var any=c.some(function(s){return _bOrd[s.sku_key]!==undefined&&_bOrd[s.sku_key]!==999;});
-  if(!any){c.forEach(function(s,i){_bOrd[s.sku_key]=i+1;});}
-  else{var mx=Math.max.apply(null,c.filter(function(s){return _bOrd[s.sku_key]!==undefined&&_bOrd[s.sku_key]!==999;}).map(function(s){return _bOrd[s.sku_key];}));c.forEach(function(s){if(_bOrd[s.sku_key]===undefined||_bOrd[s.sku_key]===999)_bOrd[s.sku_key]=++mx;});}
-  Object.keys(_bOrd).forEach(function(k){if(!_bCk[k])delete _bOrd[k];});
-  G('b-step-a').style.display='none';G('b-step-b').style.display='';rOrdList();
-}
-function goAssign(){G('b-step-b').style.display='none';G('b-step-a').style.display='';}
-
-function goOrderStep(){G('b-step-c').style.display='none';G('b-step-b').style.display='';}
-
-function goPricingStep(){
-    // Ensure order positions are initialised (in case coming directly from step A)
-    var any=Object.keys(_bOrd).some(function(k){return _bOrd[k]!==999;});
-    if(!any){ var ci=_skus.filter(function(s){return _bCk[s.sku_key];}); ci.forEach(function(s,i){_bOrd[s.sku_key]=i+1;}); }
-    // Build pricing UI from current checked SKUs with their order positions
-    var checked=_skus.filter(function(s){return _bCk[s.sku_key];});
-    checked.sort(function(a,b){return (_bOrd[a.sku_key]||999)-(_bOrd[b.sku_key]||999);});
-    var list=G('b-pricing-list');
-    if(!checked.length){list.innerHTML='<div style="padding:14px;color:var(--text-light);font-size:13px;">No products assigned.</div>';
-    } else {
-        var hdr='<div class="price-hdr"><span>Product</span><span>Price/unit</span><span>COGS</span><span>Margin</span><span>Active</span></div>';
-        var rows=checked.map(function(s,i){
-            var price=_bPricing[s.sku_key]&&_bPricing[s.sku_key].price!=null?_bPricing[s.sku_key].price:'';
-            var cogs=_bPricing[s.sku_key]&&_bPricing[s.sku_key].cogs!=null?_bPricing[s.sku_key].cogs:'';
-            var active=_bPricing[s.sku_key]&&_bPricing[s.sku_key].active===false?'':'checked';
-            return '<div class="price-row" data-sku="'+e(s.sku_key)+'">'
-                +'<div><div class="p-sku-name">'+e(s.display||s.recipe)+'</div>'
-                +'<div class="p-sku-fmt">'+e(s.format||'')+'</div></div>'
-                +'<div><div style="display:flex;align-items:center;gap:2px;">'
-                +'<span style="font-size:11px;color:var(--text-light);">$</span>'
-                +'<input class="p-input p-price" type="number" min="0" step="0.01" placeholder="0.00" value="'+e(String(price))+'" data-sku="'+e(s.sku_key)+'" data-field="price">'
-                +'</div></div>'
-                +'<div><div style="display:flex;align-items:center;gap:2px;">'
-                +'<span style="font-size:11px;color:var(--text-light);">$</span>'
-                +'<input class="p-input p-cogs" type="number" min="0" step="0.01" placeholder="0.00" value="'+e(String(cogs))+'" data-sku="'+e(s.sku_key)+'" data-field="cogs">'
-                +'</div></div>'
-                +'<div class="p-margin" data-sku-margin="'+e(s.sku_key)+'">'+(_bPricing[s.sku_key]&&_bPricing[s.sku_key].margin_pct!=null?_bPricing[s.sku_key].margin_pct.toFixed(1)+'%':'—')+'</div>'
-                +'<div style="display:flex;justify-content:center;">'
-                +'<input type="checkbox" '+active+' data-sku="'+e(s.sku_key)+'" data-field="active" style="width:16px;height:16px;accent-color:var(--accent);">'
-                +'</div>'
-                +'</div>';
-        }).join('');
-        list.innerHTML=hdr+rows;
-    }
-    G('b-step-b').style.display='none';
-    G('b-step-c').style.display='';
-    // Attach listeners via event delegation
-    var pList=G('b-pricing-list');
-    pList.oninput=function(ev){
-        var el=ev.target;
-        var sk=el.getAttribute('data-sku');
-        var field=el.getAttribute('data-field');
-        if(!sk||!field) return;
-        if(!_bPricing[sk]) _bPricing[sk]={active:true};
-        var val=parseFloat(el.value)||null;
-        _bPricing[sk][field]=val;
-        // Recalc margin
-        var p=_bPricing[sk].price, c=_bPricing[sk].cogs;
-        if(p&&c&&c>0){
-            var m=((p/c)-1)*100;
-            _bPricing[sk].margin_pct=Math.round(m*100)/100;
-            var mEl=pList.querySelector('[data-sku-margin="'+sk+'"]');
-            if(mEl) mEl.textContent=m.toFixed(1)+'%';
-        }
-    };
-    pList.onchange=function(ev){
-        var el=ev.target;
-        if(el.type==='checkbox'){
-            var sk=el.getAttribute('data-sku');
-            if(!sk) return;
-            if(!_bPricing[sk]) _bPricing[sk]={};
-            _bPricing[sk].active=el.checked;
-        }
-    };
-}
-
-function updatePricing(skuKey, input){
-    var price=parseFloat(input.value)||null;
-    if(!_bPricing[skuKey]) _bPricing[skuKey]={};
-    _bPricing[skuKey].price=price;
-    // Recalc margin
-    var cogs=_bPricing[skuKey].cogs;
-    if(price&&cogs&&cogs>0){
-        var margin=((price/cogs)-1)*100;
-        _bPricing[skuKey].margin_pct=Math.round(margin*100)/100;
-        var row=input.closest('.price-row');
-        var mEl=row?row.querySelector('.p-margin'):null;
-        if(mEl) mEl.textContent=margin.toFixed(1)+'%';
-    }
-}
-function updateCogs(skuKey, input){
-    var cogs=parseFloat(input.value)||null;
-    if(!_bPricing[skuKey]) _bPricing[skuKey]={};
-    _bPricing[skuKey].cogs=cogs;
-    var price=_bPricing[skuKey].price;
-    if(price&&cogs&&cogs>0){
-        var margin=((price/cogs)-1)*100;
-        _bPricing[skuKey].margin_pct=Math.round(margin*100)/100;
-        var row=input.closest('.price-row');
-        var mEl=row?row.querySelector('.p-margin'):null;
-        if(mEl) mEl.textContent=margin.toFixed(1)+'%';
-    }
-}
-function rOrdList(){
-  var c=_skus.filter(function(s){return _bCk[s.sku_key];});
-  c.sort(function(a,b){return (_bOrd[a.sku_key]||999)-(_bOrd[b.sku_key]||999);});
-  var list=G('b-ord-list');
-  if(!c.length){list.innerHTML='<div style="padding:14px;color:var(--text-light);font-size:13px;">No products selected.</div>';return;}
-  var html='';
-  c.forEach(function(s,i){
-    var iF=i===0,iL=i===c.length-1;
-    html+='<div class="sku-orow">'
-      +'<div style="display:flex;flex-direction:column;gap:2px;">'
-      +'<button class="mv" data-i="'+i+'" data-d="-1" '+(iF?'disabled':'')+'>▲</button>'
-      +'<button class="mv" data-i="'+i+'" data-d="1" '+(iL?'disabled':'')+'>▼</button>'
-      +'</div>'
-      +'<span style="flex:1;font-size:13px;">'+e(s.display||s.recipe)+'</span>'
-      +'<span class="cc-badge bg-k">'+e(s.format||'')+'</span>'
-      +'</div>';
-  });
-  list.innerHTML=html;
-  list.querySelectorAll('.mv').forEach(function(btn){
-    btn.addEventListener('click',function(){mvSku(parseInt(this.getAttribute('data-i')),parseInt(this.getAttribute('data-d')));});
-  });
-}
-function mvSku(idx,dir){
-  var c=_skus.filter(function(s){return _bCk[s.sku_key];});
-  c.sort(function(a,b){return (_bOrd[a.sku_key]||999)-(_bOrd[b.sku_key]||999);});
-  var sw=idx+dir;if(sw<0||sw>=c.length)return;
-  var pa=_bOrd[c[idx].sku_key],pb=_bOrd[c[sw].sku_key];
-  _bOrd[c[idx].sku_key]=pb;_bOrd[c[sw].sku_key]=pa;rOrdList();
-}
-function _clrBuy(){['b-name','b-contact','b-phone','b-email','b-web','b-addr','b-certs','b-notes','b-sku-q'].forEach(function(id){G(id).value='';});G('b-msg').textContent='';_bCk={};_bOrd={};_bLocs={};_bLocs=[];_bPricing={};}
+function _clrBuy(){['b-name','b-contact','b-phone','b-email','b-web','b-addr','b-certs','b-notes','b-sku-q'].forEach(function(id){G(id).value='';});G('b-msg').textContent='';_bCk={};_bLocs=[];}
 async function openAddBuy(){_bMode='add';_bId=null;G('buy-mo-title').textContent='Add Buyer';G('b-save').textContent='Save Buyer';_clrBuy();rLocList();await _fSkus();rSkuList();G('buy-mo').classList.add('open');}
-async function openEditBuy(bid){
-  var b=_buys.find(function(x){return x.id===bid;});if(!b)return;
-  _bMode='edit';_bId=bid;G('buy-mo-title').textContent='Edit Buyer';G('b-save').textContent='Save Changes';
-  G('b-name').value=b.name||'';G('b-contact').value=b.contact_name||'';G('b-phone').value=b.phone||'';G('b-email').value=b.email||'';G('b-web').value=b.website||'';G('b-addr').value=b.address||'';G('b-certs').value=b.certifications||'';G('b-notes').value=b.notes||'';G('b-sku-q').value='';G('b-msg').textContent='';
-  _bCk={};_bOrd={};_bPricing={};
-  _bLocs=(b.locations||[]).map(function(l){return Object.assign({},l);});rLocList();
-  (b.skus||[]).forEach(function(s){ if(s.price!=null||s.cogs!=null){_bPricing[s.sku_key]={price:s.price,cogs:s.cogs,margin_pct:s.margin_pct,active:s.active!==false};} });
-  (b.skus||[]).forEach(function(s){_bCk[s.sku_key]=true;_bOrd[s.sku_key]=(s.position!==undefined?s.position:999);});
-  G('b-step-a').style.display='';G('b-step-b').style.display='none';
-  await _fSkus();rSkuList();G('buy-mo').classList.add('open');
-}
 function closeBuy(){G('buy-mo').classList.remove('open');}
 async function saveBuy(){
   var name=G('b-name').value.trim(),msg=G('b-msg'),btn=G('b-save');

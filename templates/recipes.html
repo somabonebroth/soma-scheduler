@@ -507,7 +507,7 @@ async function saveEdit(){
         if(c.runs) parts.push(c.runs+' production run'+(c.runs===1?'':'s'));
         if(c.schedules) parts.push(c.schedules+' schedule file'+(c.schedules===1?'':'s'));
         if(c.buyers_skus) parts.push(c.buyers_skus+' buyer SKU'+(c.buyers_skus===1?'':'s'));
-        if(c.sku_meta) parts.push('PAR/price meta');
+        if(c.sku_meta) parts.push('PAR meta');
         if(c.ripe_products !== undefined) parts.push('Ripe product key '+(c.ripe_products==='unreachable'?'(Ripe unreachable)':c.ripe_products===0?'(no match in Ripe)':'updated'));
         if(parts.length > 0){
             var msg = '✓ Saved. Cascade updated: '+parts.join(', ')+'.';
