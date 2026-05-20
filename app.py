@@ -4770,13 +4770,12 @@ def audit_page(kind):
 @app.route("/api/audit/start", methods=["POST"])
 @login_required
 def start_audit():
-    """Start a new audit.
+    """Start a new audit. Both kinds are now stateless — the audit doc is
+    returned to the client and only persisted when /complete is called.
 
-    RM: persists an in-progress audit doc that can be resumed via 'save'.
-        Body: { kind: 'rm', categories: [str] }
-    FG: stateless — returns the item list without persisting. The audit
-        record is only written when /complete is called. Single brand.
-        Body: { kind: 'fg', brand: str }  (or categories=[brand] for back-compat)
+    FG body: { kind: 'fg', brand: str }
+    RM body: { kind: 'rm', section: str }  (one section per audit)
+    Back-compat: 'categories: [name]' is accepted in place of brand/section.
     """
     data = request.get_json() or {}
     kind = data.get("kind")
@@ -4803,69 +4802,119 @@ def start_audit():
             "current_idx": 0,
             "results":    {},
         }
-        # Stateless: deliberately not persisted. /complete will write the
-        # finalised audit doc with results applied.
         return jsonify({"ok": True, "audit": audit})
 
-    # RM: stateful with resume support
-    audits = _load_audits()
-    audits = [a for a in audits
-              if not (a.get("kind") == kind and a.get("status") == "in_progress")]
+    # RM: stateless, one section per audit
+    section = (data.get("section") or "").strip()
+    if not section:
+        cats = data.get("categories") or []
+        if cats:
+            section = (cats[0] or "").strip()
+    if not section:
+        return jsonify({"error": "section required for RM audit"}), 400
 
-    categories = data.get("categories", [])
-    items = _build_rm_audit_items(categories)
-
+    items = _build_rm_audit_items(section)
     audit = {
         "id":         "audit_" + datetime.now().strftime("%Y%m%d%H%M%S"),
-        "kind":       kind,
+        "kind":       "rm",
         "status":     "in_progress",
-        "categories": categories,
+        "section":    section,
         "started_at": datetime.now().isoformat(),
         "items":      items,
         "current_idx": 0,
-        "results":    {},  # {item_id: {counted, system_qty, ...}}
+        "results":    {},
     }
-    audits.append(audit)
-    _save_audits(audits)
     return jsonify({"ok": True, "audit": audit})
 
-def _build_rm_audit_items(categories):
-    """Build ordered list of RM items for the audit, filtered by section categories."""
+def _collect_recipe_ingredients():
+    """Return {name: {'unit': str}} for every ingredient referenced across
+    all recipes (any of the kettle_overnight / after_skim / finishing /
+    add_to_jar sections). First non-empty unit wins on conflict.
+
+    Used as the procurement-side master list for RM audits — same role
+    recipes.json plays as the SKU master for FG audits.
+    """
+    recipes = load_recipes()
+    ings = {}
+    for r in recipes.values():
+        if not isinstance(r, dict):
+            continue
+        for sec_key in INGREDIENT_SECTIONS:
+            for ing in (r.get(sec_key) or []):
+                if not isinstance(ing, dict):
+                    continue
+                name = (ing.get("name") or "").strip()
+                if not name:
+                    continue
+                unit = (ing.get("unit") or "").strip()
+                if name not in ings:
+                    ings[name] = {"unit": unit}
+                elif unit and not ings[name]["unit"]:
+                    ings[name]["unit"] = unit
+    return ings
+
+def _build_rm_audit_items(section_name):
+    """Build per-item audit list for RM, scoped to a single section.
+
+    Master list = ingredient names referenced in any recipe, unioned with
+    item names that appear in raw-material inventory history. Items are
+    filtered to the chosen section via rm_sections.json assignments.
+    Items without a section assignment go to 'Unassigned'.
+
+    Each item row aggregates remaining across its lots. Zero-stock items
+    are included so the auditor can record a baseline-lot surplus if
+    physical stock exists. Unit is resolved to the newest lot's unit
+    (procurement unit) when stock exists, otherwise to the recipe
+    ingredient's unit, otherwise empty.
+    """
     materials = _load_json(ORGANIC_RAW_PATH, [])
     sections_data = _load_rm_sections()
     assignments = sections_data.get("assignments", {})
     sections = {s["id"]: s["name"] for s in sections_data.get("sections", [])}
+    section_name_norm = (section_name or "").strip()
 
-    seen = {}  # item_name -> {total_remaining, lots, unit, section}
+    recipe_ings = _collect_recipe_ingredients()
+
+    # Master list: recipe ingredients ∪ inventory history
+    all_names = set(recipe_ings.keys())
     for mat in materials:
-        remaining = float(mat.get("remaining") or 0)
-        if remaining <= 0:
-            continue
-        item_name = (mat.get("item") or "").strip()
-        if not item_name:
-            continue
-        section_id = assignments.get(item_name, "")
-        section_name = sections.get(section_id, "") or "Unassigned"
-        if categories and section_name not in categories:
-            continue
-        if item_name not in seen:
-            seen[item_name] = {
-                "id":      item_name,
-                "name":    item_name,
-                "unit":    mat.get("unit", ""),
-                "section": section_name,
-                "system_qty": 0,
-                "lots":    [],
-            }
-        seen[item_name]["system_qty"] = round(seen[item_name]["system_qty"] + remaining, 4)
-        seen[item_name]["lots"].append({
-            "id":           mat.get("id"),
-            "supplier_lot": mat.get("supplier_lot", ""),
-            "date_received": mat.get("date_received", ""),
-            "remaining":    remaining,
-        })
+        name = (mat.get("item") or "").strip()
+        if name:
+            all_names.add(name)
 
-    items = sorted(seen.values(), key=lambda x: (x["section"], x["name"]))
+    items_map = {}
+    for name in all_names:
+        section_id = assignments.get(name, "")
+        section = sections.get(section_id, "") or "Unassigned"
+        if section_name_norm and section != section_name_norm:
+            continue
+
+        # All lots for this item with stock on hand
+        lots = [m for m in materials
+                if (m.get("item") or "").strip() == name
+                and float(m.get("remaining") or 0) > 0]
+        lots.sort(key=lambda m: m.get("date_received", ""))
+
+        system_qty = round(sum(float(l.get("remaining") or 0) for l in lots), 4)
+
+        # Resolve unit: newest lot (procurement) > recipe ingredient > ""
+        unit = ""
+        if lots:
+            unit = (lots[-1].get("unit") or "").strip()
+        if not unit and name in recipe_ings:
+            unit = recipe_ings[name].get("unit", "")
+
+        items_map[name] = {
+            "id":         name,
+            "name":       name,
+            "unit":       unit,
+            "section":    section,
+            "system_qty": system_qty,
+            "lot_count":  len(lots),
+            "in_recipes": name in recipe_ings,
+        }
+
+    items = sorted(items_map.values(), key=lambda x: x["name"].lower())
     return items
 
 def _build_fg_audit_items(brand):
@@ -4935,12 +4984,9 @@ def _build_fg_audit_items(brand):
 @app.route("/api/audit/active/<kind>", methods=["GET"])
 @login_required
 def get_active_audit(kind):
-    """Return the current in-progress audit for rm, or null.
-    FG audits are stateless — no resume — so always returns null for fg."""
-    if kind == "fg":
-        return jsonify({"audit": None})
-    audit = _active_audit(kind)
-    return jsonify({"audit": audit})
+    """Both audit kinds are stateless — no resume — so this always
+    returns null. Endpoint retained for back-compat with stale clients."""
+    return jsonify({"audit": None})
 
 @app.route("/api/audit/<audit_id>/save", methods=["POST"])
 @login_required
@@ -4964,13 +5010,14 @@ def save_audit_progress(audit_id):
 def complete_audit(audit_id):
     """Complete an audit — apply all counted adjustments to inventory.
 
-    RM: looks up the persisted in-progress audit by id.
-        Body: { results: {item_id: {counted}} }
-    FG: stateless — audit was not persisted at /start. Builds a fresh
-        audit record from the body and writes it as completed.
-        Body: { kind: 'fg', brand: str, started_at?: iso,
-                results: {sku_key: {counted}} }
-    Guards against double-complete: a completed audit cannot be re-applied.
+    Both kinds are now stateless — the audit doc was not persisted at /start.
+    The doc is constructed fresh here from the request body, applied, then
+    written to audits.json with status='completed'.
+
+    FG body: { kind: 'fg', brand: str,   started_at?, results }
+    RM body: { kind: 'rm', section: str, started_at?, results }
+
+    Guards against double-complete via existing completed-status check.
     """
     data = request.get_json() or {}
     audits = _load_audits()
@@ -4980,23 +5027,37 @@ def complete_audit(audit_id):
         return jsonify({"error": "Audit already completed"}), 409
 
     if not audit:
-        # FG stateless flow: build the audit doc fresh from the request body.
         kind = (data.get("kind") or "").strip()
-        if kind != "fg":
+        if kind == "fg":
+            brand = (data.get("brand") or "").strip()
+            if not brand:
+                return jsonify({"error": "brand required for FG audit"}), 400
+            audit = {
+                "id":          audit_id,
+                "kind":        "fg",
+                "status":      "in_progress",
+                "brand":       brand,
+                "started_at":  data.get("started_at") or datetime.now().isoformat(),
+                "items":       _build_fg_audit_items(brand),
+                "current_idx": 0,
+                "results":     {},
+            }
+        elif kind == "rm":
+            section = (data.get("section") or "").strip()
+            if not section:
+                return jsonify({"error": "section required for RM audit"}), 400
+            audit = {
+                "id":          audit_id,
+                "kind":        "rm",
+                "status":      "in_progress",
+                "section":     section,
+                "started_at":  data.get("started_at") or datetime.now().isoformat(),
+                "items":       _build_rm_audit_items(section),
+                "current_idx": 0,
+                "results":     {},
+            }
+        else:
             return jsonify({"error": "Audit not found"}), 404
-        brand = (data.get("brand") or "").strip()
-        if not brand:
-            return jsonify({"error": "brand required for FG audit"}), 400
-        audit = {
-            "id":          audit_id,
-            "kind":        "fg",
-            "status":      "in_progress",
-            "brand":       brand,
-            "started_at":  data.get("started_at") or datetime.now().isoformat(),
-            "items":       _build_fg_audit_items(brand),
-            "current_idx": 0,
-            "results":     {},
-        }
         audits.append(audit)
 
     audit["results"].update(data.get("results", {}))
@@ -5015,31 +5076,52 @@ def complete_audit(audit_id):
     return jsonify({"ok": True, "adjustments": len(adjustments), "audit": audit})
 
 def _apply_rm_audit(audit):
-    """Apply RM audit results — adjust remaining on individual lots."""
+    """Apply RM audit results — FIFO drain on shortage, baseline lot on surplus.
+
+    Per-item-name model (RM is bulk; auditors count totals, not per-lot).
+      - diff < 0  → drain oldest lots first (FIFO) until shortfall covered.
+                    Matches how production deduction already consumes lots,
+                    so traceability fidelity is unchanged.
+      - diff > 0  → create a new RM row with supplier='Audit baseline',
+                    supplier_lot='BASELINE-YYYYMMDD', no PO, no cost.
+                    Keeps real supplier lots honest — surplus doesn't
+                    get falsely attributed to the newest receipt.
+      - diff == 0 → no change, no log entry.
+
+    Unit for the baseline lot resolves: newest lot's unit > recipe unit > ''.
+    counted == None means the item was skipped (not counted).
+    """
     materials = _load_json(ORGANIC_RAW_PATH, [])
+    recipe_ings = _collect_recipe_ingredients()
     adjustments = []
+    new_rows = []
+    now_iso = datetime.now().isoformat()
+    today = datetime.now().strftime("%Y-%m-%d")
 
     for item_name, result in audit["results"].items():
         counted = result.get("counted")
         if counted is None:
-            continue  # skipped
+            continue
+        try:
+            counted = round(float(counted), 4)
+        except (ValueError, TypeError):
+            continue
+        if counted < 0:
+            continue
 
-        counted = round(float(counted), 4)
         lots = sorted(
-            [m for m in materials if (m.get("item") or "").strip() == item_name
+            [m for m in materials
+             if (m.get("item") or "").strip() == item_name
              and float(m.get("remaining") or 0) > 0],
             key=lambda m: m.get("date_received", "")
         )
-        if not lots:
-            continue
-
-        system_total = round(sum(float(m.get("remaining") or 0) for m in lots), 4)
+        system_total = round(sum(float(l.get("remaining") or 0) for l in lots), 4)
         diff = round(counted - system_total, 4)
         if diff == 0:
             continue
 
+        baseline_lot_code = None
         if diff < 0:
-            # Decrease: take from oldest lots first (FIFO)
             to_remove = abs(diff)
             for lot in lots:
                 if to_remove <= 0:
@@ -5047,29 +5129,56 @@ def _apply_rm_audit(audit):
                 avail = float(lot.get("remaining") or 0)
                 take = min(avail, to_remove)
                 lot["remaining"] = round(avail - take, 4)
+                lot["last_adjusted_at"] = now_iso
                 to_remove = round(to_remove - take, 4)
         else:
-            lots[-1]["remaining"] = round(float(lots[-1].get("remaining") or 0) + diff, 4)
+            # Resolve unit for the new baseline lot
+            unit = ""
+            if lots:
+                unit = (lots[-1].get("unit") or "").strip()
+            if not unit and item_name in recipe_ings:
+                unit = recipe_ings[item_name].get("unit", "")
+
+            baseline_lot_code = "BASELINE-" + datetime.now().strftime("%Y%m%d")
+            new_id = (datetime.now().strftime("%Y%m%d%H%M%S")
+                      + "_audit_" + str(len(new_rows)))
+            new_rows.append({
+                "id":             new_id,
+                "item":           item_name,
+                "supplier":       "Audit baseline",
+                "date_received":  today,
+                "supplier_lot":   baseline_lot_code,
+                "quantity":       diff,
+                "unit":           unit,
+                "remaining":      diff,
+                "created_at":     now_iso,
+                "audit_baseline": True,
+                "audit_id":       audit["id"],
+            })
 
         adjustments.append({
-            "item": item_name,
-            "system_qty": system_total,
-            "counted": counted,
-            "diff": diff,
+            "item":         item_name,
+            "system_qty":   system_total,
+            "counted":      counted,
+            "diff":         diff,
+            "baseline_lot": baseline_lot_code,
         })
 
+    if new_rows:
+        materials.extend(new_rows)
     _save_json(ORGANIC_RAW_PATH, materials)
 
-    for adj in adjustments:
+    for i, adj in enumerate(adjustments):
         _record_adjustment({
-            "id":         "audit_rm_" + datetime.now().strftime("%Y%m%d%H%M%S") + str(abs(int(adj["diff"]*100))),
-            "kind":       "audit_rm",
-            "item":       adj["item"],
-            "system_qty": adj["system_qty"],
-            "counted":    adj["counted"],
-            "diff":       adj["diff"],
-            "audit_id":   audit["id"],
-            "created_at": datetime.now().isoformat(),
+            "id":           "audit_rm_" + datetime.now().strftime("%Y%m%d%H%M%S") + "_" + str(i),
+            "kind":         "audit_rm",
+            "item":         adj["item"],
+            "system_qty":   adj["system_qty"],
+            "counted":      adj["counted"],
+            "diff":         adj["diff"],
+            "baseline_lot": adj["baseline_lot"],
+            "audit_id":     audit["id"],
+            "created_at":   now_iso,
         })
 
     return adjustments
@@ -5202,32 +5311,40 @@ def audit_history():
 def audit_categories(kind):
     """Return available categories for category selection screen."""
     if kind == "rm":
+        # Return every section that has at least one item assigned to it
+        # (recipe ingredient OR inventory history), regardless of current
+        # stock — auditors need to be able to enter baseline counts for
+        # zero-stock items too. Plus 'Unassigned' if any items lack a
+        # section assignment.
         sections_data = _load_rm_sections()
-        sections = {s["id"]: s["name"] for s in sections_data.get("sections", [])}
+        sections_ordered = sections_data.get("sections", [])
+        sections_by_id = {s["id"]: s["name"] for s in sections_ordered}
         assignments = sections_data.get("assignments", {})
+
+        recipe_ings = _collect_recipe_ingredients()
         materials = _load_json(ORGANIC_RAW_PATH, [])
 
-        # Find which section names actually have stock
-        active_sections = set()
-        has_unassigned = False
+        all_names = set(recipe_ings.keys())
         for mat in materials:
-            if float(mat.get("remaining") or 0) <= 0:
-                continue
-            item_name = (mat.get("item") or "").strip()
-            section_id = assignments.get(item_name, "")
-            section_name = sections.get(section_id, "")
-            if section_name:
-                active_sections.add(section_name)
+            n = (mat.get("item") or "").strip()
+            if n:
+                all_names.add(n)
+
+        used_sections = set()
+        has_unassigned = False
+        for name in all_names:
+            sid = assignments.get(name, "")
+            sname = sections_by_id.get(sid, "")
+            if sname:
+                used_sections.add(sname)
             else:
                 has_unassigned = True
 
-        # Return sections in defined order, only those with stock
-        cats = [s["name"] for s in sections_data.get("sections", [])
-                if s["name"] in active_sections]
+        cats = [s["name"] for s in sections_ordered if s["name"] in used_sections]
         if has_unassigned:
             cats.append("Unassigned")
         if not cats:
-            cats = ["All"]
+            cats = ["Unassigned"]
         return jsonify(cats)
     else:
         # FG brand list = brands in recipes.json (source of truth) unioned

@@ -235,41 +235,27 @@ async function init() {
   document.getElementById('item-audit-title').textContent =
     KIND === 'rm' ? 'Raw Materials Audit' : 'Finished Goods Audit';
   document.getElementById('audit-sub').textContent =
-    KIND === 'rm' ? 'Select categories to count' : 'Select a brand to count';
+    KIND === 'rm' ? 'Select a section to count' : 'Select a brand to count';
   document.getElementById('cat-title').textContent =
-    KIND === 'rm' ? 'What are you auditing today?' : 'Which brand are you auditing?';
+    KIND === 'rm' ? 'Which section are you auditing?' : 'Which brand are you auditing?';
   document.getElementById('cat-sub-text').textContent =
     KIND === 'rm'
-      ? 'Select the categories to include. Tap to toggle.'
+      ? 'One section per audit. Start to finish — no save & resume.'
       : 'One brand per audit. Start to finish — no save & resume.';
 
-  // FG: replace top-right "Save & Exit" with plain "Exit" (no save endpoint)
-  if (KIND === 'fg') {
-    var exitBtns = document.querySelectorAll('.header-exit');
-    if (exitBtns[1]) {
-      exitBtns[1].textContent = '✕ Exit';
-      exitBtns[1].setAttribute('onclick', 'exitItemScreen()');
-    }
+  // Both kinds are stateless — replace top-right "Save & Exit" with plain "Exit".
+  var exitBtns = document.querySelectorAll('.header-exit');
+  if (exitBtns[1]) {
+    exitBtns[1].textContent = '✕ Exit';
+    exitBtns[1].setAttribute('onclick', 'exitItemScreen()');
   }
 
-  // Load categories / brands
+  // Load section / brand list — single-select for both
   var res = await fetch('/api/audit/categories/' + KIND);
   _cats = await res.json();
-  if (KIND === 'rm') {
-    _cats.forEach(function(c){ _selectedCats.add(c); });
-  }
-  // FG starts with no brand selected (single-select)
   renderCats();
-  document.getElementById('start-btn').disabled =
-    (KIND === 'fg' && _selectedCats.size === 0);
-
-  // FG has no resume — always stateless
-  if (KIND === 'fg') return;
-
-  // RM: check for in-progress audit
-  var r2 = await fetch('/api/audit/active/' + KIND);
-  var d  = await r2.json();
-  if (d.audit) showResumeBanner(d.audit);
+  document.getElementById('start-btn').disabled = _selectedCats.size === 0;
+  // Audits are stateless on both sides — never show a resume banner.
 }
 
 function renderCats() {
@@ -284,17 +270,12 @@ function renderCats() {
 }
 
 function toggleCat(name) {
-  if (KIND === 'fg') {
-    // Single-select for FG (one brand per audit)
-    if (_selectedCats.has(name)) {
-      _selectedCats.clear();
-    } else {
-      _selectedCats.clear();
-      _selectedCats.add(name);
-    }
+  // Single-select for both kinds — one brand / one section per audit.
+  if (_selectedCats.has(name)) {
+    _selectedCats.clear();
   } else {
-    if (_selectedCats.has(name)) _selectedCats.delete(name);
-    else _selectedCats.add(name);
+    _selectedCats.clear();
+    _selectedCats.add(name);
   }
   renderCats();
   document.getElementById('start-btn').disabled = _selectedCats.size === 0;
@@ -330,11 +311,11 @@ async function startAudit() {
   btn.disabled = true; btn.textContent = 'Building audit…';
 
   var body;
+  var sel = Array.from(_selectedCats)[0];
   if (KIND === 'fg') {
-    var brand = Array.from(_selectedCats)[0];
-    body = {kind: 'fg', brand: brand};
+    body = {kind: 'fg', brand: sel};
   } else {
-    body = {kind: KIND, categories: Array.from(_selectedCats)};
+    body = {kind: 'rm', section: sel};
   }
 
   var res = await fetch('/api/audit/start', {
@@ -394,30 +375,47 @@ function renderItem() {
 }
 
 function renderRMItem(item, existing, body) {
-  var val = existing !== undefined ? existing.counted : '';
+  var hasCount = existing !== undefined && existing.counted !== null && existing.counted !== undefined;
+  var val = hasCount ? existing.counted : '';
+
+  var lotInfo = item.lot_count
+    ? item.lot_count + ' lot' + (item.lot_count === 1 ? '' : 's') + ' on hand'
+    : 'No lots on hand';
+  var legacyBadge = item.in_recipes === false
+    ? '<div class="lot-badge" style="background:#fff3e0;border-color:#ffb74d;color:#e65100;">Not in current recipes</div>'
+    : '';
+
   body.innerHTML =
     '<div class="item-meta">'
-    +'<div class="item-counter">Raw Material</div>'
+    +'<div class="item-counter">Raw Material'+(item.section?' · '+e(item.section):'')+'</div>'
     +'<div class="item-name">'+e(item.name)+'</div>'
-    +(item.section?'<div class="item-section-badge">'+e(item.section)+'</div>':'')
+    +'<div class="item-detail">'+e(lotInfo)+(item.unit?' · unit: '+e(item.unit):'')+'</div>'
+    +legacyBadge
     +'</div>'
     +'<div class="system-card">'
     +'<div class="system-label">System quantity</div>'
     +'<div><span class="system-qty">'+fmtQty(item.system_qty)+'</span>'
     +'<span class="system-unit">'+e(item.unit||'')+'</span></div>'
-    +(item.lots&&item.lots.length>1?'<div style="font-size:11px;color:var(--text-light);margin-top:4px;">'+item.lots.length+' lots on hand</div>':'')
     +'</div>'
     +'<div class="count-section">'
     +'<div class="count-label">Physical count ('+e(item.unit||'units')+')</div>'
     +'<input class="big-input" id="count-input" type="number" inputmode="decimal" min="0" step="0.01"'
-    +' placeholder="Enter count…" value="'+(val!==undefined&&val!==null?val:'')+'"'
+    +' placeholder="—" value="'+(hasCount?val:'')+'"'
     +' oninput="updateDiff(\'rm\')" onfocus="this.select()">'
+    +'<div class="fg-total" id="rm-hint" style="margin-top:10px;">'
+    +(hasCount
+        ? 'Counted: <strong>'+fmtQty(val)+'</strong> '+e(item.unit||'')
+        : '<span style="color:var(--text-light);">Not counted yet — use Skip to leave unchanged, or enter 0 to confirm zero on hand.</span>')
+    +'</div>'
+    +'<div style="margin-top:10px;text-align:center;">'
+    +'<button type="button" class="nav-btn" style="padding:8px 16px;font-size:13px;border-radius:8px;display:inline-block;width:auto;" onclick="setCountZero()">Mark as 0 (confirmed zero)</button>'
+    +'</div>'
     +'</div>'
     +'<div class="diff-indicator" id="diff-indicator"></div>';
 
   setTimeout(function(){
     var inp = document.getElementById('count-input');
-    if(inp){ inp.focus(); if(val!==undefined) updateDiff('rm'); }
+    if(inp){ inp.focus(); if(hasCount) updateDiff('rm'); }
   }, 50);
 }
 
@@ -479,11 +477,17 @@ function renderFGItem(item, existing, body) {
 }
 
 function setCountZero() {
-  var c = document.getElementById('count-cases');
-  var u = document.getElementById('count-units');
-  if (c) c.value = '0';
-  if (u) u.value = '0';
-  updateDiff('fg');
+  if (KIND === 'rm') {
+    var inp = document.getElementById('count-input');
+    if (inp) inp.value = '0';
+    updateDiff('rm');
+  } else {
+    var c = document.getElementById('count-cases');
+    var u = document.getElementById('count-units');
+    if (c) c.value = '0';
+    if (u) u.value = '0';
+    updateDiff('fg');
+  }
 }
 
 function updateDiff(kind) {
@@ -491,9 +495,15 @@ function updateDiff(kind) {
   var counted, valid;
 
   if (kind === 'rm') {
-    var val = parseFloat(document.getElementById('count-input').value);
-    valid   = !isNaN(val) && val >= 0;
-    counted = valid ? val : null;
+    var raw = document.getElementById('count-input').value;
+    valid   = raw !== '' && !isNaN(parseFloat(raw)) && parseFloat(raw) >= 0;
+    counted = valid ? parseFloat(raw) : null;
+    var hint = document.getElementById('rm-hint');
+    if (hint) {
+      hint.innerHTML = valid
+        ? 'Counted: <strong>'+fmtQty(counted)+'</strong> '+e(item.unit||'')
+        : '<span style="color:var(--text-light);">Not counted yet — use Skip to leave unchanged, or enter 0 to confirm zero on hand.</span>';
+    }
   } else {
     var cRaw  = document.getElementById('count-cases').value;
     var uRaw  = document.getElementById('count-units').value;
@@ -525,14 +535,12 @@ function updateDiff(kind) {
     el.textContent = '✓ Matches system';
   } else if (diff > 0) {
     el.className = 'diff-indicator over';
-    var overLabel = (kind === 'fg') ? '▲ +'+diff+' units over system — will create BASELINE lot'
-                                    : '▲ +'+diff+' '+(item.unit||'')+' over system';
-    el.textContent = overLabel;
+    var unit = (kind === 'fg') ? 'units' : (item.unit || '');
+    el.textContent = '▲ +'+diff+' '+unit+' over system — will create BASELINE lot';
   } else {
     el.className = 'diff-indicator under';
-    var underLabel = (kind === 'fg') ? '▼ '+diff+' units under system — will FIFO drain oldest lots'
-                                     : '▼ '+diff+' '+(item.unit||'')+' under system';
-    el.textContent = underLabel;
+    var unit2 = (kind === 'fg') ? 'units' : (item.unit || '');
+    el.textContent = '▼ '+diff+' '+unit2+' under system — will FIFO drain oldest lots';
   }
 }
 
@@ -575,7 +583,6 @@ async function goNext() {
   } else {
     _audit.current_idx++;
     renderItem();
-    if (KIND !== 'fg') await autoSave();
   }
 }
 
@@ -587,44 +594,19 @@ function skipItem() {
   } else {
     _audit.current_idx++;
     renderItem();
-    if (KIND !== 'fg') autoSave();
   }
 }
 
-async function autoSave() {
-  // FG audits are stateless — no save endpoint.
-  if (KIND === 'fg') return;
-  try {
-    await fetch('/api/audit/'+_audit.id+'/save', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({current_idx: _audit.current_idx, results: _results}),
-    });
-  } catch(e) {}
-}
+// Both audit kinds are now stateless — no save endpoint, no autosave.
+async function autoSave() { /* no-op */ }
 
 async function saveAndExit() {
-  if (KIND === 'fg') {
-    // No save for FG — exit confirmation only.
-    if (confirm('Exit this audit? Any counts entered will be discarded.')) {
-      window.location = '/organic?tab=fg';
-    }
-    return;
-  }
-  saveCurrentCount();
-  await fetch('/api/audit/'+_audit.id+'/save', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({current_idx: _audit.current_idx, results: _results}),
-  });
-  alert('Audit saved. You can resume it from the Audit button next time.');
-  window.location = '/organic?tab=raw';
+  exitItemScreen();
 }
 
 function exitItemScreen() {
-  // FG-only: exit without saving (used by the FG-replaced top-right button)
   if (confirm('Exit this audit? Any counts entered will be discarded.')) {
-    window.location = '/organic?tab=fg';
+    window.location = KIND === 'rm' ? '/organic?tab=raw' : '/organic?tab=fg';
   }
 }
 
@@ -639,7 +621,12 @@ async function completeAudit() {
       results:    _results,
     };
   } else {
-    body = {results: _results};
+    body = {
+      kind:       'rm',
+      section:    _audit.section,
+      started_at: _audit.started_at,
+      results:    _results,
+    };
   }
   var res = await fetch('/api/audit/'+_audit.id+'/complete', {
     method: 'POST',
@@ -672,7 +659,7 @@ function showComplete(adjCount, audit) {
       var name = a.item || a.recipe || '—';
       var detail;
       if (a.baseline_lot) {
-        // FG surplus — new baseline lot was created
+        // Surplus — new baseline lot was created (RM or FG)
         detail = 'System: '+a.system_qty+' → Counted: '+a.counted
                + ' · Created lot '+a.baseline_lot;
       } else if (a.format !== undefined) {
@@ -680,9 +667,9 @@ function showComplete(adjCount, audit) {
         detail = 'System: '+a.system_qty+' → Counted: '+a.counted
                + ' · '+a.format+' · drained oldest lots first';
       } else {
-        // RM
-        var lot = a.lot ? ' · LOT '+a.lot : '';
-        detail = 'System: '+a.system_qty+' → Counted: '+a.counted+lot;
+        // RM shortage — FIFO drain across lots
+        detail = 'System: '+a.system_qty+' → Counted: '+a.counted
+               + ' · drained oldest lots first';
       }
       html += '<div class="adj-row">'
         +'<div><div class="adj-name">'+e(name)+'</div>'
