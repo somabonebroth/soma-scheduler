@@ -401,6 +401,58 @@ def ripe_order_action(order_id):
     return jsonify({"error": f"Unknown action: {action}"}), 400
 
 
+@ripe_orders_bp.route("/api/internal/ripe-retail-auto-approve/<order_id>", methods=["POST"])
+def ripe_retail_auto_approve(order_id):
+    """Called by Ripe's Stripe Checkout webhook after a retail-pickup order is paid.
+
+    Authed via X-Internal-Key. Skips the Soma-admin business-rule checks (SS
+    minimum / FZ-BB lead time) because retail pickup is exempt from wholesale
+    rules. Writes sale records, pushes status=approved back to Ripe.
+    """
+    import hmac as _hmac
+    if not INTERNAL_API_KEY:
+        return jsonify({"error": "Internal API not configured"}), 503
+    if not _hmac.compare_digest(request.headers.get("X-Internal-Key", "").encode(),
+                                INTERNAL_API_KEY.encode()):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    get_status, order_data = _ripe_request("GET", "/api/internal/orders")
+    if get_status != 200 or not isinstance(order_data, list):
+        return jsonify({"error": "Could not fetch orders from Ripe portal"}), 502
+    order = next((o for o in order_data if o["id"] == order_id), None)
+    if not order:
+        return jsonify({"error": "Order not found"}), 404
+
+    if order.get("order_mode") != "retail":
+        return jsonify({"error": "Order is not a retail pickup order"}), 400
+    if order.get("payment_status") != "paid":
+        return jsonify({"error": "Order is not paid yet"}), 409
+    if order.get("status") == "approved":
+        return jsonify({"ok": True, "already_approved": True}), 200
+    if order.get("status") != "pending":
+        return jsonify({"error": f"Order is {order.get('status')} — cannot auto-approve"}), 409
+
+    pickup_date = (order.get("requested_date") or "").strip()
+    if not pickup_date:
+        return jsonify({"error": "Order has no pickup date set"}), 400
+
+    ok, err = create_ripe_sale_records(order, pickup_date, "stripe_checkout")
+    if not ok:
+        return jsonify({"error": err or "Could not create sale records"}), 500
+
+    ripe_status, ripe_resp = _ripe_request(
+        "PATCH", f"/api/internal/orders/{order_id}",
+        {"action": "approve", "fulfillment_date": pickup_date},
+    )
+    if ripe_status != 200:
+        return jsonify({
+            "warning": "Sale records created but Ripe status update failed",
+            "ripe_error": ripe_resp.get("error") if isinstance(ripe_resp, dict) else str(ripe_resp),
+        }), 502
+
+    return jsonify({"ok": True})
+
+
 @ripe_orders_bp.route("/ripe-products")
 @_soma_login_required
 def ripe_products_page():

@@ -106,14 +106,18 @@
 
   {% macro order_row(o) %}
     <tr class="order-row" data-id="{{ o.id }}" data-status="{{ o.status }}" onclick="toggleDetail('{{ o.id }}')">
-      <td><strong>{{ o.id }}</strong></td>
+      <td>
+        <strong>{{ o.id }}</strong>
+        {% if o.order_mode == 'retail' %}<br><span class="tag" style="background:#fdf0e6;color:#8a4a1a;font-size:10px;padding:1px 7px;margin-top:3px;">Retail</span>{% endif %}
+      </td>
       <td>{{ o.created_at[:10] }}</td>
       <td style="font-size:12px;">{{ o.delivery_label }}</td>
-      <td>{{ o.total_cases }}</td>
+      <td>{% if o.order_mode == 'retail' %}{{ o.total_units }} jars{% else %}{{ o.total_cases }}{% endif %}</td>
       <td>${{ "%.2f"|format(o.total) }}</td>
       <td>
         <div class="payment-stack">
           {% if o.payment_key == 'etransfer' %}<span style="font-size:11px;color:var(--text-light);">E-Transfer</span>
+          {% elif o.payment_key == 'stripe_checkout' %}<span style="font-size:11px;color:var(--text-light);">Card</span>
           {% else %}<span class="tag tag-net14">Net 14</span>{% endif %}
           {% set ps = o.payment_status or 'n/a' %}
           {% if ps == 'paid' %}<span class="tag tag-paid">paid{% if o.paid_at %} · {{ o.paid_at[:10] }}{% endif %}</span>
