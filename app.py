@@ -4770,25 +4770,50 @@ def audit_page(kind):
 @app.route("/api/audit/start", methods=["POST"])
 @login_required
 def start_audit():
-    """Start a new audit or return the existing in-progress one.
-    Body: { kind: 'rm'|'fg', categories: [str] }
+    """Start a new audit.
+
+    RM: persists an in-progress audit doc that can be resumed via 'save'.
+        Body: { kind: 'rm', categories: [str] }
+    FG: stateless — returns the item list without persisting. The audit
+        record is only written when /complete is called. Single brand.
+        Body: { kind: 'fg', brand: str }  (or categories=[brand] for back-compat)
     """
     data = request.get_json() or {}
     kind = data.get("kind")
     if kind not in ("rm", "fg"):
         return jsonify({"error": "kind must be rm or fg"}), 400
 
-    audits = _load_audits()
+    if kind == "fg":
+        brand = (data.get("brand") or "").strip()
+        if not brand:
+            cats = data.get("categories") or []
+            if cats:
+                brand = (cats[0] or "").strip()
+        if not brand:
+            return jsonify({"error": "brand required for FG audit"}), 400
 
+        items = _build_fg_audit_items(brand)
+        audit = {
+            "id":         "audit_" + datetime.now().strftime("%Y%m%d%H%M%S"),
+            "kind":       "fg",
+            "status":     "in_progress",
+            "brand":      brand,
+            "started_at": datetime.now().isoformat(),
+            "items":      items,
+            "current_idx": 0,
+            "results":    {},
+        }
+        # Stateless: deliberately not persisted. /complete will write the
+        # finalised audit doc with results applied.
+        return jsonify({"ok": True, "audit": audit})
+
+    # RM: stateful with resume support
+    audits = _load_audits()
     audits = [a for a in audits
               if not (a.get("kind") == kind and a.get("status") == "in_progress")]
 
     categories = data.get("categories", [])
-
-    if kind == "rm":
-        items = _build_rm_audit_items(categories)
-    else:
-        items = _build_fg_audit_items(categories)
+    items = _build_rm_audit_items(categories)
 
     audit = {
         "id":         "audit_" + datetime.now().strftime("%Y%m%d%H%M%S"),
@@ -4843,42 +4868,77 @@ def _build_rm_audit_items(categories):
     items = sorted(seen.values(), key=lambda x: (x["section"], x["name"]))
     return items
 
-def _build_fg_audit_items(categories):
-    """Build ordered list of FG lots for the audit, filtered by brand."""
+def _build_fg_audit_items(brand):
+    """Build per-SKU audit items for FG inventory, scoped to a single brand.
+
+    SKU master list = recipes.json filtered by brand, unioned with any FG
+    history for the brand (catches legacy SKUs whose recipe card was removed).
+    Each item row represents one SKU (brand|recipe|format) with system_qty
+    summed across matching FG lots. SKUs with zero on hand are included so
+    the auditor can record a baseline-lot surplus if physical stock exists.
+    """
+    brand_norm = (brand or "").strip()
+    recipes = load_recipes()
     fg = _load_json(ORGANIC_FG_PATH, [])
-    items = []
-    for entry in fg:
-        if int(entry.get("quantity_remaining") or 0) <= 0:
+
+    sku_map = {}  # sku_key -> item dict
+
+    for recipe_name, r in recipes.items():
+        if (r.get("brand") or "").strip() != brand_norm:
             continue
-        brand = (entry.get("brand") or "Unknown").strip()
-        if categories and brand not in categories:
+        fmt = (r.get("format") or "").strip()
+        key = _sku_key(brand_norm, recipe_name, fmt)
+        sku_map[key] = {
+            "id":            key,
+            "recipe":        recipe_name,
+            "brand":         brand_norm,
+            "format":        fmt,
+            "certification": (r.get("certification") or "").strip(),
+            "system_qty":    0,
+            "lot_count":     0,
+            "in_recipes":    True,
+        }
+
+    for f in fg:
+        if (f.get("brand") or "").strip() != brand_norm:
             continue
-        recipe  = (entry.get("recipe") or "").strip()
-        fmt     = (entry.get("format") or "").strip()
-        lot     = (entry.get("lot") or "").strip()
-        items.append({
-            "id":         entry["id"],
-            "recipe":     recipe,
-            "brand":      brand,
-            "format":     fmt,
-            "lot":        lot,
-            "sku":        f"{recipe} · {fmt}",
-            "system_qty": int(entry.get("quantity_remaining") or 0),
-            "created_at": entry.get("created_at", ""),
-        })
+        recipe_name = (f.get("recipe") or "").strip()
+        fmt         = (f.get("format") or "").strip()
+        remaining   = int(f.get("quantity_remaining") or 0)
+        key = _sku_key(brand_norm, recipe_name, fmt)
+        if key not in sku_map:
+            # Legacy SKU — not in current recipe set
+            sku_map[key] = {
+                "id":            key,
+                "recipe":        recipe_name,
+                "brand":         brand_norm,
+                "format":        fmt,
+                "certification": (f.get("certification") or "").strip(),
+                "system_qty":    0,
+                "lot_count":     0,
+                "in_recipes":    False,
+            }
+        if remaining > 0:
+            sku_map[key]["system_qty"] += remaining
+            sku_map[key]["lot_count"]  += 1
+
     fmt_order = {"SS": 0, "FZ": 1, "BB": 2}
-    items.sort(key=lambda x: (
-        x["brand"],
-        fmt_order.get((x["format"] or "")[:2].upper(), 9),
-        x["recipe"],
-        x.get("created_at", ""),
-    ))
+    items = sorted(
+        sku_map.values(),
+        key=lambda x: (
+            fmt_order.get((x["format"] or "")[:2].upper(), 9),
+            x["recipe"],
+        ),
+    )
     return items
 
 @app.route("/api/audit/active/<kind>", methods=["GET"])
 @login_required
 def get_active_audit(kind):
-    """Return the current in-progress audit for rm or fg, or null."""
+    """Return the current in-progress audit for rm, or null.
+    FG audits are stateless — no resume — so always returns null for fg."""
+    if kind == "fg":
+        return jsonify({"audit": None})
     audit = _active_audit(kind)
     return jsonify({"audit": audit})
 
@@ -4903,13 +4963,41 @@ def save_audit_progress(audit_id):
 @login_required
 def complete_audit(audit_id):
     """Complete an audit — apply all counted adjustments to inventory.
-    Body: { results: {item_id: {counted}} }
+
+    RM: looks up the persisted in-progress audit by id.
+        Body: { results: {item_id: {counted}} }
+    FG: stateless — audit was not persisted at /start. Builds a fresh
+        audit record from the body and writes it as completed.
+        Body: { kind: 'fg', brand: str, started_at?: iso,
+                results: {sku_key: {counted}} }
+    Guards against double-complete: a completed audit cannot be re-applied.
     """
     data = request.get_json() or {}
     audits = _load_audits()
     audit = next((a for a in audits if a["id"] == audit_id), None)
+
+    if audit and audit.get("status") == "completed":
+        return jsonify({"error": "Audit already completed"}), 409
+
     if not audit:
-        return jsonify({"error": "Audit not found"}), 404
+        # FG stateless flow: build the audit doc fresh from the request body.
+        kind = (data.get("kind") or "").strip()
+        if kind != "fg":
+            return jsonify({"error": "Audit not found"}), 404
+        brand = (data.get("brand") or "").strip()
+        if not brand:
+            return jsonify({"error": "brand required for FG audit"}), 400
+        audit = {
+            "id":          audit_id,
+            "kind":        "fg",
+            "status":      "in_progress",
+            "brand":       brand,
+            "started_at":  data.get("started_at") or datetime.now().isoformat(),
+            "items":       _build_fg_audit_items(brand),
+            "current_idx": 0,
+            "results":     {},
+        }
+        audits.append(audit)
 
     audit["results"].update(data.get("results", {}))
     kind = audit["kind"]
@@ -4987,45 +5075,112 @@ def _apply_rm_audit(audit):
     return adjustments
 
 def _apply_fg_audit(audit):
-    """Apply FG audit results — direct per-lot overwrite."""
-    fg = _load_json(ORGANIC_FG_PATH, [])
-    adjustments = []
+    """Apply FG audit results — per-SKU FIFO drain on shortage, baseline lot
+    creation on surplus.
 
-    for fg_id, result in audit["results"].items():
+    Result keys are sku_key strings ('BRAND|RECIPE|FORMAT'). For each SKU:
+      - diff < 0  → drain oldest FG lots first (FIFO) until shortfall covered.
+      - diff > 0  → create a new FG row with lot 'BASELINE-YYYYMMDD',
+                     source='audit_baseline', no production/raw-material links.
+      - diff == 0 → no change, no log entry.
+
+    counted == None means the SKU was skipped (not counted) and is ignored.
+    """
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    recipes = load_recipes()
+    adjustments = []
+    new_rows = []
+    now_iso = datetime.now().isoformat()
+
+    for sku_key, result in audit["results"].items():
         counted = result.get("counted")
         if counted is None:
+            continue  # explicit skip
+        try:
+            counted = int(counted)
+        except (ValueError, TypeError):
             continue
-        counted = int(counted)
-        entry = next((f for f in fg if f.get("id") == fg_id), None)
-        if not entry:
+        if counted < 0:
             continue
-        system_qty = int(entry.get("quantity_remaining") or 0)
-        if counted == system_qty:
+
+        parts = sku_key.split("|")
+        if len(parts) != 3:
             continue
-        entry["quantity_remaining"] = counted
-        entry["last_adjusted_at"]   = datetime.now().isoformat()
+        brand, recipe_name, fmt = parts
+
+        matching = [f for f in fg
+                    if (f.get("brand") or "").strip() == brand
+                    and (f.get("recipe") or "").strip() == recipe_name
+                    and (f.get("format") or "").strip() == fmt
+                    and int(f.get("quantity_remaining") or 0) > 0]
+        matching.sort(key=lambda f: f.get("created_at", ""))
+
+        system_total = sum(int(f.get("quantity_remaining") or 0) for f in matching)
+        diff = counted - system_total
+        if diff == 0:
+            continue
+
+        baseline_lot_code = None
+        if diff < 0:
+            to_remove = abs(diff)
+            for f in matching:
+                if to_remove <= 0:
+                    break
+                avail = int(f.get("quantity_remaining") or 0)
+                take = min(avail, to_remove)
+                f["quantity_remaining"] = avail - take
+                f["last_adjusted_at"]   = now_iso
+                to_remove -= take
+        else:
+            recipe_meta = recipes.get(recipe_name, {}) or {}
+            baseline_lot_code = "BASELINE-" + datetime.now().strftime("%Y%m%d")
+            new_id = ("fg_baseline_" + datetime.now().strftime("%Y%m%d%H%M%S")
+                      + "_" + str(len(new_rows)))
+            new_rows.append({
+                "id":                 new_id,
+                "recipe":             recipe_name,
+                "brand":              brand,
+                "format":             fmt,
+                "certification":      (recipe_meta.get("certification") or "").strip(),
+                "lot":                baseline_lot_code,
+                "quantity_produced":  diff,
+                "quantity_remaining": diff,
+                "vessel":             "Audit baseline",
+                "week_id":            None,
+                "day_idx":            None,
+                "created_at":         now_iso,
+                "source":             "audit_baseline",
+                "audit_id":           audit["id"],
+            })
+
         adjustments.append({
-            "fg_id":      fg_id,
-            "recipe":     entry.get("recipe", ""),
-            "lot":        entry.get("lot", ""),
-            "system_qty": system_qty,
-            "counted":    counted,
-            "diff":       counted - system_qty,
+            "sku_key":      sku_key,
+            "brand":        brand,
+            "recipe":       recipe_name,
+            "format":       fmt,
+            "system_qty":   system_total,
+            "counted":      counted,
+            "diff":         diff,
+            "baseline_lot": baseline_lot_code,
         })
 
+    if new_rows:
+        fg.extend(new_rows)
     _save_json(ORGANIC_FG_PATH, fg)
 
-    for adj in adjustments:
+    for i, adj in enumerate(adjustments):
         _record_adjustment({
-            "id":         "audit_fg_" + datetime.now().strftime("%Y%m%d%H%M%S") + str(abs(adj["diff"])),
-            "kind":       "audit_fg",
-            "recipe":     adj["recipe"],
-            "lot":        adj["lot"],
-            "system_qty": adj["system_qty"],
-            "counted":    adj["counted"],
-            "diff":       adj["diff"],
-            "audit_id":   audit["id"],
-            "created_at": datetime.now().isoformat(),
+            "id":           "audit_fg_" + datetime.now().strftime("%Y%m%d%H%M%S") + "_" + str(i),
+            "kind":         "audit_fg",
+            "brand":        adj["brand"],
+            "recipe":       adj["recipe"],
+            "format":       adj["format"],
+            "system_qty":   adj["system_qty"],
+            "counted":      adj["counted"],
+            "diff":         adj["diff"],
+            "baseline_lot": adj["baseline_lot"],
+            "audit_id":     audit["id"],
+            "created_at":   now_iso,
         })
 
     return adjustments
@@ -5075,10 +5230,14 @@ def audit_categories(kind):
             cats = ["All"]
         return jsonify(cats)
     else:
+        # FG brand list = brands in recipes.json (source of truth) unioned
+        # with any brand that has FG history (catches legacy/defunct recipes).
+        recipes = load_recipes()
+        brands = {(r.get("brand") or "").strip() for r in recipes.values()}
         fg = _load_json(ORGANIC_FG_PATH, [])
-        brands = sorted({(f.get("brand") or "Unknown").strip()
-                         for f in fg if int(f.get("quantity_remaining") or 0) > 0})
-        return jsonify(brands or ["All"])
+        brands.update((f.get("brand") or "").strip() for f in fg)
+        brands = {b for b in brands if b}
+        return jsonify(sorted(brands) or ["Unknown"])
 
 @app.route("/api/organic/adjustments", methods=["GET"])
 @login_required
