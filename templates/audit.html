@@ -658,9 +658,10 @@ function showComplete(adjCount, audit) {
       var cls  = diff > 0 ? 'pos' : diff < 0 ? 'neg' : 'zero';
       var name = a.item || a.recipe || '—';
       var detail;
+      var unitSuffix = a.unit ? ' '+a.unit : '';
       if (a.baseline_lot) {
         // Surplus — new baseline lot was created (RM or FG)
-        detail = 'System: '+a.system_qty+' → Counted: '+a.counted
+        detail = 'System: '+a.system_qty+unitSuffix+' → Counted: '+a.counted+unitSuffix
                + ' · Created lot '+a.baseline_lot;
       } else if (a.format !== undefined) {
         // FG shortage — FIFO drain
@@ -668,7 +669,7 @@ function showComplete(adjCount, audit) {
                + ' · '+a.format+' · drained oldest lots first';
       } else {
         // RM shortage — FIFO drain across lots
-        detail = 'System: '+a.system_qty+' → Counted: '+a.counted
+        detail = 'System: '+a.system_qty+unitSuffix+' → Counted: '+a.counted+unitSuffix
                + ' · drained oldest lots first';
       }
       html += '<div class="adj-row">'

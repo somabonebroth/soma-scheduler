@@ -4827,15 +4827,17 @@ def start_audit():
     return jsonify({"ok": True, "audit": audit})
 
 def _collect_recipe_ingredients():
-    """Return {name: {'unit': str}} for every ingredient referenced across
-    all recipes (any of the kettle_overnight / after_skim / finishing /
-    add_to_jar sections). First non-empty unit wins on conflict.
+    """Return a set of (name, unit) tuples for every ingredient referenced
+    across all recipes (kettle_overnight / after_skim / finishing /
+    add_to_jar sections).
 
-    Used as the procurement-side master list for RM audits — same role
-    recipes.json plays as the SKU master for FG audits.
+    The (name, unit) tuple is the canonical key used everywhere else in
+    the codebase — section assignments, the grouped-raw-materials view,
+    receipt validation. The audit must use the same key shape or
+    section assignments won't resolve.
     """
     recipes = load_recipes()
-    ings = {}
+    pairs = set()
     for r in recipes.values():
         if not isinstance(r, dict):
             continue
@@ -4847,74 +4849,67 @@ def _collect_recipe_ingredients():
                 if not name:
                     continue
                 unit = (ing.get("unit") or "").strip()
-                if name not in ings:
-                    ings[name] = {"unit": unit}
-                elif unit and not ings[name]["unit"]:
-                    ings[name]["unit"] = unit
-    return ings
+                pairs.add((name, unit))
+    return pairs
 
 def _build_rm_audit_items(section_name):
-    """Build per-item audit list for RM, scoped to a single section.
+    """Build per-(name,unit) audit list for RM, scoped to a single section.
 
-    Master list = ingredient names referenced in any recipe, unioned with
-    item names that appear in raw-material inventory history. Items are
-    filtered to the chosen section via rm_sections.json assignments.
-    Items without a section assignment go to 'Unassigned'.
+    Master list = (name, unit) pairs from recipes ∪ inventory history.
+    Section lookup uses _section_for_ingredient(name, unit, ...) — the
+    same key shape (`name|unit`) the rest of the system uses to store
+    assignments. Items without a section assignment go to 'Unassigned'.
 
-    Each item row aggregates remaining across its lots. Zero-stock items
-    are included so the auditor can record a baseline-lot surplus if
-    physical stock exists. Unit is resolved to the newest lot's unit
-    (procurement unit) when stock exists, otherwise to the recipe
-    ingredient's unit, otherwise empty.
+    Each row aggregates remaining across all lots matching both name
+    AND unit (so 'Carrots|kg' and 'Carrots|lb' are separate rows, matching
+    the data model). Zero-stock items are included so the auditor can
+    record a baseline surplus.
+
+    Item id is `name|unit` (the same key shape used everywhere else).
     """
     materials = _load_json(ORGANIC_RAW_PATH, [])
     sections_data = _load_rm_sections()
-    assignments = sections_data.get("assignments", {})
-    sections = {s["id"]: s["name"] for s in sections_data.get("sections", [])}
+    sections_by_id = {s["id"]: s["name"] for s in sections_data.get("sections", [])}
     section_name_norm = (section_name or "").strip()
 
-    recipe_ings = _collect_recipe_ingredients()
-
-    # Master list: recipe ingredients ∪ inventory history
-    all_names = set(recipe_ings.keys())
+    # Master list: (name, unit) pairs from recipes ∪ inventory history
+    pairs = set(_collect_recipe_ingredients())
+    in_recipes = set(pairs)  # snapshot before we add inventory-only pairs
     for mat in materials:
         name = (mat.get("item") or "").strip()
-        if name:
-            all_names.add(name)
+        if not name:
+            continue
+        unit = (mat.get("unit") or "").strip()
+        pairs.add((name, unit))
 
     items_map = {}
-    for name in all_names:
-        section_id = assignments.get(name, "")
-        section = sections.get(section_id, "") or "Unassigned"
+    for name, unit in pairs:
+        section_id = _section_for_ingredient(name, unit, sections_data)
+        section = sections_by_id.get(section_id, "") or "Unassigned"
         if section_name_norm and section != section_name_norm:
             continue
 
-        # All lots for this item with stock on hand
+        # All lots for this exact (name, unit) with stock on hand
         lots = [m for m in materials
                 if (m.get("item") or "").strip() == name
+                and (m.get("unit") or "").strip() == unit
                 and float(m.get("remaining") or 0) > 0]
         lots.sort(key=lambda m: m.get("date_received", ""))
 
         system_qty = round(sum(float(l.get("remaining") or 0) for l in lots), 4)
 
-        # Resolve unit: newest lot (procurement) > recipe ingredient > ""
-        unit = ""
-        if lots:
-            unit = (lots[-1].get("unit") or "").strip()
-        if not unit and name in recipe_ings:
-            unit = recipe_ings[name].get("unit", "")
-
-        items_map[name] = {
-            "id":         name,
+        key = _ingredient_section_key(name, unit)
+        items_map[key] = {
+            "id":         key,           # "name|unit"
             "name":       name,
             "unit":       unit,
             "section":    section,
             "system_qty": system_qty,
             "lot_count":  len(lots),
-            "in_recipes": name in recipe_ings,
+            "in_recipes": (name, unit) in in_recipes,
         }
 
-    items = sorted(items_map.values(), key=lambda x: x["name"].lower())
+    items = sorted(items_map.values(), key=lambda x: (x["name"].lower(), x["unit"].lower()))
     return items
 
 def _build_fg_audit_items(brand):
@@ -5092,13 +5087,12 @@ def _apply_rm_audit(audit):
     counted == None means the item was skipped (not counted).
     """
     materials = _load_json(ORGANIC_RAW_PATH, [])
-    recipe_ings = _collect_recipe_ingredients()
     adjustments = []
     new_rows = []
     now_iso = datetime.now().isoformat()
     today = datetime.now().strftime("%Y-%m-%d")
 
-    for item_name, result in audit["results"].items():
+    for result_key, result in audit["results"].items():
         counted = result.get("counted")
         if counted is None:
             continue
@@ -5109,12 +5103,22 @@ def _apply_rm_audit(audit):
         if counted < 0:
             continue
 
-        lots = sorted(
-            [m for m in materials
-             if (m.get("item") or "").strip() == item_name
-             and float(m.get("remaining") or 0) > 0],
-            key=lambda m: m.get("date_received", "")
-        )
+        # Parse "name|unit" key
+        if "|" in result_key:
+            item_name, unit_key = result_key.split("|", 1)
+        else:
+            # Legacy key (name only) — match any unit
+            item_name, unit_key = result_key, None
+        item_name = item_name.strip()
+        if unit_key is not None:
+            unit_key = unit_key.strip()
+
+        lots = [m for m in materials
+                if (m.get("item") or "").strip() == item_name
+                and (unit_key is None or (m.get("unit") or "").strip() == unit_key)
+                and float(m.get("remaining") or 0) > 0]
+        lots.sort(key=lambda m: m.get("date_received", ""))
+
         system_total = round(sum(float(l.get("remaining") or 0) for l in lots), 4)
         diff = round(counted - system_total, 4)
         if diff == 0:
@@ -5132,12 +5136,9 @@ def _apply_rm_audit(audit):
                 lot["last_adjusted_at"] = now_iso
                 to_remove = round(to_remove - take, 4)
         else:
-            # Resolve unit for the new baseline lot
-            unit = ""
-            if lots:
+            unit = unit_key or ""
+            if not unit and lots:
                 unit = (lots[-1].get("unit") or "").strip()
-            if not unit and item_name in recipe_ings:
-                unit = recipe_ings[item_name].get("unit", "")
 
             baseline_lot_code = "BASELINE-" + datetime.now().strftime("%Y%m%d")
             new_id = (datetime.now().strftime("%Y%m%d%H%M%S")
@@ -5158,6 +5159,7 @@ def _apply_rm_audit(audit):
 
         adjustments.append({
             "item":         item_name,
+            "unit":         unit_key or "",
             "system_qty":   system_total,
             "counted":      counted,
             "diff":         diff,
@@ -5173,6 +5175,7 @@ def _apply_rm_audit(audit):
             "id":           "audit_rm_" + datetime.now().strftime("%Y%m%d%H%M%S") + "_" + str(i),
             "kind":         "audit_rm",
             "item":         adj["item"],
+            "unit":         adj["unit"],
             "system_qty":   adj["system_qty"],
             "counted":      adj["counted"],
             "diff":         adj["diff"],
@@ -5311,30 +5314,28 @@ def audit_history():
 def audit_categories(kind):
     """Return available categories for category selection screen."""
     if kind == "rm":
-        # Return every section that has at least one item assigned to it
-        # (recipe ingredient OR inventory history), regardless of current
-        # stock — auditors need to be able to enter baseline counts for
-        # zero-stock items too. Plus 'Unassigned' if any items lack a
-        # section assignment.
+        # Sections that have any (name, unit) pair assigned to them, plus
+        # 'Unassigned' if any item lacks an assignment. Uses the canonical
+        # `name|unit` key shape via _section_for_ingredient — matches how
+        # assignments are actually stored.
         sections_data = _load_rm_sections()
         sections_ordered = sections_data.get("sections", [])
         sections_by_id = {s["id"]: s["name"] for s in sections_ordered}
-        assignments = sections_data.get("assignments", {})
 
-        recipe_ings = _collect_recipe_ingredients()
+        pairs = set(_collect_recipe_ingredients())
         materials = _load_json(ORGANIC_RAW_PATH, [])
-
-        all_names = set(recipe_ings.keys())
         for mat in materials:
             n = (mat.get("item") or "").strip()
-            if n:
-                all_names.add(n)
+            if not n:
+                continue
+            u = (mat.get("unit") or "").strip()
+            pairs.add((n, u))
 
         used_sections = set()
         has_unassigned = False
-        for name in all_names:
-            sid = assignments.get(name, "")
-            sname = sections_by_id.get(sid, "")
+        for name, unit in pairs:
+            sid = _section_for_ingredient(name, unit, sections_data)
+            sname = sections_by_id.get(sid, "") if sid else ""
             if sname:
                 used_sections.add(sname)
             else:
