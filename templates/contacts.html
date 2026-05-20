@@ -78,13 +78,13 @@ body.cp { background: var(--bg); }
 .cat-sku-name { font-size:14px; font-weight:600; color:var(--dark); }
 .cat-sku-fmt { font-size:11px; color:var(--text-light); }
 .cat-buyer-list { margin-top:6px; }
-.cat-buyer-row { display:flex; align-items:center; gap:14px; padding:7px 0; font-size:12px; border-top:1px solid #f0f0ed; flex-wrap:wrap; }
+.cat-buyer-row { display:flex; align-items:center; gap:22px; padding:8px 0; font-size:12px; border-top:1px solid #f0f0ed; flex-wrap:wrap; }
 .cat-buyer-row:first-child { border-top:none; padding-top:6px; }
 .cat-buyer-name { flex:1; min-width:140px; font-weight:500; color:var(--dark); }
-.cat-num { color:var(--text-light); min-width:78px; }
-.cat-num.cat-price { color:var(--dark); font-weight:500; }
+.cat-num { color:var(--text-light); min-width:100px; text-align:right; font-variant-numeric:tabular-nums; }
+.cat-num.cat-price { color:var(--dark); font-weight:600; min-width:80px; }
 .cat-buyer-row.inactive { opacity:.55; }
-.cat-active-tag { font-size:10px; font-weight:700; color:#2e7d32; text-transform:uppercase; letter-spacing:.05em; }
+.cat-active-tag { font-size:10px; font-weight:700; color:#2e7d32; text-transform:uppercase; letter-spacing:.05em; min-width:64px; text-align:right; }
 .cat-buyer-row.inactive .cat-active-tag { color:#c62828; }
 .cat-empty-buyers { font-size:12px; color:var(--text-light); font-style:italic; padding:4px 0 0; }
 .scard { background:#fff; border:1px solid var(--border); border-radius:12px; padding:22px 24px; margin-bottom:14px; }
