@@ -185,44 +185,11 @@ body.cp { background: var(--bg); }
       <div style="margin-top:10px;" id="b-loc-list"></div>
       <button class="btn-sm" onclick="addLoc()" style="margin-top:4px;margin-bottom:2px;">+ Add Location</button>
 
-      <!-- Step A -->
-      <div id="b-step-a">
-        <div class="mo-div">Assigned Products</div>
-        <div style="margin-top:14px;">
-          <input id="b-sku-q" type="text" placeholder="Filter products…" oninput="rSkuList()" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:8px;">
-          <div id="b-sku-list" style="max-height:240px;overflow-y:auto;border:1.5px solid var(--border);border-radius:10px;background:#fff;"></div>
-          <div style="display:flex;justify-content:flex-end;margin-top:10px;">
-            <div style="display:flex;gap:8px;">
-              <button class="btn btn-p" onclick="goOrder()" style="background:#0288d1;border:none;font-size:13px;">Set Display Order →</button>
-              <button class="btn btn-p" onclick="goOrder();goPricingStep();" style="background:#2e7d32;border:none;font-size:13px;">Set Pricing →</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Step B -->
-      <div id="b-step-b" style="display:none;">
-        <div class="mo-div"></div>
-        <div style="margin-top:14px;display:flex;align-items:center;gap:12px;margin-bottom:10px;">
-          <button onclick="goAssign()" style="background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;text-decoration:underline;padding:0;">← Back to Products</button>
-          <span style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;">Display Order</span>
-        </div>
-        <div style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Products appear in this order in the sale grid. Click Set Pricing to assign buyer-specific prices.</div>
-        <div id="b-ord-list" style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden;"></div>
-        <div style="display:flex;justify-content:flex-end;margin-top:10px;">
-          <button class="btn btn-p" onclick="goPricingStep()" style="background:#0288d1;border:none;font-size:13px;">Set Pricing →</button>
-        </div>
-      </div>
-
-      <!-- Step C: Pricing per SKU -->
-      <div id="b-step-c" style="display:none;">
-        <div class="mo-div"></div>
-        <div style="margin-top:14px;display:flex;align-items:center;gap:12px;margin-bottom:10px;">
-          <button onclick="goOrderStep()" style="background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;text-decoration:underline;padding:0;">← Back to Order</button>
-          <span style="font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;">Set Pricing</span>
-        </div>
-        <p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Set the price this buyer pays per unit. COGS and margin are internal only.</p>
-        <div id="b-pricing-list" style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden;"></div>
+      <div class="mo-div">Assigned Products</div>
+      <div style="margin-top:14px;">
+        <input id="b-sku-q" type="text" placeholder="Filter products…" oninput="rSkuList()" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:8px;">
+        <div id="b-sku-list" style="max-height:240px;overflow-y:auto;border:1.5px solid var(--border);border-radius:10px;background:#fff;"></div>
+        <div style="font-size:11px;color:var(--text-light);margin-top:8px;">Display order and per-buyer pricing can be set after on the buyer's edit page.</div>
       </div>
 
       <div class="smsg" id="b-msg"></div>
@@ -529,7 +496,7 @@ function mvSku(idx,dir){
   _bOrd[c[idx].sku_key]=pb;_bOrd[c[sw].sku_key]=pa;rOrdList();
 }
 function _clrBuy(){['b-name','b-contact','b-phone','b-email','b-web','b-addr','b-certs','b-notes','b-sku-q'].forEach(function(id){G(id).value='';});G('b-msg').textContent='';_bCk={};_bOrd={};_bLocs={};_bLocs=[];_bPricing={};}
-async function openAddBuy(){_bMode='add';_bId=null;G('buy-mo-title').textContent='Add Buyer';G('b-save').textContent='Save Buyer';_clrBuy();rLocList();G('b-step-a').style.display='';G('b-step-b').style.display='none';await _fSkus();rSkuList();G('buy-mo').classList.add('open');}
+async function openAddBuy(){_bMode='add';_bId=null;G('buy-mo-title').textContent='Add Buyer';G('b-save').textContent='Save Buyer';_clrBuy();rLocList();await _fSkus();rSkuList();G('buy-mo').classList.add('open');}
 async function openEditBuy(bid){
   var b=_buys.find(function(x){return x.id===bid;});if(!b)return;
   _bMode='edit';_bId=bid;G('buy-mo-title').textContent='Edit Buyer';G('b-save').textContent='Save Changes';
@@ -546,7 +513,7 @@ async function saveBuy(){
   var name=G('b-name').value.trim(),msg=G('b-msg'),btn=G('b-save');
   if(!name){msg.className='smsg err';msg.textContent='Name required.';return;}
   syncLocs();
-  var skus=_skus.filter(function(s){return _bCk[s.sku_key];}).map(function(s){var pr=_bPricing[s.sku_key]||{};return Object.assign({},s,{position:_bOrd[s.sku_key]!==undefined?_bOrd[s.sku_key]:999,price:pr.price!=null?pr.price:(s.price||null),cogs:pr.cogs!=null?pr.cogs:(s.cogs||null),margin_pct:pr.margin_pct!=null?pr.margin_pct:(s.margin_pct||null),active:pr.active!==undefined?pr.active:true});});
+  var skus=_skus.filter(function(s){return _bCk[s.sku_key];});
   var body={name,skus,locations:_bLocs.filter(function(l){return l.name;}),contact_name:G('b-contact').value.trim(),phone:G('b-phone').value.trim(),email:G('b-email').value.trim(),website:G('b-web').value.trim(),address:G('b-addr').value.trim(),certifications:G('b-certs').value.trim(),notes:G('b-notes').value.trim()};
   btn.disabled=true;btn.textContent='Saving…';
   var res=await fetch(_bMode==='add'?'/api/buyers':'/api/buyers/'+_bId,{method:_bMode==='add'?'POST':'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});

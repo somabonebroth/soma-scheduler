@@ -5391,8 +5391,11 @@ def create_supplier():
     supplier = {
         "id": datetime.now().strftime("%Y%m%d%H%M%S%f"),
         "name": name,
-        "ingredients": [],
+        "ingredients": data.get("ingredients") or [],
     }
+    for field in ("contact_name","phone","email","address","website","certifications","notes"):
+        if field in data:
+            supplier[field] = (data[field] or "").strip()
     suppliers.append(supplier)
     _save_suppliers(suppliers)
     return jsonify(supplier), 201
@@ -6423,10 +6426,42 @@ def create_buyer():
     buyers = _load_buyers()
     if any(b["name"].lower() == name.lower() for b in buyers):
         return jsonify({"error": "Buyer already exists"}), 409
-    sku_catalog = _all_sku_catalog()
-    default_skus = [s for s in sku_catalog if s["brand"].lower() == name.lower()]
-    buyer = {"id": datetime.now().strftime("%Y%m%d%H%M%S%f"),
-             "name": name, "skus": default_skus}
+    buyer = {"id": datetime.now().strftime("%Y%m%d%H%M%S%f"), "name": name}
+
+    if "skus" in data:
+        catalog_by_key = {s["sku_key"]: s for s in _all_sku_catalog()}
+        new_skus = []
+        for sku in (data["skus"] or []):
+            merged = dict(sku)
+            cat = catalog_by_key.get(sku.get("sku_key", ""), {})
+            for ident in ("brand", "format"):
+                if not merged.get(ident) and cat.get(ident):
+                    merged[ident] = cat[ident]
+            for pf in ("price", "cogs", "margin_pct"):
+                if pf in merged and merged[pf] is not None:
+                    try:
+                        merged[pf] = round(float(merged[pf]), 2)
+                    except (TypeError, ValueError):
+                        merged[pf] = None
+            new_skus.append(merged)
+        buyer["skus"] = new_skus
+    else:
+        sku_catalog = _all_sku_catalog()
+        buyer["skus"] = [s for s in sku_catalog if s["brand"].lower() == name.lower()]
+
+    for field in ("contact_name","phone","email","address","website","certifications","notes"):
+        if field in data:
+            buyer[field] = (data[field] or "").strip()
+
+    if "locations" in data and isinstance(data["locations"], list):
+        buyer["locations"] = [
+            {"id": l.get("id") or str(i),
+             "name": (l.get("name") or "").strip(),
+             "address": (l.get("address") or "").strip()}
+            for i, l in enumerate(data["locations"])
+            if (l.get("name") or "").strip()
+        ]
+
     buyers.append(buyer)
     _save_buyers(buyers)
     return jsonify(buyer), 201
