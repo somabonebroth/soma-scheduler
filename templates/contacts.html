@@ -257,7 +257,7 @@ async function loadSups(){
   if(cnt)cnt.textContent=_sups.length+' supplier'+(_sups.length===1?'':'s');
   if(!_sups.length){c.innerHTML='<div class="empty">No suppliers yet.</div>';return;}
   c.innerHTML=_sups.map(function(s){
-    var m=[],sid=s.id,sidE=e(s.id);
+    var m=[],sidE=e(s.id),snameE=e(s.name);
     if(s.contact_name)m.push(e(s.contact_name));
     if(s.phone)m.push('<a href="tel:'+e(s.phone)+'">'+e(s.phone)+'</a>');
     if(s.email)m.push('<a href="mailto:'+e(s.email)+'">'+e(s.email)+'</a>');
@@ -267,7 +267,7 @@ async function loadSups(){
     var h='<div class="cc">';
     h+='<div style="flex:1;min-width:0;">';
     h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">';
-    h+='<div class="cc-name" style="font-size:17px;">'+e(s.name)+'</div>';
+    h+='<div class="cc-name" style="font-size:17px;">'+snameE+'</div>';
     if(n) h+='<span class="cc-badge bg-g">'+n+' ingredient'+(n===1?'':'s')+'</span>';
     if(s.certifications) h+='<span class="cc-badge bg-b">'+e(s.certifications)+'</span>';
     h+='</div>';
@@ -276,21 +276,17 @@ async function loadSups(){
     if(n) h+='<div class="cc-sub" style="margin-top:6px;font-size:11px;">'+prev+'</div>';
     if(s.notes) h+='<div class="cc-sub" style="font-style:italic;margin-top:4px;color:#999;">'+e(s.notes)+'</div>';
     h+='</div><div class="cc-actions">';
-    var editBtn=document.createElement('button');
-    editBtn.className='btn btn-p';
-    editBtn.style.cssText='font-size:12px;padding:8px 16px;background:#2e7d32;border:none;';
-    editBtn.textContent='Edit';
-    editBtn.onclick=(function(id){return function(){openEditSup(id);};})(sid);
-    var delBtn=document.createElement('button');
-    delBtn.className='btn-r';
-    delBtn.textContent='Delete';
-    delBtn.onclick=(function(id,nm){return function(){delSup(id,nm);};})(sid,s.name);
-    var tmp=document.createElement('div');
-    tmp.innerHTML=h+'</div></div>';
-    tmp.querySelector('.cc-actions').appendChild(editBtn);
-    tmp.querySelector('.cc-actions').appendChild(delBtn);
-    return tmp.outerHTML;
+    h+='<button class="btn btn-p" style="font-size:12px;padding:8px 16px;background:#2e7d32;border:none;" data-edit-sid="'+sidE+'">Edit</button>';
+    h+='<button class="btn-r" data-del-sid="'+sidE+'" data-del-name="'+snameE+'">Delete</button>';
+    h+='</div></div>';
+    return h;
   }).join('');
+  c.querySelectorAll('[data-edit-sid]').forEach(function(btn){
+    btn.addEventListener('click', function(){ openEditSup(this.getAttribute('data-edit-sid')); });
+  });
+  c.querySelectorAll('[data-del-sid]').forEach(function(btn){
+    btn.addEventListener('click', function(){ delSup(this.getAttribute('data-del-sid'), this.getAttribute('data-del-name')); });
+  });
 }
 async function _fIng(){try{_ing=await(await fetch('/api/organic/ingredients')).json();}catch(ex){_ing=[];}}
 function rSupIng(){
