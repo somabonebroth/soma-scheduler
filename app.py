@@ -741,7 +741,7 @@ def login_page():
 
 @app.route("/api/login", methods=["POST"])
 def login():
-    data = request.json
+    data = request.json or {}
     if data.get("password") == APP_PASSWORD:
         session.permanent = True   # enables PERMANENT_SESSION_LIFETIME
         session["authenticated"] = True
@@ -1258,7 +1258,7 @@ def get_recipes():
 @app.route("/api/recipes", methods=["POST"])
 @login_required
 def add_recipe():
-    data = request.json
+    data = request.json or {}
     name = data.get("name", "").strip()
     if not name:
         return jsonify({"error": "Name required"}), 400
@@ -1711,7 +1711,7 @@ def get_recipes_grouped():
 @app.route("/api/recipes/order", methods=["POST"])
 @login_required
 def update_recipe_order():
-    data = request.json
+    data = request.json or {}
     save_recipe_order(data)
     return jsonify({"success": True})
 
@@ -1745,7 +1745,7 @@ def upload_recipe():
         return jsonify({"success": True, "name": parsed["name"], "data": parsed["data"]})
 
     # Handle JSON text upload (legacy)
-    data = request.json
+    data = request.json or {}
     if not data:
         return jsonify({"error": "No data provided"}), 400
     text = data.get("text", "")
@@ -1763,7 +1763,7 @@ def upload_recipe():
 @app.route("/api/recipes/upload-json", methods=["POST"])
 @login_required
 def upload_recipe_json():
-    data = request.json
+    data = request.json or {}
     if not data:
         return jsonify({"error": "No data provided"}), 400
     name = data.get("name", "").strip()
@@ -1814,7 +1814,7 @@ def delete_schedule(week_id):
 @app.route("/api/generate", methods=["POST"])
 @login_required
 def generate_pdfs():
-    data = request.json
+    data = request.json or {}
     week_id = data.get("week_id", get_current_week_id())
     schedule = data.get("schedule", {})
     notes = data.get("notes", "")
@@ -2015,7 +2015,7 @@ def get_daily_production(week_id, day_idx):
 @require_valid_week
 @require_valid_day
 def save_daily_production(week_id, day_idx):
-    data = request.json
+    data = request.json or {}
     data["last_updated"] = datetime.now().isoformat()
     save_checklist_data(week_id, day_idx, data)
     # Process any organic runs scheduled on the previous day —
@@ -2031,7 +2031,7 @@ def save_daily_production(week_id, day_idx):
 @app.route("/api/label", methods=["POST"])
 @login_required
 def generate_label():
-    data = request.json
+    data = request.json or {}
     brand_name = data.get("brand_name", "")
     recipe_name = data.get("recipe_name", "")
     recipe_format = data.get("recipe_format", "")
@@ -2082,7 +2082,7 @@ def get_checklist_route(week_id, day_idx):
 @require_valid_week
 @require_valid_day
 def save_checklist_route(week_id, day_idx):
-    data = request.json
+    data = request.json or {}
     data["last_updated"] = datetime.now().isoformat()
     save_checklist_data(week_id, day_idx, data)
     return jsonify({"success": True})
@@ -2092,7 +2092,7 @@ def save_checklist_route(week_id, day_idx):
 @require_valid_week
 @require_valid_day
 def complete_checklist(week_id, day_idx):
-    data = request.json
+    data = request.json or {}
     data["last_updated"] = datetime.now().isoformat()
     data["completed"] = True
     save_checklist_data(week_id, day_idx, data)
@@ -2188,7 +2188,7 @@ def get_ccp_master():
 @app.route("/api/ccp-master", methods=["POST"])
 @login_required
 def update_ccp_master():
-    data = request.json
+    data = request.json or {}
     save_ccp_master(data)
     return jsonify({"success": True})
 
@@ -4754,11 +4754,6 @@ def _load_audits():
 def _save_audits(data):
     _save_json(AUDITS_PATH, data)
 
-def _active_audit(kind):
-    """Return the current in-progress audit of the given kind, or None."""
-    return next((a for a in _load_audits()
-                 if a.get("kind") == kind and a.get("status") == "in_progress"), None)
-
 @app.route("/audit/<kind>")
 @login_required
 def audit_page(kind):
@@ -4982,23 +4977,6 @@ def get_active_audit(kind):
     """Both audit kinds are stateless — no resume — so this always
     returns null. Endpoint retained for back-compat with stale clients."""
     return jsonify({"audit": None})
-
-@app.route("/api/audit/<audit_id>/save", methods=["POST"])
-@login_required
-def save_audit_progress(audit_id):
-    """Save progress on an in-progress audit without completing it.
-    Body: { current_idx: int, results: {item_id: {counted}} }
-    """
-    data = request.get_json() or {}
-    audits = _load_audits()
-    audit = next((a for a in audits if a["id"] == audit_id), None)
-    if not audit:
-        return jsonify({"error": "Audit not found"}), 404
-    audit["current_idx"] = data.get("current_idx", audit["current_idx"])
-    audit["results"].update(data.get("results", {}))
-    audit["last_saved_at"] = datetime.now().isoformat()
-    _save_audits(audits)
-    return jsonify({"ok": True})
 
 @app.route("/api/audit/<audit_id>/complete", methods=["POST"])
 @login_required
@@ -5297,18 +5275,6 @@ def _apply_fg_audit(audit):
 
     return adjustments
 
-@app.route("/api/audit/history", methods=["GET"])
-@login_required
-def audit_history():
-    """Return completed audits, most recent first."""
-    kind = request.args.get("kind")
-    audits = _load_audits()
-    completed = [a for a in audits if a.get("status") == "completed"]
-    if kind:
-        completed = [a for a in completed if a.get("kind") == kind]
-    completed.sort(key=lambda a: a.get("completed_at", ""), reverse=True)
-    return jsonify(completed)
-
 @app.route("/api/audit/categories/<kind>", methods=["GET"])
 @login_required
 def audit_categories(kind):
@@ -5356,12 +5322,6 @@ def audit_categories(kind):
         brands.update((f.get("brand") or "").strip() for f in fg)
         brands = {b for b in brands if b}
         return jsonify(sorted(brands) or ["Unknown"])
-
-@app.route("/api/organic/adjustments", methods=["GET"])
-@login_required
-def get_adjustments():
-    """Return the full audit log of manual adjustments (additions + subtractions)."""
-    return jsonify(_load_json(ADJUSTMENTS_PATH, []))
 
 # ── Supplier catalog ────────────────────────────────────────────────────
 # suppliers.json: list of {id, name, ingredients: [{name, unit}]}
@@ -5484,14 +5444,6 @@ def delete_rm_receipt_photo(entry_id):
             os.remove(os.path.join(RM_RECEIPT_PHOTOS_DIR, fn))
             return jsonify({"ok": True})
     return jsonify({"error": "Not found"}), 404
-
-@app.route("/api/organic/raw-materials/receipt-photo-exists/<entry_id>", methods=["GET"])
-@login_required
-def rm_receipt_photo_exists(entry_id):
-    for fn in os.listdir(RM_RECEIPT_PHOTOS_DIR):
-        if fn.startswith(entry_id + "."):
-            return jsonify({"exists": True, "filename": fn})
-    return jsonify({"exists": False})
 
 @app.route("/api/organic/finished-goods/grouped", methods=["GET"])
 @login_required
