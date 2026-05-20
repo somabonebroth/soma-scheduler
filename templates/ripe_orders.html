@@ -141,6 +141,10 @@
             <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Requested</div>{{ o.requested_date or '—' }}{% if o.requested_time %} · {{ o.requested_time }}{% endif %}</div>
             <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Payment</div>{{ o.payment_label }}</div>
             {% if o.fulfillment_date %}<div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Set Date</div><strong>{{ o.fulfillment_date }}</strong></div>{% endif %}
+            {% if o.payment_key == 'etransfer' and o.etransfer_reference %}
+            <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">E-Transfer Memo</div><span style="font-family:ui-monospace,Menlo,monospace;font-weight:700;letter-spacing:.08em;">{{ o.etransfer_reference }}</span></div>
+            <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Bank Confirmation</div><span style="font-family:ui-monospace,Menlo,monospace;">{{ o.etransfer_confirmation or '—' }}</span></div>
+            {% endif %}
           </div>
 
           <div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Items</div>
