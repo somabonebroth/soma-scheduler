@@ -71,6 +71,22 @@ body.cp { background: var(--bg); }
 .smsg.err { color:#c62828; }
 .sflash { font-size:12px; color:#2e7d32; display:none; margin-top:10px; font-weight:600; }
 .empty { text-align:center; padding:48px 24px; color:var(--text-light); font-size:14px; border:2px dashed var(--border); border-radius:12px; }
+.cat-brand { font-size:11px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.06em; margin:18px 0 8px; padding-left:4px; }
+.cat-brand:first-child { margin-top:0; }
+.cat-card { background:#fff; border:1px solid var(--border); border-radius:10px; padding:14px 18px; margin-bottom:8px; }
+.cat-card-head { display:flex; align-items:baseline; gap:10px; margin-bottom:6px; flex-wrap:wrap; }
+.cat-sku-name { font-size:14px; font-weight:600; color:var(--dark); }
+.cat-sku-fmt { font-size:11px; color:var(--text-light); }
+.cat-buyer-list { margin-top:6px; }
+.cat-buyer-row { display:flex; align-items:center; gap:14px; padding:7px 0; font-size:12px; border-top:1px solid #f0f0ed; flex-wrap:wrap; }
+.cat-buyer-row:first-child { border-top:none; padding-top:6px; }
+.cat-buyer-name { flex:1; min-width:140px; font-weight:500; color:var(--dark); }
+.cat-num { color:var(--text-light); min-width:78px; }
+.cat-num.cat-price { color:var(--dark); font-weight:500; }
+.cat-buyer-row.inactive { opacity:.55; }
+.cat-active-tag { font-size:10px; font-weight:700; color:#2e7d32; text-transform:uppercase; letter-spacing:.05em; }
+.cat-buyer-row.inactive .cat-active-tag { color:#c62828; }
+.cat-empty-buyers { font-size:12px; color:var(--text-light); font-style:italic; padding:4px 0 0; }
 .scard { background:#fff; border:1px solid var(--border); border-radius:12px; padding:22px 24px; margin-bottom:14px; }
 .scard h3 { font-size:14px; font-weight:700; margin:0 0 16px; color:var(--dark); }
 .price-row { display:grid; grid-template-columns:1fr 80px 80px 70px 60px; gap:6px; align-items:center; padding:9px 12px; border-bottom:1px solid var(--border); background:#fff; font-size:13px; }
@@ -108,6 +124,7 @@ body.cp { background: var(--bg); }
 <div class="tab-bar">
   <button class="tab-btn" onclick="showTab('suppliers')">Suppliers</button>
   <button class="tab-btn active" onclick="showTab('buyers')">Buyers</button>
+  <button class="tab-btn" onclick="showTab('catalogue')">SKU Catalogue</button>
 </div>
 <div class="main">
 
@@ -129,8 +146,17 @@ body.cp { background: var(--bg); }
   <div id="buy-list"><div class="empty">Loading…</div></div>
 </div>
 
-<!-- Settings -->
-
+<!-- SKU Catalogue (read-only) -->
+<div class="tab-content" id="tab-catalogue">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+    <div>
+      <div style="font-size:20px;font-weight:700;color:var(--dark);">SKU Catalogue</div>
+      <div id="cat-count" style="font-size:12px;color:var(--text-light);margin-top:2px;"></div>
+    </div>
+    <input id="cat-q" type="text" placeholder="Filter SKUs or buyers…" oninput="rCatList()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:240px;max-width:100%;">
+  </div>
+  <div id="cat-list"><div class="empty">Loading…</div></div>
+</div>
 
 </div>
 
@@ -209,10 +235,10 @@ function showTab(t){
   document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});
   document.querySelectorAll('.tab-content').forEach(function(x){x.classList.remove('active');});
   G('tab-'+t).classList.add('active');
-  ['suppliers','buyers'].forEach(function(n,i){if(n===t)document.querySelectorAll('.tab-btn')[i].classList.add('active');});
+  ['suppliers','buyers','catalogue'].forEach(function(n,i){if(n===t)document.querySelectorAll('.tab-btn')[i].classList.add('active');});
   if(t==='suppliers')loadSups();
   if(t==='buyers')loadBuys();
-  if(t==='settings')loadCI();
+  if(t==='catalogue')loadCatalogue();
 }
 
 /* ════════ SUPPLIERS ════════ */
@@ -397,14 +423,100 @@ async function saveCI(){
 /* ════════ BACKDROP CLOSE ════════ */
 ['sup-mo','buy-mo'].forEach(function(id){G(id).addEventListener('click',function(ev){if(ev.target===this)this.classList.remove('open');});});
 
+/* ════════ SKU CATALOGUE (read-only) ════════ */
+var _catSkus=[];
+
+async function loadCatalogue(){
+  var c=G('cat-list'),cnt=G('cat-count');
+  c.innerHTML='<div class="empty">Loading…</div>';
+  try{
+    var resp=await Promise.all([
+      fetch('/api/buyers/sku-catalog').then(function(r){return r.json();}),
+      fetch('/api/buyers').then(function(r){return r.json();}),
+    ]);
+    var cat=resp[0],buyers=resp[1];
+    var flat=[];
+    (cat||[]).forEach(function(g){(g.skus||[]).forEach(function(s){flat.push(Object.assign({},s,{brand:s.brand||g.brand||'(no brand)'}));});});
+    _catSkus=flat.map(function(s){
+      var assigned=[];
+      (buyers||[]).forEach(function(b){
+        var bs=(b.skus||[]).find(function(x){return x.sku_key===s.sku_key;});
+        if(bs){
+          assigned.push({
+            name:b.name||'(unnamed buyer)',
+            price:bs.price,cogs:bs.cogs,margin_pct:bs.margin_pct,
+            active:bs.active!==false,
+          });
+        }
+      });
+      assigned.sort(function(a,b){return a.name.localeCompare(b.name);});
+      return Object.assign({},s,{buyers:assigned});
+    });
+    var brands={};_catSkus.forEach(function(s){brands[s.brand]=1;});
+    var brandCount=Object.keys(brands).length;
+    if(cnt)cnt.textContent=_catSkus.length+' SKU'+(_catSkus.length===1?'':'s')+' · '+brandCount+' brand'+(brandCount===1?'':'s');
+    rCatList();
+  }catch(ex){
+    c.innerHTML='<div class="empty">Failed to load catalogue.</div>';
+  }
+}
+
+function rCatList(){
+  var q=(G('cat-q').value||'').toLowerCase().trim();
+  var match=function(s){
+    if(!q)return true;
+    if((s.display||'').toLowerCase().indexOf(q)>=0)return true;
+    if((s.recipe||'').toLowerCase().indexOf(q)>=0)return true;
+    if((s.format||'').toLowerCase().indexOf(q)>=0)return true;
+    if((s.brand||'').toLowerCase().indexOf(q)>=0)return true;
+    return s.buyers.some(function(b){return b.name.toLowerCase().indexOf(q)>=0;});
+  };
+  var shown=_catSkus.filter(match);
+  var c=G('cat-list');
+  if(!shown.length){c.innerHTML='<div class="empty">'+(q?'No SKUs match.':'No SKUs in catalogue yet.')+'</div>';return;}
+  var brandOrder=[],byBrand={};
+  shown.forEach(function(s){
+    if(!byBrand[s.brand]){byBrand[s.brand]=[];brandOrder.push(s.brand);}
+    byBrand[s.brand].push(s);
+  });
+  var money=function(v){return v==null?'—':'$'+Number(v).toFixed(2);};
+  var pct=function(v){return v==null?'—':Number(v).toFixed(1)+'%';};
+  c.innerHTML=brandOrder.map(function(brand){
+    var cards=byBrand[brand].map(function(s){
+      var head='<div class="cat-card-head">'
+        +'<div class="cat-sku-name">'+e(s.display||s.recipe||'(unnamed)')+'</div>'
+        +'<div class="cat-sku-fmt">'+e(s.format||'')+'</div>'
+        +'</div>';
+      var body;
+      if(!s.buyers.length){
+        body='<div class="cat-empty-buyers">Not yet assigned to any buyer.</div>';
+      } else {
+        body='<div class="cat-buyer-list">'+s.buyers.map(function(b){
+          var cls='cat-buyer-row'+(b.active?'':' inactive');
+          return '<div class="'+cls+'">'
+            +'<span class="cat-buyer-name">'+e(b.name)+'</span>'
+            +'<span class="cat-num cat-price">'+money(b.price)+'</span>'
+            +'<span class="cat-num">COGS '+money(b.cogs)+'</span>'
+            +'<span class="cat-num">'+pct(b.margin_pct)+' margin</span>'
+            +'<span class="cat-active-tag">'+(b.active?'Active':'Inactive')+'</span>'
+            +'</div>';
+        }).join('')+'</div>';
+      }
+      return '<div class="cat-card">'+head+body+'</div>';
+    }).join('');
+    return '<div class="cat-brand">'+e(brand)+'</div>'+cards;
+  }).join('');
+}
+
 /* ════════ INIT ════════ */
-// Load both tabs' data upfront so switching is instant
+// Load all tabs' data upfront so switching is instant
 loadSups();
 loadBuys();
+loadCatalogue();
 // Default to buyers tab; restore from URL param if present
 (function(){
   var t=new URLSearchParams(window.location.search).get('tab');
-  showTab((t&&['suppliers','buyers'].includes(t))?t:'buyers');
+  showTab((t&&['suppliers','buyers','catalogue'].includes(t))?t:'buyers');
 })();
 
 </script>
