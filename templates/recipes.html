@@ -92,7 +92,10 @@
         <div id="upload-status" class="status" style="margin-top:12px;"></div>
     </div>
     <div class="card">
-        <h2>All Recipes (<span id="recipe-count">0</span>)</h2>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+            <h2 style="margin:0;">All Recipes (<span id="recipe-count">0</span>)</h2>
+            <button class="btn btn-outline" onclick="downloadAllRecipes(this)">⤓ Download All</button>
+        </div>
         <div class="filter-bar">
             <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
             <button class="filter-btn" onclick="setFilter('Organic',this)">Organic</button>
@@ -195,6 +198,7 @@ function renderList(){
             html+='<div class="recipe-list-item"'+(archived?' style="opacity:0.7;"':' draggable="true"')+' data-recipe-name="'+nameSafe+'" data-recipe-brand="'+brandSafe+'">';
             html+='<div class="recipe-info"><div class="recipe-name">'+(archived?'':'<span class="drag-handle">&#9776;</span>')+name+cert+archBadge+'</div><div class="recipe-meta">'+(r.format||'')+' | Target: '+(r.yield||'--')+' units</div></div>';
             var btns='<button class="btn-sm" data-action="view" data-name="'+nameSafe+'">View</button>';
+            btns+='<button class="btn-sm" data-action="download" data-name="'+nameSafe+'" title="Download PDF">⤓</button>';
             if(!archived){
                 btns+='<button class="btn-sm" data-action="edit" data-name="'+nameSafe+'">Edit</button>';
                 btns+='<button class="btn-sm" data-action="duplicate" data-name="'+nameSafe+'">Duplicate</button>';
@@ -275,6 +279,7 @@ function attachClickDelegationOnce(){
         else if(action==='duplicate')duplicateRecipe(name);
         else if(action==='archive')archiveRecipe(name);
         else if(action==='unarchive')unarchiveRecipe(name);
+        else if(action==='download')downloadRecipe(name);
     });
 }
 
@@ -623,6 +628,32 @@ async function unarchiveRecipe(name){
     if(!data.success){alert(data.error||'Unarchive failed');return;}
     recipes=await(await fetch('/api/recipes')).json();
     renderList();
+}
+
+async function downloadRecipe(name){
+    try{
+        var res=await fetch('/api/recipe-pdf/'+encodeURIComponent(name));
+        if(!res.ok){var err=await res.json().catch(function(){return{};});alert(err.error||'Download failed');return;}
+        var blob=await res.blob();
+        var url=URL.createObjectURL(blob);
+        var a=document.createElement('a');a.href=url;a.download='Recipe_'+name.replace(/[^a-zA-Z0-9]/g,'_')+'.pdf';a.click();
+        URL.revokeObjectURL(url);
+    }catch(e){alert('Download failed');}
+}
+
+async function downloadAllRecipes(btn){
+    var orig=btn?btn.textContent:'';
+    if(btn){btn.disabled=true;btn.textContent='Building PDF…';}
+    try{
+        var res=await fetch('/api/recipe-pdf-all');
+        if(!res.ok){var err=await res.json().catch(function(){return{};});alert(err.error||'Download failed');return;}
+        var blob=await res.blob();
+        var url=URL.createObjectURL(blob);
+        var today=new Date().toISOString().slice(0,10);
+        var a=document.createElement('a');a.href=url;a.download='All_Recipes_'+today+'.pdf';a.click();
+        URL.revokeObjectURL(url);
+    }catch(e){alert('Download failed');}
+    finally{if(btn){btn.disabled=false;btn.textContent=orig;}}
 }
 
 var uz=document.getElementById('upload-zone');var ui=document.getElementById('recipe-upload');

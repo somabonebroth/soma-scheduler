@@ -102,7 +102,7 @@ def estimate_card_height(recipe_data, card_w):
     return 22 + si_lines * 10 + 8 + n_items * 11 + n_sections * 14 + 10
 
 
-def draw_recipe_card(c, x, y, card_w, recipe_name, recipe_data, vessel):
+def draw_recipe_card(c, x, y, card_w, recipe_name, recipe_data, vessel=""):
     start_y = y
     margin = 6
     header_h = 22
@@ -110,7 +110,8 @@ def draw_recipe_card(c, x, y, card_w, recipe_name, recipe_data, vessel):
     c.rect(x, y - header_h, card_w, header_h, fill=1, stroke=0)
     c.setFillColor(HEADER_TEXT)
     c.setFont(FONT_BOLD, 9)
-    c.drawString(x + margin, y - 15, vessel + "  |  " + recipe_name)
+    title = (vessel + "  |  " + recipe_name) if vessel else recipe_name
+    c.drawString(x + margin, y - 15, title)
     fmt = recipe_data.get("format", "")
     target = recipe_data.get("yield", "")
     c.setFont(FONT, 8)
@@ -519,6 +520,60 @@ def generate_weekly_schedule_pdf(output_path, week_start, days_map, recipes, not
     c.setFont(FONT, 7)
     c.drawString(40, 28, "Generated: " + datetime.now().strftime("%Y-%m-%d %H:%M"))
     c.drawRightString(w - 40, 28, "Soma Bone Broth - Confidential")
+    c.save()
+
+
+def generate_single_recipe_pdf(output, recipe_name, recipe_data, logo_path=None):
+    """One-recipe PDF for the recipe-cards page Download button.
+
+    `output` may be a path or a writable buffer (e.g. BytesIO). No vessel
+    context — the header just shows the recipe name plus brand/format/yield
+    as a subtitle.
+    """
+    w, h = letter
+    c = canvas.Canvas(output, pagesize=letter)
+    brand = recipe_data.get("brand") or ""
+    fmt = recipe_data.get("format", "")
+    target = recipe_data.get("yield", "")
+    subtitle_parts = []
+    if brand:
+        subtitle_parts.append(str(brand))
+    if fmt:
+        subtitle_parts.append(str(fmt))
+    if target:
+        subtitle_parts.append("Target: " + str(target) + " units")
+    subtitle = "  |  ".join(subtitle_parts)
+    draw_header(c, w, h, "RECIPE CARD", subtitle, logo_path)
+    margin = 30
+    card_w = w - 2 * margin
+    y = h - 68
+    draw_recipe_card(c, margin, y, card_w, recipe_name, recipe_data)
+    c.save()
+
+
+def generate_all_recipes_pdf(output, ordered_recipes, logo_path=None):
+    """All-recipes PDF. `ordered_recipes` is a list of (name, data) tuples,
+    already filtered (e.g. archived excluded) and sorted by the caller —
+    pdf_engine renders them in given order, paginating as needed.
+    """
+    w, h = letter
+    c = canvas.Canvas(output, pagesize=letter)
+    today = datetime.now().strftime("%d/%m/%Y")
+    n = len(ordered_recipes)
+    subtitle = today + "  |  " + str(n) + " recipe" + ("" if n == 1 else "s")
+    draw_header(c, w, h, "RECIPE CARDS - ALL", subtitle, logo_path)
+    margin = 30
+    card_w = w - 2 * margin
+    y = h - 68
+    gap = 12
+    for name, data in ordered_recipes:
+        est_h = estimate_card_height(data, card_w)
+        if y - est_h < 60:
+            c.showPage()
+            draw_header(c, w, h, "RECIPE CARDS - ALL (cont.)", today, logo_path)
+            y = h - 68
+        card_bottom = draw_recipe_card(c, margin, y, card_w, name, data)
+        y = card_bottom - gap
     c.save()
 
 
