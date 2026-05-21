@@ -27,16 +27,28 @@ body.ba-page { background:var(--bg); }
 .section-head h2 { margin:0; font-size:14px; font-weight:700; color:var(--dark); }
 .section-body { padding:20px; }
 
-/* Bar chart */
+/* Bar chart — stacked + prior-year ghost */
 .chart-wrap { position:relative; }
-.chart-bars { display:flex; align-items:flex-end; gap:4px; height:160px; padding-bottom:24px; }
-.chart-bar-col { display:flex; flex-direction:column; align-items:center; flex:1; min-width:0; }
-.chart-bar { width:100%; background:var(--accent); border-radius:3px 3px 0 0; transition:height .3s; cursor:pointer; position:relative; }
-.chart-bar:hover { filter:brightness(1.1); }
-.chart-bar-tip { display:none; position:absolute; bottom:calc(100% + 4px); left:50%; transform:translateX(-50%); background:var(--dark); color:#fff; font-size:10px; padding:3px 7px; border-radius:4px; white-space:nowrap; z-index:10; }
-.chart-bar:hover .chart-bar-tip { display:block; }
+.chart-bars { display:flex; align-items:flex-end; gap:6px; height:180px; padding-bottom:24px; padding-top:8px; }
+.chart-bar-group { display:flex; flex-direction:column; align-items:center; flex:1; min-width:0; }
+.chart-bar-pair { display:flex; align-items:flex-end; justify-content:center; gap:3px; width:100%; height:148px; position:relative; }
+.chart-bar-stack { display:flex; flex-direction:column-reverse; width:60%; max-width:30px; border-radius:3px 3px 0 0; overflow:hidden; cursor:pointer; transition:filter .15s; }
+.chart-bar-stack:hover { filter:brightness(1.08); }
+.chart-bar-stack.ghost { background:#e0e0d8; width:32%; max-width:14px; cursor:default; }
+.chart-bar-stack.ghost:hover { filter:none; }
+.chart-bar-seg { width:100%; transition:height .3s; }
+.chart-bar-tip { display:none; position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); background:var(--dark); color:#fff; font-size:10px; padding:6px 10px; border-radius:4px; white-space:nowrap; z-index:10; pointer-events:none; line-height:1.5; }
+.chart-bar-stack:hover .chart-bar-tip { display:block; }
 .chart-label { font-size:9px; color:var(--text-light); margin-top:4px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%; }
 .chart-zero { font-size:12px; color:var(--text-light); text-align:center; padding:48px 0; }
+.chart-controls { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.stack-label { font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.05em; margin-right:2px; }
+.stack-btn { padding:4px 9px; border:1.5px solid var(--border); border-radius:6px; font-size:11px; font-weight:600; background:#fff; cursor:pointer; color:var(--text-light); transition:all .15s; }
+.stack-btn:hover { color:var(--accent); }
+.stack-btn.active { border-color:var(--accent); color:var(--accent); background:#f0f7f0; }
+.chart-legend { display:flex; gap:14px; margin-top:14px; flex-wrap:wrap; font-size:11px; color:var(--text-light); }
+.chart-legend-item { display:flex; align-items:center; gap:5px; }
+.chart-legend-swatch { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
 
 /* SKU table */
 .sku-tbl { width:100%; border-collapse:collapse; font-size:13px; }
@@ -45,6 +57,21 @@ body.ba-page { background:var(--bg); }
 .sku-tbl tr:last-child td { border-bottom:none; }
 .sku-tbl td.r { text-align:right; font-weight:600; }
 .rev-bar { height:5px; background:var(--accent); border-radius:2px; margin-top:4px; }
+/* Sortable headers */
+.sku-tbl th.sortable-h { cursor:pointer; user-select:none; transition:color .15s; }
+.sku-tbl th.sortable-h::after { content:' \25B4\25BE'; opacity:0.25; font-size:9px; letter-spacing:-2px; }
+.sku-tbl th.sortable-h.asc::after  { content:' \25B4'; opacity:1; color:var(--accent); }
+.sku-tbl th.sortable-h.desc::after { content:' \25BE'; opacity:1; color:var(--accent); }
+.sku-tbl th.sortable-h:hover { color:var(--accent); }
+/* Expandable rows */
+.sku-tbl tr.row-expander { cursor:pointer; transition:background .15s; }
+.sku-tbl tr.row-expander:hover td { background:#f9faf7; }
+.sku-tbl tr.row-expander td:first-child::before { content:'\25B8\00A0'; color:var(--text-light); font-size:10px; }
+.sku-tbl tr.row-expander.expanded td:first-child::before { content:'\25BE\00A0'; color:var(--accent); }
+.sku-tbl tr.row-nested { background:#fafaf7; display:none; }
+.sku-tbl tr.row-nested.shown { display:table-row; }
+.sku-tbl tr.row-nested td { font-size:12px; color:var(--text); border-bottom:1px solid #f0f0eb; padding:6px 14px; }
+.sku-tbl tr.row-nested td:first-child { padding-left:36px; color:var(--text-light); font-style:italic; }
 
 /* Predictive */
 .pred-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
@@ -101,19 +128,36 @@ body.ba-page { background:var(--bg); }
     <div class="section">
       <div class="section-head">
         <h2>Revenue by Month</h2>
-        <div id="year-tabs"></div>
+        <div class="chart-controls">
+          <span class="stack-label">Stack by:</span>
+          <button class="stack-btn active" data-stack="none"     onclick="setStackBy('none', this)">None</button>
+          <button class="stack-btn"        data-stack="location" onclick="setStackBy('location', this)">Location</button>
+          <button class="stack-btn"        data-stack="sku"      onclick="setStackBy('sku', this)">SKU</button>
+        </div>
       </div>
       <div class="section-body">
-        <div class="chart-wrap"><div class="chart-bars" id="chart-bars"></div></div>
+        <div class="chart-wrap">
+          <div class="chart-bars" id="chart-bars"></div>
+          <div class="chart-legend" id="chart-legend"></div>
+        </div>
       </div>
     </div>
 
     <!-- Location breakdown (only for buyers with 2+ distinct locations) -->
     <div class="section" id="location-section" style="display:none;">
-      <div class="section-head"><h2>Sales by Location</h2></div>
+      <div class="section-head">
+        <h2>Sales by Location</h2>
+        <span style="font-size:11px;color:var(--text-light);">Click a row to see its product mix</span>
+      </div>
       <div class="section-body" style="padding:0;">
         <table class="sku-tbl" id="loc-table">
-          <thead><tr><th>Location</th><th class="r">Units</th><th class="r">Cases</th><th class="r">Revenue</th><th class="r">Share</th></tr></thead>
+          <thead><tr>
+            <th class="sortable-h"        data-sort-col="name"    onclick="setSort('loc','name')">Location</th>
+            <th class="sortable-h r"      data-sort-col="units"   onclick="setSort('loc','units')">Units</th>
+            <th class="sortable-h r"      data-sort-col="cases"   onclick="setSort('loc','cases')">Cases</th>
+            <th class="sortable-h r desc" data-sort-col="revenue" onclick="setSort('loc','revenue')">Revenue</th>
+            <th class="r">Share</th>
+          </tr></thead>
           <tbody id="loc-body"></tbody>
         </table>
       </div>
@@ -124,7 +168,14 @@ body.ba-page { background:var(--bg); }
       <div class="section-head"><h2>Sales by Product</h2></div>
       <div class="section-body" style="padding:0;">
         <table class="sku-tbl" id="sku-table">
-          <thead><tr><th>Product</th><th>Format</th><th class="r">Units</th><th class="r">Cases</th><th class="r">Revenue</th><th class="r">Share</th></tr></thead>
+          <thead><tr>
+            <th class="sortable-h"        data-sort-col="recipe"  onclick="setSort('sku','recipe')">Product</th>
+            <th>Format</th>
+            <th class="sortable-h r"      data-sort-col="units"   onclick="setSort('sku','units')">Units</th>
+            <th class="sortable-h r"      data-sort-col="cases"   onclick="setSort('sku','cases')">Cases</th>
+            <th class="sortable-h r desc" data-sort-col="revenue" onclick="setSort('sku','revenue')">Revenue</th>
+            <th class="r">Share</th>
+          </tr></thead>
           <tbody id="sku-body"></tbody>
         </table>
       </div>
@@ -143,6 +194,14 @@ body.ba-page { background:var(--bg); }
 var BUYER = {{ buyer_name | tojson }};
 var _seg = 'all';
 var _data = null;
+var _stackBy = 'none';                                   // chart stacking dim: 'none' | 'location' | 'sku'
+var _locSort = { col: 'revenue', dir: 'desc' };          // location table sort
+var _skuSort = { col: 'revenue', dir: 'desc' };          // sku table sort
+var _expanded = {};                                       // location idx -> true when expanded
+
+// Palette for stacked-bar segments. Distinct hues that read on light bg.
+var SEG_PALETTE = ['#4a6741','#0288d1','#f57c00','#7b1fa2','#c62828','#00838f','#5d4037','#558b2f','#e91e63','#3949ab','#00695c','#bf360c'];
+function _segColor(i){ return SEG_PALETTE[i % SEG_PALETTE.length]; }
 
 async function load() {
   try {
@@ -160,6 +219,42 @@ function setSeg(seg, btn) {
   _seg = seg;
   document.querySelectorAll('.seg-btn').forEach(function(b){ b.classList.remove('active'); });
   btn.classList.add('active');
+  render();
+}
+
+function setStackBy(mode, btn) {
+  _stackBy = mode;
+  document.querySelectorAll('.stack-btn').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  renderChart(filterMonthly(_data.monthly || []));
+}
+
+function setSort(tbl, col) {
+  var state = tbl === 'loc' ? _locSort : _skuSort;
+  if (state.col === col) { state.dir = state.dir === 'desc' ? 'asc' : 'desc'; }
+  else { state.col = col; state.dir = 'desc'; }
+  // Update header indicators
+  var table = document.getElementById(tbl === 'loc' ? 'loc-table' : 'sku-table');
+  table.querySelectorAll('th.sortable-h').forEach(function(h){
+    h.classList.remove('asc','desc');
+    if (h.getAttribute('data-sort-col') === state.col) h.classList.add(state.dir);
+  });
+  render();
+}
+
+function _applySort(rows, state, fallback) {
+  var dir = state.dir === 'asc' ? 1 : -1;
+  return rows.slice().sort(function(a, b){
+    var av = a[state.col], bv = b[state.col];
+    if (typeof av === 'string' || typeof bv === 'string') {
+      return (av || '').localeCompare(bv || '') * dir;
+    }
+    return ((av || 0) - (bv || 0)) * dir;
+  });
+}
+
+function toggleLocExpand(name) {
+  _expanded[name] = !_expanded[name];
   render();
 }
 
@@ -198,11 +293,13 @@ function renderLocations(locations, monthly) {
   // sales history. Single-location (or no-location) buyers don't need this view.
   if (!locations || locations.length < 2) { section.style.display = 'none'; return; }
 
+  // Build period-filtered rows. Keep a reference to the original location
+  // entry on each row so we can render the nested SKU breakdown on expand.
   var activeMonths = new Set(monthly.map(function(m){ return m.month; }));
   var rows;
   if (_seg === 'all') {
     rows = locations.map(function(l){
-      return {name:l.name, units:l.units, cases:l.cases, revenue:l.revenue};
+      return { name:l.name, units:l.units, cases:l.cases, revenue:l.revenue, _src:l };
     });
   } else {
     rows = locations.map(function(l){
@@ -214,24 +311,49 @@ function renderLocations(locations, monthly) {
           qty += months[m].units   || 0;
         }
       });
-      return {name:l.name, units:qty, cases:cs, revenue:rev};
-    }).filter(function(l){ return l.revenue > 0 || l.units > 0; })
-      .sort(function(a,b){ return b.revenue - a.revenue; });
+      return { name:l.name, units:qty, cases:cs, revenue:rev, _src:l };
+    }).filter(function(l){ return l.revenue > 0 || l.units > 0; });
   }
+
+  rows = _applySort(rows, _locSort);
 
   var totalRev = rows.reduce(function(a,l){ return a + l.revenue; }, 0) || 1;
   var maxRev   = Math.max.apply(null, rows.map(function(l){ return l.revenue; })) || 1;
-  document.getElementById('loc-body').innerHTML = rows.map(function(l){
-    var share = Math.round(l.revenue / totalRev * 100);
-    var barW  = Math.round(l.revenue / maxRev  * 100);
-    return '<tr>'
+
+  var html = rows.map(function(l){
+    var share   = Math.round(l.revenue / totalRev * 100);
+    var barW    = Math.round(l.revenue / maxRev  * 100);
+    var expanded = !!_expanded[l.name];
+    var skus = (l._src.by_sku || []).slice().sort(function(a,b){ return b.revenue - a.revenue; });
+
+    var mainRow = '<tr class="row-expander'+(expanded?' expanded':'')+'" data-loc="'+e(l.name)+'" onclick="toggleLocExpand(this.dataset.loc)">'
       + '<td><strong>'+e(l.name)+'</strong></td>'
       + '<td class="r">'+fmtN(l.units)+'</td>'
       + '<td class="r">'+fmtN(l.cases)+'</td>'
       + '<td class="r">'+fmt$(l.revenue)+'</td>'
       + '<td class="r" style="min-width:80px;"><span>'+share+'%</span><div class="rev-bar" style="width:'+barW+'%"></div></td>'
       + '</tr>';
-  }).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-light);">No data for this period.</td></tr>';
+
+    // Nested SKU rows for this location
+    var nestedRows = '';
+    if (skus.length) {
+      nestedRows = skus.map(function(s){
+        return '<tr class="row-nested'+(expanded?' shown':'')+'">'
+          + '<td>'+e(s.recipe || s.sku || '—')+' <span style="color:var(--text-light);font-size:11px;">'+e(s.format||'')+'</span></td>'
+          + '<td class="r">'+fmtN(s.units)+'</td>'
+          + '<td class="r">'+fmtN(s.cases)+'</td>'
+          + '<td class="r">'+fmt$(s.revenue)+'</td>'
+          + '<td></td>'
+          + '</tr>';
+      }).join('');
+    } else {
+      nestedRows = '<tr class="row-nested'+(expanded?' shown':'')+'"><td colspan="5" style="color:var(--text-light);">No SKU data recorded for this location.</td></tr>';
+    }
+
+    return mainRow + nestedRows;
+  }).join('');
+
+  document.getElementById('loc-body').innerHTML = html || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-light);">No data for this period.</td></tr>';
   section.style.display = '';
 }
 
@@ -253,40 +375,145 @@ function renderKPIs(monthly) {
 }
 
 function renderChart(monthly) {
-  var bars = document.getElementById('chart-bars');
+  var bars   = document.getElementById('chart-bars');
+  var legend = document.getElementById('chart-legend');
   if (!monthly.length) {
     bars.innerHTML = '<div class="chart-zero">No sales data for this period.</div>';
+    legend.innerHTML = '';
     return;
   }
-  var maxRev = Math.max.apply(null, monthly.map(function(m){ return m.revenue; })) || 1;
-  bars.innerHTML = monthly.map(function(m) {
-    var h = Math.max(4, Math.round((m.revenue / maxRev) * 140));
-    return '<div class="chart-bar-col">'
-      + '<div class="chart-bar" style="height:'+h+'px;">'
-      + '<div class="chart-bar-tip">'+m.label+'<br>'+fmt$(m.revenue)+'<br>'+m.cases+' cases</div>'
+
+  // Build prior-year lookup from the FULL monthly list (not the period-filtered slice)
+  // so Apr 2026 can pair with Apr 2025 even when the filter is "30d" / "YTD".
+  var fullMap = {};
+  (_data.monthly || []).forEach(function(m){ fullMap[m.month] = m; });
+
+  // Build segment data per month for stacking.
+  var segmentKeys = [];
+  var monthSegs = {};
+  if (_stackBy === 'location') {
+    var locs = _data.locations || [];
+    segmentKeys = locs.map(function(l){ return l.name; });
+    monthly.forEach(function(m){
+      monthSegs[m.month] = locs.map(function(l){
+        var d = (l.monthly && l.monthly[m.month]) || {};
+        return { key: l.name, value: d.revenue || 0 };
+      });
+    });
+  } else if (_stackBy === 'sku') {
+    var skus = _data.by_sku || [];
+    segmentKeys = skus.map(function(s){ return s.recipe || s.sku; });
+    monthly.forEach(function(m){
+      monthSegs[m.month] = skus.map(function(s){
+        var mr = s.monthly_revenue || {};
+        return { key: s.recipe || s.sku, value: mr[m.month] || 0 };
+      });
+    });
+  } else {
+    monthly.forEach(function(m){ monthSegs[m.month] = [{ key: 'Revenue', value: m.revenue }]; });
+    segmentKeys = ['Revenue'];
+  }
+  var colorMap = {};
+  segmentKeys.forEach(function(k, i){
+    colorMap[k] = (_stackBy === 'none') ? '#4a6741' : _segColor(i);
+  });
+
+  // Scale max across both this-period bars and any prior-year ghosts.
+  var maxRev = 0;
+  var anyGhost = false;
+  monthly.forEach(function(m){
+    if (m.revenue > maxRev) maxRev = m.revenue;
+    var py = (parseInt(m.month.slice(0,4)) - 1) + m.month.slice(4);
+    if (fullMap[py]) {
+      anyGhost = true;
+      if (fullMap[py].revenue > maxRev) maxRev = fullMap[py].revenue;
+    }
+  });
+  maxRev = maxRev || 1;
+
+  bars.innerHTML = monthly.map(function(m){
+    var segs = monthSegs[m.month] || [];
+    // Stacked segments (column-reverse → first array entry is bottom of stack)
+    var segHtml = segs.map(function(s){
+      if (s.value <= 0) return '';
+      var h = Math.max(2, Math.round((s.value / maxRev) * 140));
+      return '<div class="chart-bar-seg" style="height:'+h+'px;background:'+colorMap[s.key]+';"></div>';
+    }).join('');
+
+    // Tooltip — show total + per-segment breakdown when stacked
+    var tipLines = ['<strong>'+m.label+'</strong>', fmt$(m.revenue) + ' &middot; ' + m.cases + ' cases'];
+    if (_stackBy !== 'none') {
+      var nonZero = segs.filter(function(s){ return s.value > 0; });
+      if (nonZero.length) {
+        nonZero.forEach(function(s){
+          var labelTxt = s.key.length > 30 ? s.key.slice(0,30) + '…' : s.key;
+          tipLines.push('<span style="color:'+colorMap[s.key]+';">■</span> ' + e(labelTxt) + ': ' + fmt$(s.value));
+        });
+      }
+    }
+    var tip = '<div class="chart-bar-tip" style="text-align:left;">'+tipLines.join('<br>')+'</div>';
+
+    // Prior-year ghost bar (left of main bar)
+    var ghostHtml = '';
+    var py = (parseInt(m.month.slice(0,4)) - 1) + m.month.slice(4);
+    var prior = fullMap[py];
+    if (prior) {
+      var gh = prior.revenue > 0 ? Math.max(2, Math.round((prior.revenue / maxRev) * 140)) : 0;
+      var gtip = '<div class="chart-bar-tip">'+prior.label+'<br>'+fmt$(prior.revenue)+' (prior year)</div>';
+      ghostHtml = '<div class="chart-bar-stack ghost" style="height:'+gh+'px;">' + gtip + '</div>';
+    }
+
+    return '<div class="chart-bar-group">'
+      + '<div class="chart-bar-pair">'
+      + ghostHtml
+      + '<div class="chart-bar-stack">' + segHtml + tip + '</div>'
       + '</div>'
-      + '<div class="chart-label">'+m.label.replace(' ', '\n')+'</div>'
+      + '<div class="chart-label">'+m.label.replace(' ', '<br>')+'</div>'
       + '</div>';
   }).join('');
+
+  // Legend
+  var legendItems = [];
+  if (_stackBy !== 'none') {
+    // Only show legend items for segments that actually contributed something in this view
+    var contributors = {};
+    monthly.forEach(function(m){ (monthSegs[m.month]||[]).forEach(function(s){ if (s.value > 0) contributors[s.key] = true; }); });
+    segmentKeys.forEach(function(k){
+      if (contributors[k]) {
+        legendItems.push('<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:'+colorMap[k]+';"></span>'+e(k)+'</div>');
+      }
+    });
+  }
+  if (anyGhost) {
+    legendItems.push('<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:#e0e0d8;"></span>Prior year</div>');
+  }
+  legend.innerHTML = legendItems.join('');
 }
 
 function renderSkus(skus, monthly) {
-  // Filter skus to only show those active in current period months
+  // Filter skus to only show those active in current period months — uses the
+  // backend's per-SKU monthly_revenue (preferred) and monthly_cases.
   var activeMonths = new Set(monthly.map(function(m){ return m.month; }));
-  var filtered = _seg === 'all' ? skus : skus.map(function(s) {
-    var units = Object.entries(s.monthly_cases || {})
-      .filter(function(e){ return activeMonths.has(e[0]); })
-      .reduce(function(a, e){ return a + e[1]; }, 0);
-    return Object.assign({}, s, {cases: units, units: units * 12,
-      revenue: units * 12 * (s.units ? s.revenue / s.units : 0)});
-  }).filter(function(s){ return s.cases > 0; })
-    .sort(function(a,b){ return b.revenue - a.revenue; });
+  var filtered = _seg === 'all' ? skus.slice() : skus.map(function(s){
+    var mc = s.monthly_cases   || {};
+    var mr = s.monthly_revenue || {};
+    var cases = 0, revenue = 0;
+    Object.keys(mc).forEach(function(k){ if (activeMonths.has(k)) cases   += mc[k]; });
+    Object.keys(mr).forEach(function(k){ if (activeMonths.has(k)) revenue += mr[k]; });
+    return Object.assign({}, s, {
+      cases:   cases,
+      units:   cases * 12,
+      revenue: revenue,
+    });
+  }).filter(function(s){ return s.cases > 0 || s.revenue > 0; });
 
-  var maxRev = Math.max.apply(null, filtered.map(function(s){ return s.revenue; })) || 1;
+  filtered = _applySort(filtered, _skuSort);
+
+  var maxRev   = Math.max.apply(null, filtered.map(function(s){ return s.revenue; })) || 1;
   var totalRev = filtered.reduce(function(a,s){ return a + s.revenue; }, 0) || 1;
-  document.getElementById('sku-body').innerHTML = filtered.map(function(s) {
+  document.getElementById('sku-body').innerHTML = filtered.map(function(s){
     var share = Math.round(s.revenue / totalRev * 100);
-    var barW  = Math.round(s.revenue / maxRev * 100);
+    var barW  = Math.round(s.revenue / maxRev   * 100);
     return '<tr>'
       + '<td><strong>'+e(s.recipe||s.sku||'—')+'</strong></td>'
       + '<td style="color:var(--text-light);font-size:12px;">'+e(s.format||'')+'</td>'

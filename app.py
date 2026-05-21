@@ -1019,7 +1019,9 @@ def api_buyer_analytics(buyer_name):
 
     # ── By SKU ────────────────────────────────────────────────────────────────
     by_sku = defaultdict(lambda: {"recipe": "", "format": "", "units": 0,
-                                   "cases": 0, "revenue": 0.0, "months": defaultdict(int)})
+                                   "cases": 0, "revenue": 0.0,
+                                   "months_cases":   defaultdict(int),
+                                   "months_revenue": defaultdict(float)})
     for s in buyer_sales:
         sk = s.get("sku_key") or s.get("recipe") or "Unknown"
         by_sku[sk]["recipe"]  = s.get("recipe", "")
@@ -1029,12 +1031,15 @@ def api_buyer_analytics(buyer_name):
         by_sku[sk]["revenue"]+= _revenue(s)
         m = (s.get("sale_date") or "")[:7]
         if m:
-            by_sku[sk]["months"][m] += _cases(s)
+            by_sku[sk]["months_cases"][m]   += _cases(s)
+            by_sku[sk]["months_revenue"][m] += _revenue(s)
 
     skus = sorted(
-        [{"sku": k, **{kk: vv for kk, vv in v.items() if kk != "months"},
-          "revenue": round(v["revenue"], 2),
-          "monthly_cases": dict(v["months"])}
+        [{"sku": k,
+          **{kk: vv for kk, vv in v.items() if kk not in ("months_cases", "months_revenue")},
+          "revenue":         round(v["revenue"], 2),
+          "monthly_cases":   dict(v["months_cases"]),
+          "monthly_revenue": {m: round(r, 2) for m, r in v["months_revenue"].items()}}
          for k, v in by_sku.items()],
         key=lambda x: -x["revenue"]
     )
@@ -1046,9 +1051,11 @@ def api_buyer_analytics(buyer_name):
     # Nature's Emporium see per-store performance.
     by_location = defaultdict(lambda: {"revenue": 0.0, "cases": 0, "units": 0,
                                        "orders": set(),
-                                       "months": defaultdict(lambda: {"revenue": 0.0, "cases": 0, "units": 0})})
+                                       "months": defaultdict(lambda: {"revenue": 0.0, "cases": 0, "units": 0}),
+                                       "by_sku": defaultdict(lambda: {"recipe": "", "format": "", "units": 0, "cases": 0, "revenue": 0.0})})
     for s in buyer_sales:
         loc = (s.get("location_name") or "").strip() or "(No location)"
+        sk  = s.get("sku_key") or s.get("recipe") or "Unknown"
         rev = _revenue(s)
         cs  = _cases(s)
         qty = int(s.get("quantity") or 0)
@@ -1061,6 +1068,11 @@ def api_buyer_analytics(buyer_name):
             by_location[loc]["months"][m]["revenue"] += rev
             by_location[loc]["months"][m]["cases"]   += cs
             by_location[loc]["months"][m]["units"]   += qty
+        by_location[loc]["by_sku"][sk]["recipe"]  = s.get("recipe", "")
+        by_location[loc]["by_sku"][sk]["format"]  = s.get("format", "")
+        by_location[loc]["by_sku"][sk]["units"]  += qty
+        by_location[loc]["by_sku"][sk]["cases"]  += cs
+        by_location[loc]["by_sku"][sk]["revenue"]+= rev
 
     locations = sorted(
         [{"name":    k,
@@ -1071,7 +1083,13 @@ def api_buyer_analytics(buyer_name):
           "monthly": {m: {"revenue": round(d["revenue"], 2),
                           "cases":   d["cases"],
                           "units":   d["units"]}
-                      for m, d in v["months"].items()}}
+                      for m, d in v["months"].items()},
+          "by_sku":  sorted(
+                        [{"sku": sk, "recipe": d["recipe"], "format": d["format"],
+                          "units": d["units"], "cases": d["cases"], "revenue": round(d["revenue"], 2)}
+                         for sk, d in v["by_sku"].items()],
+                        key=lambda x: -x["revenue"]
+                     )}
          for k, v in by_location.items()],
         key=lambda x: -x["revenue"],
     )
