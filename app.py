@@ -954,10 +954,20 @@ def api_buyer_analytics(buyer_name):
     from collections import defaultdict
 
     sales = _load_json(ORGANIC_SALES_PATH, [])
-    buyer_sales = [
-        s for s in sales
-        if (s.get("buyer") or "").strip().lower() == buyer_name.lower()
-    ]
+
+    # Resolve each sale's raw buyer / location_name using buyers.json so that
+    # historical rows entered as "Parent - Location" (when the location feature
+    # didn't exist yet) roll up under their parent here too. The resolver also
+    # injects the inferred location onto each matched sale copy so the
+    # downstream by_location aggregation works without further changes.
+    resolve = _buyer_resolver(_load_buyers())
+    buyer_sales = []
+    for s in sales:
+        canonical_buyer, canonical_loc = resolve(s.get("buyer"), s.get("location_name"))
+        if canonical_buyer.lower() == buyer_name.lower():
+            s_copy = dict(s)
+            s_copy["location_name"] = canonical_loc
+            buyer_sales.append(s_copy)
 
     def _revenue(s):
         lt = s.get("line_total")
@@ -1212,10 +1222,17 @@ def api_sales_by_buyer():
     else:
         cutoff = None
 
+    # Roll up sales whose raw buyer is a location-suffixed form (e.g.
+    # "Nature's Emporium - Newmarket") under their parent in buyers.json.
+    resolve = _buyer_resolver(_load_buyers())
+
     # Aggregate
     by_buyer = {}
     for sale in sales:
-        buyer = (sale.get("buyer") or "Unknown").strip()
+        raw_buyer = (sale.get("buyer") or "Unknown").strip()
+        buyer, _resolved_loc = resolve(raw_buyer, sale.get("location_name"))
+        if not buyer:
+            buyer = "Unknown"
         if buyers_q and buyer.lower() != buyers_q.lower():
             continue
         sale_date = (sale.get("sale_date") or "")[:10]
@@ -6347,6 +6364,48 @@ def _load_buyers():
 
 def _save_buyers(data):
     _save_json(BUYERS_PATH, data)
+
+def _buyer_resolver(buyers_list):
+    """Build a resolver that canonicalises a raw (sale.buyer, sale.location_name)
+    pair to (parent_buyer_name, location_name) using buyers.json as the truth
+    table.
+
+    Historical sales were sometimes entered with the buyer field as
+    "Parent - LocationName" (the location feature came later). This lets the
+    analytics roll those rows up under their parent buyer with the location
+    inferred, without rewriting any sale records.
+
+    The resolver only rolls up when the suffix matches a REGISTERED location
+    of the prefix buyer — so an unknown name won't be mis-split by accident.
+    """
+    # Try several separators between parent and location. Order matters: more
+    # specific (with spaces) comes first so the longest match wins.
+    SEPS = [" - ", " — ", " – ", " -", "- ", "-"]
+    lookup = {}
+    for b in buyers_list:
+        bname = (b.get("name") or "").strip()
+        if not bname:
+            continue
+        lookup.setdefault(bname.lower(), (bname, ""))
+        for loc in (b.get("locations") or []):
+            loc_name = (loc.get("name") or "").strip()
+            if not loc_name:
+                continue
+            for sep in SEPS:
+                lookup.setdefault((bname + sep + loc_name).lower(), (bname, loc_name))
+
+    def resolve(raw_buyer, sale_location_name=None):
+        raw = (raw_buyer or "").strip()
+        explicit_loc = (sale_location_name or "").strip()
+        hit = lookup.get(raw.lower())
+        if hit:
+            parent, loc_from_name = hit
+            # Prefer an explicit location_name on the sale; fall back to the
+            # one inferred from the buyer suffix.
+            return parent, (explicit_loc or loc_from_name)
+        return raw, explicit_loc
+
+    return resolve
 
 @app.route("/api/buyers", methods=["GET"])
 @login_required
