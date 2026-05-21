@@ -1191,7 +1191,7 @@ body.inv-page .modal-actions {
 
                 <!-- Invoice photo attach -->
                 <div style="background:#f9f9f7;border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px;">
-                    <div style="font-size:13px;font-weight:600;margin-bottom:10px;">📎 Attach Invoice (optional)</div>
+                    <div style="font-size:13px;font-weight:600;margin-bottom:10px;">📎 Attach Invoice <span style="color:#c62828;">*</span></div>
 
                     <!-- Hidden inputs — one camera, one file -->
                     <input type="file" id="add-inv-photo" accept="image/*,application/pdf" style="display:none;" onchange="onInvPhotoSelected(this)">
@@ -2790,6 +2790,11 @@ async function submitAddInventory(){
 
     if(entries.length === 0){
         msg.className='status error'; msg.textContent='Enter a quantity for at least one ingredient.';
+        return;
+    }
+
+    if(!_getInvPhotoFile()){
+        msg.className='status error'; msg.textContent='Attach a photo of the packing slip or invoice before saving.';
         return;
     }
 
