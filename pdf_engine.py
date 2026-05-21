@@ -110,8 +110,14 @@ def draw_recipe_card(c, x, y, card_w, recipe_name, recipe_data, vessel=""):
     c.rect(x, y - header_h, card_w, header_h, fill=1, stroke=0)
     c.setFillColor(HEADER_TEXT)
     c.setFont(FONT_BOLD, 9)
-    title = (vessel + "  |  " + recipe_name) if vessel else recipe_name
-    c.drawString(x + margin, y - 15, title)
+    brand = (recipe_data.get("brand") or "").strip()
+    title_parts = []
+    if vessel:
+        title_parts.append(vessel)
+    if brand:
+        title_parts.append(brand)
+    title_parts.append(recipe_name)
+    c.drawString(x + margin, y - 15, "  |  ".join(title_parts))
     fmt = recipe_data.get("format", "")
     target = recipe_data.get("yield", "")
     c.setFont(FONT, 8)
