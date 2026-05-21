@@ -2681,6 +2681,44 @@ function clearInvPhoto(){
 // ── Add Inventory Modal ─────────────────────────────────────────────────
 var _addInvSuppliers = [];
 
+// Unit converter for the Qty input. The stored/canonical unit on each
+// ingredient never changes — this just lets the user enter received
+// quantities in whatever unit the invoice uses (kg/g/lbs interchangeable,
+// L/ml interchangeable) and converts to canonical before save.
+var _WEIGHT_TO_KG = {kg: 1, g: 0.001, lbs: 0.45359237};
+var _VOLUME_TO_L  = {L: 1, ml: 0.001};
+function _convertableUnits(canonical){
+    if(_WEIGHT_TO_KG.hasOwnProperty(canonical)) return ['kg','g','lbs'];
+    if(_VOLUME_TO_L.hasOwnProperty(canonical))  return ['L','ml'];
+    return null;
+}
+function _convertQty(qty, fromUnit, toUnit){
+    if(fromUnit === toUnit) return qty;
+    if(_WEIGHT_TO_KG.hasOwnProperty(fromUnit) && _WEIGHT_TO_KG.hasOwnProperty(toUnit)){
+        return qty * _WEIGHT_TO_KG[fromUnit] / _WEIGHT_TO_KG[toUnit];
+    }
+    if(_VOLUME_TO_L.hasOwnProperty(fromUnit) && _VOLUME_TO_L.hasOwnProperty(toUnit)){
+        return qty * _VOLUME_TO_L[fromUnit] / _VOLUME_TO_L[toUnit];
+    }
+    return qty; // not convertable; leave as-is
+}
+function _updateInvConv(idx){
+    var qtyEl  = document.querySelector('[data-qty="'+idx+'"]');
+    var unitEl = document.querySelector('[data-unit="'+idx+'"]');
+    var convEl = document.querySelector('[data-conv="'+idx+'"]');
+    if(!convEl) return;
+    if(!qtyEl || !unitEl){ convEl.textContent = ''; return; }
+    var qty = parseFloat(qtyEl.value);
+    if(isNaN(qty) || qty <= 0){ convEl.textContent = ''; return; }
+    var inputUnit = unitEl.value;
+    var canonical = unitEl.getAttribute('data-canonical');
+    if(inputUnit === canonical){ convEl.textContent = ''; return; }
+    var converted = _convertQty(qty, inputUnit, canonical);
+    convEl.textContent = '= ' + (Math.round(converted * 10000) / 10000) + ' ' + canonical;
+}
+function onInvQtyInput(idx){ _updateInvConv(idx); }
+function onInvUnitChange(idx){ _updateInvConv(idx); }
+
 async function openAddInventoryModal(){
     // Set today's date
     var today = new Date().toISOString().split('T')[0];
@@ -2748,11 +2786,21 @@ function goToAddInvStep2(){
         var row = document.createElement('div');
         var bg = idx % 2 === 0 ? '#fff' : '#fafaf8';
         row.style.cssText = 'display:grid;grid-template-columns:1fr 140px 100px 80px;gap:8px;padding:8px 12px;background:'+bg+';align-items:center;border-bottom:1px solid #f0f0eb;';
+        var convUnits = _convertableUnits(ing.unit);
+        var unitCell;
+        if(convUnits){
+            var opts = convUnits.map(function(u){
+                return '<option value="'+u+'"'+(u===ing.unit?' selected':'')+'>'+u+'</option>';
+            }).join('');
+            unitCell = '<div><select data-unit="'+idx+'" data-canonical="'+ing.unit+'" onchange="onInvUnitChange('+idx+')" style="width:100%;box-sizing:border-box;padding:7px 4px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:#fff;">'+opts+'</select></div>';
+        } else {
+            unitCell = '<div style="font-size:13px;color:var(--text-light);">'+ing.unit+'</div>';
+        }
         row.innerHTML =
             '<div style="font-size:13px;font-weight:500;">'+ing.name+'</div>' +
             '<div><input type="text" data-lot="'+idx+'" placeholder="LOT#" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;"></div>' +
-            '<div><input type="number" data-qty="'+idx+'" placeholder="0" step="any" inputmode="decimal" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;"></div>' +
-            '<div style="font-size:13px;color:var(--text-light);">'+ing.unit+'</div>';
+            '<div><input type="number" data-qty="'+idx+'" placeholder="0" step="any" inputmode="decimal" oninput="onInvQtyInput('+idx+')" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;"><div data-conv="'+idx+'" style="font-size:10px;color:#2e7d32;margin-top:2px;height:12px;line-height:12px;"></div></div>' +
+            unitCell;
         row.setAttribute('data-ing-idx', idx);
         grid.appendChild(row);
     });
@@ -2769,18 +2817,24 @@ async function submitAddInventory(){
     var btn = document.getElementById('add-inv-submit-btn');
     msg.textContent=''; msg.className='status';
 
-    // Collect only rows with qty filled in
+    // Collect only rows with qty filled in. If the user picked a non-canonical
+    // input unit (e.g. lbs when stored as kg), convert before saving so the
+    // raw materials inventory always sees the canonical unit.
     var entries = [];
     supplier.ingredients.forEach(function(ing, idx){
-        var lotEl = document.querySelector('[data-lot="'+idx+'"]');
-        var qtyEl = document.querySelector('[data-qty="'+idx+'"]');
+        var lotEl  = document.querySelector('[data-lot="'+idx+'"]');
+        var qtyEl  = document.querySelector('[data-qty="'+idx+'"]');
+        var unitEl = document.querySelector('[data-unit="'+idx+'"]');
         var lot = lotEl ? lotEl.value.trim() : '';
         var qty = qtyEl ? parseFloat(qtyEl.value) : NaN;
+        var inputUnit = unitEl ? unitEl.value : ing.unit;
         if(!isNaN(qty) && qty > 0){
+            var canonicalQty = _convertQty(qty, inputUnit, ing.unit);
+            canonicalQty = Math.round(canonicalQty * 10000) / 10000;
             entries.push({
                 item: ing.name,
                 unit: ing.unit,
-                quantity: qty,
+                quantity: canonicalQty,
                 supplier: supplier.name,
                 supplier_lot: lot || '',
                 date_received: date,
