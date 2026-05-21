@@ -108,6 +108,17 @@ body.ba-page { background:var(--bg); }
       </div>
     </div>
 
+    <!-- Location breakdown (only for buyers with 2+ distinct locations) -->
+    <div class="section" id="location-section" style="display:none;">
+      <div class="section-head"><h2>Sales by Location</h2></div>
+      <div class="section-body" style="padding:0;">
+        <table class="sku-tbl" id="loc-table">
+          <thead><tr><th>Location</th><th class="r">Units</th><th class="r">Cases</th><th class="r">Revenue</th><th class="r">Share</th></tr></thead>
+          <tbody id="loc-body"></tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- SKU breakdown -->
     <div class="section">
       <div class="section-head"><h2>Sales by Product</h2></div>
@@ -176,8 +187,52 @@ function render() {
   var monthly = filterMonthly(_data.monthly || []);
   renderKPIs(monthly);
   renderChart(monthly);
+  renderLocations(_data.locations || [], monthly);
   renderSkus(_data.by_sku || [], monthly);
   renderPredictive(_data.predictive || {});
+}
+
+function renderLocations(locations, monthly) {
+  var section = document.getElementById('location-section');
+  // Hide section unless this buyer has 2+ distinct locations recorded in their
+  // sales history. Single-location (or no-location) buyers don't need this view.
+  if (!locations || locations.length < 2) { section.style.display = 'none'; return; }
+
+  var activeMonths = new Set(monthly.map(function(m){ return m.month; }));
+  var rows;
+  if (_seg === 'all') {
+    rows = locations.map(function(l){
+      return {name:l.name, units:l.units, cases:l.cases, revenue:l.revenue};
+    });
+  } else {
+    rows = locations.map(function(l){
+      var months = l.monthly || {}, rev=0, cs=0, qty=0;
+      Object.keys(months).forEach(function(m){
+        if (activeMonths.has(m)) {
+          rev += months[m].revenue || 0;
+          cs  += months[m].cases   || 0;
+          qty += months[m].units   || 0;
+        }
+      });
+      return {name:l.name, units:qty, cases:cs, revenue:rev};
+    }).filter(function(l){ return l.revenue > 0 || l.units > 0; })
+      .sort(function(a,b){ return b.revenue - a.revenue; });
+  }
+
+  var totalRev = rows.reduce(function(a,l){ return a + l.revenue; }, 0) || 1;
+  var maxRev   = Math.max.apply(null, rows.map(function(l){ return l.revenue; })) || 1;
+  document.getElementById('loc-body').innerHTML = rows.map(function(l){
+    var share = Math.round(l.revenue / totalRev * 100);
+    var barW  = Math.round(l.revenue / maxRev  * 100);
+    return '<tr>'
+      + '<td><strong>'+e(l.name)+'</strong></td>'
+      + '<td class="r">'+fmtN(l.units)+'</td>'
+      + '<td class="r">'+fmtN(l.cases)+'</td>'
+      + '<td class="r">'+fmt$(l.revenue)+'</td>'
+      + '<td class="r" style="min-width:80px;"><span>'+share+'%</span><div class="rev-bar" style="width:'+barW+'%"></div></td>'
+      + '</tr>';
+  }).join('') || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-light);">No data for this period.</td></tr>';
+  section.style.display = '';
 }
 
 function renderKPIs(monthly) {

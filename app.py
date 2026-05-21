@@ -1039,6 +1039,43 @@ def api_buyer_analytics(buyer_name):
         key=lambda x: -x["revenue"]
     )
 
+    # ── By location ───────────────────────────────────────────────────────────
+    # Each sale carries an optional `location_name` (set at sale-add time when
+    # the buyer has a `locations[]` array; also populated from Ripe orders'
+    # delivery_label). Aggregating by location lets multi-location buyers like
+    # Nature's Emporium see per-store performance.
+    by_location = defaultdict(lambda: {"revenue": 0.0, "cases": 0, "units": 0,
+                                       "orders": set(),
+                                       "months": defaultdict(lambda: {"revenue": 0.0, "cases": 0, "units": 0})})
+    for s in buyer_sales:
+        loc = (s.get("location_name") or "").strip() or "(No location)"
+        rev = _revenue(s)
+        cs  = _cases(s)
+        qty = int(s.get("quantity") or 0)
+        by_location[loc]["revenue"] += rev
+        by_location[loc]["cases"]   += cs
+        by_location[loc]["units"]   += qty
+        by_location[loc]["orders"].add(s.get("order_id") or s.get("id"))
+        m = (s.get("sale_date") or "")[:7]
+        if m:
+            by_location[loc]["months"][m]["revenue"] += rev
+            by_location[loc]["months"][m]["cases"]   += cs
+            by_location[loc]["months"][m]["units"]   += qty
+
+    locations = sorted(
+        [{"name":    k,
+          "revenue": round(v["revenue"], 2),
+          "cases":   v["cases"],
+          "units":   v["units"],
+          "orders":  len(v["orders"]),
+          "monthly": {m: {"revenue": round(d["revenue"], 2),
+                          "cases":   d["cases"],
+                          "units":   d["units"]}
+                      for m, d in v["months"].items()}}
+         for k, v in by_location.items()],
+        key=lambda x: -x["revenue"],
+    )
+
     # ── YoY comparison ────────────────────────────────────────────────────────
     now = _dt.now().date()
     this_year  = str(now.year)
@@ -1074,9 +1111,10 @@ def api_buyer_analytics(buyer_name):
             "avg_order_revenue": avg_order_rev,
             "avg_order_cases":   avg_order_cases,
         },
-        "monthly":  monthly,
-        "yearly":   yearly,
-        "by_sku":   skus,
+        "monthly":   monthly,
+        "yearly":    yearly,
+        "by_sku":    skus,
+        "locations": locations,
         "predictive": {
             "has_sufficient_data": has_sufficient_data,
             "yoy_growth_pct":      yoy_growth,
