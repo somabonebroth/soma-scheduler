@@ -6370,38 +6370,55 @@ def _buyer_resolver(buyers_list):
     pair to (parent_buyer_name, location_name) using buyers.json as the truth
     table.
 
-    Historical sales were sometimes entered with the buyer field as
-    "Parent - LocationName" (the location feature came later). This lets the
-    analytics roll those rows up under their parent buyer with the location
-    inferred, without rewriting any sale records.
+    Historical sales were sometimes entered with the buyer field as a
+    location-suffixed string (the location feature came later). Common shapes
+    seen in the wild:
+        "Parent - LocationName"
+        "Parent (LocationName)"
+        "Natures Emporium (Woodbridge)"   <- note missing apostrophe
+        "Nature's Emporium - Newmarket"
+        "Nature’s Emporium"         <- smart-quote apostrophe
 
-    The resolver only rolls up when the suffix matches a REGISTERED location
-    of the prefix buyer — so an unknown name won't be mis-split by accident.
+    To roll any of these up under the parent buyer, the resolver normalises
+    apostrophe variants (curly, straight, or absent) when comparing, and
+    pre-generates lookup keys in both dash and parenthesis suffix forms.
+
+    Only rolls up when the suffix matches a REGISTERED location of the prefix
+    buyer (per buyers.json) — unknown names pass through unchanged so no
+    accidental mis-splitting.
     """
-    # Try several separators between parent and location. Order matters: more
-    # specific (with spaces) comes first so the longest match wins.
-    SEPS = [" - ", " — ", " – ", " -", "- ", "-"]
+    def _norm(s):
+        # Lowercase, strip apostrophe variants and outer whitespace. Internal
+        # spacing left intact so "Healthy Planet" vs "HealthyPlanet" still
+        # differ correctly.
+        return (s or "").lower().replace("’", "").replace("'", "").strip()
+
+    DASH_SEPS = [" - ", " — ", " – ", " -", "- ", "-"]
     lookup = {}
     for b in buyers_list:
         bname = (b.get("name") or "").strip()
         if not bname:
             continue
-        lookup.setdefault(bname.lower(), (bname, ""))
+        # Parent name alone (so apostrophe-stripped variants still resolve to
+        # the canonical form with the apostrophe).
+        lookup.setdefault(_norm(bname), (bname, ""))
         for loc in (b.get("locations") or []):
             loc_name = (loc.get("name") or "").strip()
             if not loc_name:
                 continue
-            for sep in SEPS:
-                lookup.setdefault((bname + sep + loc_name).lower(), (bname, loc_name))
+            # Dash-style: "Parent - Location"
+            for sep in DASH_SEPS:
+                lookup.setdefault(_norm(bname + sep + loc_name), (bname, loc_name))
+            # Parenthesis-style: "Parent (Location)" and "Parent(Location)"
+            lookup.setdefault(_norm(bname + " (" + loc_name + ")"), (bname, loc_name))
+            lookup.setdefault(_norm(bname + "(" + loc_name + ")"),  (bname, loc_name))
 
     def resolve(raw_buyer, sale_location_name=None):
         raw = (raw_buyer or "").strip()
         explicit_loc = (sale_location_name or "").strip()
-        hit = lookup.get(raw.lower())
+        hit = lookup.get(_norm(raw))
         if hit:
             parent, loc_from_name = hit
-            # Prefer an explicit location_name on the sale; fall back to the
-            # one inferred from the buyer suffix.
             return parent, (explicit_loc or loc_from_name)
         return raw, explicit_loc
 

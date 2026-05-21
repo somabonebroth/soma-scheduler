@@ -129,7 +129,12 @@ function renderSales(buyers) {
   var html = buyers.map(function(b) {
     var pct = Math.round((b.revenue / maxRev) * 100);
     var topSkus = (b.by_sku||[]).slice(0,3).map(function(s){ return s.recipe||s.sku; }).join(' · ');
-    return '<div class="buyer-card" onclick="window.location=\'/analytics/buyer/'+encodeURIComponent(b.buyer)+'\'">'
+    // encodeURIComponent does NOT escape apostrophes (they're unreserved), so
+    // a buyer like "Nature's Emporium" would break the single-quoted JS string
+    // in the inline onclick. Replace ' with %27 so the URL is valid both as a
+    // URL component and inside the JS attribute.
+    var safeUrl = encodeURIComponent(b.buyer).replace(/'/g, '%27');
+    return '<div class="buyer-card" onclick="window.location=\'/analytics/buyer/'+safeUrl+'\'">'
       + '<div class="buyer-card-head">'
       + '<div style="flex:1;min-width:0;">'
       + '<div class="bc-name">'+e(b.buyer)+'</div>'
