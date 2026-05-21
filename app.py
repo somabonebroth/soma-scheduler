@@ -6,7 +6,7 @@ label generation, traceability records, master CCP reference.
 
 from flask import Flask, render_template, request, jsonify, send_file, send_from_directory, session, redirect, url_for
 from datetime import datetime, timedelta
-from pdf_engine import generate_weekly_schedule_pdf, generate_daily_package_pdf, generate_filled_checklist_pdf, generate_label_pdf
+from pdf_engine import generate_weekly_schedule_pdf, generate_daily_package_pdf, generate_filled_checklist_pdf, generate_label_pdf, generate_single_recipe_pdf, generate_all_recipes_pdf
 from functools import wraps
 import json
 import os
@@ -1279,6 +1279,54 @@ def get_recipe(name):
     if name in recipes:
         return jsonify({"name": name, "data": recipes[name]})
     return jsonify({"error": "Recipe not found"}), 404
+
+@app.route("/api/recipe-pdf/<path:name>", methods=["GET"])
+@login_required
+def recipe_pdf(name):
+    """Single-recipe card PDF, for the per-row Download button."""
+    recipes = load_recipes()
+    if name not in recipes:
+        return jsonify({"error": "Recipe not found"}), 404
+    logo_path = os.path.join(app.static_folder, "logo.jpg")
+    if not os.path.exists(logo_path):
+        logo_path = None
+    buf = io.BytesIO()
+    generate_single_recipe_pdf(buf, name, recipes[name], logo_path)
+    buf.seek(0)
+    safe = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+    return send_file(buf, mimetype="application/pdf", as_attachment=True,
+                     download_name="Recipe_" + safe + ".pdf")
+
+@app.route("/api/recipe-pdf-all", methods=["GET"])
+@login_required
+def recipe_pdf_all():
+    """All active (non-archived) recipes as one PDF, ordered by the saved
+    brand+recipe order so the file matches what's on screen."""
+    recipes = load_recipes()
+    order = load_recipe_order() or {}
+    brand_order  = order.get("brand_order")  or []
+    recipe_order = order.get("recipe_order") or {}
+    ordered, seen = [], set()
+    for brand in brand_order:
+        for name in (recipe_order.get(brand) or []):
+            r = recipes.get(name)
+            if r and not r.get("archived"):
+                ordered.append((name, r))
+                seen.add(name)
+    for name, r in recipes.items():
+        if name not in seen and not r.get("archived"):
+            ordered.append((name, r))
+    if not ordered:
+        return jsonify({"error": "No active recipes to export"}), 400
+    logo_path = os.path.join(app.static_folder, "logo.jpg")
+    if not os.path.exists(logo_path):
+        logo_path = None
+    buf = io.BytesIO()
+    generate_all_recipes_pdf(buf, ordered, logo_path)
+    buf.seek(0)
+    today = datetime.now().strftime("%Y-%m-%d")
+    return send_file(buf, mimetype="application/pdf", as_attachment=True,
+                     download_name="All_Recipes_" + today + ".pdf")
 
 @app.route("/api/recipes/<path:name>", methods=["PUT"])
 @login_required
@@ -2735,7 +2783,9 @@ _DEFAULT_COMPANY_INFO = {
     "registration": "",
     "notes": "",
     "ripe_inventory_buffer": 12,   # units withheld from Ripe's visible stock
-    "ss_min_cases_delivery": 40,   # min SS cases for delivery orders
+    "ss_min_cases_delivery":     40,    # SS cases above which no small-order fee applies (fee-free threshold)
+    "ss_small_order_threshold":  20,    # SS cases below which delivery is rejected outright (hard minimum)
+    "ss_small_order_fee":        50.0,  # Flat fee added when ss_small_order_threshold ≤ cases < ss_min_cases_delivery
     "fzbb_small_lead_days":  3,    # min days notice for FZ/BB ≤ threshold
     "fzbb_large_lead_days":  7,    # min days notice for FZ/BB ≥ threshold
     "fzbb_large_threshold":  8,    # cases at which large lead time applies
@@ -5460,10 +5510,12 @@ def internal_buyer_catalogue():
         "units_per_case": 12,
         "buffer_units": buffer_units,
         "rules": {
-            "ss_min_cases_delivery": int(company.get("ss_min_cases_delivery") or 40),
-            "fzbb_small_lead_days":  int(company.get("fzbb_small_lead_days")  or 3),
-            "fzbb_large_lead_days":  int(company.get("fzbb_large_lead_days")  or 7),
-            "fzbb_large_threshold":  int(company.get("fzbb_large_threshold")  or 8),
+            "ss_min_cases_delivery":    int(company.get("ss_min_cases_delivery") or 40),
+            "ss_small_order_threshold": int(company.get("ss_small_order_threshold") or 20),
+            "ss_small_order_fee":       float(company.get("ss_small_order_fee") or 50.0),
+            "fzbb_small_lead_days":     int(company.get("fzbb_small_lead_days")  or 3),
+            "fzbb_large_lead_days":     int(company.get("fzbb_large_lead_days")  or 7),
+            "fzbb_large_threshold":     int(company.get("fzbb_large_threshold")  or 8),
         },
     })
 

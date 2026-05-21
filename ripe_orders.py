@@ -326,10 +326,11 @@ def ripe_order_action(order_id):
         from app import _load_company_info
         from datetime import datetime as _dt, timedelta as _td
         _company  = _load_company_info()
-        _ss_min      = int(_company.get("ss_min_cases_delivery") or 40)
-        _fzbb_small  = int(_company.get("fzbb_small_lead_days")  or 3)
-        _fzbb_large  = int(_company.get("fzbb_large_lead_days")  or 7)
-        _fzbb_thresh = int(_company.get("fzbb_large_threshold")  or 8)
+        _ss_min          = int(_company.get("ss_min_cases_delivery") or 40)
+        _ss_hard_min     = int(_company.get("ss_small_order_threshold") or 20)
+        _fzbb_small      = int(_company.get("fzbb_small_lead_days")  or 3)
+        _fzbb_large      = int(_company.get("fzbb_large_lead_days")  or 7)
+        _fzbb_thresh     = int(_company.get("fzbb_large_threshold")  or 8)
 
         # We need the order details to validate — fetch it
         _get_status, _order_data = _ripe_request("GET", "/api/internal/orders")
@@ -342,9 +343,12 @@ def ripe_order_action(order_id):
                 _delivery   = _order_obj.get("delivery_key","")
                 _req_date   = _order_obj.get("requested_date","")
 
-                if _delivery != "pickup" and _ss_cases < _ss_min:
+                # Hard-minimum check: reject anything below the absolute SS threshold.
+                # Between the hard min and the fee-free threshold, Ripe applies a
+                # flat small-order fee; Soma allows the order through.
+                if _delivery != "pickup" and _ss_cases < _ss_hard_min:
                     return jsonify({
-                        "error": f"Cannot approve: delivery orders require at least {_ss_min} SS cases (order has {_ss_cases})."
+                        "error": f"Cannot approve: delivery orders require at least {_ss_hard_min} SS cases (order has {_ss_cases})."
                     }), 400
 
                 if _fzbb_cases > 0 and _req_date:

@@ -160,6 +160,7 @@
           <div style="display:flex;justify-content:flex-end;gap:16px;font-size:12px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
             <span>Subtotal: <strong>${{ "%.2f"|format(o.subtotal) }}</strong></span>
             {% if o.surcharge %}<span>Surcharge: <strong>${{ "%.2f"|format(o.surcharge) }}</strong></span>{% endif %}
+            {% if o.small_order_fee %}<span style="color:#a66b1e;">Small order fee: <strong>${{ "%.2f"|format(o.small_order_fee) }}</strong></span>{% endif %}
             <span>Total: <strong>${{ "%.2f"|format(o.total) }}</strong></span>
           </div>
 
