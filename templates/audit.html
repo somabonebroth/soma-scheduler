@@ -262,7 +262,10 @@ function renderCats() {
   var grid = document.getElementById('cat-grid');
   grid.innerHTML = _cats.map(function(c) {
     var sel = _selectedCats.has(c);
-    return '<div class="cat-chip'+(sel?' selected':'')+'" onclick="toggleCat(\''+e(c)+'\')">'
+    // Pass brand via JSON.stringify so apostrophes in names like
+    // "Nature's Emporium" don't terminate the inline JS string.
+    var arg = JSON.stringify(c).replace(/"/g, '&quot;');
+    return '<div class="cat-chip'+(sel?' selected':'')+'" onclick="toggleCat('+arg+')">'
       +'<div class="check">'+(sel?'✓':'')+'</div>'
       +'<div class="cat-name">'+e(c)+'</div>'
       +'</div>';
