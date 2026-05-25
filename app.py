@@ -10,9 +10,18 @@ from pdf_engine import generate_weekly_schedule_pdf, generate_daily_package_pdf,
 from functools import wraps
 import json
 import os
+import time
 import threading
 import logging
 logger = logging.getLogger(__name__)
+
+# Pin the process timezone so bare datetime.now()/today() across the app
+# return Toronto local time (audits, sales records, FG lots, etc.).
+# Without this they fall back to the host TZ — UTC on Render — which
+# stamps late-evening Toronto activity onto the next calendar day.
+os.environ["TZ"] = "America/Toronto"
+if hasattr(time, "tzset"):
+    time.tzset()
 import re
 import zipfile
 import io
