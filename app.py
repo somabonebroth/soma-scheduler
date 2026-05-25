@@ -4765,6 +4765,30 @@ def audit_page(kind):
         return "Invalid audit type", 400
     return render_template("audit.html", kind=kind)
 
+@app.route("/audits")
+@login_required
+def audits_history():
+    """Read-only history of completed audits, newest first.
+
+    Strips the heavy 'items' / 'results' / 'current_idx' fields — the
+    'adjustments' summary is what's useful to look back at."""
+    audits = _load_audits()
+    rows = []
+    for a in audits:
+        if a.get("status") != "completed":
+            continue
+        rows.append({
+            "id":            a.get("id"),
+            "kind":          a.get("kind"),
+            "brand":         a.get("brand"),
+            "section":       a.get("section"),
+            "started_at":    a.get("started_at"),
+            "completed_at":  a.get("completed_at"),
+            "adjustments":   a.get("adjustments") or [],
+        })
+    rows.sort(key=lambda r: r.get("completed_at") or "", reverse=True)
+    return render_template("audits.html", audits=rows)
+
 @app.route("/api/audit/start", methods=["POST"])
 @login_required
 def start_audit():

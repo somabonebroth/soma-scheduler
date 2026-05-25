@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Soma">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/logo-180.png">
+<title>Audit History · Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+body.ah { background: var(--bg); }
+.ah-header {
+  background: var(--dark); color: #fff;
+  padding: 14px 20px; display: flex; align-items: center; justify-content: space-between;
+}
+.ah-header h1 { font-size: 16px; font-weight: 700; margin: 0; }
+.ah-header .sub { font-size: 12px; opacity: .7; margin-top: 2px; }
+.ah-back { background: rgba(255,255,255,.15); border: none; color: #fff;
+  border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600;
+  cursor: pointer; text-decoration: none; display: inline-block; }
+.ah-back:hover { background: rgba(255,255,255,.25); }
+.ah-main { padding: 20px; max-width: 860px; margin: 0 auto; }
+.ah-filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.ah-filter {
+  background: #fff; border: 1.5px solid var(--border); border-radius: 20px;
+  padding: 6px 14px; font-size: 13px; font-weight: 600; color: var(--text-light);
+  cursor: pointer; transition: all .15s;
+}
+.ah-filter.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ah-empty {
+  text-align: center; padding: 48px 24px; color: var(--text-light);
+  font-size: 14px; border: 2px dashed var(--border); border-radius: 12px; background: #fff;
+}
+.ah-card {
+  background: #fff; border: 1px solid var(--border); border-radius: 12px;
+  margin-bottom: 10px; overflow: hidden; transition: box-shadow .15s;
+}
+.ah-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+.ah-card-head {
+  padding: 14px 18px; display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; cursor: pointer; user-select: none;
+}
+.ah-card-head:hover { background: #fafaf8; }
+.ah-card-left { flex: 1; min-width: 0; }
+.ah-badge {
+  display: inline-block; padding: 2px 9px; border-radius: 20px;
+  font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  margin-right: 8px;
+}
+.ah-badge.fg { background: #e3f2fd; color: #0a4081; border: 1px solid #90caf9; }
+.ah-badge.rm { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+.ah-scope { font-size: 15px; font-weight: 700; color: var(--dark); }
+.ah-meta { font-size: 12px; color: var(--text-light); margin-top: 4px; line-height: 1.5; }
+.ah-card-right { text-align: right; flex-shrink: 0; }
+.ah-count {
+  font-size: 13px; font-weight: 700; color: var(--dark);
+  background: var(--bg); padding: 4px 10px; border-radius: 6px; white-space: nowrap;
+}
+.ah-count.zero { color: var(--text-light); background: #f5f5f0; }
+.ah-chevron { font-size: 12px; color: var(--text-light); margin-left: 8px; transition: transform .15s; }
+.ah-card.open .ah-chevron { transform: rotate(90deg); }
+.ah-card-body { display: none; border-top: 1px solid var(--border); padding: 6px 0; background: #fafaf8; }
+.ah-card.open .ah-card-body { display: block; }
+.ah-adj {
+  display: grid; grid-template-columns: 1fr auto auto auto; gap: 12px;
+  padding: 10px 18px; align-items: baseline; font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+.ah-adj:last-child { border-bottom: none; }
+.ah-adj-name { font-weight: 600; color: var(--dark); }
+.ah-adj-sub { font-size: 11px; color: var(--text-light); font-weight: 400; margin-left: 6px; }
+.ah-num { font-variant-numeric: tabular-nums; color: var(--text-light); font-size: 12px; }
+.ah-num strong { color: var(--dark); font-size: 13px; }
+.ah-diff { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ah-diff.up { color: #2e7d32; }
+.ah-diff.down { color: #c62828; }
+.ah-baseline {
+  display: block; font-size: 10px; color: var(--text-light);
+  margin-top: 2px; font-weight: 500; letter-spacing: .03em;
+}
+@media (max-width: 600px) {
+  .ah-adj { grid-template-columns: 1fr auto; row-gap: 4px; }
+  .ah-adj .ah-num { grid-column: 1 / -1; }
+}
+</style>
+</head>
+<body class="ah">
+
+<div class="ah-header">
+  <div>
+    <h1>Audit History</h1>
+    <div class="sub">Read-only · completed inventory audits</div>
+  </div>
+  <a href="/organic" class="ah-back">← Inventory</a>
+</div>
+
+<div class="ah-main">
+  <div class="ah-filters">
+    <button class="ah-filter active" data-filter="all" onclick="setFilter('all', this)">All</button>
+    <button class="ah-filter" data-filter="fg" onclick="setFilter('fg', this)">Finished Goods</button>
+    <button class="ah-filter" data-filter="rm" onclick="setFilter('rm', this)">Raw Materials</button>
+  </div>
+
+  {% if not audits %}
+    <div class="ah-empty">
+      No completed audits yet. Start one from the Organic Inventory page.
+    </div>
+  {% else %}
+    <div id="ah-list">
+    {% for a in audits %}
+      {% set adj_count = a.adjustments|length %}
+      <div class="ah-card" data-kind="{{ a.kind }}">
+        <div class="ah-card-head" onclick="toggleCard(this)">
+          <div class="ah-card-left">
+            <div>
+              <span class="ah-badge {{ a.kind }}">{{ 'FG' if a.kind == 'fg' else 'RM' }}</span>
+              <span class="ah-scope">
+                {% if a.kind == 'fg' %}{{ a.brand or '—' }}{% else %}{{ a.section or '—' }}{% endif %}
+              </span>
+            </div>
+            <div class="ah-meta">
+              <span data-iso="{{ a.completed_at or '' }}" class="ah-when">{{ a.completed_at or 'unknown' }}</span>
+              {% if a.started_at and a.completed_at %}
+                <span style="opacity:.6;"> · started <span data-iso="{{ a.started_at }}" class="ah-when-short">{{ a.started_at }}</span></span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="ah-card-right">
+            <span class="ah-count {% if adj_count == 0 %}zero{% endif %}">
+              {{ adj_count }} adj{{ '' if adj_count == 1 else 's' }}
+            </span>
+            <span class="ah-chevron">▶</span>
+          </div>
+        </div>
+        <div class="ah-card-body">
+          {% if adj_count == 0 %}
+            <div style="padding:14px 18px;font-size:13px;color:var(--text-light);">
+              Counts matched system — no inventory changes were made.
+            </div>
+          {% else %}
+            {% for adj in a.adjustments %}
+              <div class="ah-adj">
+                <div class="ah-adj-name">
+                  {% if a.kind == 'fg' %}
+                    {{ adj.recipe or '—' }}
+                    <span class="ah-adj-sub">{{ adj.format or '' }}</span>
+                  {% else %}
+                    {{ adj.item or '—' }}
+                    {% if adj.unit %}<span class="ah-adj-sub">{{ adj.unit }}</span>{% endif %}
+                  {% endif %}
+                  {% if adj.baseline_lot %}
+                    <span class="ah-baseline">+ created lot {{ adj.baseline_lot }}</span>
+                  {% endif %}
+                </div>
+                <div class="ah-num">system <strong>{{ adj.system_qty }}</strong></div>
+                <div class="ah-num">counted <strong>{{ adj.counted }}</strong></div>
+                <div class="ah-diff {% if adj.diff and adj.diff > 0 %}up{% elif adj.diff and adj.diff < 0 %}down{% endif %}">
+                  {{ '+' if adj.diff and adj.diff > 0 else '' }}{{ adj.diff }}
+                </div>
+              </div>
+            {% endfor %}
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+    </div>
+  {% endif %}
+</div>
+
+<script>
+function toggleCard(headEl) {
+  headEl.parentElement.classList.toggle('open');
+}
+
+function setFilter(kind, btn) {
+  document.querySelectorAll('.ah-filter').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  document.querySelectorAll('.ah-card').forEach(function(card){
+    if (kind === 'all' || card.dataset.kind === kind) {
+      card.style.display = '';
+    } else {
+      card.style.display = 'none';
+    }
+  });
+}
+
+// Localize the ISO timestamps to the user's browser timezone — server stores naive
+// America/Toronto strings via datetime.now().isoformat(), so this just reformats for display.
+(function formatTimes(){
+  var longOpts  = { year:'numeric', month:'short', day:'numeric', hour:'numeric', minute:'2-digit' };
+  var shortOpts = { hour:'numeric', minute:'2-digit' };
+  document.querySelectorAll('.ah-when').forEach(function(el){
+    var iso = el.dataset.iso;
+    if (!iso) return;
+    var d = new Date(iso);
+    if (!isNaN(d)) el.textContent = d.toLocaleString(undefined, longOpts);
+  });
+  document.querySelectorAll('.ah-when-short').forEach(function(el){
+    var iso = el.dataset.iso;
+    if (!iso) return;
+    var d = new Date(iso);
+    if (!isNaN(d)) el.textContent = d.toLocaleTimeString(undefined, shortOpts);
+  });
+})();
+</script>
+
+</body>
+</html>
