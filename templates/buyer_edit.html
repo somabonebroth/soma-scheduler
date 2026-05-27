@@ -168,8 +168,7 @@ body.be-page { background:var(--bg); }
         {% set is_active = assigned.get('active', True) if is_assigned else True %}
 
         <div class="sku-row {% if is_assigned %}assigned{% endif %}" data-sku="{{ sku.sku_key|e }}">
-          <input type="checkbox" class="sku-check" {% if is_assigned %}checked{% endif %}
-            onchange="toggleSku('{{ sku.sku_key|e }}', this.checked)">
+          <input type="checkbox" class="sku-check" {% if is_assigned %}checked{% endif %}>
           <div>
             <div class="sku-name">{{ sku.recipe }}</div>
             <div class="sku-fmt" style="font-family:ui-monospace,monospace;font-size:10px;">{{ sku.sku_key }}</div>
@@ -192,8 +191,7 @@ body.be-page { background:var(--bg); }
           <div>
             <button class="p-active-tog {% if is_active %}on{% else %}off{% endif %}"
               data-sku="{{ sku.sku_key|e }}"
-              {% if not is_assigned %}disabled style="opacity:.4;"{% endif %}
-              onclick="toggleActive('{{ sku.sku_key|e }}', this)"></button>
+              {% if not is_assigned %}disabled style="opacity:.4;"{% endif %}></button>
           </div>
         </div>
       {% endfor %}
@@ -256,6 +254,23 @@ function toggleActive(sk, btn) {
   _skuData[sk] = _skuData[sk] || {};
   _skuData[sk].active = !isOn;
 }
+
+// Delegated change listener for sku assignment checkboxes
+document.getElementById('sku-table').addEventListener('change', function(ev) {
+  var el = ev.target;
+  if(!el.classList || !el.classList.contains('sku-check')) return;
+  var row = el.closest('.sku-row');
+  if(!row) return;
+  toggleSku(row.dataset.sku, el.checked);
+});
+
+// Delegated click listener for active toggles
+document.getElementById('sku-table').addEventListener('click', function(ev) {
+  var el = ev.target;
+  if(!el.classList || !el.classList.contains('p-active-tog')) return;
+  if(el.disabled) return;
+  toggleActive(el.dataset.sku, el);
+});
 
 // Delegated input listener for price/cogs
 document.getElementById('sku-table').addEventListener('input', function(ev) {
