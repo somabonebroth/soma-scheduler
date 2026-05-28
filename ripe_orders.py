@@ -352,21 +352,61 @@ def ripe_order_action(order_id):
                     }), 400
 
                 if _fzbb_cases > 0 and _req_date:
-                    try:
-                        _req   = _dt.strptime(_req_date, "%Y-%m-%d").date()
-                        _today = _dt.utcnow().date()
-                        _lead_req = _fzbb_large if _fzbb_cases >= _fzbb_thresh else _fzbb_small
-                        _lead_act = (_req - _today).days
-                        if _lead_act < _lead_req:
-                            return jsonify({
-                                "error": (
-                                    f"Cannot approve: {_fzbb_cases} FZ/BB cases require "
-                                    f"{_lead_req} days notice. Earliest approvable date: "
-                                    f"{(_today + _td(days=_lead_req)).strftime('%B %d, %Y')}."
-                                )
-                            }), 400
-                    except ValueError:
-                        pass
+                    # Lead time only applies when FZ/BB stock cannot cover the
+                    # order. If every FZ/BB line is fully in stock, the order
+                    # can be picked up same-day. Any shortfall on any line
+                    # falls through to the existing whole-order lead time.
+                    from app import _sku_key as _make_sku_key, _compute_available_stock
+                    _fg_all    = _load(_FG_PATH, [])
+                    _stock_map = _compute_available_stock()
+                    _fzbb_shortfall = False
+                    for _it in _items:
+                        _fmt = (_it.get("format") or "").upper()
+                        if not _fmt.startswith(("FZ", "BB")):
+                            continue
+                        _units = int(_it.get("units") or 0)
+                        if _units <= 0:
+                            continue
+                        _name   = (_it.get("name") or "").strip()
+                        _prefix = _fmt.split("-")[0]
+                        _match  = next((
+                            f for f in _fg_all
+                            if (f.get("recipe") or "").lower() == _name.lower()
+                            and (f.get("format") or "").upper().startswith(_prefix)
+                        ), None) or next((
+                            f for f in _fg_all
+                            if _name.lower() in (f.get("recipe") or "").lower()
+                            and (f.get("format") or "").upper().startswith(_prefix)
+                        ), None)
+                        if not _match:
+                            _fzbb_shortfall = True
+                            break
+                        _sku = _make_sku_key(
+                            _match.get("brand",""),
+                            _match.get("recipe",""),
+                            _match.get("format",""),
+                        )
+                        _avail = _stock_map.get(_sku, {}).get("available", 0)
+                        if _units > _avail:
+                            _fzbb_shortfall = True
+                            break
+
+                    if _fzbb_shortfall:
+                        try:
+                            _req   = _dt.strptime(_req_date, "%Y-%m-%d").date()
+                            _today = _dt.utcnow().date()
+                            _lead_req = _fzbb_large if _fzbb_cases >= _fzbb_thresh else _fzbb_small
+                            _lead_act = (_req - _today).days
+                            if _lead_act < _lead_req:
+                                return jsonify({
+                                    "error": (
+                                        f"Cannot approve: {_fzbb_cases} FZ/BB cases require "
+                                        f"{_lead_req} days notice. Earliest approvable date: "
+                                        f"{(_today + _td(days=_lead_req)).strftime('%B %d, %Y')}."
+                                    )
+                                }), 400
+                        except ValueError:
+                            pass
 
         # Fetch the order from Ripe
         get_status, order_data = _ripe_request("GET", "/api/internal/orders")
