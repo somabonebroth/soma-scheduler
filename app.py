@@ -3931,6 +3931,33 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
 
     produced = (produced_data or {}).get("produced") or {}
 
+    # A batch can only contain raw material that was on hand when it was made.
+    # Every run in this call started on (start_week_id, start_day_idx), so a lot
+    # is eligible to be consumed only if it was received on or before that date.
+    # This keeps deductions date-honest: receiving a new delivery never back-fills
+    # an earlier run, and re-saving a later kettle can't shift an earlier kettle
+    # onto a newer lot. Among eligible lots we consume oldest-first (true FIFO).
+    try:
+        run_start_date = (datetime.strptime(start_week_id, "%Y-%m-%d")
+                          + timedelta(days=start_day_idx)).strftime("%Y-%m-%d")
+    except ValueError:
+        run_start_date = None
+
+    def _lot_eligible(mat):
+        if run_start_date is None:
+            return True
+        dr = (mat.get("date_received") or "").strip()
+        if not dr:
+            return True  # undated lot — don't strand it
+        return dr <= run_start_date
+
+    # Same dict references as `materials`, so in-place remaining edits persist
+    # and are saved at the end. Date-filtered and sorted oldest-first.
+    eligible_mats = sorted(
+        [m for m in materials if _lot_eligible(m)],
+        key=lambda m: ((m.get("date_received") or ""), (m.get("created_at") or "")),
+    )
+
     for run in runs:
         if run.get("week_id") != start_week_id or run.get("day_idx") != start_day_idx:
             continue
@@ -4020,7 +4047,7 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
                         continue
                     qty_remaining_to_deduct = round(qty_needed, 4)
                     # Pass 1: name + exact unit
-                    for mat in materials:
+                    for mat in eligible_mats:
                         if mat["remaining"] <= 0:
                             continue
                         if not ingredients_match(mat["item"], item_name):
@@ -4042,7 +4069,7 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
                             break
                     # Pass 2: name-only fallback
                     if qty_remaining_to_deduct > 0:
-                        for mat in materials:
+                        for mat in eligible_mats:
                             if mat["remaining"] <= 0:
                                 continue
                             if not ingredients_match(mat["item"], item_name):
