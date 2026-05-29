@@ -3739,7 +3739,20 @@ def get_raw_material_usage(entry_id):
 @app.route("/api/organic/raw-materials/<entry_id>", methods=["DELETE"])
 @login_required
 def delete_raw_material(entry_id):
+    """Delete a raw-material lot — but never one that a completed production run
+    consumed. A completed batch points back to its lots by id; hard-deleting a
+    consumed lot dangles that link and breaks one-step-back traceability. If the
+    lot was used, the caller must reverse the affected run(s) first."""
+    used_in = _runs_using_raw_material(entry_id)
+    if used_in:
+        return jsonify({
+            "error": (f"Cannot delete: this lot was used in {len(used_in)} completed "
+                      f"production run(s). Reverse that production first, then delete."),
+            "used_in": used_in,
+        }), 409
     materials = _load_json(ORGANIC_RAW_PATH, [])
+    if not any(m.get("id") == entry_id for m in materials):
+        return jsonify({"error": "Entry not found"}), 404
     materials = [m for m in materials if m.get("id") != entry_id]
     _save_json(ORGANIC_RAW_PATH, materials)
     return jsonify({"success": True})

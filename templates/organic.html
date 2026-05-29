@@ -2006,19 +2006,28 @@ async function editRMRemaining(id,item,unit,current){
 }
 
 async function deleteRM(id){
-    // Check usage first to show informed warning
-    var msg='Delete this inventory entry?';
+    // A lot that a completed run consumed cannot be deleted — it would break the
+    // traceability link back from that batch. Tell the user up front.
     try{
         var ur=await fetch('/api/organic/raw-materials/'+encodeURIComponent(id)+'/usage');
         var udata=await ur.json();
         var used=(udata.used_in)||[];
         if(used.length){
-            msg='This entry was used in '+used.length+' completed production run'+(used.length===1?'':'s')+'. Deleting won\'t affect those runs — the deduction history is preserved on each run. The inventory entry will be gone.\n\nContinue?';
+            await mobileConfirm(
+                'This lot was used in '+used.length+' completed production run'+(used.length===1?'':'s')+
+                ', so it can\'t be deleted — that would break the traceability link from those batches. '+
+                'To remove it, reverse that production first (set its Amount Produced to 0, or delete that production record).',
+                {title:'Cannot delete lot', okLabel:'OK', danger:false});
+            return;
         }
     }catch(e){}
-    var ok = await mobileConfirm(msg, {title:'Delete inventory entry', okLabel:'Delete', danger:true});
+    var ok = await mobileConfirm('Delete this inventory entry?', {title:'Delete inventory entry', okLabel:'Delete', danger:true});
     if(!ok) return;
-    await fetch('/api/organic/raw-materials/'+encodeURIComponent(id),{method:'DELETE'});
+    var res = await fetch('/api/organic/raw-materials/'+encodeURIComponent(id),{method:'DELETE'});
+    if(!res.ok){
+        var err={}; try{ err=await res.json(); }catch(e){}
+        await mobileConfirm(err.error || 'Could not delete this entry.', {title:'Delete failed', okLabel:'OK', danger:false});
+    }
     loadRawMaterials();
 }
 
