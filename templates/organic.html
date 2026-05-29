@@ -2876,15 +2876,23 @@ async function submitAddInventory(){
 
         // Upload photo if selected, attach to first saved entry id
         var photoFile = _getInvPhotoFile();
-        var savedIds = data.ids || [];
+        var savedIds = data.ids || (data.entries || []).map(function(e){ return e.id; });
         if(photoFile && savedIds.length > 0){
             var fd = new FormData();
             fd.append('photo', photoFile);
             // Use the first entry id as the receipt anchor
             var photoEntryId = savedIds[0];
-            await fetch('/api/organic/raw-materials/receipt-photo/' + photoEntryId, {
+            var pr = await fetch('/api/organic/raw-materials/receipt-photo/' + photoEntryId, {
                 method: 'POST', body: fd,
             });
+            if(!pr.ok){
+                var pe={}; try{ pe = await pr.json(); }catch(e){}
+                msg.className='status error';
+                msg.textContent = 'Items saved, but the invoice photo failed to upload: ' + (pe.error || pr.status) + '. Re-open this delivery to retry.';
+                btn.disabled=false; btn.textContent='Save Delivery';
+                loadRawMaterials();
+                return;
+            }
         }
 
         closeAddInventoryModal();

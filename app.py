@@ -3681,6 +3681,7 @@ def add_raw_materials_bulk():
         "success": True,
         "created": len(created),
         "lot": shared_baseline_lot,  # only set when baseline=true
+        "ids": [e["id"] for e in created],  # receipt-photo anchor (first id)
         "entries": created,
     })
 
