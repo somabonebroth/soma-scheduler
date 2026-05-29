@@ -5619,6 +5619,22 @@ def upload_rm_receipt_photo(entry_id):
         fh.write(data)
     return jsonify({"ok": True, "filename": filename})
 
+@app.route("/api/organic/raw-materials/receipt-photos", methods=["GET"])
+@login_required
+def list_rm_receipt_photos():
+    """Return the set of raw-material entry ids that have a stored receipt photo.
+    The Receiving list uses this to show an invoice link on the right
+    transaction (the photo is anchored to the first entry id of a delivery)."""
+    ids = []
+    try:
+        for fn in os.listdir(RM_RECEIPT_PHOTOS_DIR):
+            stem = fn.rsplit(".", 1)[0]
+            if stem:
+                ids.append(stem)
+    except FileNotFoundError:
+        pass
+    return jsonify({"ids": ids})
+
 @app.route("/api/organic/raw-materials/receipt-photo/<entry_id>", methods=["GET"])
 @login_required
 def get_rm_receipt_photo(entry_id):

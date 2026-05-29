@@ -5428,8 +5428,13 @@ async function _doLotTrace(type, q){
 
 // ── Receiving Transactions ────────────────────────────────────────────
 async function loadReceiving(){
-    var res = await fetch('/api/organic/raw-materials');
+    var [res, photoRes] = await Promise.all([
+        fetch('/api/organic/raw-materials'),
+        fetch('/api/organic/raw-materials/receipt-photos'),
+    ]);
     var data = await res.json();
+    var photoIds = new Set([]);
+    try { photoIds = new Set(((await photoRes.json()).ids) || []); } catch(e) {}
     var container = document.getElementById('receiving-container');
     var countEl = document.getElementById('receiving-count');
     var deliveries = data.filter(function(r){ return !r.migration_baseline && !r.adjustment; });
@@ -5446,7 +5451,7 @@ async function loadReceiving(){
     });
     var transactions = txOrder.map(function(k){ return txMap[k]; });
 
-    if(countEl) countEl.textContent = transactions.length+' delivery'+(transactions.length===1?'':'ies');
+    if(countEl) countEl.textContent = transactions.length+' deliver'+(transactions.length===1?'y':'ies');
     if(!transactions.length){
         container.innerHTML='<div class="empty-state">No receiving records yet. Use <strong>Add Inventory</strong> to record deliveries.</div>'; return;
     }
@@ -5458,7 +5463,13 @@ async function loadReceiving(){
         h+='<span style="font-size:13px;font-weight:600;">'+escHtml(tx.supplier)+'</span>';
         h+='<span style="font-size:11px;color:var(--text-light);">'+escHtml(tx.date)+'</span>';
         h+='</span>';
-        h+='<span style="font-size:11px;color:var(--text-light);white-space:nowrap;">'+tx.items.length+' item'+(tx.items.length===1?'':'s')+'</span>';
+        h+='<span style="display:flex;align-items:center;gap:10px;white-space:nowrap;">';
+        var photoItem = tx.items.find(function(r){ return photoIds.has(r.id); });
+        if(photoItem){
+            h+='<button onclick="event.stopPropagation();event.preventDefault();window.open(\'/api/organic/raw-materials/receipt-photo/'+encodeURIComponent(photoItem.id)+'\',\'_blank\');" title="View invoice / packing slip" style="border:1px solid var(--border);background:#fff;border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;color:#2e7d32;">&#128206; Invoice</button>';
+        }
+        h+='<span style="font-size:11px;color:var(--text-light);">'+tx.items.length+' item'+(tx.items.length===1?'':'s')+'</span>';
+        h+='</span>';
         h+='</summary>';
         h+='<div style="padding:8px 14px 12px;">';
         h+='<table class="inv-table" style="font-size:12px;"><tr><th>Ingredient</th><th>LOT#</th><th>Qty</th><th>Remaining</th></tr>';
@@ -5490,7 +5501,7 @@ async function loadReceiving(){
         } else {
             html+='<details style="margin-top:6px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">'
                 +'<summary style="padding:10px 14px;background:#f5f5f0;cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;justify-content:space-between;">'
-                +'<span>'+_monthLabel(mk)+'</span><span style="color:var(--text-light);font-weight:400;">'+txs.length+' delivery'+(txs.length===1?'':'ies')+'</span></summary>'
+                +'<span>'+_monthLabel(mk)+'</span><span style="color:var(--text-light);font-weight:400;">'+txs.length+' deliver'+(txs.length===1?'y':'ies')+'</span></summary>'
                 +'<div style="padding:6px 8px;">'+inner+'</div></details>';
         }
     });
