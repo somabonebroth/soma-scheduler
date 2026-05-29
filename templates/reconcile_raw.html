@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reconcile Raw Material Stock</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 980px; margin: 0 auto; padding: 24px; color: #1a1a1a; background: #faf8f3; }
+  h1 { font-size: 22px; }
+  p { font-size: 14px; line-height: 1.5; color: #444; }
+  .warn { background: #fff7e6; border: 1px solid #ffd98a; border-radius: 8px; padding: 12px 16px; font-size: 13px; margin: 16px 0; }
+  .btn { padding: 10px 18px; border-radius: 6px; border: 1px solid #2e7d32; font-size: 14px; cursor: pointer; margin-right: 10px; }
+  .btn-preview { background: #fff; color: #2e7d32; }
+  .btn-apply { background: #2e7d32; color: #fff; opacity: 0.5; pointer-events: none; }
+  .btn-apply.ready { opacity: 1; pointer-events: auto; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #eee; }
+  th { background: #1a2e1a; color: #fff; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .up { color: #2e7d32; font-weight: 600; }
+  .down { color: #c0392b; }
+  .summary { font-size: 14px; margin: 14px 0; font-weight: 600; }
+  .section-title { font-size: 13px; text-transform: uppercase; letter-spacing: 0.4px; color: #666; margin-top: 22px; }
+  #status { font-size: 13px; margin-left: 8px; color: #666; }
+</style>
+</head>
+<body>
+  <h1>Reconcile Raw Material Stock</h1>
+  <p>Rebuilds every raw-material lot's remaining balance from scratch: each lot is reset to its received
+  quantity, then every completed production run is replayed in date order, drawing only from lots that
+  existed when that batch was made. This corrects balances that were drained by the old date-blind
+  deduction (e.g. a delivery consumed by a run that predated it).</p>
+
+  <div class="warn">
+    <strong>Preview first.</strong> Nothing is written until you click Apply.
+    Manual <em>Edit&nbsp;Qty</em> adjustments are recomputed away by this rebuild — any lots affected are
+    listed below so you can re-enter them afterward.
+  </div>
+
+  <button class="btn btn-preview" onclick="run(false)">Preview</button>
+  <button class="btn btn-apply" id="apply-btn" onclick="run(true)">Apply</button>
+  <span id="status"></span>
+
+  <div id="results"></div>
+
+<script>
+function fmt(v){ return (v===null||v===undefined) ? '—' : v; }
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+async function run(apply){
+  var status = document.getElementById('status');
+  if(apply && !confirm('Apply the rebuild and overwrite current remaining balances? This cannot be undone.')) return;
+  status.textContent = apply ? 'Applying…' : 'Computing preview…';
+  var res = await fetch('/admin/reconcile-raw/run', { method: apply ? 'POST' : 'GET' });
+  var d = await res.json();
+  status.textContent = '';
+  render(d);
+  if(!apply){
+    document.getElementById('apply-btn').classList.add('ready');
+  } else {
+    document.getElementById('apply-btn').classList.remove('ready');
+    status.textContent = 'Applied.';
+  }
+}
+
+function render(d){
+  var h = '';
+  h += '<div class="summary">' + (d.applied ? '✅ Applied — ' : 'Preview — ')
+     + d.runs_replayed + ' runs replayed, ' + d.lots_changed + ' lots changed, '
+     + (d.shortfalls ? d.shortfalls.length : 0) + ' shortfalls.</div>';
+
+  if(d.changes && d.changes.length){
+    h += '<div class="section-title">Lot balance changes</div>';
+    h += '<table><tr><th>Ingredient</th><th>Received</th><th>LOT#</th><th class="num">Before</th><th class="num">After</th><th class="num">Δ</th></tr>';
+    d.changes.forEach(function(c){
+      var delta = (c.after||0) - (c.before||0);
+      var cls = delta > 0 ? 'up' : (delta < 0 ? 'down' : '');
+      var sign = delta > 0 ? '+' : '';
+      h += '<tr><td>'+esc(c.item)+'</td><td>'+esc(c.date_received)+'</td><td>'+esc(c.supplier_lot)+'</td>'
+         + '<td class="num">'+fmt(c.before)+'</td><td class="num">'+fmt(c.after)+'</td>'
+         + '<td class="num '+cls+'">'+sign+(Math.round(delta*10000)/10000)+' '+esc(c.unit||'')+'</td></tr>';
+    });
+    h += '</table>';
+  } else {
+    h += '<p>No lot balances changed — everything was already date-consistent.</p>';
+  }
+
+  if(d.manually_adjusted_lots && d.manually_adjusted_lots.length){
+    h += '<div class="section-title">⚠ Lots with a manual adjustment (will be recomputed away)</div>';
+    h += '<table><tr><th>Ingredient</th><th>Received</th><th>LOT#</th><th class="num">Manual remaining</th></tr>';
+    d.manually_adjusted_lots.forEach(function(m){
+      h += '<tr><td>'+esc(m.item)+'</td><td>'+esc(m.date_received)+'</td><td>'+esc(m.supplier_lot)+'</td><td class="num">'+fmt(m.remaining)+'</td></tr>';
+    });
+    h += '</table>';
+  }
+
+  if(d.shortfalls && d.shortfalls.length){
+    h += '<div class="section-title">Shortfalls after rebuild (insufficient stock at production time)</div>';
+    h += '<table><tr><th>Recipe</th><th>Vessel</th><th>Ingredient</th><th class="num">Short by</th></tr>';
+    d.shortfalls.forEach(function(s){
+      h += '<tr><td>'+esc(s.recipe)+'</td><td>'+esc(s.vessel)+'</td><td>'+esc(s.ingredient)+'</td><td class="num">'+fmt(s.shortfall)+' '+esc(s.unit||'')+'</td></tr>';
+    });
+    h += '</table>';
+  }
+
+  document.getElementById('results').innerHTML = h;
+}
+</script>
+</body>
+</html>

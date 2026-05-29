@@ -3659,6 +3659,113 @@ def delete_raw_material(entry_id):
     _save_json(ORGANIC_RAW_PATH, materials)
     return jsonify({"success": True})
 
+# ── One-time reconciliation: rebuild raw-material consumption ─────────────
+# After the date-aware FIFO fix, historical lots may still carry deductions
+# that were attributed under the old date-blind rule (a lot consumed by a run
+# that predates its delivery). This rebuild replays every completed run from a
+# clean slate so all 'remaining' balances become date-honest. Operated via the
+# /admin/reconcile-raw control page (Preview then Apply).
+def _rebuild_raw_material_consumption(materials, runs, recipes):
+    """Deterministically rebuild every lot's 'remaining':
+      1) reset each lot to its full received quantity
+      2) replay every completed run in chronological order (oldest start date
+         first, then vessel), each drawing only from date-eligible lots
+         (received on or before the run's start date), oldest-first.
+    Mutates `materials` ('remaining') and `runs` ('ingredients_used') in place.
+    Returns {runs_replayed, warnings}. Does NOT save — the caller decides."""
+    for mat in materials:
+        try:
+            mat["remaining"] = round(float(mat.get("quantity") or 0), 4)
+        except (ValueError, TypeError):
+            mat["remaining"] = 0
+
+    completed = [r for r in runs
+                 if r.get("status") == "completed" and (r.get("amount_produced") or 0) > 0]
+
+    def _start_key(r):
+        di = r.get("day_idx")
+        return ((r.get("week_id") or ""),
+                di if isinstance(di, int) else 99,
+                (r.get("vessel") or ""))
+    completed.sort(key=_start_key)
+
+    all_warnings = []
+    replayed = 0
+    for run in completed:
+        recipe_data = recipes.get(run.get("recipe", "")) or {}
+        if not recipe_data:
+            continue
+        run_start_date = _run_start_date_str(run.get("week_id"), run.get("day_idx"))
+        eligible_mats = _eligible_lots_for_date(materials, run_start_date)
+        try:
+            amount = int(run.get("amount_produced") or 0)
+        except (ValueError, TypeError):
+            amount = 0
+        ingredients_used, warns = _deduct_run_ingredients(
+            recipe_data, run.get("vessel", ""), run.get("recipe", ""), amount, eligible_mats)
+        run["ingredients_used"] = ingredients_used
+        all_warnings.extend(warns)
+        replayed += 1
+
+    return {"runs_replayed": replayed, "warnings": all_warnings}
+
+
+@app.route("/admin/reconcile-raw")
+@login_required
+def reconcile_raw_page():
+    return render_template("reconcile_raw.html")
+
+
+@app.route("/admin/reconcile-raw/run", methods=["GET", "POST"])
+@login_required
+def reconcile_raw_run():
+    """GET = preview (no writes). POST = apply (writes recomputed materials + runs).
+    Preview returns a per-lot before/after diff, the resulting shortfalls, and any
+    lots that carry a manual 'Edit Qty' adjustment (those overrides are recomputed
+    away on Apply — re-enter them afterward if they still apply)."""
+    import copy
+    do_apply = request.method == "POST"
+    runs = _load_json(ORGANIC_RUNS_PATH, [])
+    materials = _load_json(ORGANIC_RAW_PATH, [])
+    recipes = load_recipes()
+
+    before = {m.get("id"): m.get("remaining") for m in materials}
+    manually_adjusted = [
+        {"item": m.get("item"), "supplier_lot": m.get("supplier_lot"),
+         "date_received": m.get("date_received"), "remaining": m.get("remaining")}
+        for m in materials if m.get("last_adjusted_at")
+    ]
+
+    work_materials = copy.deepcopy(materials)
+    work_runs = copy.deepcopy(runs)
+    summary = _rebuild_raw_material_consumption(work_materials, work_runs, recipes)
+
+    changes = []
+    for m in work_materials:
+        old, new = before.get(m.get("id")), m.get("remaining")
+        if old != new:
+            changes.append({
+                "item": m.get("item"), "supplier_lot": m.get("supplier_lot"),
+                "date_received": m.get("date_received"), "unit": m.get("unit"),
+                "before": old, "after": new,
+            })
+    changes.sort(key=lambda c: ((c["item"] or "").lower(), c["date_received"] or ""))
+
+    if do_apply:
+        for m in work_materials:
+            m.pop("last_adjusted_at", None)
+        _save_json(ORGANIC_RAW_PATH, work_materials)
+        _save_json(ORGANIC_RUNS_PATH, work_runs)
+
+    return jsonify({
+        "applied": do_apply,
+        "runs_replayed": summary["runs_replayed"],
+        "lots_changed": len(changes),
+        "changes": changes,
+        "shortfalls": summary["warnings"],
+        "manually_adjusted_lots": manually_adjusted,
+    })
+
 # ── Organic: Invoices (standalone module, keyed by supplier + date + LOT#s) ──
 INVOICES_DIR = os.path.join(ORGANIC_DIR, "invoices")
 os.makedirs(INVOICES_DIR, exist_ok=True)
@@ -3899,6 +4006,150 @@ def _previous_day_coords(week_id, day_idx):
         return week_id, day_idx
     return prev_week_start.strftime("%Y-%m-%d"), 6
 
+def _run_start_date_str(week_id, day_idx):
+    """ISO date (YYYY-MM-DD) a run started on, or None if week_id is malformed."""
+    try:
+        return (datetime.strptime(week_id, "%Y-%m-%d")
+                + timedelta(days=int(day_idx))).strftime("%Y-%m-%d")
+    except (ValueError, TypeError):
+        return None
+
+
+def _eligible_lots_for_date(materials, run_start_date):
+    """Lots a run may consume: received on or before run_start_date (undated
+    lots are always eligible so stock is never stranded), oldest-first (FIFO).
+    Returns the SAME dict references as `materials`, so in-place 'remaining'
+    edits persist and are saved by the caller."""
+    def _eligible(mat):
+        if run_start_date is None:
+            return True
+        dr = (mat.get("date_received") or "").strip()
+        if not dr:
+            return True
+        return dr <= run_start_date
+    return sorted(
+        [m for m in materials if _eligible(m)],
+        key=lambda m: ((m.get("date_received") or ""), (m.get("created_at") or "")),
+    )
+
+
+def _deduct_run_ingredients(recipe_data, vessel, recipe_name, amount, eligible_mats):
+    """Deduct one production run's raw materials from `eligible_mats`, oldest-first.
+    Mutates each consumed lot's 'remaining' in place. Returns
+    (ingredients_used, warnings). Shared by the live completion path and the
+    one-time reconciliation rebuild so both apply identical logic."""
+    ingredients_used = []
+    warnings = []
+    if amount <= 0:
+        return ingredients_used, warnings
+
+    is_115L = vessel == "115L"
+    half_factor = 0.5 if is_115L else 1.0
+    try:
+        recipe_yield = int(recipe_data.get("yield") or 0)
+    except (ValueError, TypeError):
+        recipe_yield = 0
+    jar_l = _jar_volume_liters(recipe_data) or 0.75
+    batch_liters = recipe_yield * jar_l * half_factor
+
+    for section in INGREDIENT_SECTIONS:
+        items = recipe_data.get(section, [])
+        for item in items:
+            if not is_structured_ingredient(item):
+                continue
+            if item.get("needs_review"):
+                continue
+            item_name = (item.get("name") or "").strip()
+            if not item_name:
+                continue
+            # Untracked ingredients (e.g. water) are unlimited — never
+            # deduct from inventory and never flag insufficient stock.
+            if is_untracked_ingredient(item_name):
+                continue
+            try:
+                recipe_amount = float(item.get("amount") or 0)
+            except (ValueError, TypeError):
+                recipe_amount = 0
+            if recipe_amount <= 0:
+                continue
+            unit = (item.get("unit") or "").strip()
+            if not unit:
+                continue
+            if unit == "per L":
+                qty_needed = recipe_amount * batch_liters
+                display_unit = "g"
+            else:
+                qty_needed = recipe_amount * half_factor
+                display_unit = unit
+            if qty_needed <= 0:
+                continue
+            qty_remaining_to_deduct = round(qty_needed, 4)
+            # Pass 1: name + exact unit
+            for mat in eligible_mats:
+                if mat["remaining"] <= 0:
+                    continue
+                if not ingredients_match(mat["item"], item_name):
+                    continue
+                mat_unit = (mat.get("unit") or "").strip()
+                if unit != "per L" and mat_unit != display_unit:
+                    continue
+                deduct = min(qty_remaining_to_deduct, mat["remaining"])
+                mat["remaining"] = round(mat["remaining"] - deduct, 4)
+                qty_remaining_to_deduct = round(qty_remaining_to_deduct - deduct, 4)
+                ingredients_used.append({
+                    "item": mat["item"],
+                    "supplier_lot": mat["supplier_lot"],
+                    "quantity_used": deduct,
+                    "unit": mat_unit or display_unit,
+                    "raw_material_id": mat["id"],
+                })
+                if qty_remaining_to_deduct <= 0:
+                    break
+            # Pass 2: name-only fallback
+            if qty_remaining_to_deduct > 0:
+                for mat in eligible_mats:
+                    if mat["remaining"] <= 0:
+                        continue
+                    if not ingredients_match(mat["item"], item_name):
+                        continue
+                    mat_unit = (mat.get("unit") or "").strip()
+                    if unit != "per L" and mat_unit == display_unit:
+                        continue
+                    deduct = min(qty_remaining_to_deduct, mat["remaining"])
+                    mat["remaining"] = round(mat["remaining"] - deduct, 4)
+                    qty_remaining_to_deduct = round(qty_remaining_to_deduct - deduct, 4)
+                    ingredients_used.append({
+                        "item": mat["item"],
+                        "supplier_lot": mat["supplier_lot"],
+                        "quantity_used": deduct,
+                        "unit": mat_unit or display_unit,
+                        "raw_material_id": mat["id"],
+                    })
+                    if qty_remaining_to_deduct <= 0:
+                        break
+            if qty_remaining_to_deduct > 0:
+                ingredients_used.append({
+                    "item": item_name,
+                    "supplier_lot": "INSUFFICIENT_STOCK",
+                    "quantity_used": qty_remaining_to_deduct,
+                    "unit": display_unit,
+                    "negative": True,
+                })
+                warnings.append({
+                    "kind": "insufficient_stock",
+                    "vessel": vessel,
+                    "recipe": recipe_name,
+                    "ingredient": item_name,
+                    "shortfall": qty_remaining_to_deduct,
+                    "unit": display_unit,
+                    "message": (f"Insufficient {item_name}: short by "
+                                f"{qty_remaining_to_deduct} {display_unit} "
+                                f"on {vessel} ({recipe_name}). "
+                                f"Production proceeded with what was on hand."),
+                })
+    return ingredients_used, warnings
+
+
 def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
     """Process organic production amounts entered on the FINISH day.
 
@@ -3933,30 +4184,12 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
 
     # A batch can only contain raw material that was on hand when it was made.
     # Every run in this call started on (start_week_id, start_day_idx), so a lot
-    # is eligible to be consumed only if it was received on or before that date.
-    # This keeps deductions date-honest: receiving a new delivery never back-fills
-    # an earlier run, and re-saving a later kettle can't shift an earlier kettle
+    # is eligible only if it was received on or before that date. This keeps
+    # deductions date-honest: receiving a new delivery never back-fills an
+    # earlier run, and re-saving a later kettle can't shift an earlier kettle
     # onto a newer lot. Among eligible lots we consume oldest-first (true FIFO).
-    try:
-        run_start_date = (datetime.strptime(start_week_id, "%Y-%m-%d")
-                          + timedelta(days=start_day_idx)).strftime("%Y-%m-%d")
-    except ValueError:
-        run_start_date = None
-
-    def _lot_eligible(mat):
-        if run_start_date is None:
-            return True
-        dr = (mat.get("date_received") or "").strip()
-        if not dr:
-            return True  # undated lot — don't strand it
-        return dr <= run_start_date
-
-    # Same dict references as `materials`, so in-place remaining edits persist
-    # and are saved at the end. Date-filtered and sorted oldest-first.
-    eligible_mats = sorted(
-        [m for m in materials if _lot_eligible(m)],
-        key=lambda m: ((m.get("date_received") or ""), (m.get("created_at") or "")),
-    )
+    run_start_date = _run_start_date_str(start_week_id, start_day_idx)
+    eligible_mats = _eligible_lots_for_date(materials, run_start_date)
 
     for run in runs:
         if run.get("week_id") != start_week_id or run.get("day_idx") != start_day_idx:
@@ -4001,114 +4234,9 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
                             mat["remaining"] = round(mat.get("remaining", 0) + qty, 4)
                             break
 
-        ingredients_used = []
-        is_115L = vessel == "115L"
-        half_factor = 0.5 if is_115L else 1.0
-
-        recipe_yield = 0
-        try:
-            recipe_yield = int(recipe_data.get("yield") or 0)
-        except (ValueError, TypeError):
-            recipe_yield = 0
-        jar_l = _jar_volume_liters(recipe_data) or 0.75
-        batch_liters = recipe_yield * jar_l * half_factor
-
-        if amount > 0:
-            for section in INGREDIENT_SECTIONS:
-                items = recipe_data.get(section, [])
-                for item in items:
-                    if not is_structured_ingredient(item):
-                        continue
-                    if item.get("needs_review"):
-                        continue
-                    item_name = (item.get("name") or "").strip()
-                    if not item_name:
-                        continue
-                    # Untracked ingredients (e.g. water) are unlimited — never
-                    # deduct from inventory and never flag insufficient stock.
-                    if is_untracked_ingredient(item_name):
-                        continue
-                    try:
-                        recipe_amount = float(item.get("amount") or 0)
-                    except (ValueError, TypeError):
-                        recipe_amount = 0
-                    if recipe_amount <= 0:
-                        continue
-                    unit = (item.get("unit") or "").strip()
-                    if not unit:
-                        continue
-                    if unit == "per L":
-                        qty_needed = recipe_amount * batch_liters
-                        display_unit = "g"
-                    else:
-                        qty_needed = recipe_amount * half_factor
-                        display_unit = unit
-                    if qty_needed <= 0:
-                        continue
-                    qty_remaining_to_deduct = round(qty_needed, 4)
-                    # Pass 1: name + exact unit
-                    for mat in eligible_mats:
-                        if mat["remaining"] <= 0:
-                            continue
-                        if not ingredients_match(mat["item"], item_name):
-                            continue
-                        mat_unit = (mat.get("unit") or "").strip()
-                        if unit != "per L" and mat_unit != display_unit:
-                            continue
-                        deduct = min(qty_remaining_to_deduct, mat["remaining"])
-                        mat["remaining"] = round(mat["remaining"] - deduct, 4)
-                        qty_remaining_to_deduct = round(qty_remaining_to_deduct - deduct, 4)
-                        ingredients_used.append({
-                            "item": mat["item"],
-                            "supplier_lot": mat["supplier_lot"],
-                            "quantity_used": deduct,
-                            "unit": mat_unit or display_unit,
-                            "raw_material_id": mat["id"],
-                        })
-                        if qty_remaining_to_deduct <= 0:
-                            break
-                    # Pass 2: name-only fallback
-                    if qty_remaining_to_deduct > 0:
-                        for mat in eligible_mats:
-                            if mat["remaining"] <= 0:
-                                continue
-                            if not ingredients_match(mat["item"], item_name):
-                                continue
-                            mat_unit = (mat.get("unit") or "").strip()
-                            if unit != "per L" and mat_unit == display_unit:
-                                continue
-                            deduct = min(qty_remaining_to_deduct, mat["remaining"])
-                            mat["remaining"] = round(mat["remaining"] - deduct, 4)
-                            qty_remaining_to_deduct = round(qty_remaining_to_deduct - deduct, 4)
-                            ingredients_used.append({
-                                "item": mat["item"],
-                                "supplier_lot": mat["supplier_lot"],
-                                "quantity_used": deduct,
-                                "unit": mat_unit or display_unit,
-                                "raw_material_id": mat["id"],
-                            })
-                            if qty_remaining_to_deduct <= 0:
-                                break
-                    if qty_remaining_to_deduct > 0:
-                        ingredients_used.append({
-                            "item": item_name,
-                            "supplier_lot": "INSUFFICIENT_STOCK",
-                            "quantity_used": qty_remaining_to_deduct,
-                            "unit": display_unit,
-                            "negative": True,
-                        })
-                        warnings.append({
-                            "kind": "insufficient_stock",
-                            "vessel": vessel,
-                            "recipe": recipe_name,
-                            "ingredient": item_name,
-                            "shortfall": qty_remaining_to_deduct,
-                            "unit": display_unit,
-                            "message": (f"Insufficient {item_name}: short by "
-                                        f"{qty_remaining_to_deduct} {display_unit} "
-                                        f"on {vessel} ({recipe_name}). "
-                                        f"Production proceeded with what was on hand."),
-                        })
+        ingredients_used, ded_warnings = _deduct_run_ingredients(
+            recipe_data, vessel, recipe_name, amount, eligible_mats)
+        warnings.extend(ded_warnings)
 
         run["status"] = "completed" if amount > 0 else "scheduled"
         run["ingredients_used"] = ingredients_used
