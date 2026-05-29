@@ -2496,14 +2496,99 @@ def get_traceability():
 @require_valid_week
 @require_valid_day
 def delete_traceability_record(week_id, day_idx):
+    """Delete a completed production record AND properly reverse its production,
+    so the traceability chain is never left orphaned.
+
+    A bare checklist delete used to leave the consumed raw materials deducted
+    and the finished goods floating with no record behind them. This now:
+      1. Refuses if any finished goods from that day were already sold (the one
+         case that cannot be safely reversed — the sale is downstream).
+      2. Restores the raw materials each finishing run consumed.
+      3. Removes the finished goods that day created.
+      4. Resets those runs to 'scheduled'.
+      5. Deletes the checklist file + completed-checklist PDF.
+    """
     path = os.path.join(CHECKLISTS_DIR, week_id + "_day" + str(day_idx) + ".json")
-    if os.path.exists(path):
-        os.unlink(path)
-        pdf_path = os.path.join(PDF_DIR, week_id, DAYS[day_idx] + "_Completed_Checklist.pdf")
-        if os.path.exists(pdf_path):
-            os.unlink(pdf_path)
-        return jsonify({"success": True})
-    return jsonify({"error": "Record not found"}), 404
+    if not os.path.exists(path):
+        return jsonify({"error": "Record not found"}), 404
+
+    runs = _load_json(ORGANIC_RUNS_PATH, [])
+    materials = _load_json(ORGANIC_RAW_PATH, [])
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+
+    # Finished goods this production day created (keyed to the finish day).
+    day_fg = [f for f in fg if f.get("week_id") == week_id and f.get("day_idx") == day_idx]
+    day_fg_ids = {f.get("id") for f in day_fg}
+
+    # Hard stop: refuse if any of that stock has already been sold.
+    sold_units = 0
+    for s in sales:
+        if s.get("fg_id") in day_fg_ids:
+            try:
+                sold_units += int(s.get("quantity") or 0)
+            except (ValueError, TypeError):
+                pass
+            continue
+        for lot in (s.get("lots") or []):
+            for b in (lot.get("breakdown") or []):
+                if b.get("fg_id") in day_fg_ids:
+                    try:
+                        sold_units += int(b.get("quantity") or 0)
+                    except (ValueError, TypeError):
+                        pass
+    if sold_units > 0:
+        return jsonify({
+            "error": (f"Cannot delete: {sold_units} unit(s) produced this day have "
+                      f"already been sold. Reverse the sale(s) first, then delete."),
+            "sold_units": sold_units,
+        }), 409
+
+    # Reverse the runs that FINISHED on this day: restore the raw materials they
+    # consumed, then reset them to scheduled.
+    mat_by_id = {m.get("id"): m for m in materials}
+    restored = 0
+    reset_runs = 0
+    for run in runs:
+        if run.get("finish_week_id") != week_id or run.get("finish_day_idx") != day_idx:
+            continue
+        if run.get("status") != "completed":
+            continue
+        for used in (run.get("ingredients_used") or []):
+            if used.get("negative"):
+                continue  # insufficient-stock markers never reserved real stock
+            rm_id = used.get("raw_material_id")
+            qty = used.get("quantity_used", 0)
+            mat = mat_by_id.get(rm_id)
+            if mat and qty:
+                mat["remaining"] = round(mat.get("remaining", 0) + qty, 4)
+                restored += 1
+        run["status"] = "scheduled"
+        run["ingredients_used"] = []
+        run["amount_produced"] = 0
+        run["completed_at"] = None
+        run["finish_week_id"] = None
+        run["finish_day_idx"] = None
+        reset_runs += 1
+
+    # Remove the finished goods this day created.
+    fg = [f for f in fg if f.get("id") not in day_fg_ids]
+
+    _save_json(ORGANIC_RUNS_PATH, runs)
+    _save_json(ORGANIC_RAW_PATH, materials)
+    _save_json(ORGANIC_FG_PATH, fg)
+
+    os.unlink(path)
+    pdf_path = os.path.join(PDF_DIR, week_id, DAYS[day_idx] + "_Completed_Checklist.pdf")
+    if os.path.exists(pdf_path):
+        os.unlink(pdf_path)
+
+    return jsonify({
+        "success": True,
+        "runs_reset": reset_runs,
+        "lots_restored": restored,
+        "finished_goods_removed": len(day_fg_ids),
+    })
 
 @app.route("/api/weekly-signoff/<week_id>", methods=["POST"])
 @login_required
