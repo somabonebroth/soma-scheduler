@@ -7310,6 +7310,148 @@ def organic_stock_exceptions():
     out.sort(key=lambda r: (r.get("production_date") or ""), reverse=True)
     return jsonify(out)
 
+# ── Mass-balance reconciliation (organic audit) ───────────────────────────
+def _compute_mass_balance(date_from, date_to, organic_only=False):
+    """Input/output reconciliation for [date_from, date_to].
+
+    Raw materials per ingredient: Opening + Received - Consumed = Expected
+    closing, compared to current stock; the discrepancy is manual adjustments /
+    loss. Finished goods per SKU: Opening + Produced - Sold = Expected, vs
+    current stock (discrepancy = breakage / manual adjustment).
+
+    Dates: raw received = date_received; raw consumed = the run's PRODUCTION
+    (start) date; FG produced = finish date; sold = sale_date. 'Opening' is
+    derived from flows dated before the range. The discrepancy column is exact
+    only when date_to is today (current stock is reconciled as-of-now); the
+    organic-only toggle filters the finished-goods side by certification — raw
+    lots aren't certified individually, so the raw table always shows all."""
+    materials = _load_json(ORGANIC_RAW_PATH, [])
+    runs = _load_json(ORGANIC_RUNS_PATH, [])
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+
+    def in_range(ds): return bool(ds) and date_from <= ds <= date_to
+    def before(ds):   return bool(ds) and ds < date_from
+
+    # ---- Raw materials (always all — lots carry no certification) ----
+    raw = {}
+    def rawrow(item, unit):
+        k = (item.strip().lower(), unit)
+        if k not in raw:
+            raw[k] = {"item": item, "unit": unit, "opening": 0.0,
+                      "received": 0.0, "consumed": 0.0, "current": 0.0}
+        return raw[k]
+
+    for m in materials:
+        item = (m.get("item") or "").strip()
+        if not item:
+            continue
+        row = rawrow(item, (m.get("unit") or "").strip())
+        try: q = float(m.get("quantity") or 0)
+        except (ValueError, TypeError): q = 0.0
+        try: rem = float(m.get("remaining") or 0)
+        except (ValueError, TypeError): rem = 0.0
+        dr = (m.get("date_received") or "").strip()
+        row["current"] += rem
+        if before(dr):
+            row["opening"] += q
+        elif in_range(dr):
+            row["received"] += q
+
+    for run in runs:
+        if run.get("status") != "completed":
+            continue
+        pdate = _run_start_date_str(run.get("week_id"), run.get("day_idx"))
+        for used in (run.get("ingredients_used") or []):
+            if used.get("negative"):
+                continue
+            item = (used.get("item") or "").strip()
+            if not item:
+                continue
+            row = rawrow(item, (used.get("unit") or "").strip())
+            try: q = float(used.get("quantity_used") or 0)
+            except (ValueError, TypeError): q = 0.0
+            if before(pdate):
+                row["opening"] -= q
+            elif in_range(pdate):
+                row["consumed"] += q
+
+    raw_rows = []
+    for r in raw.values():
+        exp = r["opening"] + r["received"] - r["consumed"]
+        raw_rows.append({
+            "item": r["item"], "unit": r["unit"],
+            "opening": round(r["opening"], 3), "received": round(r["received"], 3),
+            "consumed": round(r["consumed"], 3), "expected_closing": round(exp, 3),
+            "current": round(r["current"], 3), "discrepancy": round(r["current"] - exp, 3),
+        })
+    raw_rows.sort(key=lambda x: x["item"].lower())
+
+    # ---- Finished goods per SKU (organic-only filters by certification) ----
+    fgr = {}
+    def fgrow(sku, label, cert):
+        if sku not in fgr:
+            fgr[sku] = {"sku": sku, "label": label, "certification": cert,
+                        "opening": 0, "produced": 0, "sold": 0, "current": 0}
+        return fgr[sku]
+
+    for f in fg:
+        cert = (f.get("certification") or "").strip()
+        if organic_only and cert.lower() != "organic":
+            continue
+        sku = _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", ""))
+        row = fgrow(sku, _sku_display(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")), cert)
+        pdate = _run_start_date_str(f.get("week_id"), f.get("day_idx"))
+        try: produced = int(f.get("quantity_produced") or 0)
+        except (ValueError, TypeError): produced = 0
+        try: rem = int(f.get("quantity_remaining") or 0)
+        except (ValueError, TypeError): rem = 0
+        row["current"] += rem
+        if before(pdate):
+            row["opening"] += produced
+        elif in_range(pdate):
+            row["produced"] += produced
+
+    for s in sales:
+        cert = (s.get("certification") or "").strip()
+        if organic_only and cert.lower() != "organic":
+            continue
+        sku = s.get("sku_key") or _sku_key(s.get("brand", ""), s.get("recipe", ""), s.get("format", ""))
+        row = fgrow(sku, _sku_display(s.get("brand", ""), s.get("recipe", ""), s.get("format", "")), cert)
+        sdate = (s.get("sale_date") or "").strip()
+        try: qn = int(s.get("quantity") or 0)
+        except (ValueError, TypeError): qn = 0
+        if before(sdate):
+            row["opening"] -= qn
+        elif in_range(sdate):
+            row["sold"] += qn
+
+    fg_rows = []
+    for r in fgr.values():
+        exp = r["opening"] + r["produced"] - r["sold"]
+        fg_rows.append({
+            "sku": r["sku"], "label": r["label"], "certification": r["certification"],
+            "opening": r["opening"], "produced": r["produced"], "sold": r["sold"],
+            "expected_closing": exp, "current": r["current"], "discrepancy": r["current"] - exp,
+        })
+    fg_rows.sort(key=lambda x: x["label"].lower())
+
+    return {"from": date_from, "to": date_to, "organic_only": organic_only,
+            "raw_materials": raw_rows, "finished_goods": fg_rows}
+
+@app.route("/api/organic/mass-balance", methods=["GET"])
+@login_required
+def organic_mass_balance():
+    to = (request.args.get("to") or "").strip() or datetime.now().strftime("%Y-%m-%d")
+    frm = (request.args.get("from") or "").strip() or (datetime.now().strftime("%Y") + "-01-01")
+    organic_only = (request.args.get("organic_only") or "").lower() in ("1", "true", "yes", "on")
+    return jsonify(_compute_mass_balance(frm, to, organic_only))
+
+@app.route("/mass-balance")
+@login_required
+def mass_balance_page():
+    return render_template("mass_balance.html")
+
 # ── Hook: Auto-create organic runs when schedule is generated ─────────
 def _check_organic_schedule(week_id, schedule):
     """Reconcile organic production runs with the current schedule.
