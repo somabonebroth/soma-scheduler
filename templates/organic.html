@@ -5059,6 +5059,33 @@ function _monthLabel(yyyymm){
     return d.toLocaleDateString('en-CA', {year:'numeric', month:'long'});
 }
 
+// Group transactions into collapsible month sections. `txs` must be sorted
+// newest-first; each tx needs a .date (YYYY-MM-DD). `renderGroup(txArray)`
+// returns the HTML for one month's transactions; `countLabel(n)` returns the
+// summary count text (e.g. "12 sales"). The newest month opens by default;
+// pass openAll=true to expand every month (used for action buckets).
+function renderMonthGroups(txs, renderGroup, countLabel, openAll){
+    var byMonth={}, monthOrder=[];
+    txs.forEach(function(tx){
+        var mk=(tx.date||'').substring(0,7);
+        if(!byMonth[mk]){ byMonth[mk]=[]; monthOrder.push(mk); }
+        byMonth[mk].push(tx);
+    });
+    monthOrder.sort().reverse();
+    var html='';
+    monthOrder.forEach(function(mk, i){
+        var group=byMonth[mk];
+        var open=(openAll || i===0)?' open':'';
+        html+='<details'+open+' style="margin-top:6px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">'
+            +'<summary style="padding:10px 14px;background:#f5f5f0;cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;justify-content:space-between;">'
+            +'<span>'+_monthLabel(mk)+'</span><span style="color:var(--text-light);font-weight:400;">'+countLabel(group.length)+'</span></summary>'
+            +'<div style="padding:6px 8px;">'+renderGroup(group)+'</div></details>';
+    });
+    return html;
+}
+function _salesCount(n){ return n+' sale'+(n===1?'':'s'); }
+function _deliveriesCount(n){ return n+' deliver'+(n===1?'y':'ies'); }
+
 async function loadSales(){
     var res=await fetch('/api/organic/sales');
     var data=await res.json();
@@ -5176,43 +5203,27 @@ async function loadSales(){
 
     var html='';
 
+    function byDateDesc(a,b){ return (b.date||'').localeCompare(a.date||''); }
+
     if(scheduled.length){
+        var schedTxs=groupSales(scheduled).sort(byDateDesc);
         html+='<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:14px;margin-bottom:12px;">'
             +'<div style="font-size:11px;font-weight:700;color:#f57f17;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">'
             +'📅 Scheduled — Inventory Reserved</div>'
-            +renderScheduled(groupSales(scheduled))+'</div>';
+            +renderMonthGroups(schedTxs, renderScheduled, _salesCount, true)+'</div>';
     }
 
     if(pendingPmt.length){
+        var pendTxs=groupSales(pendingPmt).sort(byDateDesc);
         html+='<div style="background:#e8eaf6;border:1px solid #9fa8da;border-radius:8px;padding:14px;margin-bottom:12px;">'
             +'<div style="font-size:11px;font-weight:700;color:#3949ab;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">'
             +'⏳ Pending Payment (Net 14)</div>'
-            +renderPending(groupSales(pendingPmt))+'</div>';
+            +renderMonthGroups(pendTxs, renderPending, _salesCount, true)+'</div>';
     }
 
     if(settled.length){
-        settled.sort(function(a,b){return(b.sale_date||'').localeCompare(a.sale_date||'');});
-        var settledTxs=groupSales(settled);
-        var byMonth={},monthOrder=[];
-        settledTxs.forEach(function(tx){
-            var mk=(tx.date||'').substring(0,7);
-            if(!byMonth[mk]){byMonth[mk]=[];monthOrder.push(mk);}
-            byMonth[mk].push(tx);
-        });
-        monthOrder.sort().reverse();
-        var recentMk=new Date(Date.now()-45*864e5).toISOString().substring(0,7);
-        monthOrder.forEach(function(mk){
-            var txs=byMonth[mk];
-            var inner=renderSettled(txs);
-            if(mk>=recentMk){
-                html+=inner;
-            } else {
-                html+='<details style="margin-top:6px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">'
-                    +'<summary style="padding:10px 14px;background:#f5f5f0;cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;justify-content:space-between;">'
-                    +'<span>'+_monthLabel(mk)+'</span><span style="color:var(--text-light);font-weight:400;">'+txs.length+' sale'+(txs.length===1?'':'s')+'</span></summary>'
-                    +'<div style="padding:6px 8px;">'+inner+'</div></details>';
-            }
-        });
+        var settledTxs=groupSales(settled).sort(byDateDesc);
+        html+=renderMonthGroups(settledTxs, renderSettled, _salesCount);
     } else if(!scheduled.length && !pendingPmt.length){
         html+='<div class="empty-state">No settled sales yet.</div>';
     }
@@ -5527,30 +5538,10 @@ async function loadReceiving(){
         return h;
     }
 
-    // Group by month
-    var byMonth={}, monthOrder=[];
-    transactions.forEach(function(tx){
-        var mk=(tx.date||'').substring(0,7);
-        if(!byMonth[mk]){ byMonth[mk]=[]; monthOrder.push(mk); }
-        byMonth[mk].push(tx);
-    });
-    monthOrder.sort().reverse();
-
-    var recentMk = new Date(Date.now()-45*864e5).toISOString().substring(0,7);
-    var html='', idx=0;
-    monthOrder.forEach(function(mk){
-        var txs=byMonth[mk];
-        var inner=txs.map(function(tx){ return renderDelivery(tx,idx++); }).join('');
-        if(mk>=recentMk){
-            html+=inner;
-        } else {
-            html+='<details style="margin-top:6px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">'
-                +'<summary style="padding:10px 14px;background:#f5f5f0;cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;justify-content:space-between;">'
-                +'<span>'+_monthLabel(mk)+'</span><span style="color:var(--text-light);font-weight:400;">'+txs.length+' deliver'+(txs.length===1?'y':'ies')+'</span></summary>'
-                +'<div style="padding:6px 8px;">'+inner+'</div></details>';
-        }
-    });
-    container.innerHTML=html;
+    // Group by month — newest month open, older months collapsed.
+    container.innerHTML = renderMonthGroups(transactions, function(group){
+        return group.map(function(tx){ return renderDelivery(tx); }).join('');
+    }, _deliveriesCount);
 }
 
 
