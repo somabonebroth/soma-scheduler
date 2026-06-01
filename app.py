@@ -7238,6 +7238,38 @@ def organic_trace():
 
     return jsonify({"results": []})
 
+@app.route("/api/organic/stock-exceptions", methods=["GET"])
+@login_required
+def organic_stock_exceptions():
+    """Completed batches recorded as produced with LESS raw material on file than
+    the recipe required — the INSUFFICIENT_STOCK markers written during deduction.
+    Surfaced as an explicit, explainable list for audit rather than left buried in
+    the run data. One row per short ingredient per batch. Read-only."""
+    runs = _load_json(ORGANIC_RUNS_PATH, [])
+    out = []
+    for run in runs:
+        if run.get("status") != "completed":
+            continue
+        for used in (run.get("ingredients_used") or []):
+            if not used.get("negative"):
+                continue
+            out.append({
+                "run_id": run.get("id"),
+                "week_id": run.get("week_id"),
+                "day_idx": run.get("day_idx"),
+                "day_name": run.get("day_name", ""),
+                "production_date": _run_start_date_str(run.get("week_id"), run.get("day_idx")),
+                "vessel": run.get("vessel", ""),
+                "recipe": run.get("recipe", ""),
+                "brand": run.get("brand", ""),
+                "batch_lot": run.get("lot", ""),
+                "ingredient": used.get("item", ""),
+                "shortfall": used.get("quantity_used"),
+                "unit": used.get("unit", ""),
+            })
+    out.sort(key=lambda r: (r.get("production_date") or ""), reverse=True)
+    return jsonify(out)
+
 # ── Hook: Auto-create organic runs when schedule is generated ─────────
 def _check_organic_schedule(week_id, schedule):
     """Reconcile organic production runs with the current schedule.

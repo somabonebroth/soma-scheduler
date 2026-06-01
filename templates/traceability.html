@@ -93,6 +93,7 @@
         <button class="filter-btn" id="filter-nonorg" onclick="loadRecords('non-organic',this)">Non-Organic</button>
         <button class="filter-btn" id="filter-org" onclick="loadRecords('organic',this)">Organic</button>
     </div>
+    <div id="stock-exceptions"></div>
     <div id="records-container"><div class="empty-state">Loading...</div></div>
 </div>
 <div class="modal-overlay" id="confirm-modal">
@@ -247,7 +248,40 @@ async function deleteRecord(weekId,dayIdx,dayName){
     else alert('Failed to delete');
 }
 
-document.addEventListener('DOMContentLoaded',function(){loadRecords('all',document.getElementById('filter-all'));});
+async function loadStockExceptions(){
+    var el=document.getElementById('stock-exceptions');
+    if(!el) return;
+    var rows=[];
+    try{ rows=await (await fetch('/api/organic/stock-exceptions')).json(); }catch(e){ rows=[]; }
+    if(!rows.length){ el.innerHTML=''; return; }  // nothing to flag → show nothing
+    var body='';
+    rows.forEach(function(r){
+        var prod=(r.brand?r.brand+' ':'')+r.recipe;
+        body+='<tr>'
+            +'<td>'+escHtml(r.production_date||'')+'</td>'
+            +'<td>'+escHtml(prod.trim())+'</td>'
+            +'<td>'+escHtml(r.vessel||'')+'</td>'
+            +'<td>'+escHtml(r.ingredient||'')+'</td>'
+            +'<td style="text-align:right;color:#c62828;font-weight:600;">'+escHtml(String(r.shortfall))+' '+escHtml(r.unit||'')+'</td>'
+            +'</tr>';
+    });
+    el.innerHTML=
+        '<details style="border:1px solid #f0c36d;background:#fffaf0;border-radius:8px;margin-bottom:16px;overflow:hidden;">'
+        +'<summary style="padding:12px 16px;cursor:pointer;font-weight:600;font-size:14px;color:#8a6d00;list-style:none;display:flex;justify-content:space-between;align-items:center;">'
+        +'<span>⚠ Stock exceptions <span style="font-weight:400;color:#a07d20;">— batches made with insufficient raw material on file</span></span>'
+        +'<span style="background:#f0c36d;color:#5a4500;border-radius:10px;padding:1px 9px;font-size:12px;">'+rows.length+'</span>'
+        +'</summary>'
+        +'<div style="padding:0 12px 12px;">'
+        +'<p style="font-size:12px;color:#7a6420;margin:6px 2px 10px;">Each row is a completed batch where the recipe required more of an ingredient than inventory had recorded. Production proceeded with what was on hand — confirm the material was genuinely available and the receipt was recorded.</p>'
+        +'<table class="inv-table" style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;">'
+        +'<tr><th style="text-align:left;">Production date</th><th style="text-align:left;">Product</th><th style="text-align:left;">Vessel</th><th style="text-align:left;">Ingredient</th><th style="text-align:right;">Short by</th></tr>'
+        +body+'</table></div></details>';
+}
+
+document.addEventListener('DOMContentLoaded',function(){
+    loadRecords('all',document.getElementById('filter-all'));
+    loadStockExceptions();
+});
 </script>
 <script>
 (function(){
