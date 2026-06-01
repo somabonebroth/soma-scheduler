@@ -3528,8 +3528,13 @@ def add_raw_material():
 
     is_baseline = bool(data.get("baseline"))
     supplier_lot = (data.get("supplier_lot") or "").strip()
-    if is_baseline and not supplier_lot:
-        supplier_lot = "BL-" + datetime.now().strftime("%d%m%y")
+    # Never store a blank lot — a receipt with no lot# is untraceable. Stamp a
+    # system lot ('MAN-DDMMYY', or 'BL-' for a baseline count) and flag it so the
+    # real supplier lot# can be chased and filled in later.
+    no_supplier_lot = False
+    if not supplier_lot:
+        supplier_lot = ("BL-" if is_baseline else "MAN-") + datetime.now().strftime("%d%m%y")
+        no_supplier_lot = not is_baseline
 
     entry = {
         "id": datetime.now().strftime("%Y%m%d%H%M%S") + str(len(materials)),
@@ -3542,6 +3547,8 @@ def add_raw_material():
         "remaining": qty,
         "created_at": datetime.now().isoformat(),
     }
+    if no_supplier_lot:
+        entry["no_supplier_lot"] = True
     if is_baseline:
         entry["migration_baseline"] = True
     materials.append(entry)
@@ -3676,6 +3683,9 @@ def add_raw_materials_bulk():
         }
         if is_baseline:
             entry["migration_baseline"] = True
+        elif not item["supplier_lot"]:
+            # Auto-generated MAN- lot (no real supplier lot# provided) — flag for follow-up.
+            entry["no_supplier_lot"] = True
         if item["notes"]:
             entry["notes"] = item["notes"]
         materials.append(entry)

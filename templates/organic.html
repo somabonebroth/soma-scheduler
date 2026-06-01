@@ -1916,10 +1916,11 @@ async function renderRMDetail(key){
     lots.forEach(function(m){
         var remClass=(m.remaining||0)<0?'negative':(m.remaining||0)===0?'low':'';
         var baselineBadge=m.migration_baseline?'<span class="baseline-badge" style="margin-left:4px;">BASELINE</span>':'';
+        var noLotFlag=m.no_supplier_lot?'<span title="No supplier LOT# was entered — this is a system-generated lot. Fill in the real supplier lot number when known." style="margin-left:4px;font-size:10px;color:#b26a00;white-space:nowrap;">⚠ no supplier lot</span>':'';
         html+='<tr>'+
               '<td>'+escSku(m.supplier||'')+'</td>'+
               '<td>'+escSku(m.date_received||'')+'</td>'+
-              '<td>'+escSku(m.supplier_lot||'')+baselineBadge+'</td>'+
+              '<td>'+escSku(m.supplier_lot||'')+baselineBadge+noLotFlag+'</td>'+
               '<td>'+m.quantity+'</td>'+
               '<td class="'+remClass+'">'+m.remaining+'</td>'+
               '<td style="white-space:nowrap;">'+
@@ -5516,7 +5517,8 @@ async function loadReceiving(){
         h+='<div style="padding:8px 14px 12px;">';
         h+='<table class="inv-table" style="font-size:12px;"><tr><th>Ingredient</th><th>LOT#</th><th>Qty</th><th>Remaining</th></tr>';
         tx.items.forEach(function(r){
-            h+='<tr><td>'+escHtml(r.item||'')+'</td><td>'+escHtml(r.supplier_lot||'—')+'</td>'
+            var noLot=r.no_supplier_lot?' <span title="No supplier LOT# entered — system-generated" style="font-size:10px;color:#b26a00;white-space:nowrap;">⚠ no supplier lot</span>':'';
+            h+='<tr><td>'+escHtml(r.item||'')+'</td><td>'+escHtml(r.supplier_lot||'—')+noLot+'</td>'
               +'<td>'+(r.quantity||0)+' '+escHtml(r.unit||'')+'</td>'
               +'<td>'+(r.remaining!==undefined?r.remaining:'—')+' '+escHtml(r.unit||'')+'</td></tr>';
         });
