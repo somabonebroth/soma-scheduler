@@ -7144,23 +7144,81 @@ def organic_trace():
     sales = _load_json(ORGANIC_SALES_PATH, [])
 
     if search_type == "raw_lot":
-        matched_runs = []
-        for run in runs:
-            for ing in run.get("ingredients_used", []):
-                if ing.get("supplier_lot", "").lower() == query.lower():
-                    matched_runs.append(run)
-                    break
-        run_ids = {r["id"] for r in matched_runs}
-        matched_fg = [f for f in fg if f.get("run_id") in run_ids]
-        # Find sales of those finished goods (handle both new lots[] and legacy fg_id)
-        fg_ids = {f["id"] for f in matched_fg}
-        matched_sales = [s for s in sales if _sale_touches_fg(s, fg_ids)]
+        # A supplier lot string is NOT unique — every day-zero baseline ingredient
+        # shares one BL-DDMMYY string, so matching runs by the string alone
+        # conflates distinct physical lots. Resolve the typed lot to the actual
+        # raw-material entries (each has a unique id) and trace each entry
+        # separately by raw_material_id, so results never get commingled.
+        materials = _load_json(ORGANIC_RAW_PATH, [])
+        ql = query.lower()
+        matched_entries = [m for m in materials
+                           if (m.get("supplier_lot") or "").strip().lower() == ql]
+
+        def _chain_for_run_ids(run_id_set):
+            efg = [f for f in fg if f.get("run_id") in run_id_set]
+            fg_id_set = {f["id"] for f in efg}
+            esales = [s for s in sales if _sale_touches_fg(s, fg_id_set)]
+            return efg, esales
+
+        lots_out = []
+        all_runs, all_fg, all_sales = [], [], []
+        seen_run, seen_fg, seen_sale = set(), set(), set()
+
+        for entry in matched_entries:
+            eid = entry.get("id")
+            eruns = [r for r in runs
+                     if any(ing.get("raw_material_id") == eid
+                            for ing in r.get("ingredients_used", []))]
+            efg, esales = _chain_for_run_ids({r["id"] for r in eruns})
+            lots_out.append({
+                "raw_material_id": eid,
+                "item": entry.get("item", ""),
+                "supplier": entry.get("supplier", ""),
+                "date_received": entry.get("date_received", ""),
+                "supplier_lot": entry.get("supplier_lot", ""),
+                "unit": entry.get("unit", ""),
+                "quantity": entry.get("quantity"),
+                "remaining": entry.get("remaining"),
+                "runs": eruns, "finished_goods": efg, "sales": esales,
+            })
+            for r in eruns:
+                if r["id"] not in seen_run:
+                    seen_run.add(r["id"]); all_runs.append(r)
+            for f in efg:
+                if f["id"] not in seen_fg:
+                    seen_fg.add(f["id"]); all_fg.append(f)
+            for s in esales:
+                if s.get("id") not in seen_sale:
+                    seen_sale.add(s.get("id")); all_sales.append(s)
+
+        # Fallback: a run references this lot string but no current inventory entry
+        # carries it (e.g. a pre-Change-B historical orphan). Still surface it so the
+        # chain is never silently lost — flagged as not resolvable to a lot on file.
+        if not matched_entries:
+            legacy_runs = [r for r in runs
+                           if any((ing.get("supplier_lot") or "").strip().lower() == ql
+                                  for ing in r.get("ingredients_used", []))]
+            if legacy_runs:
+                efg, esales = _chain_for_run_ids({r["id"] for r in legacy_runs})
+                lots_out.append({
+                    "raw_material_id": None,
+                    "item": "(lot not found in current inventory)",
+                    "supplier": "", "date_received": "",
+                    "supplier_lot": query, "unit": "",
+                    "quantity": None, "remaining": None,
+                    "runs": legacy_runs, "finished_goods": efg, "sales": esales,
+                })
+                all_runs, all_fg, all_sales = legacy_runs, efg, esales
+
         return jsonify({
             "search_type": "raw_lot",
             "query": query,
-            "runs": matched_runs,
-            "finished_goods": matched_fg,
-            "sales": matched_sales,
+            "lots": lots_out,
+            # Flattened unions kept for backward compatibility with any caller
+            # that doesn't read the per-lot grouping.
+            "runs": all_runs,
+            "finished_goods": all_fg,
+            "sales": all_sales,
         })
 
     elif search_type == "fg_lot":
