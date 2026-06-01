@@ -4345,25 +4345,37 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
         if amount <= 0 and not existing_fg:
             continue
 
-        # Deduct raw materials based on the new amount.
-        # If we're updating an existing entry, first restore any previously-deducted
-        # materials so we can recompute clean. (Simpler: always restore, then deduct fresh.)
+        # Raw-material record is FROZEN once a batch is completed: an ordinary
+        # re-save (still producing) must not rewrite what was recorded as consumed,
+        # which is what previously let a later recipe edit silently alter past
+        # batches. We compute the deduction only on FIRST completion, or when
+        # reversing (amount<=0). The deliberate "recompute everything" path is the
+        # reconcile tool, not an ordinary save. Note: the raw charge is per-batch
+        # (independent of jars produced), so freezing it while still letting the
+        # finished-goods quantity update below is correct.
+        was_completed = run.get("status") == "completed"
         prev_used = run.get("ingredients_used") or []
-        if run.get("status") == "completed" and prev_used:
-            for used in prev_used:
-                if used.get("negative"):
-                    continue  # Insufficient-stock markers don't restore inventory
-                rm_id = used.get("raw_material_id")
-                qty = used.get("quantity_used", 0)
-                if rm_id and qty:
-                    for mat in materials:
-                        if mat.get("id") == rm_id:
-                            mat["remaining"] = round(mat.get("remaining", 0) + qty, 4)
-                            break
+        freeze = was_completed and amount > 0 and bool(prev_used)
 
-        ingredients_used, ded_warnings = _deduct_run_ingredients(
-            recipe_data, vessel, recipe_name, amount, eligible_mats)
-        warnings.extend(ded_warnings)
+        if freeze:
+            ingredients_used = prev_used  # keep the snapshot taken at completion
+        else:
+            # Reversal or first/again-from-scratch completion: undo any prior
+            # deduction, then deduct fresh from the current recipe + eligible lots.
+            if was_completed and prev_used:
+                for used in prev_used:
+                    if used.get("negative"):
+                        continue  # Insufficient-stock markers don't restore inventory
+                    rm_id = used.get("raw_material_id")
+                    qty = used.get("quantity_used", 0)
+                    if rm_id and qty:
+                        for mat in materials:
+                            if mat.get("id") == rm_id:
+                                mat["remaining"] = round(mat.get("remaining", 0) + qty, 4)
+                                break
+            ingredients_used, ded_warnings = _deduct_run_ingredients(
+                recipe_data, vessel, recipe_name, amount, eligible_mats)
+            warnings.extend(ded_warnings)
 
         run["status"] = "completed" if amount > 0 else "scheduled"
         run["ingredients_used"] = ingredients_used
