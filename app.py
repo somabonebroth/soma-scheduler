@@ -4222,6 +4222,11 @@ def _deduct_run_ingredients(recipe_data, vessel, recipe_name, amount, eligible_m
                     "quantity_used": deduct,
                     "unit": mat_unit or display_unit,
                     "raw_material_id": mat["id"],
+                    # Snapshot supplier + receive date INTO the batch record so
+                    # one-step-back traceability survives even if the lot entry
+                    # is later edited or removed.
+                    "supplier": mat.get("supplier", ""),
+                    "date_received": mat.get("date_received", ""),
                 })
                 if qty_remaining_to_deduct <= 0:
                     break
@@ -4244,6 +4249,8 @@ def _deduct_run_ingredients(recipe_data, vessel, recipe_name, amount, eligible_m
                         "quantity_used": deduct,
                         "unit": mat_unit or display_unit,
                         "raw_material_id": mat["id"],
+                        "supplier": mat.get("supplier", ""),
+                        "date_received": mat.get("date_received", ""),
                     })
                     if qty_remaining_to_deduct <= 0:
                         break
