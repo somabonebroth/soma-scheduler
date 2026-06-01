@@ -2453,6 +2453,7 @@ def get_week_summary(week_id):
 def get_traceability():
     weeks = list_schedules()
     signoffs = _load_weekly_signoffs()
+    recipes = load_recipes()
     records = []
     for week_id in weeks:
         week_record = {"week_id": week_id, "days": []}
@@ -2463,22 +2464,32 @@ def get_traceability():
                 day_info = {}
                 if schedule_data and schedule_data.get("schedule"):
                     day_info = schedule_data["schedule"].get(str(d_idx), {})
-                certification = ""
+                # Certification PER VESSEL — a single day can run different
+                # certifications across kettles (e.g. Organic on K1, Conventional
+                # on K2), so we never collapse the day to one label. cert_by_vessel
+                # maps each producing vessel to its recipe's certification;
+                # certifications is the distinct set present that day.
+                cert_by_vessel = {}
+                certifications = []
                 if day_info:
-                    recipes = load_recipes()
                     for v in VESSELS:
                         rname = day_info.get(v, "")
                         if rname and rname in recipes:
-                            cert = recipes[rname].get("certification", "")
+                            cert = (recipes[rname].get("certification") or "").strip()
                             if cert:
-                                certification = cert
-                                break
+                                cert_by_vessel[v] = cert
+                                if cert not in certifications:
+                                    certifications.append(cert)
                 week_record["days"].append({
                     "day_idx": d_idx,
                     "day_name": DAYS[d_idx],
                     "completed": True,
                     "last_updated": cl.get("last_updated", ""),
-                    "certification": certification,
+                    # Kept for back-compat: a single value only when the whole day
+                    # is one certification; blank when mixed (use certifications).
+                    "certification": certifications[0] if len(certifications) == 1 else "",
+                    "certifications": certifications,
+                    "cert_by_vessel": cert_by_vessel,
                 })
         if week_record["days"]:
             state, complete_idxs, incomplete_idxs = _week_completion_state(week_id)

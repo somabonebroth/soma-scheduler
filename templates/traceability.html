@@ -173,9 +173,23 @@ async function loadRecords(filter,btn){
         for(var j=0;j<rec.days.length;j++){
             var day=rec.days[j];
             var timeStr=day.last_updated?day.last_updated.substring(0,16).replace('T',' '):'';
-            var orgBadge=day.has_organic||day.certification?'<span class="organic-badge">Organic</span>':'';
+            // One badge per distinct certification that ran that day, labeled with
+            // the actual cert (not always "Organic"). On a mixed-certification day,
+            // show the per-vessel breakdown so kettles are never conflated.
+            var certs=day.certifications||(day.certification?[day.certification]:[]);
+            var certBadges=certs.map(function(c){
+                var isOrg=/organic/i.test(c);
+                return isOrg
+                    ? '<span class="organic-badge">'+escHtml(c)+'</span>'
+                    : '<span class="organic-badge" style="background:#ececec;color:#555;">'+escHtml(c)+'</span>';
+            }).join(' ');
+            var certDetail='';
+            if(certs.length>1 && day.cert_by_vessel){
+                var parts=Object.keys(day.cert_by_vessel).map(function(v){return escHtml(v)+': '+escHtml(day.cert_by_vessel[v]);});
+                certDetail='<br><span class="day-time" style="color:#8a6d00;">⚠ Mixed certification — '+parts.join(', ')+'</span>';
+            }
             var deleteBtn=rec.hoo_signoff?'':'<button onclick="deleteRecord(\''+rec.week_id+'\','+day.day_idx+',\''+day.day_name+'\')">Delete</button>';
-            html+='<div class="day-record"><div><span class="day-name">'+day.day_name+'</span>'+orgBadge+'<br><span class="day-time">Completed: '+timeStr+'</span></div><div class="day-actions"><a href="/daily-production/'+rec.week_id+'/'+day.day_idx+'">View</a><a href="/api/pdf/'+rec.week_id+'/'+day.day_name+'_Completed_Checklist.pdf" target="_blank">Download PDF</a>'+deleteBtn+'</div></div>';
+            html+='<div class="day-record"><div><span class="day-name">'+day.day_name+'</span> '+certBadges+'<br><span class="day-time">Completed: '+timeStr+'</span>'+certDetail+'</div><div class="day-actions"><a href="/daily-production/'+rec.week_id+'/'+day.day_idx+'">View</a><a href="/api/pdf/'+rec.week_id+'/'+day.day_name+'_Completed_Checklist.pdf" target="_blank">Download PDF</a>'+deleteBtn+'</div></div>';
         }
         html+='</div></div>';
     }
