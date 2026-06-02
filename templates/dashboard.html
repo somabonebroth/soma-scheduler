@@ -102,27 +102,17 @@
               <span id="res-caret" style="font-size:12px;color:var(--text-light);font-weight:600;">▶</span>
             </div>
           </summary>
-        <!-- Organic certification hub -->
-        <div class="dash-row" style="grid-template-columns:1fr;margin-bottom:6px;">
-            <a href="/organic-certification" class="dash-btn highlight" style="flex-direction:row;justify-content:flex-start;gap:16px;padding:20px 24px;">
-                <span class="icon" style="font-size:24px;flex-shrink:0;">&#127807;</span>
-                <div style="text-align:left;">
-                    <div class="label" style="margin-bottom:3px;">Organic Certification</div>
-                    <div class="sublabel">Reconciliation, audits &amp; compliance documents in one place</div>
-                </div>
-            </a>
-        </div>
-        <!-- Top row: Production Record | Manage Inventory | Buyers & Suppliers | Recipe Cards -->
+        <!-- Top row: Organic Certification | Production Record | Manage Inventory | Buyers & Suppliers -->
         <div class="dash-row">
+            <a href="/organic-certification" class="dash-btn"><span class="icon">&#127807;</span><span class="label">Organic Certification</span><span class="sublabel">Reconciliation, audits &amp; documents</span></a>
             <a href="/traceability" class="dash-btn" id="prod-record-btn" style="position:relative;"><span class="icon">&#128451;</span><span class="label" style="display:flex;align-items:center;gap:8px;">Production Record<span id="prod-badge" style="display:none;background:#b38b00;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span></span><span class="sublabel">Review and sign off weekly records</span></a>
             <a href="/organic" class="dash-btn"><span class="icon">&#128230;</span><span class="label">Manage Inventory</span><span class="sublabel">Raw materials, finished goods &amp; traceability</span></a>
             <a href="/contacts" class="dash-btn"><span class="icon">&#128101;</span><span class="label">Buyers &amp; Suppliers</span><span class="sublabel">Manage suppliers and buyers</span></a>
-            <a href="/recipes" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Recipe Cards</span><span class="sublabel">View and manage recipes</span></a>
         </div>
-        <!-- Bottom row: Company Settings | Important Documents | CCP Checklist | Data Backup -->
+        <!-- Bottom row: Recipe Cards | Company Settings | CCP Checklist | Data Backup -->
         <div class="dash-row" style="margin-top:6px;">
+            <a href="/recipes" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Recipe Cards</span><span class="sublabel">View and manage recipes</span></a>
             <a href="/company-settings" class="dash-btn"><span class="icon">&#9881;</span><span class="label">Company Settings</span><span class="sublabel">Info, address, Ripe buffer</span></a>
-            <a href="/important-documents" class="dash-btn"><span class="icon">&#128196;</span><span class="label">Important Documents</span><span class="sublabel">Certifications &amp; records</span></a>
             <a href="/ccp-master" class="dash-btn"><span class="icon">&#9989;</span><span class="label">CCP Checklist</span><span class="sublabel">Master reference</span></a>
             <div class="dash-btn" onclick="downloadBackup()" style="cursor:pointer;"><span class="icon">&#128190;</span><span class="label">Data Backup</span><span class="sublabel">Download a zip of all data</span></div>
         </div>

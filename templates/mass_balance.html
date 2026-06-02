@@ -11,8 +11,12 @@
   .header img{ height:34px; cursor:pointer; }
   .header h1{ font-size:19px; margin:0; }
   .header p{ font-size:12px; color:var(--text-light); margin:2px 0 0; }
-  .header-right{ margin-left:auto; }
+  .header-right{ margin-left:auto; display:flex; align-items:center; gap:8px; }
   .header-btn{ font-size:13px; text-decoration:none; color:var(--accent); border:1px solid var(--border); padding:7px 12px; border-radius:6px; background:#fff; }
+  .nav-arrows{ display:inline-flex; gap:4px; align-items:center; }
+  .nav-arrow-btn{ width:30px; height:30px; border:1px solid var(--border); background:#fff; border-radius:6px; cursor:pointer; color:var(--accent); font-size:14px; line-height:1; }
+  .nav-arrow-btn:hover{ border-color:var(--accent); }
+  .nav-arrow-btn:disabled{ opacity:.35; cursor:default; }
   .main{ max-width:1100px; margin:0 auto; padding:22px; }
   .controls{ display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; background:#fff; border:1px solid var(--border); border-radius:8px; padding:14px 16px; margin-bottom:18px; }
   .controls label{ font-size:12px; color:var(--text-light); display:block; margin-bottom:4px; }
@@ -38,7 +42,10 @@
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
   <div><h1>Mass Balance</h1><p>Input / output reconciliation for organic audit</p></div>
-  <div class="header-right"><a class="header-btn" href="/traceability">← Traceability</a></div>
+  <div class="header-right">
+    <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button><button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button></div>
+    <a class="header-btn" href="/">⌂ Dashboard</a>
+  </div>
 </div>
 <div class="main">
   <div class="controls">
@@ -140,6 +147,14 @@ document.addEventListener('DOMContentLoaded',function(){
     document.getElementById('to').value=now.toISOString().slice(0,10);
     run();
 });
+</script>
+<script>
+(function(){
+  var back=document.getElementById('nav-back'), fwd=document.getElementById('nav-fwd');
+  if(back){ back.disabled=(window.history.length<=1); back.onclick=function(){ window.history.back(); }; }
+  if(fwd)  fwd.onclick=function(){ window.history.forward(); };
+  window.addEventListener('popstate',function(){ if(back) back.disabled=(window.history.length<=1); });
+})();
 </script>
 </body>
 </html>

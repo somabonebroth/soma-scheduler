@@ -97,7 +97,10 @@ body.ah { background: var(--bg); }
     <h1>Audit History</h1>
     <div class="sub">Read-only · completed inventory audits</div>
   </div>
-  <a href="/organic" class="ah-back">← Inventory</a>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button><button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button></div>
+    <a href="/" class="ah-back">⌂ Dashboard</a>
+  </div>
 </div>
 
 <div class="ah-main">
@@ -207,6 +210,14 @@ function setFilter(kind, btn) {
     var d = new Date(iso);
     if (!isNaN(d)) el.textContent = d.toLocaleTimeString(undefined, shortOpts);
   });
+})();
+</script>
+<script>
+(function(){
+  var back=document.getElementById('nav-back'), fwd=document.getElementById('nav-fwd');
+  if(back){ back.disabled=(window.history.length<=1); back.onclick=function(){ window.history.back(); }; }
+  if(fwd)  fwd.onclick=function(){ window.history.forward(); };
+  window.addEventListener('popstate',function(){ if(back) back.disabled=(window.history.length<=1); });
 })();
 </script>
 
