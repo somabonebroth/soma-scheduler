@@ -863,6 +863,12 @@ def certifications_page():
     """Organic & compliance document storage page."""
     return render_template("certifications.html")
 
+@app.route("/organic-certification")
+@login_required
+def organic_certification_page():
+    """Hub linking the organic-certification tools (reconcile, audits, docs)."""
+    return render_template("organic_certification.html")
+
 @app.route("/api/certifications", methods=["GET"])
 @login_required
 def list_certifications():

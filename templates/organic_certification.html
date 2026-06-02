@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Organic Certification · Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.oc-intro { max-width:760px; margin:0 auto 4px; padding:4px 4px 0; font-size:13px; color:var(--text-light); }
+</style>
+</head>
+<body>
+<div class="header">
+    <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+    <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Organic Certification</p></div>
+    <div class="header-right" style="display:flex;align-items:center;gap:8px;">
+        <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button><button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button></div>
+        <a href="/" class="header-btn">⌂ Dashboard</a>
+    </div>
+</div>
+<div class="main">
+    <div class="dashboard-grid">
+        <p class="oc-intro">Everything needed for the organic certification chain — reconciliation, audits, and compliance documents — in one place.</p>
+        <div class="section-label">Reconciliation &amp; Audits</div>
+        <div class="dash-row">
+            <a href="/mass-balance" class="dash-btn"><span class="icon">&#128202;</span><span class="label">Mass Balance</span><span class="sublabel">Opening + Received &minus; Consumed reconciliation</span></a>
+            <a href="/admin/reconcile-raw" class="dash-btn"><span class="icon">&#9851;</span><span class="label">Reconcile Raw Materials</span><span class="sublabel">Replay completed runs date-aware</span></a>
+            <a href="/audit/rm" class="dash-btn"><span class="icon">&#128269;</span><span class="label">Audit Inventory</span><span class="sublabel">Count raw materials against the books</span></a>
+        </div>
+        <div class="section-label">Records &amp; Documents</div>
+        <div class="dash-row">
+            <a href="/audits" class="dash-btn"><span class="icon">&#128220;</span><span class="label">Audit History</span><span class="sublabel">Past inventory audits</span></a>
+            <a href="/certifications" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Certifications</span><span class="sublabel">Organic &amp; compliance documents</span></a>
+            <a href="/important-documents" class="dash-btn"><span class="icon">&#128196;</span><span class="label">Important Documents</span><span class="sublabel">Certifications &amp; records</span></a>
+        </div>
+    </div>
+</div>
+<script>
+(function(){
+  var back = document.getElementById('nav-back');
+  var fwd  = document.getElementById('nav-fwd');
+  if(back) back.disabled = (window.history.length <= 1);
+  if(back) back.onclick = function(){ window.history.back(); };
+  if(fwd)  fwd.onclick  = function(){ window.history.forward(); };
+  window.addEventListener('popstate', function(){
+    if(back) back.disabled = (window.history.length <= 1);
+  });
+})();
+</script>
+</body>
+</html>
