@@ -25,7 +25,7 @@
 .dash-btn .icon { font-size: 28px; }
 .dash-btn .label { font-size: 14px; font-weight: 600; color: var(--dark); }
 .dash-btn .sublabel { font-size: 11px; color: var(--text-light); }
-.dash-btn.highlight { border-color: var(--accent); background: linear-gradient(135deg, #f5f5f0, #e8efe5); }
+.dash-btn.highlight { border-color: var(--accent); background: linear-gradient(135deg, var(--bg), #e8efe5); }
 .dash-btn.disabled { opacity: 0.4; cursor: default; }
 .dash-btn.disabled:hover { transform: none; box-shadow: none; border-color: var(--border); }
 .section-label { font-size: 11px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 1px; margin-top: 16px; margin-bottom: 6px; border-left: 3px solid var(--accent); padding-left: 8px; }
@@ -59,13 +59,13 @@
         <div class="section-label">Quick Actions</div>
         <div class="dash-row">
             <div class="dash-btn" onclick="openReceiveModal()" style="background:var(--action-green);border-color:var(--action-green);cursor:pointer;">
-                <span class="icon" style="color:#fff;">&#128230;</span>
-                <span class="label" style="color:#fff;">Receive Inventory</span>
+                <span class="icon" style="color:var(--white);">&#128230;</span>
+                <span class="label" style="color:var(--white);">Receive Inventory</span>
                 <span class="sublabel" style="color:rgba(255,255,255,0.75);">Record a supplier delivery</span>
             </div>
             <div class="dash-btn" onclick="openDashSaleModal()" style="background:var(--action-blue);border-color:var(--action-blue);cursor:pointer;">
-                <span class="icon" style="color:#fff;">&#128176;</span>
-                <span class="label" style="color:#fff;">Record Sale</span>
+                <span class="icon" style="color:var(--white);">&#128176;</span>
+                <span class="label" style="color:var(--white);">Record Sale</span>
                 <span class="sublabel" style="color:rgba(255,255,255,0.75);">Select buyer and date</span>
             </div>
         </div>
@@ -77,7 +77,7 @@
                 <div style="text-align:left;">
                     <div class="label" style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
                         Ripe Orders
-                        <span id="ripe-badge" style="display:none;background:#c62828;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
+                        <span id="ripe-badge" style="display:none;background:var(--action-red);color:var(--white);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
                     </div>
                     <div class="sublabel">Manage incoming wholesale orders</div>
                 </div>
@@ -105,7 +105,7 @@
         <!-- Top row: Organic Certification | Production Record | Manage Inventory | Buyers & Suppliers -->
         <div class="dash-row">
             <a href="/organic-certification" class="dash-btn"><span class="icon">&#127807;</span><span class="label">Organic Certification</span><span class="sublabel">Reconciliation, audits &amp; documents</span></a>
-            <a href="/traceability" class="dash-btn" id="prod-record-btn" style="position:relative;"><span class="icon">&#128451;</span><span class="label" style="display:flex;align-items:center;gap:8px;">Production Record<span id="prod-badge" style="display:none;background:#b38b00;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span></span><span class="sublabel">Review and sign off weekly records</span></a>
+            <a href="/traceability" class="dash-btn" id="prod-record-btn" style="position:relative;"><span class="icon">&#128451;</span><span class="label" style="display:flex;align-items:center;gap:8px;">Production Record<span id="prod-badge" style="display:none;background:var(--amber-text);color:var(--white);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span></span><span class="sublabel">Review and sign off weekly records</span></a>
             <a href="/organic" class="dash-btn"><span class="icon">&#128230;</span><span class="label">Manage Inventory</span><span class="sublabel">Raw materials, finished goods &amp; traceability</span></a>
             <a href="/contacts" class="dash-btn"><span class="icon">&#128101;</span><span class="label">Buyers &amp; Suppliers</span><span class="sublabel">Manage suppliers and buyers</span></a>
         </div>
@@ -122,14 +122,14 @@
 
 <!-- Manager password modal -->
 <div class="dash-modal-overlay" id="mgr-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;" >
-  <div style="background:#fff;border-radius:14px;width:100%;max-width:360px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,.2);margin:16px;">
+  <div style="background:var(--white);border-radius:14px;width:100%;max-width:360px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,.2);margin:16px;">
     <div style="font-size:17px;font-weight:700;margin-bottom:6px;">🔒 Manager Access</div>
     <div style="font-size:13px;color:var(--text-light);margin-bottom:18px;">Enter the manager password to access Administration.</div>
     <input type="password" id="mgr-pw" placeholder="Manager password" style="width:100%;box-sizing:border-box;padding:12px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;outline:none;margin-bottom:10px;">
     <div id="mgr-msg" style="font-size:12px;min-height:16px;margin-bottom:10px;"></div>
     <div style="display:flex;gap:10px;">
-      <button onclick="document.getElementById('mgr-modal').style.display='none'" style="flex:1;padding:12px;border:1.5px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;font-size:14px;font-weight:600;">Cancel</button>
-      <button id="mgr-submit" onclick="submitManagerPw()" style="flex:1;padding:12px;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-size:14px;font-weight:600;">Unlock</button>
+      <button onclick="document.getElementById('mgr-modal').style.display='none'" style="flex:1;padding:12px;border:1.5px solid var(--border);border-radius:8px;background:var(--white);cursor:pointer;font-size:14px;font-weight:600;">Cancel</button>
+      <button id="mgr-submit" onclick="submitManagerPw()" style="flex:1;padding:12px;border:none;border-radius:8px;background:var(--accent);color:var(--white);cursor:pointer;font-size:14px;font-weight:600;">Unlock</button>
     </div>
   </div>
 </div>
@@ -198,7 +198,7 @@ async function submitManagerPw() {
             if(c) c.textContent = '▼';
         } else {
             msg.textContent = 'Incorrect password.';
-            msg.style.color = '#c62828';
+            msg.style.color = 'var(--action-red)';
         }
     } catch(e) {
         msg.textContent = 'Error — try again.';
@@ -342,22 +342,22 @@ function dashSaleNext(){
 <style>
 .dash-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center;}
 .dash-modal-overlay.open{display:flex;}
-.dash-modal{background:#fff;border-radius:16px;width:100%;max-width:400px;margin:16px;padding:28px 24px;position:relative;}
+.dash-modal{background:var(--white);border-radius:16px;width:100%;max-width:400px;margin:16px;padding:28px 24px;position:relative;}
 .dash-modal h2{font-size:17px;font-weight:700;color:#1a1a1a;margin:0 0 4px;}
 .dash-modal p{font-size:13px;color:#888;margin:0 0 20px;}
 .dash-modal-field{margin-bottom:14px;}
 .dash-modal-field label{font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:6px;}
-.dash-modal-field input,.dash-modal-field select{width:100%;box-sizing:border-box;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:15px;background:#fff;}
-.dash-modal-err{font-size:13px;color:#c62828;display:none;margin-bottom:8px;}
-.dash-modal-success{background:#e8f5e9;border:1px solid #a5d6a7;border-radius:10px;padding:16px;text-align:center;display:none;}
+.dash-modal-field input,.dash-modal-field select{width:100%;box-sizing:border-box;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:15px;background:var(--white);}
+.dash-modal-err{font-size:13px;color:var(--action-red);display:none;margin-bottom:8px;}
+.dash-modal-success{background:var(--action-green-bg);border:1px solid var(--green-light);border-radius:10px;padding:16px;text-align:center;display:none;}
 .dash-modal-success .check{font-size:36px;margin-bottom:6px;}
-.dash-modal-success p{font-size:14px;color:#2e7d32;font-weight:600;margin:0;}
+.dash-modal-success p{font-size:14px;color:var(--action-green);font-weight:600;margin:0;}
 .dash-modal-success small{font-size:12px;color:#388e3c;}
 .dash-modal-actions{display:flex;gap:10px;margin-top:4px;}
 .dash-modal-actions button{flex:1;padding:13px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
-.dm-cancel{background:#fff;border:1px solid #ddd;color:#333;}
-.dm-primary-green{background:#2e7d32;border:none;color:#fff;}
-.dm-primary-blue{background:#0288d1;border:none;color:#fff;}
+.dm-cancel{background:var(--white);border:1px solid #ddd;color:#333;}
+.dm-primary-green{background:var(--action-green);border:none;color:var(--white);}
+.dm-primary-blue{background:var(--info);border:none;color:var(--white);}
 </style>
 
 <!-- Record Sale modal -->
@@ -377,9 +377,9 @@ function dashSaleNext(){
           <option value="">— Select buyer —</option>
         </select>
       </div>
-      <div id="dash-loc-field" style="display:none;margin-bottom:14px;padding:12px 14px;background:#e3f2fd;border:2px solid #1976d2;border-radius:9px;">
+      <div id="dash-loc-field" style="display:none;margin-bottom:14px;padding:12px 14px;background:var(--action-blue-bg);border:2px solid #1976d2;border-radius:9px;">
         <label style="display:block;font-size:11px;font-weight:700;color:#1565c0;text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px;">&#128205; Delivery Location</label>
-        <select id="dash-loc-select" style="width:100%;padding:10px 12px;border:1.5px solid #1976d2;border-radius:7px;font-size:14px;font-weight:500;background:#fff;">
+        <select id="dash-loc-select" style="width:100%;padding:10px 12px;border:1.5px solid #1976d2;border-radius:7px;font-size:14px;font-weight:500;background:var(--white);">
           <option value="">— Main / Primary address —</option>
         </select>
       </div>
