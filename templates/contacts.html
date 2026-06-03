@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Soma">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="var(--black)">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
 <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
@@ -21,22 +21,22 @@ body.cp { background: var(--bg); }
 .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
 .tab-content { display:none; padding:24px 20px 0; }
 .tab-content.active { display:block; }
-.cc { background:#fff; border:1px solid var(--border); border-radius:12px; padding:18px 20px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:flex-start; gap:16px; transition:box-shadow .15s; }
+.cc { background:var(--white); border:1px solid var(--border); border-radius:12px; padding:18px 20px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:flex-start; gap:16px; transition:box-shadow .15s; }
 .cc:hover { box-shadow:0 2px 8px rgba(0,0,0,.07); }
 .cc-name { font-size:15px; font-weight:700; margin-bottom:4px; color:var(--dark); }
 .cc-sub { font-size:12px; color:var(--text-light); margin-bottom:2px; line-height:1.5; }
 .cc-sub a { color:var(--accent); text-decoration:none; }
 .cc-badge { display:inline-block; padding:2px 9px; border-radius:20px; font-size:10px; font-weight:600; margin-top:5px; margin-right:4px; }
-.bg-g { background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7; }
-.bg-b { background:#e3f2fd; color:#0a4081; border:1px solid #90caf9; }
-.bg-k { background:#f5f5f0; color:#666; border:1px solid #d8d8d0; }
+.bg-g { background:var(--action-green-bg); color:var(--action-green); border:1px solid var(--green-light); }
+.bg-b { background:var(--action-blue-bg); color:#0a4081; border:1px solid #90caf9; }
+.bg-k { background:var(--bg); color:#666; border:1px solid #d8d8d0; }
 .cc-actions { display:flex; gap:8px; flex-shrink:0; }
 .mo { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200; align-items:center; justify-content:center; padding:16px; }
 .mo.open { display:flex; }
-.mo-box { background:#fff; border-radius:16px; width:100%; max-width:580px; max-height:92vh; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,.18); }
+.mo-box { background:var(--white); border-radius:16px; width:100%; max-width:580px; max-height:92vh; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,.18); }
 .mo-head { padding:20px 22px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
 .mo-head h2 { margin:0; font-size:17px; font-weight:700; color:var(--dark); }
-.mo-x { background:#f5f5f0; border:none; border-radius:50%; width:32px; height:32px; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center; color:#666; flex-shrink:0; transition:background .15s; }
+.mo-x { background:var(--bg); border:none; border-radius:50%; width:32px; height:32px; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center; color:#666; flex-shrink:0; transition:background .15s; }
 .mo-x:hover { background:#ebe9e4; }
 .mo-body { padding:20px 22px; overflow-y:auto; flex:1; }
 .mo-foot { padding:14px 22px; border-top:1px solid var(--border); display:flex; gap:10px; flex-shrink:0; background:#fafaf8; }
@@ -45,35 +45,35 @@ body.cp { background: var(--bg); }
 .g2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .ff { margin-bottom:13px; }
 .ff label { display:block; font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.05em; margin-bottom:5px; }
-.ff input,.ff select,.ff textarea { width:100%; box-sizing:border-box; padding:10px 12px; border:1.5px solid var(--border); border-radius:8px; font-size:14px; background:#fff; transition:border-color .15s; outline:none; font-family:inherit; }
+.ff input,.ff select,.ff textarea { width:100%; box-sizing:border-box; padding:10px 12px; border:1.5px solid var(--border); border-radius:8px; font-size:14px; background:var(--white); transition:border-color .15s; outline:none; font-family:inherit; }
 .ff input:focus,.ff textarea:focus { border-color:var(--accent); }
 .ff textarea { resize:vertical; }
 .btn { display:inline-flex; align-items:center; justify-content:center; padding:10px 18px; font-size:14px; font-weight:600; border-radius:9px; cursor:pointer; min-height:42px; box-sizing:border-box; transition:all .15s; }
-.btn-p { background:var(--accent); color:#fff; border:none; }
+.btn-p { background:var(--accent); color:var(--white); border:none; }
 .btn-p:hover { filter:brightness(1.08); }
-.btn-o { background:#fff; color:var(--dark); border:1.5px solid var(--border); }
+.btn-o { background:var(--white); color:var(--dark); border:1.5px solid var(--border); }
 .btn-o:hover { background:var(--bg); }
-.btn-r { background:none; border:1.5px solid #fca5a5; color:#c62828; font-size:12px; padding:7px 12px; min-height:36px; border-radius:7px; cursor:pointer; }
-.btn-sm { font-size:11px; padding:5px 12px; min-height:30px; border-radius:7px; border:1.5px solid var(--accent); color:var(--accent); background:#fff; cursor:pointer; font-weight:600; }
-.btn-sm:hover { background:#f0f7f0; }
+.btn-r { background:none; border:1.5px solid #fca5a5; color:var(--action-red); font-size:12px; padding:7px 12px; min-height:36px; border-radius:7px; cursor:pointer; }
+.btn-sm { font-size:11px; padding:5px 12px; min-height:30px; border-radius:7px; border:1.5px solid var(--accent); color:var(--accent); background:var(--white); cursor:pointer; font-weight:600; }
+.btn-sm:hover { background:var(--green-tint); }
 .loc-card { background:#f9f9f7; border:1.5px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:8px; }
 .loc-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; font-size:12px; font-weight:600; color:var(--text-light); }
 .sku-chk { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:6px; cursor:pointer; font-size:13px; transition:background .1s; }
-.sku-chk:hover { background:#f0f7f0; }
+.sku-chk:hover { background:var(--green-tint); }
 .sku-chk input { width:17px; height:17px; accent-color:var(--accent); cursor:pointer; flex-shrink:0; }
-.sku-bhdr { font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.06em; padding:8px 10px 4px; background:#f5f5f0; border-bottom:1px solid var(--border); }
-.sku-orow { display:flex; align-items:center; gap:8px; padding:9px 10px; border-bottom:1px solid var(--border); background:#fff; }
+.sku-bhdr { font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.06em; padding:8px 10px 4px; background:var(--bg); border-bottom:1px solid var(--border); }
+.sku-orow { display:flex; align-items:center; gap:8px; padding:9px 10px; border-bottom:1px solid var(--border); background:var(--white); }
 .sku-orow:nth-child(even) { background:#fafaf8; }
-.mv { width:26px; height:22px; border:1.5px solid var(--border); background:#fff; border-radius:5px; cursor:pointer; font-size:10px; display:flex; align-items:center; justify-content:center; }
+.mv { width:26px; height:22px; border:1.5px solid var(--border); background:var(--white); border-radius:5px; cursor:pointer; font-size:10px; display:flex; align-items:center; justify-content:center; }
 .mv:hover:not([disabled]) { background:var(--bg); }
 .mv[disabled] { opacity:.3; cursor:not-allowed; }
 .smsg { font-size:13px; margin:6px 0; min-height:18px; }
-.smsg.err { color:#c62828; }
-.sflash { font-size:12px; color:#2e7d32; display:none; margin-top:10px; font-weight:600; }
+.smsg.err { color:var(--action-red); }
+.sflash { font-size:12px; color:var(--action-green); display:none; margin-top:10px; font-weight:600; }
 .empty { text-align:center; padding:48px 24px; color:var(--text-light); font-size:14px; border:2px dashed var(--border); border-radius:12px; }
 .cat-brand { font-size:11px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.06em; margin:18px 0 8px; padding-left:4px; }
 .cat-brand:first-child { margin-top:0; }
-.cat-card { background:#fff; border:1px solid var(--border); border-radius:10px; padding:14px 18px; margin-bottom:8px; }
+.cat-card { background:var(--white); border:1px solid var(--border); border-radius:10px; padding:14px 18px; margin-bottom:8px; }
 .cat-card-head { display:flex; align-items:baseline; gap:10px; margin-bottom:6px; flex-wrap:wrap; }
 .cat-sku-name { font-size:14px; font-weight:600; color:var(--dark); }
 .cat-sku-fmt { font-size:11px; color:var(--text-light); }
@@ -84,15 +84,15 @@ body.cp { background: var(--bg); }
 .cat-num { color:var(--text-light); min-width:100px; text-align:right; font-variant-numeric:tabular-nums; }
 .cat-num.cat-price { color:var(--dark); font-weight:600; min-width:80px; }
 .cat-buyer-row.inactive { opacity:.55; }
-.cat-active-tag { font-size:10px; font-weight:700; color:#2e7d32; text-transform:uppercase; letter-spacing:.05em; min-width:64px; text-align:right; }
-.cat-buyer-row.inactive .cat-active-tag { color:#c62828; }
+.cat-active-tag { font-size:10px; font-weight:700; color:var(--action-green); text-transform:uppercase; letter-spacing:.05em; min-width:64px; text-align:right; }
+.cat-buyer-row.inactive .cat-active-tag { color:var(--action-red); }
 .cat-empty-buyers { font-size:12px; color:var(--text-light); font-style:italic; padding:4px 0 0; }
-.scard { background:#fff; border:1px solid var(--border); border-radius:12px; padding:22px 24px; margin-bottom:14px; }
+.scard { background:var(--white); border:1px solid var(--border); border-radius:12px; padding:22px 24px; margin-bottom:14px; }
 .scard h3 { font-size:14px; font-weight:700; margin:0 0 16px; color:var(--dark); }
-.price-row { display:grid; grid-template-columns:1fr 80px 80px 70px 60px; gap:6px; align-items:center; padding:9px 12px; border-bottom:1px solid var(--border); background:#fff; font-size:13px; }
+.price-row { display:grid; grid-template-columns:1fr 80px 80px 70px 60px; gap:6px; align-items:center; padding:9px 12px; border-bottom:1px solid var(--border); background:var(--white); font-size:13px; }
 .price-row:nth-child(even) { background:#fafaf8; }
 .price-row:last-child { border-bottom:none; }
-.price-hdr { display:grid; grid-template-columns:1fr 80px 80px 70px 60px; gap:6px; padding:7px 12px; background:#f5f5f0; border-bottom:1px solid var(--border); font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.05em; }
+.price-hdr { display:grid; grid-template-columns:1fr 80px 80px 70px 60px; gap:6px; padding:7px 12px; background:var(--bg); border-bottom:1px solid var(--border); font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.05em; }
 .p-input { width:100%; box-sizing:border-box; padding:5px 7px; border:1.5px solid var(--border); border-radius:6px; font-size:13px; font-weight:600; text-align:right; outline:none; }
 .p-input:focus { border-color:var(--accent); }
 .p-margin { font-size:12px; color:var(--text-light); text-align:right; }
@@ -132,7 +132,7 @@ body.cp { background: var(--bg); }
 <div class="tab-content" id="tab-suppliers">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
     <div><div style="font-size:20px;font-weight:700;color:var(--dark);">Suppliers</div><div id="sup-count" style="font-size:12px;color:var(--text-light);margin-top:2px;"></div></div>
-    <button class="btn btn-p" onclick="openAddSup()" style="background:#2e7d32;border:none;">+ Add Supplier</button>
+    <button class="btn btn-p" onclick="openAddSup()" style="background:var(--action-green);border:none;">+ Add Supplier</button>
   </div>
   <div id="sup-list"><div class="empty">Loading…</div></div>
 </div>
@@ -141,7 +141,7 @@ body.cp { background: var(--bg); }
 <div class="tab-content active" id="tab-buyers">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
     <div><div style="font-size:20px;font-weight:700;color:var(--dark);">Buyers</div><div id="buy-count" style="font-size:12px;color:var(--text-light);margin-top:2px;"></div></div>
-    <button class="btn btn-p" onclick="openAddBuy()" style="background:#0288d1;border:none;">+ Add Buyer</button>
+    <button class="btn btn-p" onclick="openAddBuy()" style="background:var(--info);border:none;">+ Add Buyer</button>
   </div>
   <div id="buy-list"><div class="empty">Loading…</div></div>
 </div>
@@ -179,13 +179,13 @@ body.cp { background: var(--bg); }
       <div class="mo-div">Assigned Ingredients</div>
       <div style="margin-top:14px;">
         <input id="s-ing-q" type="text" placeholder="Filter ingredients…" oninput="rSupIng()" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:8px;">
-        <div id="s-ing-list" style="max-height:220px;overflow-y:auto;border:1.5px solid var(--border);border-radius:10px;background:#fff;"></div>
+        <div id="s-ing-list" style="max-height:220px;overflow-y:auto;border:1.5px solid var(--border);border-radius:10px;background:var(--white);"></div>
       </div>
       <div class="smsg" id="s-msg"></div>
     </div>
     <div class="mo-foot">
       <button class="btn btn-o" onclick="closeSup()">Cancel</button>
-      <button class="btn btn-p" id="s-save" onclick="saveSup()" style="background:#2e7d32;border:none;">Save Supplier</button>
+      <button class="btn btn-p" id="s-save" onclick="saveSup()" style="background:var(--action-green);border:none;">Save Supplier</button>
     </div>
   </div>
 </div>
@@ -214,7 +214,7 @@ body.cp { background: var(--bg); }
       <div class="mo-div">Assigned Products</div>
       <div style="margin-top:14px;">
         <input id="b-sku-q" type="text" placeholder="Filter products…" oninput="rSkuList()" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:8px;">
-        <div id="b-sku-list" style="max-height:240px;overflow-y:auto;border:1.5px solid var(--border);border-radius:10px;background:#fff;"></div>
+        <div id="b-sku-list" style="max-height:240px;overflow-y:auto;border:1.5px solid var(--border);border-radius:10px;background:var(--white);"></div>
         <div style="font-size:11px;color:var(--text-light);margin-top:8px;">Display order and per-buyer pricing can be set after on the buyer's edit page.</div>
       </div>
 
@@ -222,7 +222,7 @@ body.cp { background: var(--bg); }
     </div>
     <div class="mo-foot">
       <button class="btn btn-o" onclick="closeBuy()">Cancel</button>
-      <button class="btn btn-p" id="b-save" onclick="saveBuy()" style="background:#0288d1;border:none;">Save Buyer</button>
+      <button class="btn btn-p" id="b-save" onclick="saveBuy()" style="background:var(--info);border:none;">Save Buyer</button>
     </div>
   </div>
 </div>

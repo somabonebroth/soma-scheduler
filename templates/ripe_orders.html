@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Soma">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="var(--black)">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
 <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
@@ -24,15 +24,15 @@
 .order-detail.open{display:table-row;}
 .order-detail-inner{background:var(--bg);border-radius:8px;padding:16px;margin:4px 0 8px;}
 .tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;white-space:nowrap;}
-.tag-pending{background:#fff3cd;color:#856404;}
+.tag-pending{background:var(--warning);color:#856404;}
 .tag-approved{background:#cfe2ff;color:#0a4081;}
-.tag-fulfilled{background:#d4edda;color:#155724;}
-.tag-declined{background:#f8d7da;color:#721c24;}
-.tag-net14{background:#e8eaf6;color:#3949ab;}
-.tag-paid{background:#d4edda;color:#155724;}
-.tag-awaiting{background:#fff3cd;color:#856404;}
-.tag-invoice-sent{background:#e8eaf6;color:#3949ab;}
-.tag-failed{background:#f8d7da;color:#721c24;}
+.tag-fulfilled{background:var(--success);color:#155724;}
+.tag-declined{background:var(--error);color:#721c24;}
+.tag-net14{background:#e8eaf6;color:var(--indigo);}
+.tag-paid{background:var(--success);color:#155724;}
+.tag-awaiting{background:var(--warning);color:#856404;}
+.tag-invoice-sent{background:#e8eaf6;color:var(--indigo);}
+.tag-failed{background:var(--error);color:#721c24;}
 .tag-voided{background:#eceff1;color:#546e7a;}
 .payment-stack{display:flex;flex-direction:column;gap:4px;align-items:flex-start;}
 .section-header td{background:var(--bg);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-light);padding:10px;border-bottom:2px solid var(--border);border-top:1px solid var(--border);}
@@ -42,22 +42,22 @@
 .items-list li{padding:3px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;}
 .items-list li:last-child{border-bottom:none;}
 .action-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
-.btn-approve{background:#2e7d32;color:#fff;border:none;border-radius:6px;padding:9px 16px;font-size:12px;font-weight:600;cursor:pointer;}
+.btn-approve{background:var(--action-green);color:var(--white);border:none;border-radius:6px;padding:9px 16px;font-size:12px;font-weight:600;cursor:pointer;}
 .btn-approve:hover{background:#1b5e20;}
-.btn-decline{background:#fff;color:#c62828;border:1px solid #ef9a9a;border-radius:6px;padding:9px 16px;font-size:12px;font-weight:600;cursor:pointer;}
-.btn-decline:hover{background:#ffebee;}
-.btn-fulfill{background:#0288d1;color:#fff;border:none;border-radius:6px;padding:9px 16px;font-size:12px;font-weight:600;cursor:pointer;}
-.btn-fulfill:hover{background:#0277bd;}
+.btn-decline{background:var(--white);color:var(--action-red);border:1px solid #ef9a9a;border-radius:6px;padding:9px 16px;font-size:12px;font-weight:600;cursor:pointer;}
+.btn-decline:hover{background:var(--action-red-bg);}
+.btn-fulfill{background:var(--info);color:var(--white);border:none;border-radius:6px;padding:9px 16px;font-size:12px;font-weight:600;cursor:pointer;}
+.btn-fulfill:hover{background:var(--action-blue);}
 .filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
 .filter-btn{background:var(--card-bg);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;cursor:pointer;transition:all .15s;}
-.filter-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
-.info-msg{background:#e3f2fd;border:1px solid #90caf9;border-radius:8px;padding:14px;font-size:13px;color:#1565c0;margin-bottom:16px;}
-.err-msg{background:#ffebee;border:1px solid #ef9a9a;border-radius:8px;padding:14px;font-size:13px;color:#c62828;margin-bottom:16px;}
+.filter-btn.active{background:var(--accent);color:var(--white);border-color:var(--accent);}
+.info-msg{background:var(--action-blue-bg);border:1px solid #90caf9;border-radius:8px;padding:14px;font-size:13px;color:#1565c0;margin-bottom:16px;}
+.err-msg{background:var(--action-red-bg);border:1px solid #ef9a9a;border-radius:8px;padding:14px;font-size:13px;color:var(--action-red);margin-bottom:16px;}
 
 /* Approve modal */
 .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;align-items:center;justify-content:center;}
 .modal-backdrop.open{display:flex;}
-.modal-card{background:#fff;border-radius:14px;width:100%;max-width:420px;margin:16px;padding:26px 22px;position:relative;}
+.modal-card{background:var(--white);border-radius:14px;width:100%;max-width:420px;margin:16px;padding:26px 22px;position:relative;}
 .modal-card h3{margin:0 0 4px;font-size:16px;}
 .modal-card p{margin:0 0 18px;font-size:13px;color:var(--text-light);}
 .modal-field{margin-bottom:14px;}
@@ -65,12 +65,12 @@
 .modal-field input,.modal-field select{width:100%;box-sizing:border-box;padding:11px;border:1px solid #ddd;border-radius:8px;font-size:14px;}
 .modal-actions{display:flex;gap:10px;margin-top:18px;}
 .modal-actions button{flex:1;padding:12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;}
-.modal-cancel{background:#fff;border:1px solid #ddd;color:#333;}
-.modal-confirm{background:#2e7d32;border:none;color:#fff;}
+.modal-cancel{background:var(--white);border:1px solid #ddd;color:#333;}
+.modal-confirm{background:var(--action-green);border:none;color:var(--white);}
 .modal-confirm:disabled{background:#aaa;}
-.success-banner{background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:14px;font-size:13px;color:#2e7d32;margin-top:12px;display:none;}
+.success-banner{background:var(--action-green-bg);border:1px solid var(--green-light);border-radius:8px;padding:14px;font-size:13px;color:var(--action-green);margin-top:12px;display:none;}
 
-.toast{position:fixed;bottom:20px;right:20px;background:#333;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;}
+.toast{position:fixed;bottom:20px;right:20px;background:#333;color:var(--white);padding:10px 16px;border-radius:8px;font-size:13px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;}
 .toast.show{opacity:1;}
 </style>
 </head>
@@ -179,9 +179,9 @@
             {% endif %}
           </div>
           {% if o.status == 'approved' and o.payment_key == 'cc_net14' %}
-          <div style="font-size:11px;color:#3949ab;margin-top:8px;">⏳ Net 14 invoice sent. Inventory deducts on {{ o.fulfillment_date or 'delivery date' }}. Sale pending Stripe payment.</div>
+          <div style="font-size:11px;color:var(--indigo);margin-top:8px;">⏳ Net 14 invoice sent. Inventory deducts on {{ o.fulfillment_date or 'delivery date' }}. Sale pending Stripe payment.</div>
           {% elif o.status == 'approved' and o.payment_key == 'etransfer' %}
-          <div style="font-size:11px;color:#2e7d32;margin-top:8px;">✓ E-transfer confirmed. Inventory deducts on {{ o.fulfillment_date or 'delivery date' }}.</div>
+          <div style="font-size:11px;color:var(--action-green);margin-top:8px;">✓ E-transfer confirmed. Inventory deducts on {{ o.fulfillment_date or 'delivery date' }}.</div>
           {% endif %}
         </div>
       </td>
@@ -227,7 +227,7 @@
       <label>Delivery / Pickup Date</label>
       <input type="date" id="approve-date">
     </div>
-    <div id="approve-error" style="font-size:12px;color:#c62828;margin-top:-8px;margin-bottom:8px;display:none;"></div>
+    <div id="approve-error" style="font-size:12px;color:var(--action-red);margin-top:-8px;margin-bottom:8px;display:none;"></div>
     <div class="success-banner" id="approve-success">
       ✓ Order approved. Sale record created — inventory deducts on the set date.
     </div>

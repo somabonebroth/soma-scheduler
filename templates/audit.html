@@ -16,7 +16,7 @@ body.audit-page { background: var(--bg); overflow-x: hidden; }
 /* ── Header ──────────────────────────────────────────────────────── */
 .audit-header {
   background: var(--dark);
-  color: #fff;
+  color: var(--white);
   padding: 14px 20px;
   display: flex;
   align-items: center;
@@ -25,7 +25,7 @@ body.audit-page { background: var(--bg); overflow-x: hidden; }
 }
 .audit-header h1 { font-size: 16px; font-weight: 700; margin: 0; }
 .audit-header .sub { font-size: 12px; opacity: .7; margin-top: 2px; }
-.header-exit { background: rgba(255,255,255,.15); border: none; color: #fff;
+.header-exit { background: rgba(255,255,255,.15); border: none; color: var(--white);
   border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .header-exit:hover { background: rgba(255,255,255,.25); }
 
@@ -35,27 +35,27 @@ body.audit-page { background: var(--bg); overflow-x: hidden; }
 .cat-sub { font-size: 14px; color: var(--text-light); margin-bottom: 24px; }
 .cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 32px; }
 .cat-chip {
-  background: #fff; border: 2.5px solid var(--border); border-radius: 12px;
+  background: var(--white); border: 2.5px solid var(--border); border-radius: 12px;
   padding: 16px 14px; display: flex; align-items: center; gap: 12px;
   cursor: pointer; transition: all .15s; user-select: none;
 }
-.cat-chip.selected { border-color: var(--accent); background: #f0f7f0; }
+.cat-chip.selected { border-color: var(--accent); background: var(--green-tint); }
 .cat-chip .check {
   width: 24px; height: 24px; border-radius: 6px; border: 2px solid var(--border);
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  font-size: 14px; font-weight: 800; color: #fff; transition: all .15s;
+  font-size: 14px; font-weight: 800; color: var(--white); transition: all .15s;
 }
 .cat-chip.selected .check { background: var(--accent); border-color: var(--accent); }
 .cat-chip .cat-name { font-size: 14px; font-weight: 600; color: var(--dark); line-height: 1.3; }
 .start-btn {
-  width: 100%; padding: 18px; background: var(--accent); color: #fff;
+  width: 100%; padding: 18px; background: var(--accent); color: var(--white);
   border: none; border-radius: 12px; font-size: 17px; font-weight: 700;
   cursor: pointer; letter-spacing: .01em;
 }
 .start-btn:disabled { background: #ccc; }
 
 /* ── Progress bar ────────────────────────────────────────────────── */
-.progress-wrap { background: #e0e0d8; height: 4px; flex-shrink: 0; }
+.progress-wrap { background: var(--border); height: 4px; flex-shrink: 0; }
 .progress-fill { height: 4px; background: var(--accent); transition: width .3s; }
 
 /* ── Item screen ─────────────────────────────────────────────────── */
@@ -63,7 +63,7 @@ body.audit-page { background: var(--bg); overflow-x: hidden; }
 .item-meta {
   padding: 20px 20px 16px;
   border-bottom: 1px solid var(--border);
-  background: #fff;
+  background: var(--white);
 }
 .item-counter { font-size: 11px; font-weight: 700; color: var(--text-light);
   text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
@@ -75,14 +75,14 @@ body.audit-page { background: var(--bg); overflow-x: hidden; }
   color: var(--text-light); margin-top: 6px;
 }
 .lot-badge {
-  display: inline-block; background: #e3f2fd; border: 1px solid #90caf9;
+  display: inline-block; background: var(--action-blue-bg); border: 1px solid #90caf9;
   border-radius: 6px; padding: 3px 10px; font-size: 11px; font-weight: 700;
-  color: #0277bd; margin-top: 6px;
+  color: var(--action-blue); margin-top: 6px;
 }
 
 /* System qty card */
 .system-card {
-  margin: 16px 20px; background: #fff; border: 1px solid var(--border);
+  margin: 16px 20px; background: var(--white); border: 1px solid var(--border);
   border-radius: 12px; padding: 16px 18px;
 }
 .system-label { font-size: 11px; font-weight: 700; color: var(--text-light);
@@ -102,7 +102,7 @@ body.audit-page { background: var(--bg); overflow-x: hidden; }
 .big-input {
   width: 100%; padding: 20px 16px; font-size: 32px; font-weight: 800;
   border: 2.5px solid var(--border); border-radius: 12px; text-align: center;
-  outline: none; background: #fff; color: var(--dark);
+  outline: none; background: var(--white); color: var(--dark);
   -webkit-appearance: none; appearance: none;
 }
 .big-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(74,103,65,.12); }
@@ -114,14 +114,14 @@ body.audit-page { background: var(--bg); overflow-x: hidden; }
   margin: 0 20px 16px; padding: 12px 16px; border-radius: 10px;
   font-size: 14px; font-weight: 600; display: none;
 }
-.diff-indicator.over  { background: #e8f5e9; color: #2e7d32; }
-.diff-indicator.under { background: #ffebee; color: #c62828; }
-.diff-indicator.exact { background: #e8f5e9; color: #2e7d32; }
+.diff-indicator.over  { background: var(--action-green-bg); color: var(--action-green); }
+.diff-indicator.under { background: var(--action-red-bg); color: var(--action-red); }
+.diff-indicator.exact { background: var(--action-green-bg); color: var(--action-green); }
 
 /* Bottom nav */
 .item-nav {
   position: fixed; bottom: 0; left: 0; right: 0;
-  background: #fff; border-top: 1px solid var(--border);
+  background: var(--white); border-top: 1px solid var(--border);
   padding: 12px 20px 20px;
   display: grid; grid-template-columns: 1fr 1fr 1fr;
   gap: 10px; z-index: 50;
@@ -129,11 +129,11 @@ body.audit-page { background: var(--bg); overflow-x: hidden; }
 }
 .nav-btn {
   padding: 16px 8px; border-radius: 10px; border: 2px solid var(--border);
-  font-size: 14px; font-weight: 700; cursor: pointer; background: #fff;
+  font-size: 14px; font-weight: 700; cursor: pointer; background: var(--white);
   color: var(--text-light); transition: all .15s; text-align: center;
 }
 .nav-btn:active { transform: scale(.97); }
-.nav-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.nav-btn.primary { background: var(--accent); color: var(--white); border-color: var(--accent); }
 .nav-btn.skip-btn { font-size: 13px; }
 .nav-btn:disabled { opacity: .4; cursor: default; }
 
@@ -142,31 +142,31 @@ body.audit-page { background: var(--bg); overflow-x: hidden; }
 .complete-icon { font-size: 64px; text-align: center; margin-bottom: 16px; }
 .complete-title { font-size: 26px; font-weight: 800; color: var(--dark); text-align: center; margin-bottom: 8px; }
 .complete-sub { font-size: 15px; color: var(--text-light); text-align: center; margin-bottom: 32px; }
-.adj-list { background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 24px; }
+.adj-list { background: var(--white); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 24px; }
 .adj-row { display: flex; justify-content: space-between; align-items: center;
   padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 14px; }
 .adj-row:last-child { border-bottom: none; }
 .adj-name { font-weight: 600; color: var(--dark); }
 .adj-diff { font-weight: 700; }
-.adj-diff.pos { color: #2e7d32; }
-.adj-diff.neg { color: #c62828; }
+.adj-diff.pos { color: var(--action-green); }
+.adj-diff.neg { color: var(--action-red); }
 .adj-diff.zero { color: var(--text-light); }
 .done-btn {
-  width: 100%; padding: 18px; background: var(--accent); color: #fff;
+  width: 100%; padding: 18px; background: var(--accent); color: var(--white);
   border: none; border-radius: 12px; font-size: 17px; font-weight: 700; cursor: pointer;
 }
 
 /* ── Resume banner ───────────────────────────────────────────────── */
 .resume-banner {
-  margin: 20px; background: #fff8e1; border: 1px solid #ffe082;
+  margin: 20px; background: var(--amber-bg); border: 1px solid var(--amber-border);
   border-radius: 12px; padding: 16px 18px;
 }
 .resume-banner h3 { font-size: 15px; font-weight: 700; margin: 0 0 6px; color: var(--dark); }
 .resume-banner p { font-size: 13px; color: #6d4c00; margin: 0 0 12px; }
 .resume-btns { display: flex; gap: 10px; }
 .resume-btn { flex: 1; padding: 12px; border-radius: 8px; font-size: 14px; font-weight: 600;
-  cursor: pointer; border: 1.5px solid var(--border); background: #fff; }
-.resume-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  cursor: pointer; border: 1.5px solid var(--border); background: var(--white); }
+.resume-btn.primary { background: var(--accent); color: var(--white); border-color: var(--accent); }
 
 @media (min-width: 600px) {
   .cat-grid { grid-template-columns: 1fr 1fr 1fr; }

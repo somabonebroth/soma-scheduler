@@ -10,8 +10,8 @@ body.be-page { background:var(--bg); }
 .be-wrap { max-width:960px; margin:0 auto; padding:24px 16px 60px; }
 
 /* Section cards */
-.be-card { background:#fff; border:1px solid var(--border); border-radius:14px; margin-bottom:20px; overflow:hidden; }
-.be-card-head { padding:16px 22px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; background:#fafaf7; }
+.be-card { background:var(--white); border:1px solid var(--border); border-radius:14px; margin-bottom:20px; overflow:hidden; }
+.be-card-head { padding:16px 22px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; background:var(--row-alt); }
 .be-card-head h2 { margin:0; font-size:15px; font-weight:700; color:var(--dark); }
 .be-card-body { padding:22px; }
 
@@ -29,12 +29,12 @@ body.be-page { background:var(--bg); }
 .loc-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; font-size:12px; font-weight:600; color:var(--text-light); }
 
 /* SKU assignment table */
-.sku-section-hdr { font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.06em; padding:8px 14px 6px; background:#f5f5f0; border-bottom:1px solid var(--border); }
-.sku-row { display:grid; grid-template-columns:32px 1fr 80px 80px 75px 60px; gap:8px; align-items:center; padding:9px 14px; border-bottom:1px solid var(--border); background:#fff; }
+.sku-section-hdr { font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.06em; padding:8px 14px 6px; background:var(--bg); border-bottom:1px solid var(--border); }
+.sku-row { display:grid; grid-template-columns:32px 1fr 80px 80px 75px 60px; gap:8px; align-items:center; padding:9px 14px; border-bottom:1px solid var(--border); background:var(--white); }
 .sku-row:last-child { border-bottom:none; }
 .sku-row:hover { background:#f9faf7; }
-.sku-row.assigned { background:#f0f7f0; }
-.sku-hdr { display:grid; grid-template-columns:32px 1fr 80px 80px 75px 60px; gap:8px; padding:8px 14px; background:#f5f5f0; border-bottom:2px solid var(--border); font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
+.sku-row.assigned { background:var(--green-tint); }
+.sku-hdr { display:grid; grid-template-columns:32px 1fr 80px 80px 75px 60px; gap:8px; padding:8px 14px; background:var(--bg); border-bottom:2px solid var(--border); font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
 .sku-hdr span, .sku-row span.hdr { text-align:right; }
 .sku-hdr span:nth-child(2), .sku-row .sku-name { text-align:left; }
 .sku-check { width:17px; height:17px; accent-color:var(--accent); cursor:pointer; }
@@ -42,10 +42,10 @@ body.be-page { background:var(--bg); }
 .sku-fmt { font-size:11px; color:var(--text-light); }
 .p-input { width:100%; box-sizing:border-box; padding:6px 8px; border:1.5px solid var(--border); border-radius:7px; font-size:13px; font-weight:600; text-align:right; outline:none; }
 .p-input:focus { border-color:var(--accent); box-shadow:0 0 0 2px rgba(74,103,65,.1); }
-.p-input:disabled { background:#f5f5f0; opacity:.5; }
+.p-input:disabled { background:var(--bg); opacity:.5; }
 .p-margin { font-size:12px; color:var(--text-light); text-align:right; }
 .p-active-tog { width:34px; height:18px; border-radius:9px; border:none; cursor:pointer; transition:background .2s; position:relative; flex-shrink:0; }
-.p-active-tog::after { content:''; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; transition:transform .2s; }
+.p-active-tog::after { content:''; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:var(--white); transition:transform .2s; }
 .p-active-tog.on { background:var(--accent); }
 .p-active-tog.on::after { transform:translateX(16px); }
 .p-active-tog.off { background:#ccc; }
@@ -57,10 +57,10 @@ body.be-page { background:var(--bg); }
 .fmt-pill-bb { border-left:4px solid #a66b1e; padding-left:8px; }
 
 /* Sticky save bar */
-.save-bar { position:sticky; bottom:0; background:#fff; border-top:1px solid var(--border); padding:14px 22px; display:flex; align-items:center; justify-content:space-between; gap:12px; box-shadow:0 -4px 16px rgba(0,0,0,.07); z-index:10; }
+.save-bar { position:sticky; bottom:0; background:var(--white); border-top:1px solid var(--border); padding:14px 22px; display:flex; align-items:center; justify-content:space-between; gap:12px; box-shadow:0 -4px 16px rgba(0,0,0,.07); z-index:10; }
 .save-status { font-size:13px; color:var(--text-light); }
-.save-status.ok { color:#2e7d32; font-weight:600; }
-.save-status.err { color:#c62828; font-weight:600; }
+.save-status.ok { color:var(--action-green); font-weight:600; }
+.save-status.err { color:var(--action-red); font-weight:600; }
 
 @media(max-width:640px){
   .g2,.g3 { grid-template-columns:1fr; }
@@ -84,7 +84,7 @@ body.be-page { background:var(--bg); }
 <div class="be-wrap">
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
     <div style="font-size:24px;font-weight:800;color:var(--dark);">{{ buyer.name }}</div>
-    <span id="sku-count-badge" style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;padding:3px 12px;border-radius:12px;font-size:12px;font-weight:700;">
+    <span id="sku-count-badge" style="background:var(--action-green-bg);color:var(--action-green);border:1px solid var(--green-light);padding:3px 12px;border-radius:12px;font-size:12px;font-weight:700;">
       {{ (buyer.skus or [])|length }} SKUs assigned
     </span>
   </div>
@@ -118,7 +118,7 @@ body.be-page { background:var(--bg); }
         <div class="loc-card" id="loc-{{ loop.index0 }}">
           <div class="loc-head">
             <span>Location {{ loop.index }}</span>
-            <button onclick="rmLoc({{ loop.index0 }})" style="background:none;border:none;color:#c62828;cursor:pointer;font-size:20px;line-height:1;padding:0;">&times;</button>
+            <button onclick="rmLoc({{ loop.index0 }})" style="background:none;border:none;color:var(--action-red);cursor:pointer;font-size:20px;line-height:1;padding:0;">&times;</button>
           </div>
           <div class="g2">
             <div class="ff"><label>Name</label><input class="loc-name" value="{{ loc.name|e }}" placeholder="e.g. Coco Market"></div>
@@ -208,7 +208,7 @@ body.be-page { background:var(--bg); }
     <div class="save-status" id="save-status"></div>
     <div style="display:flex;gap:10px;">
       <a href="/contacts?tab=buyers" class="btn btn-o" style="text-decoration:none;display:inline-flex;align-items:center;">Cancel</a>
-      <button class="btn btn-p" onclick="saveBuyer()" style="background:#0288d1;border:none;min-width:120px;">Save Buyer</button>
+      <button class="btn btn-p" onclick="saveBuyer()" style="background:var(--info);border:none;min-width:120px;">Save Buyer</button>
     </div>
   </div>
 </div>

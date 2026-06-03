@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Soma">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="var(--black)">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
 <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
@@ -16,29 +16,29 @@
 <style>
 body.ah { background: var(--bg); }
 .ah-header {
-  background: var(--dark); color: #fff;
+  background: var(--dark); color: var(--white);
   padding: 14px 20px; display: flex; align-items: center; justify-content: space-between;
 }
 .ah-header h1 { font-size: 16px; font-weight: 700; margin: 0; }
 .ah-header .sub { font-size: 12px; opacity: .7; margin-top: 2px; }
-.ah-back { background: rgba(255,255,255,.15); border: none; color: #fff;
+.ah-back { background: rgba(255,255,255,.15); border: none; color: var(--white);
   border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600;
   cursor: pointer; text-decoration: none; display: inline-block; }
 .ah-back:hover { background: rgba(255,255,255,.25); }
 .ah-main { padding: 20px; max-width: 860px; margin: 0 auto; }
 .ah-filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .ah-filter {
-  background: #fff; border: 1.5px solid var(--border); border-radius: 20px;
+  background: var(--white); border: 1.5px solid var(--border); border-radius: 20px;
   padding: 6px 14px; font-size: 13px; font-weight: 600; color: var(--text-light);
   cursor: pointer; transition: all .15s;
 }
-.ah-filter.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ah-filter.active { background: var(--accent); border-color: var(--accent); color: var(--white); }
 .ah-empty {
   text-align: center; padding: 48px 24px; color: var(--text-light);
-  font-size: 14px; border: 2px dashed var(--border); border-radius: 12px; background: #fff;
+  font-size: 14px; border: 2px dashed var(--border); border-radius: 12px; background: var(--white);
 }
 .ah-card {
-  background: #fff; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--white); border: 1px solid var(--border); border-radius: 12px;
   margin-bottom: 10px; overflow: hidden; transition: box-shadow .15s;
 }
 .ah-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.06); }
@@ -53,8 +53,8 @@ body.ah { background: var(--bg); }
   font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
   margin-right: 8px;
 }
-.ah-badge.fg { background: #e3f2fd; color: #0a4081; border: 1px solid #90caf9; }
-.ah-badge.rm { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+.ah-badge.fg { background: var(--action-blue-bg); color: #0a4081; border: 1px solid #90caf9; }
+.ah-badge.rm { background: var(--action-green-bg); color: var(--action-green); border: 1px solid var(--green-light); }
 .ah-scope { font-size: 15px; font-weight: 700; color: var(--dark); }
 .ah-meta { font-size: 12px; color: var(--text-light); margin-top: 4px; line-height: 1.5; }
 .ah-card-right { text-align: right; flex-shrink: 0; }
@@ -62,7 +62,7 @@ body.ah { background: var(--bg); }
   font-size: 13px; font-weight: 700; color: var(--dark);
   background: var(--bg); padding: 4px 10px; border-radius: 6px; white-space: nowrap;
 }
-.ah-count.zero { color: var(--text-light); background: #f5f5f0; }
+.ah-count.zero { color: var(--text-light); background: var(--bg); }
 .ah-chevron { font-size: 12px; color: var(--text-light); margin-left: 8px; transition: transform .15s; }
 .ah-card.open .ah-chevron { transform: rotate(90deg); }
 .ah-card-body { display: none; border-top: 1px solid var(--border); padding: 6px 0; background: #fafaf8; }
@@ -78,8 +78,8 @@ body.ah { background: var(--bg); }
 .ah-num { font-variant-numeric: tabular-nums; color: var(--text-light); font-size: 12px; }
 .ah-num strong { color: var(--dark); font-size: 13px; }
 .ah-diff { font-weight: 700; font-variant-numeric: tabular-nums; }
-.ah-diff.up { color: #2e7d32; }
-.ah-diff.down { color: #c62828; }
+.ah-diff.up { color: var(--action-green); }
+.ah-diff.down { color: var(--action-red); }
 .ah-baseline {
   display: block; font-size: 10px; color: var(--text-light);
   margin-top: 2px; font-weight: 500; letter-spacing: .03em;

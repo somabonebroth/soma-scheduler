@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Soma">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="var(--black)">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
 <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
@@ -19,18 +19,18 @@
 <link rel="stylesheet" href="/static/style.css">
 <style>
 .kettle-block { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
-.kettle-header { background: var(--dark); color: #fff; padding: 10px 16px; font-weight: 700; font-size: 14px; text-align: center; }
+.kettle-header { background: var(--dark); color: var(--white); padding: 10px 16px; font-weight: 700; font-size: 14px; text-align: center; }
 .t-layout { display: grid; grid-template-columns: 1fr 1fr; min-height: 100px; }
 .t-side { padding: 12px 16px; }
 .t-side:first-child { border-right: 2px solid var(--border); }
 .t-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; padding: 4px 8px; border-radius: 4px; display: inline-block; }
-.t-label.finish { background: #fce4ec; color: #c62828; }
-.t-label.start { background: #e8f5e9; color: #2e7d32; }
+.t-label.finish { background: #fce4ec; color: var(--action-red); }
+.t-label.start { background: var(--action-green-bg); color: var(--action-green); }
 .recipe-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--dark); }
 .recipe-format { font-size: 11px; color: var(--text-light); margin-bottom: 8px; }
 .special-box { background: var(--warning); padding: 6px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-bottom: 8px; }
 .ingredient-section { margin-bottom: 8px; }
-.ingredient-header { background: var(--dark); color: #fff; padding: 4px 8px; font-size: 10px; font-weight: 600; border-radius: 3px; margin-bottom: 4px; }
+.ingredient-header { background: var(--dark); color: var(--white); padding: 4px 8px; font-size: 10px; font-weight: 600; border-radius: 3px; margin-bottom: 4px; }
 .ingredient-item { font-size: 11px; padding: 3px 8px; border-bottom: 1px solid var(--border); }
 .ingredient-item:last-child { border-bottom: none; }
 .finish-inputs { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
@@ -39,7 +39,7 @@
 .finish-inputs textarea { min-height: 50px; resize: vertical; }
 .prod-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
 .prod-row label { font-size: 11px; }
-.label-btn { background: var(--accent); color: #fff; border: none; padding: 8px 14px; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; margin-bottom: 8px; }
+.label-btn { background: var(--accent); color: var(--white); border: none; padding: 8px 14px; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; margin-bottom: 8px; }
 .label-btn:hover { background: var(--accent-light); }
 .no-production { color: var(--text-light); font-size: 12px; padding: 20px; text-align: center; }
 .kettles-end-section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 16px; }
@@ -47,11 +47,11 @@
 .kettles-end-section p { font-size: 12px; color: var(--text-light); margin-bottom: 10px; }
 .kettles-end-section input { width: 200px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
 .ccp-section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
-.ccp-header { background: var(--accent); color: #fff; padding: 12px 16px; font-size: 14px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+.ccp-header { background: var(--accent); color: var(--white); padding: 12px 16px; font-size: 14px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
 .ccp-checkbox { width: 32px; height: 32px; position: relative; flex-shrink: 0; cursor: pointer; }
 .ccp-checkbox input { position: absolute; width: 32px; height: 32px; opacity: 0; cursor: pointer; z-index: 2; margin: 0; }
 .ccp-checkbox .box { width: 28px; height: 28px; border: 2px solid rgba(255,255,255,0.6); border-radius: 4px; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; }
-.ccp-checkbox input:checked ~ .box { background: #fff; border-color: #fff; }
+.ccp-checkbox input:checked ~ .box { background: var(--white); border-color: var(--white); }
 .ccp-checkbox input:checked ~ .box::after { content: ''; display: block; width: 8px; height: 14px; border: solid var(--accent); border-width: 0 3px 3px 0; transform: rotate(45deg); margin-top: -3px; }
 .ccp-item { font-size: 13px; padding: 8px 16px; border-bottom: 1px solid var(--border); line-height: 1.4; }
 .ccp-item:last-child { border-bottom: none; }
@@ -62,7 +62,7 @@
 .signoff-row label { font-size: 13px; font-weight: 600; width: 140px; }
 .signoff-row input { flex: 1; min-width: 160px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
 .complete-bar { text-align: center; padding: 20px; }
-.btn-complete { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 16px 36px; font-size: 17px; font-weight: 600; cursor: pointer; }
+.btn-complete { background: var(--accent); color: var(--white); border: none; border-radius: 6px; padding: 16px 36px; font-size: 17px; font-weight: 600; cursor: pointer; }
 .btn-complete:hover { background: var(--accent-light); }
 .btn-complete:disabled { background: #ccc; }
 .complete-msg { margin-top: 10px; font-size: 13px; }
