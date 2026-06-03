@@ -24,6 +24,25 @@
     --r-md: 9px;
     --r-lg: 12px;
     --r-xl: 16px;
+    /* Neutrals — added 2026-06 to retire the most-duplicated literals
+       (#fff ×229, #000 ×26, #999 ×10) ahead of the per-template hex→token sweep. */
+    --white: #ffffff;
+    --black: #000000;
+    --text-muted: #999;          /* between --text and --text-light */
+    /* Blues — --info is the dominant page blue (×30); --action-blue (#0277bd, ×3)
+       is the near-identical button variant, converge in step 3. */
+    --info: #0288d1;
+    --indigo: #3949ab;
+    /* Material-amber family — the page warning palette (banners, pills, notes).
+       Distinct from the bootstrap alert pair (--warning/#856404) wired into .status. */
+    --amber-bg: #fff8e1;
+    --amber-border: #ffe082;
+    --amber-text: #b38b00;
+    --amber-text-dark: #8a6900;
+    --orange: #e65100;           /* strong alert / overdue accent */
+    /* Green tints */
+    --green-light: #a5d6a7;
+    --green-tint: #f0f7f0;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }

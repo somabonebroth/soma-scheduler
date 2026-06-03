@@ -211,8 +211,8 @@ Rules for any new or edited template:
 
 Unification is in progress, one small deploy at a time (do NOT batch). Status:
 - **Done:** deleted dead `cogs.html`; linked `mass_balance.html` + `reconcile_raw.html` to the shared sheet.
-- **Next:** extend tokens to cover reused values with no token yet (`--white` for the 191 `#fff`, the amber/warning family, info-blue `#0288d1`, neutral greys).
-- **Then:** collapse the ~986 hardcoded hexes to tokens **one template at a time, screenshot-verified** — never a global find/replace. `mass_balance.html` still forks `:root`; fold it onto the shared palette when its turn comes.
+- **Done:** extended the token set with the most-duplicated orphan literals — `--white`/`--black`/`--text-muted`, `--info`/`--indigo`, the material-amber family (`--amber-bg/-border/-text/-text-dark`, `--orange`), `--green-light`/`--green-tint`. These match values already in the templates, so collapsing to them is a no-op visually.
+- **Next:** collapse the ~954 hardcoded hexes to tokens **one template at a time, screenshot-verified** — never a global find/replace. `mass_balance.html` still forks `:root`; fold it onto the shared palette when its turn comes. A few near-duplicates to converge during the sweep: `--action-blue` (#0277bd) → `--info` (#0288d1); the darker amber text shades (#8a6900/#856404) onto `--amber-text-dark`/the bootstrap `.status` pair as appropriate.
 
 ---
 
