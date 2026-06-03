@@ -8,7 +8,7 @@
 <style>
 .cert-wrap { max-width:860px; margin:0 auto; padding:24px 16px 60px; }
 .cert-grid { display:grid; gap:10px; }
-.cert-card { background:#fff; border:1px solid var(--border); border-radius:var(--r-lg); padding:16px 18px; display:flex; align-items:center; gap:14px; transition:box-shadow .15s; }
+.cert-card { background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:16px 18px; display:flex; align-items:center; gap:14px; transition:box-shadow .15s; }
 .cert-card:hover { box-shadow:0 2px 10px rgba(0,0,0,.07); }
 .cert-icon { font-size:28px; flex-shrink:0; }
 .cert-info { flex:1; min-width:0; }
@@ -16,14 +16,14 @@
 .cert-meta { font-size:12px; color:var(--text-light); }
 .cert-cat { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; background:var(--bg); color:var(--text-light); border:1px solid var(--border); margin-right:6px; }
 .cert-actions { display:flex; gap:8px; flex-shrink:0; }
-.upload-zone { border:2px dashed var(--border); border-radius:var(--r-lg); padding:40px 24px; text-align:center; cursor:pointer; transition:all .2s; background:#fff; margin-bottom:20px; }
+.upload-zone { border:2px dashed var(--border); border-radius:var(--r-lg); padding:40px 24px; text-align:center; cursor:pointer; transition:all .2s; background:var(--white); margin-bottom:20px; }
 .upload-zone:hover,.upload-zone.drag { border-color:var(--accent); background:var(--row-alt); }
 .upload-zone .uz-icon { font-size:40px; margin-bottom:10px; }
 .upload-zone .uz-text { font-size:14px; font-weight:600; color:var(--dark); margin-bottom:4px; }
 .upload-zone .uz-sub { font-size:12px; color:var(--text-light); }
 .mo { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200; align-items:center; justify-content:center; padding:16px; }
 .mo.open { display:flex; }
-.mo-box { background:#fff; border-radius:var(--r-xl); width:100%; max-width:440px; padding:28px 24px; box-shadow:0 20px 60px rgba(0,0,0,.18); }
+.mo-box { background:var(--white); border-radius:var(--r-xl); width:100%; max-width:440px; padding:28px 24px; box-shadow:0 20px 60px rgba(0,0,0,.18); }
 .mo-box h2 { margin:0 0 18px; font-size:17px; font-weight:700; }
 .ff { margin-bottom:14px; }
 .ff label { display:block; font-size:10px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.05em; margin-bottom:5px; }
@@ -33,7 +33,7 @@
 .mo-foot button { flex:1; padding:12px; font-size:14px; font-weight:600; border-radius:var(--r-md); cursor:pointer; }
 .cat-group { margin-bottom:24px; }
 .cat-heading { font-size:11px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.06em; border-left:3px solid var(--accent); padding-left:8px; margin-bottom:10px; }
-.empty { text-align:center; padding:48px 24px; color:var(--text-light); font-size:14px; border:2px dashed var(--border); border-radius:var(--r-lg); background:#fff; }
+.empty { text-align:center; padding:48px 24px; color:var(--text-light); font-size:14px; border:2px dashed var(--border); border-radius:var(--r-lg); background:var(--white); }
 </style>
 </head>
 <body class="inv-page">
@@ -81,8 +81,8 @@
     <div style="font-size:12px;color:var(--text-light);margin-bottom:12px;">File: <strong id="u-fname"></strong></div>
     <div id="u-msg" style="font-size:13px;color:var(--action-red);min-height:16px;margin-bottom:8px;"></div>
     <div class="mo-foot">
-      <button style="background:#fff;border:1.5px solid var(--border);" onclick="cancelUpload()">Cancel</button>
-      <button id="u-save" style="background:var(--accent);color:#fff;border:none;" onclick="confirmUpload()">Upload</button>
+      <button style="background:var(--white);border:1.5px solid var(--border);" onclick="cancelUpload()">Cancel</button>
+      <button id="u-save" style="background:var(--accent);color:var(--white);border:none;" onclick="confirmUpload()">Upload</button>
     </div>
   </div>
 </div>

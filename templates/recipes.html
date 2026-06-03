@@ -24,7 +24,7 @@
 .recipe-list-item.drag-over { border-top: 3px solid var(--accent); }
 .recipe-info .recipe-name { font-size: 14px; font-weight: 600; color: var(--dark); }
 .recipe-info .recipe-meta { font-size: 11px; color: var(--text-light); }
-.recipe-info .organic-badge { font-size: 10px; background: #e8f5e9; color: #2e7d32; padding: 1px 6px; border-radius: 8px; font-weight: 600; margin-left: 6px; }
+.recipe-info .organic-badge { font-size: 10px; background: var(--action-green-bg); color: var(--action-green); padding: 1px 6px; border-radius: 8px; font-weight: 600; margin-left: 6px; }
 .recipe-btns { display: flex; gap: 6px; flex-shrink: 0; }
 .upload-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; }
 .upload-zone:hover,.upload-zone.dragover { border-color: var(--accent); background: rgba(74,103,65,0.05); }
@@ -32,7 +32,7 @@
 .upload-zone input { display: none; }
 .modal-meta { font-size: 12px; color: var(--text-light); margin-bottom: 16px; }
 .modal-section { margin-bottom: 12px; }
-.modal-section-title { background: var(--dark); color: #fff; padding: 6px 10px; font-size: 12px; font-weight: 600; border-radius: 4px; margin-bottom: 6px; }
+.modal-section-title { background: var(--dark); color: var(--white); padding: 6px 10px; font-size: 12px; font-weight: 600; border-radius: 4px; margin-bottom: 6px; }
 .modal-section-title.warning { background: var(--warning); color: #856404; }
 .modal-item { font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--border); }
 .modal-item:last-child { border-bottom: none; }
@@ -50,7 +50,7 @@
 .brand-label { font-size: 13px; font-weight: 700; color: var(--accent); }
 .filter-bar { display: flex; gap: 8px; margin-bottom: 16px; }
 .filter-btn { padding: 6px 14px; border: 1px solid var(--border); border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; background: var(--card-bg); color: var(--text); }
-.filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.filter-btn.active { background: var(--accent); color: var(--white); border-color: var(--accent); }
 .drag-handle { color: var(--text-light); font-size: 16px; margin-right: 8px; }
 .photo-upload-area { margin-top: 12px; padding: 12px; border: 1px dashed var(--border); border-radius: 6px; text-align: center; cursor: pointer; }
 .photo-upload-area:hover { border-color: var(--accent); }
@@ -60,13 +60,13 @@
 .ing-section-title { font-size: 12px; font-weight: 600; color: var(--text); }
 .ing-row { display: grid; grid-template-columns: 70px 90px 1fr 1fr 28px; gap: 6px; margin-bottom: 6px; align-items: center; }
 .ing-row input, .ing-row select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px; font-family: inherit; width: 100%; box-sizing: border-box; }
-.ing-row.needs-review { background: #fff8e1; border-radius: 4px; padding: 4px; border-left: 3px solid #f9a825; }
-.ing-row-btn { background: #d32f2f; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; height: 28px; padding: 0; }
-.ing-add-btn { background: var(--accent); color: #fff; border: none; border-radius: 4px; padding: 5px 10px; font-size: 11px; cursor: pointer; font-weight: 600; }
+.ing-row.needs-review { background: var(--amber-bg); border-radius: 4px; padding: 4px; border-left: 3px solid #f9a825; }
+.ing-row-btn { background: #d32f2f; color: var(--white); border: none; border-radius: 4px; cursor: pointer; font-size: 14px; height: 28px; padding: 0; }
+.ing-add-btn { background: var(--accent); color: var(--white); border: none; border-radius: 4px; padding: 5px 10px; font-size: 11px; cursor: pointer; font-weight: 600; }
 .ing-review-label { font-size: 10px; color: #f9a825; font-weight: 700; margin-left: 6px; }
-.migrate-banner { background: #fff3cd; border: 1px solid #ffe08a; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: #856404; display: none; }
+.migrate-banner { background: var(--warning); border: 1px solid #ffe08a; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: #856404; display: none; }
 .migrate-banner.show { display: block; }
-.migrate-banner button { margin-left: 10px; padding: 4px 10px; font-size: 11px; background: #856404; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+.migrate-banner button { margin-left: 10px; padding: 4px 10px; font-size: 11px; background: #856404; color: var(--white); border: none; border-radius: 4px; cursor: pointer; }
 .ing-row-header { display: grid; grid-template-columns: 70px 90px 1fr 1fr 28px; gap: 6px; font-size: 10px; font-weight: 600; color: var(--text-light); margin-bottom: 4px; text-transform: uppercase; }
 </style>
 </head>

@@ -8,17 +8,17 @@
 <style>
 body.an-page { background:var(--bg); }
 .an-wrap { max-width:1040px; margin:0 auto; padding:24px 16px 60px; }
-.tab-bar { display:flex; gap:0; background:#fff; border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:20px; }
+.tab-bar { display:flex; gap:0; background:var(--white); border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:20px; }
 .tab-btn { flex:1; padding:13px 16px; font-size:13px; font-weight:600; border:none; background:none; cursor:pointer; color:var(--text-light); border-bottom:3px solid transparent; transition:all .15s; }
 .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); background:#f9faf7; }
 .tab-pane { display:none; }
 .tab-pane.active { display:block; }
 .period-row { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; align-items:center; }
-.period-btn { padding:7px 14px; border:1.5px solid var(--border); border-radius:7px; font-size:12px; font-weight:600; background:#fff; cursor:pointer; color:var(--text-light); transition:all .15s; }
-.period-btn.active { border-color:var(--accent); color:var(--accent); background:#f0f7f0; }
+.period-btn { padding:7px 14px; border:1.5px solid var(--border); border-radius:7px; font-size:12px; font-weight:600; background:var(--white); cursor:pointer; color:var(--text-light); transition:all .15s; }
+.period-btn.active { border-color:var(--accent); color:var(--accent); background:var(--green-tint); }
 .buyer-filter { padding:8px 12px; border:1.5px solid var(--border); border-radius:7px; font-size:13px; outline:none; }
 .buyer-filter:focus { border-color:var(--accent); }
-.buyer-card { background:#fff; border:1px solid var(--border); border-radius:12px; margin-bottom:12px; overflow:hidden; cursor:pointer; transition:box-shadow .15s; }
+.buyer-card { background:var(--white); border:1px solid var(--border); border-radius:12px; margin-bottom:12px; overflow:hidden; cursor:pointer; transition:box-shadow .15s; }
 .buyer-card:hover { box-shadow:0 2px 12px rgba(0,0,0,.08); border-color:var(--accent); }
 .buyer-card-head { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; gap:12px; flex-wrap:wrap; }
 .bc-name { font-size:16px; font-weight:700; color:var(--dark); margin-bottom:4px; }
@@ -30,9 +30,9 @@ body.an-page { background:var(--bg); }
 .bc-arrow { font-size:18px; color:var(--text-light); flex-shrink:0; }
 .rev-bar-wrap { height:4px; background:#f0f0eb; border-radius:2px; margin-top:8px; width:140px; max-width:100%; }
 .rev-bar-fill { height:4px; background:var(--accent); border-radius:2px; }
-.empty-state { text-align:center; padding:48px 24px; color:var(--text-light); font-size:14px; border:2px dashed var(--border); border-radius:12px; background:#fff; }
+.empty-state { text-align:center; padding:48px 24px; color:var(--text-light); font-size:14px; border:2px dashed var(--border); border-radius:12px; background:var(--white); }
 .loading { text-align:center; padding:32px; color:var(--text-light); }
-.tracker-frame { width:100%; height:80vh; border:none; border-radius:10px; background:#fff; }
+.tracker-frame { width:100%; height:80vh; border:none; border-radius:10px; background:var(--white); }
 </style>
 </head>
 <body class="an-page inv-page">
@@ -78,7 +78,7 @@ body.an-page { background:var(--bg); }
 
   <!-- Production Tracker -->
   <div class="tab-pane" id="tab-production">
-    <iframe id="tracker-frame" src="" style="width:100%;height:80vh;border:none;border-radius:10px;background:#fff;" title="Production Tracker"></iframe>
+    <iframe id="tracker-frame" src="" style="width:100%;height:80vh;border:none;border-radius:10px;background:var(--white);" title="Production Tracker"></iframe>
   </div>
 </div>
 
