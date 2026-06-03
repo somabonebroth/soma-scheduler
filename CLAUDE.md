@@ -183,7 +183,7 @@ Where `{channel}` is `shopify` or `clover`. The two modules are deliberate near-
 
 **Known style debt (not bugs):**
 - JavaScript in templates uses `var` throughout (1781 uses) — 51 `let`/`const` are the inconsistent ones. Mechanical replacement is risky due to `var` hoisting semantics; use `jscodeshift` or eslint `--fix`.
-- 905 hardcoded hex colour values in templates vs 548 CSS variable uses. CSS variable system is partially adopted. Needs palette audit before fixing.
+- ~954 hardcoded hex colour values in templates vs ~886 CSS variable uses (post-cogs-deletion, 2026-06-03). CSS variable system is ~half adopted. See "UI styling convention" below for the cascade + the in-progress unification.
 - Only 125/236 functions have docstrings.
 - No type annotations (one exception).
 - 126 route handlers have 1 blank line before them instead of PEP 8's 2.
@@ -193,6 +193,26 @@ Where `{channel}` is `shopify` or `clover`. The two modules are deliberate near-
 - `eslint --fix` for JS style
 - `black` or `autopep8` for Python formatting
 - Playwright for visual regression after CSS changes
+
+### UI styling convention (the cascade — follow for ALL new pages)
+
+There IS a design system: [`static/style.css`](static/style.css). It defines the
+token palette (`:root` — colours, `--r-*` radius scale), and the component layer
+(`.card`, `.btn`/`.btn-*`, `.status`, `.modal`, `.header`, `.nav-arrow-btn`).
+Think in three layers, top-down: **tokens → components → page layout.** Pages
+should add *layout only*; they must not re-implement colours or components.
+
+Rules for any new or edited template:
+1. **Link the shared sheet** in `<head>`: `<link rel="stylesheet" href="/static/style.css">`. Every page except `login.html` (intentional standalone) does this.
+2. **Never redeclare `:root`** in a template. Adding a second `:root` forks the palette (this is how `mass_balance.html` ended up with a different `--accent` green). Need a new colour? Add a token to `static/style.css`, then reference it.
+3. **Never hardcode a hex that already has a token.** Use `var(--accent)`, `var(--bg)`, `var(--action-green)`, etc. Common offenders that are already tokens: `#2e7d32`=`--action-green`, `#c62828`=`--action-red`, `#f5f5f0`=`--bg`, `#e8f5e9`=`--action-green-bg`.
+4. **Reuse components** (`.btn-primary`, `.card`, `.status`…) instead of restyling buttons/cards inline.
+5. Inline `<style>` is for **page-specific layout** (this grid, this table width) — not a place to re-derive the global look.
+
+Unification is in progress, one small deploy at a time (do NOT batch). Status:
+- **Done:** deleted dead `cogs.html`; linked `mass_balance.html` + `reconcile_raw.html` to the shared sheet.
+- **Next:** extend tokens to cover reused values with no token yet (`--white` for the 191 `#fff`, the amber/warning family, info-blue `#0288d1`, neutral greys).
+- **Then:** collapse the ~986 hardcoded hexes to tokens **one template at a time, screenshot-verified** — never a global find/replace. `mass_balance.html` still forks `:root`; fold it onto the shared palette when its turn comes.
 
 ---
 
