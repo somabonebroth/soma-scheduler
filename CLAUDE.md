@@ -209,10 +209,13 @@ Rules for any new or edited template:
 4. **Reuse components** (`.btn-primary`, `.card`, `.status`…) instead of restyling buttons/cards inline.
 5. Inline `<style>` is for **page-specific layout** (this grid, this table width) — not a place to re-derive the global look.
 
-Unification is in progress, one small deploy at a time (do NOT batch). Status:
+Unification is in progress. The hex→token sweep is provably no-op (each swap is value-identical), so small templates are batched per deploy; anything involving a visual change (e.g. de-forking a `:root`) stays its own deploy. Status:
 - **Done:** deleted dead `cogs.html`; linked `mass_balance.html` + `reconcile_raw.html` to the shared sheet.
 - **Done:** extended the token set with the most-duplicated orphan literals — `--white`/`--black`/`--text-muted`, `--info`/`--indigo`, the material-amber family (`--amber-bg/-border/-text/-text-dark`, `--orange`), `--green-light`/`--green-tint`. These match values already in the templates, so collapsing to them is a no-op visually.
-- **Next:** collapse the ~954 hardcoded hexes to tokens **one template at a time, screenshot-verified** — never a global find/replace. `mass_balance.html` still forks `:root`; fold it onto the shared palette when its turn comes. A few near-duplicates to converge during the sweep: `--action-blue` (#0277bd) → `--info` (#0288d1); the darker amber text shades (#8a6900/#856404) onto `--amber-text-dark`/the bootstrap `.status` pair as appropriate.
+- **Done (hex→token swept):** `dashboard`, `weekly_view`, `production_tracker`, plus a batch of 12 small templates (`recipes`, `ripe_sku_audit`, `certifications`, `analytics`, `reconcile_raw`, `ripe_packing_slip`, `create_schedule`, `master_ccp`, `important_documents`, `company_settings`, `ripe_analytics`, `organic_certification`). Method: replace exact-value hex matches in CSS position **only outside `<script>`**, leaving JS logic palettes and arbitrary categorical palettes (chart bucket colours, packing-slip group borders) literal.
+- **Not yet swept (largest first):** `organic` (730 lines, audit-critical — own session), `audit` (168), `contacts` (98), `buyer_analytics` (88), `ripe_products` (78), `audits` (76), `daily_production` (67), `buyer_edit` (64), `ripe_orders` (60), `traceability` (60). `login.html` is intentionally standalone — leave it.
+- **mass_balance.html** forks `:root` with a *different* `--accent` (#3d5a3d vs canonical #4a6741) — de-forking it onto the shared palette IS a visual change; do it as its own deploy, eyes-on.
+- **Token round-2 candidates** (recurring token-less literals worth promoting): blues `#1976d2`/`#1565c0`, greys `#888`/`#333`/`#ddd`, `#e67e22` orange, off-whites `#fafaf5`/`#fffdf5`/`#fafafa`, `#856404`/`#155724` alert text. Decide as one batch. Also converge near-dupes: `--action-blue` (#0277bd) → `--info` (#0288d1); darker ambers (#8a6900/#856404).
 
 ---
 
