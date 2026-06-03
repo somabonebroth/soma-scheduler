@@ -119,7 +119,7 @@ This is the audit-critical chain: supplier lot → production run → finished g
 
 **Receipt photos:** one per delivery, stored as `<entry_id>.<ext>` in `rm_receipt_photos/`, anchored to the first entry of a bulk save. `GET /api/organic/raw-materials/receipt-photos` lists which entry ids have one; the Receiving list shows a "📎 Invoice" button per delivery.
 
-**Two pages, confusingly named:** "Manage Inventory" = `templates/organic.html` (4 tabs: Raw Materials / Production Runs / Finished Goods / Records). "Completed Production" = `templates/traceability.html` (the page formerly called Traceability; week records, HOO sign-off, stock exceptions, per-vessel certs). New templates this session: `mass_balance.html`, `reconcile_raw.html`.
+**Two pages, confusingly named:** "Manage Inventory" = `templates/organic.html` (4 tabs: Raw Materials / Production Runs / Finished Goods / Records). "Completed Production" = `templates/traceability.html` (the page formerly called Traceability; week records, HOO sign-off, stock exceptions, per-vessel certs). Two more standalone tool pages: `mass_balance.html` and `reconcile_raw.html` (both link the shared `static/style.css`).
 
 ---
 
@@ -183,7 +183,7 @@ Where `{channel}` is `shopify` or `clover`. The two modules are deliberate near-
 
 **Known style debt (not bugs):**
 - JavaScript in templates uses `var` throughout (1781 uses) — 51 `let`/`const` are the inconsistent ones. Mechanical replacement is risky due to `var` hoisting semantics; use `jscodeshift` or eslint `--fix`.
-- ~954 hardcoded hex colour values in templates vs ~886 CSS variable uses (post-cogs-deletion, 2026-06-03). CSS variable system is ~half adopted. See "UI styling convention" below for the cascade + the in-progress unification.
+- ~843 hardcoded hex colour values in templates vs ~997 CSS variable uses (2026-06-03, after the small-template sweep). CSS variables now outnumber raw hexes app-wide, but the largest templates (`organic`, `audit`, `contacts`, …) are not yet swept and still hold most of the remaining literals. See "UI styling convention" below for the cascade + the in-progress unification.
 - Only 125/236 functions have docstrings.
 - No type annotations (one exception).
 - 126 route handlers have 1 blank line before them instead of PEP 8's 2.
@@ -229,7 +229,7 @@ Render is connected to `github.com/somabonebroth/soma-scheduler` and auto-deploy
 4. Watch Render logs through startup — confirm no traceback
 5. Smoke test in browser before the next change
 
-**One change at a time, deployed and confirmed before the next.**
+**One change at a time, deployed and confirmed before the next.** (Exception: a *provably* no-op mechanical sweep — e.g. value-identical hex→token swaps across several small templates — may be batched into one deploy, since there's nothing per-file to confirm. Anything with a visual or behavioural change, including de-forking a `:root`, stays one-at-a-time.)
 
 **Smoke test after every deploy:**
 1. Dashboard loads
