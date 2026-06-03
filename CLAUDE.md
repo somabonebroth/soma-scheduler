@@ -12,7 +12,7 @@ Two Flask apps deployed on Render:
 ## Repository structure
 
 ```
-app.py              — ~7376 lines, 166 routes. Still the core, but the blueprint
+app.py              — ~6710 lines, 166 routes. Still the core, but the blueprint
                       split is now underway (see "Pending architectural work").
 helpers.py          — Foundation layer (extracted 2026-06-03): dependency-free
                       stdlib-only primitives — JSON IO with per-path locks, path/
@@ -26,6 +26,12 @@ recipes.py          — Flask Blueprint (637 lines, extracted 2026-06-03): 17 re
                       update_recipe rename cascade. Shared recipe/buyer helpers stay
                       in app.py (reached via `import app`); foundation names imported
                       from helpers. PHOTOS_DIR + serve_photo stay in app.py.
+sales.py            — Flask Blueprint (731 lines, extracted 2026-06-03): the 7
+                      organic-sales routes (/api/organic/sales*: get/add/add-order/
+                      edit/delete + packing-slip + qbo-csv). Buyer helpers + the
+                      ORGANIC_FG_PATH/ORGANIC_SALES_PATH constants stay in app.py
+                      (app.-qualified); foundation IO from helpers. Channel imports,
+                      sales analytics, and trace deliberately NOT included.
 ripe_orders.py      — Flask Blueprint (591 lines) handling Ripe order workflow within Soma
 shopify_importer.py — Shopify Admin API client. Pulls orders for a week,
                       parses SKUs, returns a structured preview. Auth via
@@ -308,6 +314,15 @@ Render restart → browser smoke test → STOP for the next.
   visible in `app.py`'s namespace is defined there. Also `app.static_folder` (Flask
   instance attr) became `app.app.static_folder` (module → instance). `PHOTOS_DIR` +
   `serve_photo` stayed in `app.py`; sliced around them per-function.
+- ✅ **`sales.py`** (commit `38a6b1d`) — 7 organic-sales routes (get/add/add-order/
+  edit/delete + packing-slip + qbo-csv). Lower-risk than recipes: per-name home
+  classification gave only **3** `app.`-qualifications (`ORGANIC_FG_PATH`,
+  `ORGANIC_SALES_PATH`, `_load_buyers`) — the FG/FIFO deduction in the add routes is
+  inline on the FG JSON, not a shared helper, so no cascade. Sliced around the
+  interleaved buyer helpers (`_load_buyers`/`_save_buyers`/`_buyer_resolver`/
+  `_all_sku_catalog`/`BUYERS_PATH`) and the startup-called `_migrate_legacy_sales`,
+  all of which stay in `app.py`. Smoke verified FIFO deduction across lots, multi-line
+  orders, and precise per-fg_id restore on delete.
 
 **Two reusable blueprint patterns are now established** (both define a local verbatim
 `login_required` to avoid a circular import, matching `ripe_orders.py`):
@@ -318,8 +333,11 @@ Render restart → browser smoke test → STOP for the next.
 `ripe_orders.py` was untouched and still resolves its lazy `from app import` calls
 because `app.py` re-exports the moved names.
 
-**NEXT: `sales.py`** (~699 lines) — analysis to be (re)run live at the start of the
-session, since line ranges drift. Apply the recipes-proven method end-to-end:
+**NEXT: `inventory.py`** (~1093 lines) — analysis to be (re)run live at the start of
+the session, since line ranges drift. NOTE: the inventory region is where the buyer
+helpers + ORGANIC_FG_PATH/ORGANIC_SALES_PATH constants live, and it is physically
+interleaved with the sales/trace code already split out — expect heavy slicing-around.
+Apply the recipes/sales-proven method end-to-end:
 1. AST inventory of the sales routes + a free-variable report, **classifying each
    external name by its TRUE home** — helpers.py names → direct `from helpers import`;
    app.py names → `app.`-qualify; Flask-instance attrs (e.g. `app.static_folder`) →
@@ -335,9 +353,9 @@ session, since line ranges drift. Apply the recipes-proven method end-to-end:
 Assume shared helpers STAY in `app.py` (the "no cross-domain deps" optimism held for
 neither buyers nor recipes).
 
-**Remaining domains after sales** (one per session given growing entanglement):
-`inventory` (~1093 lines), `production` (~883 lines). Same routes-move/helpers-stay
-pattern + the per-name home classification above.
+**Remaining domains after inventory** (one per session given growing entanglement):
+`production` (~883 lines). Same routes-move/helpers-stay pattern + the per-name home
+classification above.
 
 > Correction to the earlier audit: the helper list once named four functions that don't
 > exist as movable top-level defs — `_revenue`, `_cases`, `_entry_prod_date` are **nested
