@@ -15,7 +15,7 @@
     /* Semantic action colours */
     --action-green: #2e7d32;
     --action-green-bg: #e8f5e9;
-    --action-blue: #0277bd;
+    --action-blue: var(--info);   /* round-2: converged onto --info (#0288d1); was #0277bd */
     --action-blue-bg: #e3f2fd;
     --action-red: #c62828;
     --action-red-bg: #ffebee;
