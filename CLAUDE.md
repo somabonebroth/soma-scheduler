@@ -12,7 +12,7 @@ Two Flask apps deployed on Render:
 ## Repository structure
 
 ```
-app.py              — ~6710 lines, 166 routes. Still the core, but the blueprint
+app.py              — ~6280 lines, 166 routes. Still the core, but the blueprint
                       split is now underway (see "Pending architectural work").
 helpers.py          — Foundation layer (extracted 2026-06-03): dependency-free
                       stdlib-only primitives — JSON IO with per-path locks, path/
@@ -32,6 +32,12 @@ sales.py            — Flask Blueprint (731 lines, extracted 2026-06-03): the 7
                       ORGANIC_FG_PATH/ORGANIC_SALES_PATH constants stay in app.py
                       (app.-qualified); foundation IO from helpers. Channel imports,
                       sales analytics, and trace deliberately NOT included.
+finished_goods.py   — Flask Blueprint (477 lines, extracted 2026-06-03): the 10
+                      finished-goods routes (/api/organic/finished-goods*). First
+                      slice of the "inventory" domain. FG grouping helpers
+                      (_group_fg_by_sku/_group_fg_with_catalog) + load_recipes +
+                      ORGANIC_FG_PATH/SKU_META_PATH stay in app.py (app.-qualified);
+                      foundation IO from helpers. No consumption-chain code touched.
 ripe_orders.py      — Flask Blueprint (591 lines) handling Ripe order workflow within Soma
 shopify_importer.py — Shopify Admin API client. Pulls orders for a week,
                       parses SKUs, returns a structured preview. Auth via
@@ -323,6 +329,16 @@ Render restart → browser smoke test → STOP for the next.
   `_all_sku_catalog`/`BUYERS_PATH`) and the startup-called `_migrate_legacy_sales`,
   all of which stay in `app.py`. Smoke verified FIFO deduction across lots, multi-line
   orders, and precise per-fg_id restore on delete.
+- ✅ **`finished_goods.py`** (commit `325d17d`) — first slice of the **inventory**
+  domain. 10 FG routes (/api/organic/finished-goods*: list/update/delete, lot-adjust,
+  baseline +bulk, manual add/subtract, grouped, sku-detail). Only 5 `app.`-qualifications:
+  `ORGANIC_FG_PATH`, `SKU_META_PATH`, `load_recipes`, and the grouping helpers
+  `_group_fg_by_sku` / `_group_fg_with_catalog` (sku-meta + other routes still call them,
+  so they stay in app.py). Touches **no** consumption-chain code. Inventory was scoped
+  down from one ~44-route move to per-sub-domain slices (decided with the user); FG was
+  the cleanest cut. Confirmed `/grouped` + `/sku/<key>` still resolve alongside the
+  generic `/<fg_id>` route — Werkzeug ranks by rule specificity, not definition order, so
+  moving routes into the blueprint can't change matching precedence.
 
 **Two reusable blueprint patterns are now established** (both define a local verbatim
 `login_required` to avoid a circular import, matching `ripe_orders.py`):
@@ -333,11 +349,23 @@ Render restart → browser smoke test → STOP for the next.
 `ripe_orders.py` was untouched and still resolves its lazy `from app import` calls
 because `app.py` re-exports the moved names.
 
-**NEXT: `inventory.py`** (~1093 lines) — analysis to be (re)run live at the start of
-the session, since line ranges drift. NOTE: the inventory region is where the buyer
-helpers + ORGANIC_FG_PATH/ORGANIC_SALES_PATH constants live, and it is physically
-interleaved with the sales/trace code already split out — expect heavy slicing-around.
-Apply the recipes/sales-proven method end-to-end:
+**Inventory is being split per sub-domain, not as one blueprint** (decided 2026-06-03 —
+it was ~44 routes / ~1385 lines straddling audit-critical code). Done: `finished_goods.py`
+(✅ above). Remaining inventory slices, each its own verified step:
+- **`raw_materials.py`** (~21 routes, ~687 lines) — RM CRUD, sections/assignments, bulk
+  add, invoices, receipt photos, ingredients. HIGHER RISK: sits next to the
+  consumption-chain invariants and needs several RM-private helpers moved too
+  (`_invoice_mime`, `_save_invoice_file_bytes`, `_remove_invoice_file`, `_parse_lots_field`,
+  photo/section consts). ~18 app.-qualifications.
+- **`audit` tools** (~6 routes, ~201 lines) — reconcile-raw, trace, mass-balance,
+  stock-exceptions. HIGHEST RISK (audit-critical): depends on
+  `_rebuild_raw_material_consumption`, `_compute_mass_balance`, `_run_start_date_str`,
+  `_sale_touches_fg` — those helpers stay in app.py.
+- sku-meta (~3 routes) + the inventory page routes — small, can ride with another slice.
+- production-runs / contacts routes (~2) belong to the **production** domain below.
+
+**NEXT (recommended): `raw_materials.py`.** Apply the recipes/sales/FG-proven method
+end-to-end (re-run line ranges live; they drift):
 1. AST inventory of the sales routes + a free-variable report, **classifying each
    external name by its TRUE home** — helpers.py names → direct `from helpers import`;
    app.py names → `app.`-qualify; Flask-instance attrs (e.g. `app.static_folder`) →
@@ -354,8 +382,8 @@ Assume shared helpers STAY in `app.py` (the "no cross-domain deps" optimism held
 neither buyers nor recipes).
 
 **Remaining domains after inventory** (one per session given growing entanglement):
-`production` (~883 lines). Same routes-move/helpers-stay pattern + the per-name home
-classification above.
+`production` (~883 lines), which includes the production-runs/contacts routes noted
+above. Same routes-move/helpers-stay pattern + the per-name home classification above.
 
 > Correction to the earlier audit: the helper list once named four functions that don't
 > exist as movable top-level defs — `_revenue`, `_cases`, `_entry_prod_date` are **nested
