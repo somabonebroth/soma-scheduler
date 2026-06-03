@@ -3832,11 +3832,6 @@ def _group_fg_with_catalog(fg, recipes):
 # helpers (_group_fg_by_sku, _group_fg_with_catalog) stay above; the FG path
 # constants stay in app.py — the blueprint reaches them via app.ORGANIC_FG_PATH.
 
-VALID_ADD_REASONS = ["Found stock", "Distributor return", "Recount", "Other"]
-VALID_SUBTRACT_REASONS = [
-    "Spillage", "Waste", "Theft", "Sample", "Donation", "Recount", "Other"
-]
-
 
 @app.route("/important-documents")
 @login_required
