@@ -24,13 +24,13 @@
 .order-detail.open{display:table-row;}
 .order-detail-inner{background:var(--bg);border-radius:8px;padding:16px;margin:4px 0 8px;}
 .tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;white-space:nowrap;}
-.tag-pending{background:var(--warning);color:#856404;}
+.tag-pending{background:var(--warning);color:var(--warning-text);}
 .tag-approved{background:#cfe2ff;color:#0a4081;}
-.tag-fulfilled{background:var(--success);color:#155724;}
+.tag-fulfilled{background:var(--success);color:var(--success-text);}
 .tag-declined{background:var(--error);color:#721c24;}
 .tag-net14{background:#e8eaf6;color:var(--indigo);}
-.tag-paid{background:var(--success);color:#155724;}
-.tag-awaiting{background:var(--warning);color:#856404;}
+.tag-paid{background:var(--success);color:var(--success-text);}
+.tag-awaiting{background:var(--warning);color:var(--warning-text);}
 .tag-invoice-sent{background:#e8eaf6;color:var(--indigo);}
 .tag-failed{background:var(--error);color:#721c24;}
 .tag-voided{background:#eceff1;color:#546e7a;}
@@ -51,7 +51,7 @@
 .filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
 .filter-btn{background:var(--card-bg);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;cursor:pointer;transition:all .15s;}
 .filter-btn.active{background:var(--accent);color:var(--white);border-color:var(--accent);}
-.info-msg{background:var(--action-blue-bg);border:1px solid #90caf9;border-radius:8px;padding:14px;font-size:13px;color:#1565c0;margin-bottom:16px;}
+.info-msg{background:var(--action-blue-bg);border:1px solid #90caf9;border-radius:8px;padding:14px;font-size:13px;color:var(--info-dark);margin-bottom:16px;}
 .err-msg{background:var(--action-red-bg);border:1px solid #ef9a9a;border-radius:8px;padding:14px;font-size:13px;color:var(--action-red);margin-bottom:16px;}
 
 /* Approve modal */
@@ -62,10 +62,10 @@
 .modal-card p{margin:0 0 18px;font-size:13px;color:var(--text-light);}
 .modal-field{margin-bottom:14px;}
 .modal-field label{display:block;font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;}
-.modal-field input,.modal-field select{width:100%;box-sizing:border-box;padding:11px;border:1px solid #ddd;border-radius:8px;font-size:14px;}
+.modal-field input,.modal-field select{width:100%;box-sizing:border-box;padding:11px;border:1px solid var(--grey-border);border-radius:8px;font-size:14px;}
 .modal-actions{display:flex;gap:10px;margin-top:18px;}
 .modal-actions button{flex:1;padding:12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;}
-.modal-cancel{background:var(--white);border:1px solid #ddd;color:#333;}
+.modal-cancel{background:var(--white);border:1px solid var(--grey-border);color:#333;}
 .modal-confirm{background:var(--action-green);border:none;color:var(--white);}
 .modal-confirm:disabled{background:#aaa;}
 .success-banner{background:var(--action-green-bg);border:1px solid var(--green-light);border-radius:8px;padding:14px;font-size:13px;color:var(--action-green);margin-top:12px;display:none;}

@@ -43,6 +43,17 @@
     /* Green tints */
     --green-light: #a5d6a7;
     --green-tint: #f0f7f0;
+    /* Round-2 promotions (2026-06) — recurring token-less literals named at
+       their exact value (no-op sweep). #aaa (1 use) left literal. */
+    --info-dark: #1565c0;        /* dark blue — links, headings */
+    --info-border: #1976d2;      /* blue borders / accents */
+    --warning-text: #856404;     /* amber alert text — pairs with --warning bg */
+    --success-text: #155724;     /* green alert text — pairs with --success bg */
+    /* Cool neutral grey ramp — distinct from the warm --text/--border family */
+    --grey-dark: #666;           /* secondary text */
+    --grey: #888;                /* muted / placeholder text */
+    --grey-light: #ccc;          /* disabled controls */
+    --grey-border: #ddd;         /* cool input borders */
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }

@@ -11,14 +11,14 @@ body.inv-page .wrap { max-width:1000px; margin:0 auto; padding:24px 16px 48px; }
 .stat { background:var(--white); border:1px solid var(--border); border-radius:10px; padding:16px 18px; text-align:center; }
 .stat-n { font-size:28px; font-weight:800; }
 .stat-l { font-size:11px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.05em; margin-top:4px; }
-.n-green { color:var(--action-green); } .n-red { color:var(--action-red); } .n-amber { color:var(--orange); } .n-blue { color:#1565c0; }
+.n-green { color:var(--action-green); } .n-red { color:var(--action-red); } .n-amber { color:var(--orange); } .n-blue { color:var(--info-dark); }
 
 .section-head { font-size:15px; font-weight:700; margin:24px 0 10px; display:flex; align-items:center; gap:8px; }
 .badge { padding:2px 10px; border-radius:10px; font-size:11px; font-weight:700; }
 .b-ok  { background:var(--action-green-bg); color:var(--action-green); }
 .b-bad { background:var(--action-red-bg); color:var(--action-red); }
 .b-warn{ background:var(--amber-bg); color:var(--orange); }
-.b-grey{ background:var(--bg); color:#888; }
+.b-grey{ background:var(--bg); color:var(--grey); }
 
 table.audit { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:24px; }
 .audit th { text-align:left; padding:9px 12px; border-bottom:2px solid var(--border); font-size:11px; font-weight:700; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; }
@@ -27,10 +27,10 @@ table.audit { width:100%; border-collapse:collapse; font-size:13px; margin-botto
 .audit tr.row-ok   td:first-child { border-left:3px solid var(--action-green); }
 .audit tr.row-bad  td:first-child { border-left:3px solid var(--action-red); }
 .audit tr.row-warn td:first-child { border-left:3px solid var(--orange); }
-.audit tr.row-grey td:first-child { border-left:3px solid #ccc; }
+.audit tr.row-grey td:first-child { border-left:3px solid var(--grey-light); }
 .mono { font-family:ui-monospace,monospace; font-size:11px; color:var(--text-light); }
 .issue { font-size:11px; color:var(--action-red); margin-top:3px; }
-.suggest { font-size:11px; color:#1565c0; margin-top:3px; }
+.suggest { font-size:11px; color:var(--info-dark); margin-top:3px; }
 .inactive-label { font-size:10px; color:#bbb; font-weight:600; text-transform:uppercase; }
 .stock-n { font-weight:700; color:var(--accent); }
 .stock-zero { color:#bbb; }
@@ -81,7 +81,7 @@ table.audit { width:100%; border-collapse:collapse; font-size:13px; margin-botto
   <div class="stat"><div class="stat-n n-red">{{ s.broken }}</div><div class="stat-l">Broken Link</div></div>
   <div class="stat"><div class="stat-n n-amber">{{ s.no_key }}</div><div class="stat-l">No Key Set</div></div>
   <div class="stat"><div class="stat-n n-amber">{{ s.dirty_names }}</div><div class="stat-l">Dirty Names</div></div>
-  <div class="stat"><div class="stat-n n-grey" style="color:#888;">{{ s.unlinked_soma_recipes }}</div><div class="stat-l">Soma Only</div></div>
+  <div class="stat"><div class="stat-n n-grey" style="color:var(--grey);">{{ s.unlinked_soma_recipes }}</div><div class="stat-l">Soma Only</div></div>
 </div>
 
 <!-- Ripe product audit table -->

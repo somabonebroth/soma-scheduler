@@ -344,10 +344,10 @@ function dashSaleNext(){
 .dash-modal-overlay.open{display:flex;}
 .dash-modal{background:var(--white);border-radius:16px;width:100%;max-width:400px;margin:16px;padding:28px 24px;position:relative;}
 .dash-modal h2{font-size:17px;font-weight:700;color:#1a1a1a;margin:0 0 4px;}
-.dash-modal p{font-size:13px;color:#888;margin:0 0 20px;}
+.dash-modal p{font-size:13px;color:var(--grey);margin:0 0 20px;}
 .dash-modal-field{margin-bottom:14px;}
-.dash-modal-field label{font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:6px;}
-.dash-modal-field input,.dash-modal-field select{width:100%;box-sizing:border-box;padding:12px;border:1px solid #ddd;border-radius:8px;font-size:15px;background:var(--white);}
+.dash-modal-field label{font-size:11px;font-weight:600;color:var(--grey);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:6px;}
+.dash-modal-field input,.dash-modal-field select{width:100%;box-sizing:border-box;padding:12px;border:1px solid var(--grey-border);border-radius:8px;font-size:15px;background:var(--white);}
 .dash-modal-err{font-size:13px;color:var(--action-red);display:none;margin-bottom:8px;}
 .dash-modal-success{background:var(--action-green-bg);border:1px solid var(--green-light);border-radius:10px;padding:16px;text-align:center;display:none;}
 .dash-modal-success .check{font-size:36px;margin-bottom:6px;}
@@ -355,7 +355,7 @@ function dashSaleNext(){
 .dash-modal-success small{font-size:12px;color:#388e3c;}
 .dash-modal-actions{display:flex;gap:10px;margin-top:4px;}
 .dash-modal-actions button{flex:1;padding:13px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
-.dm-cancel{background:var(--white);border:1px solid #ddd;color:#333;}
+.dm-cancel{background:var(--white);border:1px solid var(--grey-border);color:#333;}
 .dm-primary-green{background:var(--action-green);border:none;color:var(--white);}
 .dm-primary-blue{background:var(--info);border:none;color:var(--white);}
 </style>
@@ -363,7 +363,7 @@ function dashSaleNext(){
 <!-- Record Sale modal -->
 <div class="dash-modal-overlay" id="dash-sale-modal">
   <div class="dash-modal">
-    <button onclick="closeDashSaleModal()" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:#888;">&times;</button>
+    <button onclick="closeDashSaleModal()" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:var(--grey);">&times;</button>
     <div id="dash-sale-form">
       <h2>&#128176; Record Sale</h2>
       <p>Select buyer and date. LOT numbers are assigned automatically by FIFO on the next screen.</p>
@@ -377,9 +377,9 @@ function dashSaleNext(){
           <option value="">— Select buyer —</option>
         </select>
       </div>
-      <div id="dash-loc-field" style="display:none;margin-bottom:14px;padding:12px 14px;background:var(--action-blue-bg);border:2px solid #1976d2;border-radius:9px;">
-        <label style="display:block;font-size:11px;font-weight:700;color:#1565c0;text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px;">&#128205; Delivery Location</label>
-        <select id="dash-loc-select" style="width:100%;padding:10px 12px;border:1.5px solid #1976d2;border-radius:7px;font-size:14px;font-weight:500;background:var(--white);">
+      <div id="dash-loc-field" style="display:none;margin-bottom:14px;padding:12px 14px;background:var(--action-blue-bg);border:2px solid var(--info-border);border-radius:9px;">
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--info-dark);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px;">&#128205; Delivery Location</label>
+        <select id="dash-loc-select" style="width:100%;padding:10px 12px;border:1.5px solid var(--info-border);border-radius:7px;font-size:14px;font-weight:500;background:var(--white);">
           <option value="">— Main / Primary address —</option>
         </select>
       </div>
@@ -403,7 +403,7 @@ function dashSaleNext(){
 <!-- Receive Inventory modal -->
 <div class="dash-modal-overlay" id="dash-receive-modal">
   <div class="dash-modal">
-    <button onclick="closeDashReceiveModal()" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:#888;">&times;</button>
+    <button onclick="closeDashReceiveModal()" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:var(--grey);">&times;</button>
     <div id="dash-receive-form">
       <h2>&#128230; Receive Inventory</h2>
       <p>Select supplier and delivery date to continue entering received items.</p>
