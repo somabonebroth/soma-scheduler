@@ -27,6 +27,7 @@ import zipfile
 import io
 from ripe_orders import ripe_orders_bp, init_paths as _ripe_init_paths
 from suppliers import suppliers_bp
+from buyers import buyers_bp
 import shopify_importer
 import clover_importer
 
@@ -73,6 +74,7 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ.get("SECRET_KEY", "soma-bone-broth-2026-change-me")
 app.register_blueprint(ripe_orders_bp)
 app.register_blueprint(suppliers_bp)
+app.register_blueprint(buyers_bp)
 
 # Session lifetime — 4 hours. After this the user must log in again.
 from datetime import timedelta as _timedelta
@@ -6420,181 +6422,6 @@ def _buyer_resolver(buyers_list):
 
     return resolve
 
-@app.route("/api/buyers", methods=["GET"])
-@login_required
-def get_buyers():
-    return jsonify(_load_buyers())
-
-@app.route("/api/buyers/sku-catalog", methods=["GET"])
-@login_required
-def get_buyer_sku_catalog():
-    catalog = _all_sku_catalog()
-    groups = {}
-    for sku in catalog:
-        b = sku["brand"] or "No Brand"
-        if b not in groups:
-            groups[b] = []
-        groups[b].append(sku)
-    return jsonify([{"brand": b, "skus": groups[b]} for b in sorted(groups.keys())])
-
-@app.route("/api/buyers", methods=["POST"])
-@login_required
-def create_buyer():
-    data = request.get_json(force=True) or {}
-    name = (data.get("name") or "").strip()
-    if not name:
-        return jsonify({"error": "Name required"}), 400
-    buyers = _load_buyers()
-    if any(b["name"].lower() == name.lower() for b in buyers):
-        return jsonify({"error": "Buyer already exists"}), 409
-    buyer = {"id": datetime.now().strftime("%Y%m%d%H%M%S%f"), "name": name}
-
-    if "skus" in data:
-        catalog_by_key = {s["sku_key"]: s for s in _all_sku_catalog()}
-        new_skus = []
-        for sku in (data["skus"] or []):
-            merged = dict(sku)
-            cat = catalog_by_key.get(sku.get("sku_key", ""), {})
-            for ident in ("brand", "format"):
-                if not merged.get(ident) and cat.get(ident):
-                    merged[ident] = cat[ident]
-            for pf in ("price", "cogs", "margin_pct"):
-                if pf in merged and merged[pf] is not None:
-                    try:
-                        merged[pf] = round(float(merged[pf]), 2)
-                    except (TypeError, ValueError):
-                        merged[pf] = None
-            new_skus.append(merged)
-        buyer["skus"] = new_skus
-    else:
-        sku_catalog = _all_sku_catalog()
-        buyer["skus"] = [s for s in sku_catalog if s["brand"].lower() == name.lower()]
-
-    for field in ("contact_name","phone","email","address","website","certifications","notes"):
-        if field in data:
-            buyer[field] = (data[field] or "").strip()
-
-    if "locations" in data and isinstance(data["locations"], list):
-        buyer["locations"] = [
-            {"id": l.get("id") or str(i),
-             "name": (l.get("name") or "").strip(),
-             "address": (l.get("address") or "").strip()}
-            for i, l in enumerate(data["locations"])
-            if (l.get("name") or "").strip()
-        ]
-
-    buyers.append(buyer)
-    _save_buyers(buyers)
-    return jsonify(buyer), 201
-
-@app.route("/api/buyers/<bid>", methods=["PUT"])
-@login_required
-def update_buyer(bid):
-    data = request.get_json(force=True) or {}
-    buyers = _load_buyers()
-    idx = next((i for i, b in enumerate(buyers) if b["id"] == bid), None)
-    if idx is None:
-        return jsonify({"error": "Not found"}), 404
-    if "name" in data:
-        name = data["name"].strip()
-        if not name:
-            return jsonify({"error": "Name required"}), 400
-        if any(b["name"].lower() == name.lower() and b["id"] != bid for b in buyers):
-            return jsonify({"error": "Name taken"}), 409
-        buyers[idx]["name"] = name
-    if "skus" in data:
-        # Preserve pricing fields if they already exist and incoming data
-        # doesn't explicitly include them (allows partial SKU updates).
-        # Backfill brand/format from the master catalog when missing — the
-        # buyer-edit JS doesn't send those fields, so newly-assigned SKUs
-        # would otherwise arrive empty and land in Ripe's "Other" bucket.
-        existing_by_key = {s.get("sku_key",""): s for s in (buyers[idx].get("skus") or [])}
-        catalog_by_key  = {s["sku_key"]: s for s in _all_sku_catalog()}
-        new_skus = []
-        for sku in data["skus"]:
-            key = sku.get("sku_key", "")
-            existing = existing_by_key.get(key, {})
-            merged = dict(existing)
-            merged.update(sku)
-            cat = catalog_by_key.get(key, {})
-            for ident in ("brand", "format"):
-                if not merged.get(ident) and cat.get(ident):
-                    merged[ident] = cat[ident]
-            for pf in ("price", "cogs", "margin_pct"):
-                if pf in merged and merged[pf] is not None:
-                    try:
-                        merged[pf] = round(float(merged[pf]), 2)
-                    except (TypeError, ValueError):
-                        merged[pf] = None
-            new_skus.append(merged)
-        buyers[idx]["skus"] = new_skus
-    for field in ("contact_name","phone","email","address","website","certifications","notes"):
-        if field in data:
-            buyers[idx][field] = (data[field] or "").strip()
-    if "locations" in data:
-        locs = data["locations"]
-        if isinstance(locs, list):
-            buyers[idx]["locations"] = [
-                {"id": l.get("id") or str(i),
-                 "name": (l.get("name") or "").strip(),
-                 "address": (l.get("address") or "").strip()}
-                for i, l in enumerate(locs)
-                if (l.get("name") or "").strip()
-            ]
-    _save_buyers(buyers)
-    return jsonify(buyers[idx])
-
-@app.route("/api/buyers/<bid>/skus/<path:sku_key>/pricing", methods=["PATCH"])
-@login_required
-def update_buyer_sku_pricing(bid, sku_key):
-    """Update pricing for a single SKU on a buyer.
-    Body: { price, cogs, margin_pct, buyer_sku, active }
-    Computes missing values using the price=cogs*(1+margin/100) relationship.
-    """
-    data = request.get_json() or {}
-    buyers = _load_buyers()
-    idx = next((i for i, b in enumerate(buyers) if b["id"] == bid), None)
-    if idx is None:
-        return jsonify({"error": "Buyer not found"}), 404
-
-    skus = buyers[idx].get("skus") or []
-    sku_idx = next((i for i, s in enumerate(skus) if s.get("sku_key") == sku_key), None)
-    if sku_idx is None:
-        return jsonify({"error": "SKU not assigned to this buyer"}), 404
-
-    sku = dict(skus[sku_idx])
-
-    # Derive pricing triangle: price = cogs * (1 + margin/100)
-    price      = float(data["price"])      if "price"      in data and data["price"]      is not None else sku.get("price")
-    cogs       = float(data["cogs"])       if "cogs"       in data and data["cogs"]       is not None else sku.get("cogs")
-    margin_pct = float(data["margin_pct"]) if "margin_pct" in data and data["margin_pct"] is not None else sku.get("margin_pct")
-
-    if price is not None and cogs is not None:
-        margin_pct = round(((price / cogs) - 1) * 100, 2) if cogs > 0 else 0.0
-    elif price is not None and margin_pct is not None:
-        cogs = round(price / (1 + margin_pct / 100), 2) if (1 + margin_pct / 100) > 0 else price
-    elif cogs is not None and margin_pct is not None:
-        price = round(cogs * (1 + margin_pct / 100), 2)
-
-    if price      is not None: sku["price"]      = round(price, 2)
-    if cogs       is not None: sku["cogs"]        = round(cogs, 2)
-    if margin_pct is not None: sku["margin_pct"]  = round(margin_pct, 2)
-
-    if "buyer_sku" in data:
-        sku["buyer_sku"] = (data["buyer_sku"] or "").strip()
-    if "active" in data:
-        sku["active"] = bool(data["active"])
-
-    skus[sku_idx] = sku
-    buyers[idx]["skus"] = skus
-    _save_buyers(buyers)
-    return jsonify({"ok": True, "sku": sku})
-
-@app.route("/api/buyers/<bid>", methods=["DELETE"])
-@login_required
-def delete_buyer(bid):
-    _save_buyers([b for b in _load_buyers() if b["id"] != bid])
-    return jsonify({"ok": True})
 
 # ── Sale documents ────────────────────────────────────────────────────────
 @app.route("/api/organic/sales/<sale_id>/packing-slip", methods=["GET"])
