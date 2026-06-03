@@ -12,7 +12,7 @@ Two Flask apps deployed on Render:
 ## Repository structure
 
 ```
-app.py              — ~7940 lines, 166 routes. Still the core, but the blueprint
+app.py              — ~7376 lines, 166 routes. Still the core, but the blueprint
                       split is now underway (see "Pending architectural work").
 helpers.py          — Foundation layer (extracted 2026-06-03): dependency-free
                       stdlib-only primitives — JSON IO with per-path locks, path/
@@ -21,6 +21,11 @@ helpers.py          — Foundation layer (extracted 2026-06-03): dependency-free
 suppliers.py        — Flask Blueprint: /api/suppliers CRUD (extracted 2026-06-03)
 buyers.py           — Flask Blueprint: /api/buyers CRUD only (extracted 2026-06-03).
                       Shared buyer helpers stay in app.py; reached via `import app`.
+recipes.py          — Flask Blueprint (637 lines, extracted 2026-06-03): 17 recipe
+                      routes + recipe-private _schedules_using_recipe, incl. the
+                      update_recipe rename cascade. Shared recipe/buyer helpers stay
+                      in app.py (reached via `import app`); foundation names imported
+                      from helpers. PHOTOS_DIR + serve_photo stay in app.py.
 ripe_orders.py      — Flask Blueprint (591 lines) handling Ripe order workflow within Soma
 shopify_importer.py — Shopify Admin API client. Pulls orders for a week,
                       parses SKUs, returns a structured preview. Auth via
@@ -290,6 +295,19 @@ Render restart → browser smoke test → STOP for the next.
   *analytics* routes (`api_buyer_analytics`, `api_sales_by_buyer`,
   `buyer_analytics_page`, `buyer_edit_page`) and `internal_buyer_catalogue` remain in
   `app.py` (future analytics/sales blueprints).
+- ✅ **`recipes.py`** (commit `721cf23`) — **highest-risk step to date.** 17 recipe
+  routes + recipe-private `_schedules_using_recipe` (incl. `update_recipe`'s 151-line
+  rename cascade across FG/sales/runs/sku_meta/buyers/schedules). Used the buyers
+  routes-move/helpers-stay pattern. **Lesson:** the strengthened free-variable audit
+  caught 8 names the original plan misclassified — `_load_json`, `_save_json`,
+  `DATA_DIR`, `ORGANIC_RUNS_PATH`, `_normalize_format`, `_sku_key`, `_sku_display`,
+  `build_display_name` are imported into `app.py` *from helpers*, so in the blueprint
+  they're imported **directly from `helpers`** (suppliers.py pattern), NOT
+  `app.`-qualified. Lesson for next steps: classify each external name by its true
+  home (helpers → direct import; app.py → `app.`-qualify) — don't trust that a name
+  visible in `app.py`'s namespace is defined there. Also `app.static_folder` (Flask
+  instance attr) became `app.app.static_folder` (module → instance). `PHOTOS_DIR` +
+  `serve_photo` stayed in `app.py`; sliced around them per-function.
 
 **Two reusable blueprint patterns are now established** (both define a local verbatim
 `login_required` to avoid a circular import, matching `ripe_orders.py`):
@@ -300,35 +318,26 @@ Render restart → browser smoke test → STOP for the next.
 `ripe_orders.py` was untouched and still resolves its lazy `from app import` calls
 because `app.py` re-exports the moved names.
 
-**NEXT: `recipes.py`** — analysis complete, not yet built (deferred to a fresh session
-as the highest-risk step). Use the buyers pattern + a strengthened safety net (a
-free-variable AST audit of the new file asserting every name resolves to {local,
-param, import, builtin, flask, or `app`}). Key facts:
-- **17 route handlers** to move (per-function slicing — the block is NOT contiguous):
-  `get_recipes`, `add_recipe`, `get_recipe`, `recipe_pdf`, `recipe_pdf_all`,
-  `update_recipe` (**151-line cross-domain cascade** — rewrites buyers/FG/sales/
-  schedules/sku_meta on recipe rename), `delete_recipe`, `duplicate_recipe`,
-  `archive_recipe`, `unarchive_recipe`, `migrate_all_recipes`, `upload_recipe_photo`,
-  `get_recipes_grouped`, `update_recipe_order`, `upload_recipe`, `upload_recipe_json`,
-  plus the page route `recipes_page`.
-- `_schedules_using_recipe` is **recipe-private** (only `archive_recipe` calls it) →
-  move it INTO `recipes.py`; qualify its own deps (`app.SCHEDULES_DIR`, `os`, `json`).
-- **Interleaved NON-recipe code to slice around (do NOT move):** the `PHOTOS_DIR`
-  assignment + its `os.makedirs`, and the `serve_photo` route.
-- **16 app-internal names to `app.`-qualify** (functions AND bare constants — constants
-  can't use a `name(`→`app.name(` trick, need word-boundary edits): funcs
-  `load_recipes`, `save_recipes`, `load_recipe_order`, `save_recipe_order`,
-  `migrate_recipe_ingredients`, `parse_recipe_pdf_text`, `_load_tracking_modes`,
-  `_load_buyers`, `_save_buyers`; constants `ORGANIC_FG_PATH`, `ORGANIC_SALES_PATH`,
-  `SCHEDULES_DIR`, `SKU_META_PATH`, `RECIPES_PATH`, `PHOTOS_DIR`, `INGREDIENT_SECTIONS`.
-  Direct imports in `recipes.py`: `os`, `re`, `io`, `json`, `datetime`, a module
-  `logger`, and `generate_single_recipe_pdf`/`generate_all_recipes_pdf` from `pdf_engine`.
-- Smoke must exercise the `update_recipe` cascade specifically.
+**NEXT: `sales.py`** (~699 lines) — analysis to be (re)run live at the start of the
+session, since line ranges drift. Apply the recipes-proven method end-to-end:
+1. AST inventory of the sales routes + a free-variable report, **classifying each
+   external name by its TRUE home** — helpers.py names → direct `from helpers import`;
+   app.py names → `app.`-qualify; Flask-instance attrs (e.g. `app.static_folder`) →
+   `app.app.X`. (This classification is the step the recipes plan got wrong.)
+2. Build via per-function AST line-range slicing only (never `src.replace`); slice
+   around any interleaved non-sales code.
+3. Strengthened free-variable AST audit on the new file (every name resolves to
+   {local, param, import, builtin, flask, or `app`}) — this is what catches a missed
+   import/qualification.
+4. Gate: both compile, no dup defs, **byte-identical 166-route URL+method map**,
+   `url_for` check on moved endpoints, test-client CRUD smoke (exercise any
+   cross-domain cascade specifically).
+Assume shared helpers STAY in `app.py` (the "no cross-domain deps" optimism held for
+neither buyers nor recipes).
 
-**Remaining domains after recipes** (one per session given growing entanglement):
-`sales` (~699 lines), `inventory` (~1093 lines), `production` (~883 lines). Expect the
-same routes-move/helpers-stay pattern. Note the "no cross-domain deps" optimism in the
-original audit did NOT hold for buyers or recipes — assume shared helpers stay in `app.py`.
+**Remaining domains after sales** (one per session given growing entanglement):
+`inventory` (~1093 lines), `production` (~883 lines). Same routes-move/helpers-stay
+pattern + the per-name home classification above.
 
 > Correction to the earlier audit: the helper list once named four functions that don't
 > exist as movable top-level defs — `_revenue`, `_cases`, `_entry_prod_date` are **nested
