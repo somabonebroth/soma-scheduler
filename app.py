@@ -29,6 +29,45 @@ from ripe_orders import ripe_orders_bp, init_paths as _ripe_init_paths
 import shopify_importer
 import clover_importer
 
+# Foundation layer (IO, path constants, format/SKU/date helpers) lives in
+# helpers.py. Imported back so existing references resolve unchanged.
+from helpers import (
+    ADJUSTMENTS_PATH,
+    COMPANY_INFO_PATH,
+    DATA_DIR,
+    DEFAULT_RM_SECTIONS,
+    FORMAT_PREFIX_CANONICAL,
+    FORMAT_RE,
+    INVENTORY_DIR,
+    ORGANIC_CONTACTS_PATH,
+    ORGANIC_RUNS_PATH,
+    RM_SECTIONS_PATH,
+    _DEFAULT_COMPANY_INFO,
+    _FILE_LOCKS,
+    _FILE_LOCKS_LOCK,
+    _FORMAT_SUFFIX_RE,
+    _add_contact,
+    _aggregate_lots_for_sku,
+    _classify_format,
+    _get_file_lock,
+    _ingredient_section_key,
+    _jar_volume_liters,
+    _load_company_info,
+    _load_json,
+    _load_rm_sections,
+    _normalize_format,
+    _previous_day_coords,
+    _prod_date,
+    _record_adjustment,
+    _runs_using_raw_material,
+    _save_json,
+    _section_for_ingredient,
+    _sku_display,
+    _sku_key,
+    _strip_format_suffix,
+    build_display_name,
+)
+
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ.get("SECRET_KEY", "soma-bone-broth-2026-change-me")
 app.register_blueprint(ripe_orders_bp)
@@ -44,7 +83,6 @@ MANAGER_PASSWORD = os.environ.get("MANAGER_PASSWORD", "")  # empty = feature dis
 VESSELS = ["K1", "K2", "K3", "115L"]
 DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
-DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "data"))
 RECIPES_PATH = os.path.join(DATA_DIR, "recipes.json")
 SCHEDULES_DIR = os.path.join(DATA_DIR, "schedules")
 PDF_DIR = os.path.join(DATA_DIR, "pdfs")
@@ -567,79 +605,15 @@ def migrate_recipe_ingredients(recipe_data, tracking_modes=None):
 # Canonical prefix casing for known format families.
 # Only formats that actually appear as product SKUs belong here.
 # SS = Shelf-Stable, FZ = Frozen, BB = Back Bar label variant.
-FORMAT_PREFIX_CANONICAL = {
-    "SS": "SS",
-    "FZ": "FZ",
-    "BB": "BB",
-}
 
 # Any <letters>[sep]<number>ML suffix — case-insensitive.
 # Separator can be nothing, a dash, or whitespace.
-FORMAT_RE = re.compile(r"\b([A-Za-z]{1,4})[\s-]*(\d+)\s*ML\b", re.IGNORECASE)
 
 # Suffix regex used when stripping a trailing format from a recipe name.
 # Matches "<separator><letters><separator><digits>ML" at end of string.
-_FORMAT_SUFFIX_RE = re.compile(
-    r"[\s\-]*[A-Za-z]{1,4}[\s\-]*\d+\s*ML\s*$",
-    re.IGNORECASE,
-)
 
-def _strip_format_suffix(name):
-    """Remove ALL trailing format suffixes from a recipe name.
-    Repeats until no more remove — handles double-appended legacy names like
-    'Beef SS-750ML SS-750ML' -> 'Beef'."""
-    if not name:
-        return ""
-    prev = None
-    out = name
-    while prev != out:
-        prev = out
-        out = _FORMAT_SUFFIX_RE.sub("", out).rstrip(" -")
-    return out
 
-def build_display_name(recipe_data, recipe_name=""):
-    """Canonical display string used by every UI surface.
 
-    Shape: '{brand}-{name-without-format}-{format}'
-    Example: 'Ripe-Big Kahuna-SS-750ML'
-
-    If brand is missing, drops that segment. If format is missing, uses the
-    raw recipe_name as-is.
-
-    Accepts either a recipe dict with keys brand/format plus a separate
-    recipe_name, OR a single dict containing 'name' field for convenience.
-    """
-    if not isinstance(recipe_data, dict):
-        return recipe_name or ""
-    brand = (recipe_data.get("brand") or "").strip()
-    fmt = _normalize_format((recipe_data.get("format") or "").strip())
-    name = (recipe_name or recipe_data.get("name") or "").strip()
-
-    core = _strip_format_suffix(name)
-    # If stripping removed everything (e.g. name was literally "SS-750ML"),
-    # fall back to the original name
-    if not core:
-        core = name
-
-    parts = []
-    if brand:
-        parts.append(brand)
-    if core:
-        parts.append(core)
-    if fmt:
-        parts.append(fmt)
-    return "-".join(parts) if parts else name
-
-def _normalize_format(text):
-    """Turn any 'SS-473ML', 'ss473ml', 'SS 473 ml', etc. into canonical 'SS-473ML'."""
-    if not text:
-        return ""
-    m = FORMAT_RE.search(text)
-    if not m:
-        return text.strip().upper()
-    prefix_raw = m.group(1)
-    canonical_prefix = FORMAT_PREFIX_CANONICAL.get(prefix_raw.upper(), prefix_raw.upper())
-    return f"{canonical_prefix}-{m.group(2)}ML"
 
 def _detect_format_in_text(text):
     """Return the canonical format found in text, or '' if none."""
@@ -2657,33 +2631,6 @@ def unsign_week(week_id):
 # (bottom to top): SS sizes first, then Frozen, Other, Kettle's End, BB.
 TRACKER_BUCKETS = ["SS-876ML", "SS-750ML", "SS-473ML", "FZ", "Other", "Kettles End", "BB"]
 
-def _classify_format(recipe_format):
-    """Map any format string (canonical or not) to a bucket.
-    Returns one of: 'SS-876ML', 'SS-750ML', 'SS-473ML', 'FZ', 'Other'.
-
-    Normalizes first so 'ss-750ml', 'SS750ML', 'SS 750 ML', 'SS-750 ml' all
-    match the same bucket. Any recognizable format with an SS prefix and a
-    750/876/473 ml size hits its bucket; any FZ-prefixed format goes to FZ;
-    anything else is Other.
-    """
-    if not recipe_format:
-        return "Other"
-    m = FORMAT_RE.search(recipe_format)
-    if not m:
-        return "Other"
-    prefix = m.group(1).upper()
-    size = m.group(2)
-    if prefix == "SS":
-        if size == "876":
-            return "SS-876ML"
-        if size == "750":
-            return "SS-750ML"
-        if size == "473":
-            return "SS-473ML"
-        return "Other"     # unknown SS size (e.g. 250, 1000)
-    if prefix == "FZ":
-        return "FZ"
-    return "Other"         # BB-*, iQ-*, or any other prefix
 
 def _empty_buckets():
     return {b: 0 for b in TRACKER_BUCKETS}
@@ -2948,37 +2895,15 @@ def get_production_tracker_year(year):
 # referenced in dozens of places throughout app.py; renaming them inline
 # would make this diff massive. They now point at the inventory/ paths.
 # A startup migration moves data/organic/ → data/inventory/ if needed.
-INVENTORY_DIR = os.path.join(DATA_DIR, "inventory")
 ORGANIC_DIR = INVENTORY_DIR  # legacy alias — see comment above
 ORGANIC_RAW_PATH = os.path.join(INVENTORY_DIR, "raw_materials.json")
-ORGANIC_RUNS_PATH = os.path.join(INVENTORY_DIR, "production_runs.json")
 ORGANIC_FG_PATH = os.path.join(INVENTORY_DIR, "finished_goods.json")
 ORGANIC_SALES_PATH = os.path.join(INVENTORY_DIR, "sales.json")
-ORGANIC_CONTACTS_PATH = os.path.join(INVENTORY_DIR, "contacts.json")
-COMPANY_INFO_PATH = os.path.join(INVENTORY_DIR, "company_info.json")
 
-_DEFAULT_COMPANY_INFO = {
-    "name": "Soma Bone Broth",
-    "address": "",
-    "city": "",
-    "phone": "",
-    "email": "",
-    "website": "",
-    "registration": "",
-    "notes": "",
-    "ripe_inventory_buffer": 12,   # units withheld from Ripe's visible stock
-    "ss_min_cases_delivery":     40,    # SS cases above which no small-order fee applies (fee-free threshold)
-    "ss_small_order_threshold":  20,    # SS cases below which delivery is rejected outright (hard minimum)
-    "ss_small_order_fee":        50.0,  # Flat fee added when ss_small_order_threshold ≤ cases < ss_min_cases_delivery
-    "fzbb_small_lead_days":  3,    # min days notice for FZ/BB ≤ threshold
-    "fzbb_large_lead_days":  7,    # min days notice for FZ/BB ≥ threshold
-    "fzbb_large_threshold":  8,    # cases at which large lead time applies
-}
 SKU_META_PATH = os.path.join(INVENTORY_DIR, "sku_meta.json")  # PAR levels
 # Manual inventory adjustments log (additions and subtractions outside of
 # production runs and sales). Each entry records what changed, why, and
 # which LOT(s) were drained or created. Used for audit traceability.
-ADJUSTMENTS_PATH = os.path.join(INVENTORY_DIR, "adjustments.json")
 AUDITS_PATH      = os.path.join(INVENTORY_DIR, "audits.json")
 # Camera-scan request log: per-day rolling counter for daily-limit enforcement
 # plus an audit trail of every scan (success or failure).
@@ -2987,7 +2912,6 @@ RM_RECEIPT_PHOTOS_DIR = os.path.join(DATA_DIR, "rm_receipt_photos")
 os.makedirs(RM_RECEIPT_PHOTOS_DIR, exist_ok=True)
 # Raw material section organization. User-defined sections + per-ingredient
 # assignment. Pre-seeded with the 6-section structure on first load.
-RM_SECTIONS_PATH = os.path.join(INVENTORY_DIR, "rm_sections.json")
 
 def _migrate_organic_to_inventory():
     """One-time migration: rename data/organic/ → data/inventory/ if applicable.
@@ -3051,36 +2975,9 @@ def _autotag_existing_organic_data():
             print(f"[autotag] Failed for {path}: {e}")
 
 # Per-path threading locks — one lock per file, created on demand.
-_FILE_LOCKS: dict = {}
-_FILE_LOCKS_LOCK = threading.Lock()
 
-def _get_file_lock(path: str) -> threading.Lock:
-    """Return (creating if needed) the threading lock for a given file path."""
-    with _FILE_LOCKS_LOCK:
-        if path not in _FILE_LOCKS:
-            _FILE_LOCKS[path] = threading.Lock()
-        return _FILE_LOCKS[path]
 
-def _load_json(path, default=None):
-    """Read a JSON file under a per-path threading lock.
-    Returns `default` (or [] if not given) when the file is missing.
-    """
-    with _get_file_lock(path):
-        if os.path.exists(path):
-            with open(path, "r") as f:
-                return json.load(f)
-        return default if default is not None else []
 
-def _save_json(path, data):
-    """Write JSON atomically under a per-path threading lock.
-    Writes to .tmp first then renames — so a crash mid-write
-    leaves the original intact rather than a truncated file.
-    """
-    tmp = path + ".tmp"
-    with _get_file_lock(path):
-        with open(tmp, "w") as f:
-            json.dump(data, f, indent=2)
-        os.replace(tmp, path)
 
 # ── Organic Page ──────────────────────────────────────────────────────
 @app.route("/organic")
@@ -3111,18 +3008,6 @@ def _format_pack_label(amount, unit):
         return f"{amount} {unit}"
     return str(amount)
 
-def _jar_volume_liters(recipe_data):
-    """Parse the jar volume in liters from a recipe's format string.
-    'SS-750ML' / 'FZ-750ML' / 'BB-750ML' -> 0.75, 'SS-876ML' -> 0.876,
-    'SS-473ML' -> 0.473. Returns None if unparseable (caller falls back)."""
-    fmt = (recipe_data.get("format") or "").upper()
-    m = re.search(r"(\d+)\s*ML", fmt)
-    if m:
-        return int(m.group(1)) / 1000.0
-    m = re.search(r"(\d+(?:\.\d+)?)\s*L\b", fmt)
-    if m:
-        return float(m.group(1))
-    return None
 
 @app.route("/api/organic/ingredients", methods=["GET"])
 @login_required
@@ -3200,67 +3085,14 @@ def organic_ingredients():
 
 # Default section list seeded on first load. User can rename/reorder/add/
 # delete after that — these are just a starting point.
-DEFAULT_RM_SECTIONS = [
-    {"id": "bones", "name": "Bones"},
-    {"id": "mirepoix", "name": "Mirepoix"},
-    {"id": "herbs", "name": "Herbs"},
-    {"id": "adjuncts", "name": "Adjuncts & Pre-Packs"},
-    {"id": "mushrooms", "name": "Mushrooms"},
-    {"id": "spices_other", "name": "Spices & Other"},
-]
 
 # Special "Unassigned" section. Not stored in user list; surfaced
 # separately so users can see what still needs classifying.
 UNASSIGNED_SECTION_ID = "_unassigned"
 UNASSIGNED_SECTION_NAME = "Unassigned"
 
-def _ingredient_section_key(name, unit):
-    """Storage key for ingredient assignment lookups."""
-    return f"{(name or '').strip()}|{(unit or '').strip()}"
 
-def _load_rm_sections():
-    """Load the sections+assignments file, seeding defaults on first access."""
-    if not os.path.exists(RM_SECTIONS_PATH):
-        seed = {
-            "sections": [
-                {"id": s["id"], "name": s["name"], "order": i}
-                for i, s in enumerate(DEFAULT_RM_SECTIONS)
-            ],
-            "assignments": {},
-        }
-        _save_json(RM_SECTIONS_PATH, seed)
-        return seed
 
-    data = _load_json(RM_SECTIONS_PATH, None)
-    if not isinstance(data, dict):
-        seed = {
-            "sections": [
-                {"id": s["id"], "name": s["name"], "order": i}
-                for i, s in enumerate(DEFAULT_RM_SECTIONS)
-            ],
-            "assignments": {},
-        }
-        _save_json(RM_SECTIONS_PATH, seed)
-        return seed
-
-    sections = data.get("sections")
-    if not isinstance(sections, list):
-        sections = []
-    assignments = data.get("assignments")
-    if not isinstance(assignments, dict):
-        assignments = {}
-    return {"sections": sections, "assignments": assignments}
-
-def _section_for_ingredient(name, unit, sections_data):
-    """Return the section id this ingredient is assigned to, or None."""
-    key = _ingredient_section_key(name, unit)
-    section_id = sections_data.get("assignments", {}).get(key)
-    if not section_id:
-        return None
-    # Verify the section still exists; if it was deleted, treat as unassigned
-    if not any(s.get("id") == section_id for s in sections_data.get("sections", [])):
-        return None
-    return section_id
 
 @app.route("/api/organic/raw-materials/sections", methods=["GET"])
 @login_required
@@ -3712,26 +3544,6 @@ def add_raw_materials_bulk():
         "entries": created,
     })
 
-def _runs_using_raw_material(entry_id):
-    """Return list of completed organic runs that have deducted from this raw material entry."""
-    runs = _load_json(ORGANIC_RUNS_PATH, [])
-    matches = []
-    for r in runs:
-        if r.get("status") != "completed":
-            continue
-        for used in (r.get("ingredients_used") or []):
-            if used.get("raw_material_id") == entry_id:
-                matches.append({
-                    "run_id": r.get("id"),
-                    "week_id": r.get("week_id"),
-                    "day_idx": r.get("day_idx"),
-                    "vessel": r.get("vessel"),
-                    "recipe": r.get("recipe"),
-                    "quantity_used": used.get("quantity_used"),
-                    "unit": used.get("unit"),
-                })
-                break
-    return matches
 
 @app.route("/api/organic/raw-materials/<entry_id>", methods=["PUT"])
 @login_required
@@ -4102,13 +3914,6 @@ def _cleanup_legacy_invoices():
 _cleanup_legacy_invoices()
 
 # ── Organic: Contacts (suppliers, buyers, distributors) ───────────────
-def _add_contact(contact_type, name):
-    contacts = _load_json(ORGANIC_CONTACTS_PATH, {})
-    if contact_type not in contacts:
-        contacts[contact_type] = []
-    if name not in contacts[contact_type]:
-        contacts[contact_type].append(name)
-        _save_json(ORGANIC_CONTACTS_PATH, contacts)
 
 @app.route("/api/organic/contacts", methods=["GET"])
 @login_required
@@ -4121,16 +3926,6 @@ def get_organic_contacts():
 def get_organic_runs():
     return jsonify(_load_json(ORGANIC_RUNS_PATH, []))
 
-def _previous_day_coords(week_id, day_idx):
-    """Return (prev_week_id, prev_day_idx) for the day BEFORE (week_id, day_idx).
-    For Monday (d_idx=0), crosses back to last week's Sunday (d_idx=6)."""
-    if day_idx > 0:
-        return week_id, day_idx - 1
-    try:
-        prev_week_start = datetime.strptime(week_id, "%Y-%m-%d") - timedelta(days=7)
-    except ValueError:
-        return week_id, day_idx
-    return prev_week_start.strftime("%Y-%m-%d"), 6
 
 def _run_start_date_str(week_id, day_idx):
     """ISO date (YYYY-MM-DD) a run started on, or None if week_id is malformed."""
@@ -4468,15 +4263,7 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
     return warnings
 
 # ── Organic: Finished Goods ──────────────────────────────────────────
-def _sku_key(brand, recipe, fmt):
-    """Stable identifier for a SKU group: 'BRAND|RECIPE|FORMAT'.
-    Format is normalized so 'SS-750ML' and 'ss-750ml' collapse into one SKU.
-    Separator chosen so it can't appear in any of the components."""
-    return "|".join([(brand or ""), (recipe or ""), _normalize_format(fmt or "")])
 
-def _sku_display(brand, recipe, fmt):
-    """Human-readable SKU label using the canonical helper."""
-    return build_display_name({"brand": brand, "format": fmt}, recipe_name=recipe)
 
 def _group_fg_by_sku(fg):
     """Aggregate FG entries into one dict per (brand, recipe, format).
@@ -4593,61 +4380,6 @@ def _group_fg_with_catalog(fg, recipes):
     ))
     return out
 
-def _aggregate_lots_for_sku(fg, sku_key):
-    """Return LOT-level rollup for a given SKU. One row per distinct LOT#,
-    aggregating across all kettles that share that LOT.
-    Sorted FIFO by production date (oldest first)."""
-    rows = {}
-    for entry in fg:
-        key = _sku_key(entry.get("brand", ""), entry.get("recipe", ""), entry.get("format", ""))
-        if key != sku_key:
-            continue
-        lot = entry.get("lot", "")
-        if lot not in rows:
-            rows[lot] = {
-                "lot": lot,
-                "produced": 0,
-                "remaining": 0,
-                "production_date": None,    # finish date string YYYY-MM-DD
-                "best_before": "",            # parsed ddmmyy → dd/mm/yyyy
-                "vessels": set(),
-                "fg_ids": [],
-            }
-        r = rows[lot]
-        try:
-            r["produced"] += int(entry.get("quantity_produced") or 0)
-            r["remaining"] += int(entry.get("quantity_remaining") or 0)
-        except (ValueError, TypeError):
-            pass
-        if entry.get("vessel"):
-            r["vessels"].add(entry["vessel"])
-        r["fg_ids"].append(entry.get("id"))
-
-        # falling back to created_at
-        prod_date = None
-        wid = entry.get("week_id")
-        d_idx = entry.get("day_idx")
-        if wid is not None and d_idx is not None:
-            try:
-                pd = datetime.strptime(wid, "%Y-%m-%d") + timedelta(days=int(d_idx))
-                prod_date = pd.strftime("%Y-%m-%d")
-            except (ValueError, TypeError):
-                pass
-        if not prod_date and entry.get("created_at"):
-            prod_date = entry["created_at"][:10]
-        if prod_date and (r["production_date"] is None or prod_date < r["production_date"]):
-            r["production_date"] = prod_date
-
-        if lot and len(lot) == 6 and lot.isdigit():
-            r["best_before"] = f"{lot[0:2]}/{lot[2:4]}/20{lot[4:6]}"
-
-    out = []
-    for lot, r in rows.items():
-        r["vessels"] = sorted(r["vessels"])
-        out.append(r)
-    # FIFO: oldest production date first; depleted lots sorted within their date
-    out.sort(key=lambda r: (r["production_date"] or "9999-99-99", r["lot"]))
-    return out
 
 # ── Organic: Finished Goods endpoints ──────────────────────────────────
 # ORDERING NOTE: Flask matches routes top-to-bottom, but the methods
@@ -4907,11 +4639,6 @@ VALID_SUBTRACT_REASONS = [
     "Spillage", "Waste", "Theft", "Sample", "Donation", "Recount", "Other"
 ]
 
-def _record_adjustment(record):
-    """Append an adjustment record to the audit log."""
-    log = _load_json(ADJUSTMENTS_PATH, [])
-    log.append(record)
-    _save_json(ADJUSTMENTS_PATH, log)
 
 @app.route("/api/organic/finished-goods/manual-add", methods=["POST"])
 @login_required
@@ -6157,11 +5884,6 @@ def get_finished_goods_sku_detail(sku_key):
     })
 
 # ── Company Info ──────────────────────────────────────────────────────────────
-def _load_company_info():
-    info = _load_json(COMPANY_INFO_PATH, {})
-    merged = dict(_DEFAULT_COMPANY_INFO)
-    merged.update(info)
-    return merged
 
 @app.route("/api/company-info", methods=["GET"])
 @login_required
@@ -7633,16 +7355,6 @@ _backfill_organic_finished_goods()
 # This function runs on startup and is callable via API. It processes any
 # sale records whose deduction_date has arrived but deduction hasn't run yet.
 
-def _prod_date(e):
-    """FIFO sort key: production date for a finished-goods entry.
-    Derives YYYY-MM-DD from week_id + day_idx; falls back to created_at."""
-    wid, d_idx = e.get("week_id"), e.get("day_idx")
-    if wid and d_idx is not None:
-        try:
-            return (datetime.strptime(wid, "%Y-%m-%d") + timedelta(days=int(d_idx))).strftime("%Y-%m-%d")
-        except Exception:
-            pass
-    return (e.get("created_at") or "")[:10]
 
 def _run_scheduled_deductions():
     """FIFO-deduct any Ripe sale records whose deduction_date <= today."""
