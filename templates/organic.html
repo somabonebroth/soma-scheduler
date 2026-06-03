@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Soma">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="var(--black)">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
 <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
@@ -5722,10 +5722,10 @@ document.addEventListener('DOMContentLoaded',function(){
       <label>PO #</label>
       <input type="text" id="se-po" style="width:100%;box-sizing:border-box;">
     </div>
-    <div id="se-msg" style="font-size:13px;color:#c62828;margin-bottom:8px;display:none;"></div>
+    <div id="se-msg" style="font-size:13px;color:var(--action-red);margin-bottom:8px;display:none;"></div>
     <div style="display:flex;gap:10px;">
       <button class="btn btn-outline" onclick="closeSaleEditModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitSaleEdit()" style="background:#0288d1;border-color:#0288d1;">Save Changes</button>
+      <button class="btn btn-primary" onclick="submitSaleEdit()" style="background:var(--info);border-color:var(--info);">Save Changes</button>
     </div>
   </div>
 </div>
