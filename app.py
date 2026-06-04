@@ -3721,7 +3721,10 @@ def _compute_mass_balance(date_from, date_to, organic_only=False):
     Raw materials per ingredient: Opening + Received - Consumed = Expected
     closing, compared to current stock; the discrepancy is manual adjustments /
     loss. Finished goods per SKU: Opening + Produced - Sold = Expected, vs
-    current stock (discrepancy = breakage / manual adjustment).
+    current stock. Day-zero migration_baseline entries are folded into Opening
+    (they're starting inventory, not production); manual_addition entries are
+    intentionally left out so they surface in the discrepancy column, which
+    therefore reads as breakage / loss / logged manual adjustment.
 
     Dates: raw received = date_received; raw consumed = the run's PRODUCTION
     (start) date; FG produced = finish date; sold = sale_date. 'Opening' is
@@ -3807,12 +3810,21 @@ def _compute_mass_balance(date_from, date_to, organic_only=False):
             continue
         sku = _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", ""))
         row = fgrow(sku, _sku_display(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")), cert)
-        pdate = _run_start_date_str(f.get("week_id"), f.get("day_idx"))
         try: produced = int(f.get("quantity_produced") or 0)
         except (ValueError, TypeError): produced = 0
         try: rem = int(f.get("quantity_remaining") or 0)
         except (ValueError, TypeError): rem = 0
         row["current"] += rem
+        if f.get("migration_baseline"):
+            # Day-zero migration stock = opening inventory, not production.
+            # Always the earliest inflow, so it lands in Opening (any sales
+            # of it dated before the range net it down via the sales loop).
+            row["opening"] += produced
+            continue
+        # Manual additions (manual_addition=True) carry no production date and
+        # are DELIBERATELY left out of opening/produced so they surface in the
+        # discrepancy column — that's the tool's purpose (logged adjustments).
+        pdate = _run_start_date_str(f.get("week_id"), f.get("day_idx"))
         if before(pdate):
             row["opening"] += produced
         elif in_range(pdate):
