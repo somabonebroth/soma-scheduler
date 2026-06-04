@@ -12,7 +12,7 @@ Two Flask apps deployed on Render:
 ## Repository structure
 
 ```
-app.py              — ~5218 lines, 166 routes. Still the core, but the blueprint
+app.py              — ~5029 lines, 166 routes. Still the core, but the blueprint
                       split is now underway (see "Pending architectural work").
 helpers.py          — Foundation layer (extracted 2026-06-03): dependency-free
                       stdlib-only primitives — JSON IO with per-path locks, path/
@@ -53,15 +53,17 @@ audit_tools.py      — Flask Blueprint (256 lines, extracted 2026-06-03): the 6
                       engines (_rebuild_raw_material_consumption, _compute_mass_balance,
                       _sale_touches_fg) + path consts stay in app.py (8 app.-qualified);
                       ORGANIC_RUNS_PATH + IO from helpers.
-production.py       — Flask Blueprint (257 lines, extracted 2026-06-03): FIRST slice
-                      of the production domain — 10 low-risk read/schedule routes:
-                      schedules (create/weekly pages, get/list/delete) + production
-                      tracker (page + week/month/year analytics). PURE routes-move
-                      (12 app.-qualified). Local verbatim copies of login_required AND
-                      require_valid_week (decorators apply at import time → can't be
-                      app.-qualified; require_valid_week calls app.validate_week_id at
-                      request time). Higher-risk production clusters (daily+checklist,
-                      traceability) deferred to later steps appending to production_bp.
+production.py       — Flask Blueprint (474 lines, extracted 2026-06-03): the production
+                      domain, built up over slices. (1) schedules (create/weekly pages,
+                      get/list/delete) + production tracker (page + week/month/year).
+                      (2) daily-production (page/GET/save) + checklists (GET/POST/complete/
+                      status) — save_daily_production triggers the consumption chain
+                      (_check_organic_completion→_complete_organic_run→_deduct_run_
+                      ingredients, ALL kept in app.py). PURE routes-move (app.-qualified).
+                      Local verbatim copies of login_required + require_valid_week +
+                      require_valid_day (decorators apply at import time → can't be
+                      app.-qualified; they call app.validate_week_id/day_idx at request
+                      time). Remaining: traceability/completed-records slice (deferred).
 ripe_orders.py      — Flask Blueprint (591 lines) handling Ripe order workflow within Soma
 shopify_importer.py — Shopify Admin API client. Pulls orders for a week,
                       parses SKUs, returns a structured preview. Auth via
@@ -394,6 +396,16 @@ Render restart → browser smoke test → STOP for the next.
   `app.validate_day_idx` at REQUEST time (validators stay in app.py). app.-qualifying a
   decorator (`@app.require_valid_week`) would crash at import. Smoke confirmed the local
   `require_valid_week` returns 400 on a bad week.
+- ✅ **daily-production + checklists** (commit `f2595ef`) — second production slice,
+  APPENDED to `production_bp` (8 routes, ~191 lines). The HIGH-RISK consumption-chain
+  slice: `save_daily_production` → `_check_organic_completion` → `_complete_organic_run`
+  → `_deduct_run_ingredients` (all kept in app.py, 10 app.-qualifications). Added a local
+  `require_valid_day` copy; `app.static_folder`→`app.app.static_folder` in complete_checklist;
+  `generate_filled_checklist_pdf` from pdf_engine. Smoke drove the FULL chain: day-1 save
+  finished a day-0 organic run → raw deducted per-batch (50→40kg), FG created (qty 100,
+  cert carried), run completed with ingredients_used snapshot. **Lesson:** appending to an
+  existing blueprint works cleanly (build script edits the bp file's header + appends route
+  chunks, slices routes out of app.py, no new register_blueprint).
 
 **Two reusable blueprint patterns are now established** (both define a local verbatim
 `login_required` to avoid a circular import, matching `ripe_orders.py`):
@@ -412,32 +424,33 @@ behind us. Only a small low-risk inventory tail remains (sku-meta + inventory pa
 
 **Production domain is being sliced like inventory** (decided 2026-06-03 — ~25 routes /
 ~658 lines spanning low-risk reads through the audit-critical deletion cascade). Done:
-`production.py` schedules+tracker (✅ above). Remaining production slices append to the
-same `production_bp`, each its own verified step:
-- **daily-production + checklists** (~8 routes, ~191 lines) — **HIGH RISK:** `save_daily_production`
-  triggers the raw-material consumption chain (`_complete_organic_run` → `_deduct_run_ingredients`).
-  Those audit-critical helpers MUST stay in app.py (app.-qualify), never move. Uses
-  `require_valid_day` too (another local decorator copy). `generate_filled_checklist_pdf`
-  imports from `pdf_engine`.
-- **traceability / completed records** (~6 routes, ~280 lines) — **HIGHEST RISK:** includes
-  `delete_traceability_record` (94-line cascade: refuses 409 if FG sold, else restores raw
-  materials + removes FG + resets runs to scheduled) and weekly sign-off. ~16 app.-qualifications.
+`production.py` schedules+tracker + daily-production+checklists (✅ above). One production
+slice remains, appending to the same `production_bp`:
+- **traceability / completed records** (~6 routes, ~280 lines) — **HIGHEST RISK in the
+  whole split:** `traceability_page`, `get_week_summary`, `get_traceability`,
+  `delete_traceability_record`, `sign_off_week`, `unsign_week`. The cascade in
+  `delete_traceability_record` (94 lines): refuses 409 if any FG from that day was sold,
+  else restores consumed raw materials + removes that day's FG + resets runs to
+  `scheduled` + deletes checklist/PDF. ~16 app.-qualifications incl. `_load_weekly_signoffs`,
+  `_save_weekly_signoffs`, `_week_completion_state`, `CHECKLISTS_DIR`, `PDF_DIR`,
+  `ORGANIC_FG_PATH/RAW_PATH/SALES_PATH`, `load_schedule/checklist/recipes`, `DAYS`,
+  `VESSELS`, `list_schedules`. Uses require_valid_week (+ require_valid_day on the delete) —
+  both local copies already in production.py.
 - production-runs / contacts (`get_organic_runs`, `get_organic_contacts`) — trivial, ride along.
 
-**NEXT (recommended): daily-production + checklists.** Apply the proven method (re-run
+**NEXT (recommended): traceability / completed records.** Apply the proven method (re-run
 line ranges live; they drift):
-1. AST inventory + free-variable report, classifying each name by TRUE home (helpers →
-   direct import; app.py → app.-qualify; decorators → LOCAL verbatim copies — now
-   `require_valid_day` as well as week). Confirm private-vs-shared via the rm_classify.py
-   approach; default to leaving helpers in app.py. **The consumption-chain helpers
-   (`_complete_organic_run`, `_deduct_run_ingredients`, `_check_organic_completion`,
-   `_halve_for_115L`) MUST stay in app.py.**
-2. Per-function AST line-range slicing only (never `src.replace`).
+1. AST inventory + free-variable report, classifying each name by TRUE home; confirm
+   private-vs-shared via the rm_classify.py approach; default to leaving helpers in app.py.
+   Decorators already have local copies in production.py — reuse them. Check for
+   `app.static_folder` (→ `app.app.static_folder`).
+2. Per-function AST line-range slicing only (never `src.replace`); append to production_bp.
 3. Strengthened free-variable AST audit (every name resolves to {local, param, import,
    builtin, flask, or `app`}).
 4. Gate: both compile, no dup defs, **byte-identical 166-route URL+method map**,
-   `url_for` check, test-client smoke that exercises a production save → FG creation +
-   raw-material deduction (the full consumption chain).
+   `url_for` check, test-client smoke that MUST exercise the delete cascade BOTH ways:
+   (a) 409 refusal when FG from that day was sold, (b) successful delete restoring raw
+   materials + removing FG + resetting runs to scheduled. Plus weekly sign-off/unsign.
 Assume shared helpers STAY in `app.py`.
 
 **Small inventory tail still pending** (low risk, fold into any step): sku-meta
