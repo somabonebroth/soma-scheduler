@@ -12,8 +12,12 @@ Two Flask apps deployed on Render:
 ## Repository structure
 
 ```
-app.py              — ~4749 lines, 166 routes. Still the core, but the blueprint
-                      split is now underway (see "Pending architectural work").
+app.py              — ~4688 lines, 166 routes. The core. The blueprint split is
+                      COMPLETE (see "Pending architectural work") — what remains here
+                      is the intended core (dashboard, auth, channel imports, analytics,
+                      equipment, company-info, certifications, CCP, audits, Ripe internal
+                      endpoints, PWA) + the shared helpers every blueprint reaches via
+                      `import app`.
 helpers.py          — Foundation layer (extracted 2026-06-03): dependency-free
                       stdlib-only primitives — JSON IO with per-path locks, path/
                       config constants, format/SKU/date helpers. app.py imports
@@ -32,9 +36,11 @@ sales.py            — Flask Blueprint (731 lines, extracted 2026-06-03): the 7
                       ORGANIC_FG_PATH/ORGANIC_SALES_PATH constants stay in app.py
                       (app.-qualified); foundation IO from helpers. Channel imports,
                       sales analytics, and trace deliberately NOT included.
-finished_goods.py   — Flask Blueprint (477 lines, extracted 2026-06-03): the 10
-                      finished-goods routes (/api/organic/finished-goods*). First
-                      slice of the "inventory" domain. FG grouping helpers
+finished_goods.py   — Flask Blueprint (542 lines, extracted 2026-06-03): the 10
+                      finished-goods routes (/api/organic/finished-goods*) + the
+                      inventory tail folded in later: sku-meta (update_sku_meta,
+                      get_all_sku_meta) and the two inventory page shells (organic_page,
+                      organic_certification_page). FG grouping helpers
                       (_group_fg_by_sku/_group_fg_with_catalog) + load_recipes +
                       ORGANIC_FG_PATH/SKU_META_PATH stay in app.py (app.-qualified);
                       foundation IO from helpers. No consumption-chain code touched.
@@ -53,8 +59,9 @@ audit_tools.py      — Flask Blueprint (256 lines, extracted 2026-06-03): the 6
                       engines (_rebuild_raw_material_consumption, _compute_mass_balance,
                       _sale_touches_fg) + path consts stay in app.py (8 app.-qualified);
                       ORGANIC_RUNS_PATH + IO from helpers.
-production.py       — Flask Blueprint (763 lines, extracted 2026-06-03): the FULL production
-                      domain, built up over 3 slices. (1) schedules (create/weekly pages,
+production.py       — Flask Blueprint (771 lines, extracted 2026-06-03): the FULL production
+                      domain (+ get_organic_runs production-runs read). Built over 3 slices.
+                      (1) schedules (create/weekly pages,
                       get/list/delete) + production tracker (page + week/month/year).
                       (2) daily-production (page/GET/save) + checklists (GET/POST/complete/
                       status) — save_daily_production triggers the consumption chain
@@ -417,6 +424,20 @@ Render restart → browser smoke test → STOP for the next.
   mutated), (b) successful delete restoring raw (40→50kg), removing FG, resetting run to
   scheduled + clearing finish coords, deleting checklist, 404 on re-delete; plus sign-off/unsign.
   **The production domain is now fully extracted.**
+- ✅ **inventory/misc tail** (commit `f350a44`) — FINAL step. Folded each leftover into
+  its rightful home rather than a synthetic blueprint: finished_goods.py += sku-meta
+  (update_sku_meta, get_all_sku_meta) + inventory page shells (organic_page,
+  organic_certification_page) [added render_template to its flask import; all app-quals
+  already present]; production_bp += get_organic_runs. Deliberately LEFT in app.py as
+  intended core: `internal_fg_stock` (Ripe-internal, X-Internal-Key/hmac auth, no
+  login_required) and `get_organic_contacts` (trivial cross-cutting read). Smoke: sku-meta
+  GET/PATCH/null-removal/400, both pages, production-runs, + core contacts still resolves.
+
+**The planned app.py blueprint split is COMPLETE** (2026-06-03). 9 blueprints
+(suppliers, buyers, recipes, sales, finished_goods, raw_materials, audit_tools,
+production; plus the pre-existing ripe_orders) + the helpers.py foundation layer.
+app.py went from 7940 → ~4688 lines. Everything still in app.py is the intended core.
+Any future page/domain should follow the established patterns below (and the UI cascade).
 
 **Two reusable blueprint patterns are now established** (both define a local verbatim
 `login_required` to avoid a circular import, matching `ripe_orders.py`):
@@ -427,27 +448,19 @@ Render restart → browser smoke test → STOP for the next.
 `ripe_orders.py` was untouched and still resolves its lazy `from app import` calls
 because `app.py` re-exports the moved names.
 
-**Inventory is being split per sub-domain, not as one blueprint** (decided 2026-06-03 —
-it was ~44 routes / ~1385 lines straddling audit-critical code). Done: `finished_goods.py`
-+ `raw_materials.py` + `audit_tools.py` (✅ all above). The audit-critical slice is now
-behind us. Only a small low-risk inventory tail remains (sku-meta + inventory pages +
-`internal_fg_stock`) — see "Small inventory tail still pending" below.
+**Inventory was split per sub-domain** (decided 2026-06-03 — it was ~44 routes / ~1385
+lines straddling audit-critical code): `finished_goods.py` + `raw_materials.py` +
+`audit_tools.py` (✅ all above), with the sku-meta + inventory-page tail later folded into
+finished_goods.py. **Production domain FULLY extracted** in 3 slices (schedules+tracker,
+daily-production+checklists, traceability/completed-records) into one `production_bp`.
 
-**Production domain is FULLY extracted** (sliced like inventory, 3 verified steps —
-schedules+tracker, daily-production+checklists, traceability/completed-records, ✅ all
-above; one `production_bp` in `production.py`). The audit-critical consumption chain and
-deletion cascade are now behind a blueprint, with all the audit helpers still in app.py.
-
-**NEXT (recommended): the small inventory/misc tail.** This is the only planned blueprint
-work left and it is all LOW-RISK:
-- sku-meta (`update_sku_meta`, `get_all_sku_meta`) + inventory pages (`organic_page`,
-  `organic_certification_page`) + `internal_fg_stock`.
-- production-runs / contacts (`get_organic_runs`, `get_organic_contacts`) — trivial.
-Decide with the user whether these are worth their own blueprint(s) or simply left in
-app.py as part of the core — they're small, low-churn, and not obviously a cohesive
-domain. Apply the same proven method if extracted (re-run line ranges live; classify each
-name by TRUE home; pure routes-move; byte-identical 166-route map; free-var audit; smoke).
-Assume shared helpers STAY in `app.py`.
+**NOTHING planned remains.** The split is complete (see the ✅ list above). If a future
+need arises to extract more from the core, apply the same proven method: re-run line
+ranges live (they drift); classify each external name by TRUE home (helpers → direct
+import; app.py → `app.`-qualify; Flask-instance attr → `app.app.X`; decorators applied at
+import time → LOCAL verbatim copies); pure routes-move (slice by per-function AST line
+range, never `src.replace`); strengthened free-variable AST audit on the new file;
+byte-identical 166-route map; test-client smoke. Assume shared helpers STAY in `app.py`.
 
 Everything beyond that (dashboard, auth, channel imports, analytics, equipment,
 company-info, certifications, CCP, audits, important-documents, Ripe internal endpoints,
