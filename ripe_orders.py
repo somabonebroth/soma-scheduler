@@ -36,16 +36,23 @@ _SALES_PATH = None
 
 
 def init_paths(inventory_dir):
+    """Bind the finished-goods + sales JSON paths once app.py knows INVENTORY_DIR."""
     global _FG_PATH, _SALES_PATH
     _FG_PATH = os.path.join(inventory_dir, "finished_goods.json")
     _SALES_PATH = os.path.join(inventory_dir, "sales.json")
 
 
 def _configured():
+    """True when both RIPE_PORTAL_URL and INTERNAL_API_KEY are set."""
     return bool(RIPE_PORTAL_URL and INTERNAL_API_KEY)
 
 
 def _ripe_request(method, path, body=None):
+    """Make an authenticated internal API call to the Ripe portal.
+
+    Returns (status_code, parsed_json). Yields 503 when unconfigured or on a
+    transport-level failure; HTTP error responses pass through with their code.
+    """
     if not _configured():
         return 503, {"error": "Ripe portal not configured. Set RIPE_PORTAL_URL and INTERNAL_API_KEY."}
     url = f"{RIPE_PORTAL_URL}{path}"
@@ -66,6 +73,7 @@ def _ripe_request(method, path, body=None):
 
 
 def _load(path, default):
+    """Read a JSON file, returning default (or [] when default is None) if missing."""
     if path and os.path.exists(path):
         with open(path) as f:
             return json.load(f)
@@ -73,6 +81,7 @@ def _load(path, default):
 
 
 def _save(path, data):
+    """Atomically write data as JSON (.tmp then os.replace); no-op if path is unset."""
     if not path:
         return
     tmp = path + ".tmp"
@@ -259,6 +268,7 @@ def create_ripe_sale_records(order, delivery_date, payment_key):
 
 
 def _soma_login_required(f):
+    """Decorator: require an authenticated Soma session (401 JSON otherwise)."""
     @wraps(f)
     def wrapper(*args, **kwargs):
         if not session.get("authenticated"):
@@ -308,6 +318,7 @@ def _group_orders_by_month(orders):
 @ripe_orders_bp.route("/ripe-orders")
 @_soma_login_required
 def ripe_orders_page():
+    """Render the Ripe orders page: awaiting-payment orders plus settled orders grouped by month."""
     status, data = _ripe_request("GET", "/api/internal/orders")
     orders = data if isinstance(data, list) else []
     orders.sort(key=lambda o: o.get("created_at", ""), reverse=True)
@@ -325,6 +336,7 @@ def ripe_orders_page():
 @ripe_orders_bp.route("/api/ripe-orders/pending-count")
 @_soma_login_required
 def ripe_pending_count():
+    """Return the count of pending Ripe orders for the nav badge (0 when unconfigured)."""
     if not _configured():
         return jsonify({"count": 0, "configured": False})
     status, data = _ripe_request("GET", "/api/internal/orders")
@@ -537,12 +549,6 @@ def ripe_products_page():
     return redirect("/contacts?tab=buyers")
 
 
-
-
-
-
-
-
 @ripe_orders_bp.route("/ripe-analytics")
 @_soma_login_required
 def ripe_analytics_page():
@@ -592,7 +598,6 @@ def ripe_export_csv():
     from flask import Response
     return Response(buf.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": "attachment; filename=ripe-orders.csv"})
-
 
 
 @ripe_orders_bp.route("/ripe-sku-audit")
