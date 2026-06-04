@@ -2525,12 +2525,6 @@ def _group_fg_with_catalog(fg, recipes):
 # constants stay in app.py — the blueprint reaches them via app.ORGANIC_FG_PATH.
 
 
-@app.route("/important-documents")
-@login_required
-def important_documents_page():
-    """Render the important documents page."""
-    return render_template("important_documents.html")
-
 # ══════════════════════════════════════════════════════════════════════════════
 # INVENTORY AUDIT ROUTES
 # ══════════════════════════════════════════════════════════════════════════════
