@@ -766,19 +766,7 @@ def dashboard():
 
 
 
-@app.route("/daily-production/<week_id>/<int:day_idx>")
-@login_required
-@require_valid_week
-@require_valid_day
-def daily_production_page(week_id, day_idx):
-    return render_template("daily_production.html", week_id=week_id, day_idx=day_idx)
 
-@app.route("/checklist/<week_id>/<int:day_idx>")
-@login_required
-@require_valid_week
-@require_valid_day
-def checklist_page(week_id, day_idx):
-    return render_template("checklist.html", week_id=week_id, day_idx=day_idx)
 
 
 @app.route("/contacts")
@@ -1450,107 +1438,7 @@ def _halve_for_115L(recipe_data):
     return halved
 
 # ── Daily Production API ──────────────────────────────────────────────
-@app.route("/api/daily-production/<week_id>/<int:day_idx>", methods=["GET"])
-@login_required
-@require_valid_week
-@require_valid_day
-def get_daily_production(week_id, day_idx):
-    schedule_data = load_schedule(week_id)
-    recipes = load_recipes()
-    checklist = load_checklist(week_id, day_idx)
 
-    today_schedule = {}
-    prev_schedule = {}
-
-    if schedule_data and schedule_data.get("schedule"):
-        today_key = str(day_idx)
-        today_schedule = schedule_data["schedule"].get(today_key, {})
-
-        if day_idx > 0:
-            prev_schedule = schedule_data["schedule"].get(str(day_idx - 1), {})
-
-    # Cross-week: Monday FINISH needs previous week's Sunday (day 6)
-    if day_idx == 0:
-        prev_week_start = datetime.strptime(week_id, "%Y-%m-%d") - timedelta(days=7)
-        prev_week_id = prev_week_start.strftime("%Y-%m-%d")
-        prev_week_data = load_schedule(prev_week_id)
-        if prev_week_data and prev_week_data.get("schedule"):
-            prev_schedule = prev_week_data["schedule"].get("6", {})
-
-    # FINISH = previous day's assigned recipe (it was started yesterday, finishing today)
-    # START = today's assigned recipe (what we're starting/prepping today)
-    finish_kettles = {}
-    start_kettles = {}
-
-    for vessel in VESSELS:
-        # FINISH: previous day's recipe (started yesterday, finishing today)
-        prev_recipe_name = prev_schedule.get(vessel, "")
-        if prev_recipe_name and prev_recipe_name.strip():
-            prev_recipe_data = recipes.get(prev_recipe_name, {})
-            if prev_recipe_data:
-                details = _halve_for_115L(prev_recipe_data) if vessel == "115L" else prev_recipe_data
-                finish_kettles[vessel] = {
-                    "recipe": prev_recipe_name,
-                    "details": details,
-                    "halved": vessel == "115L",
-                }
-
-        # START: today's assigned recipe (starting today, will be finished tomorrow)
-        today_recipe_name = today_schedule.get(vessel, "")
-        if today_recipe_name and today_recipe_name.strip():
-            today_recipe_data = recipes.get(today_recipe_name, {})
-            if today_recipe_data:
-                details = _halve_for_115L(today_recipe_data) if vessel == "115L" else today_recipe_data
-                start_kettles[vessel] = {
-                    "recipe": today_recipe_name,
-                    "details": details,
-                    "halved": vessel == "115L",
-                }
-
-    week_start = datetime.strptime(week_id, "%Y-%m-%d")
-    date = week_start + timedelta(days=day_idx)
-    prev_date = date - timedelta(days=1)
-
-    daily_notes = ""
-    if schedule_data and schedule_data.get("daily_notes"):
-        daily_notes = schedule_data["daily_notes"].get(str(day_idx), "")
-
-    # LOT# = expiry date (production date + 365 days) in ddmmyy format.
-    # prev_lot is used when generating labels for the recipe being finished today,
-    # which was started yesterday → expiry = yesterday + 365 days.
-    prev_expiry = prev_date + timedelta(days=365)
-    today_expiry = date + timedelta(days=365)
-
-    return jsonify({
-        "date": date.strftime("%A, %d/%m/%Y"),
-        "day_name": DAYS[day_idx],
-        "prev_date": prev_date.strftime("%d/%m/%Y"),
-        "prev_lot": prev_expiry.strftime("%d%m%y"),
-        "lot": today_expiry.strftime("%d%m%y"),
-        "today_lot": today_expiry.strftime("%d%m%y"),
-        "finish": finish_kettles,
-        "start": start_kettles,
-        "checklist": checklist,
-        "notes": schedule_data.get("notes", "") if schedule_data else "",
-        "daily_notes": daily_notes,
-    })
-
-@app.route("/api/daily-production/<week_id>/<int:day_idx>/save", methods=["POST"])
-@login_required
-@require_valid_week
-@require_valid_day
-def save_daily_production(week_id, day_idx):
-    data = request.json or {}
-    data["last_updated"] = datetime.now().isoformat()
-    save_checklist_data(week_id, day_idx, data)
-    # Process any organic runs scheduled on the previous day —
-    # the produced amounts entered today are the finish of yesterday's runs.
-    warnings = []
-    try:
-        warnings = _check_organic_completion(week_id, day_idx, data) or []
-    except Exception:
-        pass
-    return jsonify({"success": True, "warnings": warnings})
 
 # ── Label Generation ──────────────────────────────────────────────────
 @app.route("/api/label", methods=["POST"])
@@ -1588,73 +1476,8 @@ def generate_label():
                      download_name="Label_" + safe_name + "_" + lot + ".pdf")
 
 # ── Digital Checklists ─────────────────────────────────────────────────
-@app.route("/api/checklist/<week_id>/<int:day_idx>", methods=["GET"])
-@login_required
-@require_valid_week
-@require_valid_day
-def get_checklist_route(week_id, day_idx):
-    data = load_checklist(week_id, day_idx)
-    schedule_data = load_schedule(week_id)
-    day_info = {}
-    if schedule_data and schedule_data.get("schedule"):
-        day_key = str(day_idx)
-        if day_key in schedule_data["schedule"]:
-            day_info = schedule_data["schedule"][day_key]
-    return jsonify({"checklist": data, "day_info": day_info})
 
-@app.route("/api/checklist/<week_id>/<int:day_idx>", methods=["POST"])
-@login_required
-@require_valid_week
-@require_valid_day
-def save_checklist_route(week_id, day_idx):
-    data = request.json or {}
-    data["last_updated"] = datetime.now().isoformat()
-    save_checklist_data(week_id, day_idx, data)
-    return jsonify({"success": True})
 
-@app.route("/api/checklist/<week_id>/<int:day_idx>/complete", methods=["POST"])
-@login_required
-@require_valid_week
-@require_valid_day
-def complete_checklist(week_id, day_idx):
-    data = request.json or {}
-    data["last_updated"] = datetime.now().isoformat()
-    data["completed"] = True
-    save_checklist_data(week_id, day_idx, data)
-
-    schedule_data = load_schedule(week_id)
-    day_info = {}
-    if schedule_data and schedule_data.get("schedule"):
-        day_key = str(day_idx)
-        if day_key in schedule_data["schedule"]:
-            day_info = schedule_data["schedule"][day_key]
-
-    active_vessels = []
-    for vessel in VESSELS:
-        recipe = day_info.get(vessel, "")
-        if recipe:
-            active_vessels.append({"vessel": vessel, "recipe": recipe})
-
-    week_start = datetime.strptime(week_id, "%Y-%m-%d")
-    date = week_start + timedelta(days=day_idx)
-
-    logo_path = os.path.join(app.static_folder, "logo.jpg")
-    if not os.path.exists(logo_path):
-        logo_path = None
-
-    week_pdf_dir = os.path.join(PDF_DIR, week_id)
-    os.makedirs(week_pdf_dir, exist_ok=True)
-    filename = DAYS[day_idx] + "_Completed_Checklist.pdf"
-    pdf_path = os.path.join(week_pdf_dir, filename)
-    generate_filled_checklist_pdf(pdf_path, date, active_vessels, data, logo_path)
-
-    warnings = []
-    try:
-        warnings = _check_organic_completion(week_id, day_idx, data) or []
-    except Exception:
-        pass
-
-    return jsonify({"success": True, "filename": filename, "warnings": warnings})
 
 # ── Checklist Status ──────────────────────────────────────────────────
 def _has_meaningful_data(checklist_data):
@@ -1689,20 +1512,6 @@ def _has_meaningful_data(checklist_data):
         return True
     return False
 
-@app.route("/api/checklist-status/<week_id>", methods=["GET"])
-@login_required
-@require_valid_week
-def checklist_status(week_id):
-    statuses = {}
-    for d_idx in range(7):
-        data = load_checklist(week_id, d_idx)
-        if data and data.get("completed"):
-            statuses[str(d_idx)] = "completed"
-        elif data and _has_meaningful_data(data):
-            statuses[str(d_idx)] = "in_progress"
-        else:
-            statuses[str(d_idx)] = "not_started"
-    return jsonify(statuses)
 
 # ── Master CCP ─────────────────────────────────────────────────────────
 @app.route("/api/ccp-master", methods=["GET"])
