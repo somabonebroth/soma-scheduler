@@ -178,6 +178,12 @@ function e(s) {
   if(fwd)  fwd.onclick = function(){ window.history.forward(); };
 })();
 
+// Deep-link: open the tab named in ?tab= (sales | production); defaults to sales.
+(function(){
+  var t = new URLSearchParams(window.location.search).get('tab');
+  if (t === 'production') showTab('production');
+})();
+
 loadSales();
 </script>
 </body>
