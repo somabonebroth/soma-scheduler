@@ -20,13 +20,14 @@ PURELY READ-ONLY: it loads JSON and never writes. Follows the established bluepr
 pattern (verbatim local login_required; foundation IO + sku helpers from helpers;
 app.-qualified shared path constants via `import app`).
 """
+import os
 from datetime import datetime
 from functools import wraps
 
 from flask import (Blueprint, request, jsonify, session, redirect, url_for,
                    render_template)
 
-from helpers import _load_json, ADJUSTMENTS_PATH, _sku_key, _sku_display
+from helpers import _load_json, ADJUSTMENTS_PATH, INVENTORY_DIR, _sku_key, _sku_display
 
 import app
 
@@ -246,6 +247,150 @@ def compute_fg_reconciliation():
     }
 
 
+# ── Increment 2: append-only event model + projection (read-only so far) ──
+#
+# The event log is the future source of truth: inventory becomes a *projection*
+# over an immutable, append-only stream of movements, and destructive edits become
+# reversal events instead of in-place mutations. Increment 2 lays the foundation —
+# the schema, a pure projection fold, and a backfill that expresses the CURRENT
+# records as that event stream — plus a verify harness proving the projection
+# reproduces what the reconciliation independently computes. Nothing writes the log
+# yet (it stays empty until the Increment 3 zero-day reset emits opening events).
+#
+# Event shape: {type, fg_id, sku_key, qty_delta (signed), source, ref, ts}.
+EVENTS_PATH = os.path.join(INVENTORY_DIR, "inventory_events.json")
+
+EV_OPENING = "opening"        # baseline / manual-add / audit-baseline inflow
+EV_PRODUCTION = "production"  # completed-run inflow
+EV_SALE = "sale"              # recorded sale outflow
+EV_ADJUST_SUB = "adjust_sub"  # manual-subtract outflow
+
+
+def _load_events():
+    """Load the append-only inventory event log (empty until Increment 3)."""
+    return _load_json(EVENTS_PATH, [])
+
+
+def backfill_fg_events():
+    """Express the CURRENT finished-goods records as the canonical event stream
+    (in-memory; no writes). Each FG entry is an inflow — `opening` for baseline /
+    manual-add / audit-baseline lots, else `production`; each recorded sale and
+    manual-subtract is an outflow tied to the fg_id it drew from. This is the same
+    movement set the reconciliation replays, expressed as first-class events — the
+    model the ledger will persist once writes are flipped on (Increment 4)."""
+    fg = _load_json(app.ORGANIC_FG_PATH, [])
+    sales = _load_json(app.ORGANIC_SALES_PATH, [])
+    adjustments = _load_json(ADJUSTMENTS_PATH, [])
+
+    fg_sku = {f.get("id"): _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", ""))
+              for f in fg}
+    fg_ids = set(fg_sku)
+    events = []
+
+    def ev(typ, fid, delta, sku, src, ref, ts):
+        events.append({"type": typ, "fg_id": fid, "qty_delta": delta,
+                       "sku_key": sku, "source": src, "ref": ref, "ts": ts or ""})
+
+    for f in fg:
+        fid = f.get("id")
+        sku = fg_sku[fid]
+        produced = _int(f.get("quantity_produced"))
+        if f.get("migration_baseline"):
+            ev(EV_OPENING, fid, produced, sku, "baseline", f.get("lot", ""), f.get("created_at"))
+        elif f.get("manual_addition"):
+            ev(EV_OPENING, fid, produced, sku, "manual_add", f.get("lot", ""), f.get("created_at"))
+        elif f.get("source") == "audit_baseline":
+            ev(EV_OPENING, fid, produced, sku, "audit_baseline", f.get("lot", ""), f.get("created_at"))
+        else:
+            ev(EV_PRODUCTION, fid, produced, sku, "run", f.get("run_id") or "", f.get("created_at"))
+
+    for s in sales:
+        if s.get("deducted") is False:
+            continue  # not-yet-due RIPE commitment — no stock moved yet
+        sku = s.get("sku_key") or _sku_key(s.get("brand", ""), s.get("recipe", ""), s.get("format", ""))
+        sid = s.get("id")
+        ts = s.get("sale_date") or s.get("created_at")
+        if s.get("lots"):
+            for lot in s["lots"]:
+                bd = lot.get("breakdown") or []
+                if bd:
+                    for b in bd:
+                        if b.get("fg_id") in fg_ids:
+                            ev(EV_SALE, b.get("fg_id"), -_int(b.get("quantity")), sku, "sale", sid, ts)
+                else:
+                    fids = lot.get("fg_ids") or []
+                    if fids and fids[0] in fg_ids:
+                        ev(EV_SALE, fids[0], -_int(lot.get("quantity")), sku, "sale", sid, ts)
+        elif s.get("fg_id") in fg_ids:
+            ev(EV_SALE, s.get("fg_id"), -_int(s.get("quantity")), sku, "sale", sid, ts)
+
+    for a in adjustments:
+        if a.get("kind") == "subtract":
+            for d in (a.get("drained") or []):
+                fid = d.get("fg_id")
+                if fid in fg_ids:
+                    ev(EV_ADJUST_SUB, fid, -_int(d.get("quantity")), fg_sku.get(fid),
+                       "manual_subtract", a.get("id"), a.get("created_at"))
+
+    events.sort(key=lambda e: e["ts"])
+    return events
+
+
+def project_fg(events):
+    """Fold an event stream into balances. Pure. Returns (by_fg_id, by_sku)."""
+    by_fg, by_sku = {}, {}
+    for e in events:
+        d = _int(e.get("qty_delta"))
+        fid = e.get("fg_id")
+        if fid is not None:
+            by_fg[fid] = by_fg.get(fid, 0) + d
+        sku = e.get("sku_key")
+        if sku:
+            by_sku[sku] = by_sku.get(sku, 0) + d
+    return by_fg, by_sku
+
+
+def verify_fg_projection():
+    """Prove the event model is faithful: project the backfilled event stream and
+    confirm it reproduces, per fg_id, exactly what compute_fg_reconciliation derives
+    independently (`projection_matches_reconciliation`). Then report how the
+    projected balances compare to actual current stock — `lots_drifting` must equal
+    the reconciliation's drift count. Read-only."""
+    fg = _load_json(app.ORGANIC_FG_PATH, [])
+    events = backfill_fg_events()
+    proj_fg, _ = project_fg(events)
+    recon = compute_fg_reconciliation()
+    expected_by_fg = {e["fg_id"]: e["expected"] for e in recon["entries"]}
+
+    model_ok = True
+    model_mismatches = []
+    actual_match = 0
+    drifting = 0
+    for f in fg:
+        fid = f.get("id")
+        projected = proj_fg.get(fid, 0)
+        expected = expected_by_fg.get(fid, 0)
+        if projected != expected:
+            model_ok = False
+            model_mismatches.append({"fg_id": fid, "projected": projected,
+                                     "reconciliation_expected": expected})
+        if projected == _int(f.get("quantity_remaining")):
+            actual_match += 1
+        else:
+            drifting += 1
+
+    return {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "on_disk_events": len(_load_events()),
+        "backfill_events": len(events),
+        "fg_lots": len(fg),
+        "projection_matches_reconciliation": model_ok,
+        "model_mismatches": model_mismatches[:20],
+        "lots_matching_actual": actual_match,
+        "lots_drifting": drifting,
+    }
+
+
 @ledger_bp.route("/admin/fg-reconcile")
 @login_required
 def fg_reconcile_page():
@@ -258,3 +403,11 @@ def fg_reconcile_page():
 def fg_reconcile_api():
     """Read-only per-fg_id reconciliation of expected vs actual FG stock."""
     return jsonify(compute_fg_reconciliation())
+
+
+@ledger_bp.route("/api/organic/ledger/verify", methods=["GET"])
+@login_required
+def ledger_verify_api():
+    """Read-only self-check that the append-only event projection reproduces the
+    reconciliation (and reports projected-vs-actual drift)."""
+    return jsonify(verify_fg_projection())

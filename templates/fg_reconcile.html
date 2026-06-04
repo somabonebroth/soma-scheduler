@@ -64,10 +64,27 @@
     <button class="btn btn-outline" onclick="downloadCSV()">Download CSV</button>
     <span id="status"></span>
   </div>
+  <div id="verify"></div>
   <div id="results"></div>
 </div>
 <script>
 let _last = null;
+
+async function loadVerify(){
+  try{
+    const v = await (await fetch('/api/organic/ledger/verify')).json();
+    const ok = v.projection_matches_reconciliation;
+    const colour = ok ? 'var(--action-green-bg, #e8f5e9)' : '#fdecea';
+    const border = ok ? '#2e7d32' : '#c62828';
+    const icon = ok ? '✓' : '✗';
+    document.getElementById('verify').innerHTML =
+      `<div style="background:${colour};border:1px solid ${border};border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;">`
+      + `<strong>Ledger self-check ${icon}</strong> &mdash; the append-only event model `
+      + (ok ? 'reproduces the reconciliation exactly' : 'DIVERGED from the reconciliation (' + v.model_mismatches.length + ' lots)')
+      + ` for all ${v.fg_lots} FG lots `
+      + `(${v.backfill_events} backfilled events, ${v.on_disk_events} persisted; ${v.lots_drifting} lots drift from actual stock).</div>`;
+  }catch(e){ /* verify is diagnostic-only; ignore failures */ }
+}
 
 const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const n = v => (v === null || v === undefined) ? '—' : v;
@@ -197,7 +214,7 @@ function _emitCSV(){
 }
 
 document.getElementById('show-all').addEventListener('change', () => { if(_last) render(_last); });
-document.addEventListener('DOMContentLoaded', run);
+document.addEventListener('DOMContentLoaded', () => { run(); loadVerify(); });
 </script>
 <script>
 (function(){
