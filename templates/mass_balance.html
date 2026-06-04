@@ -68,6 +68,11 @@ function discCell(v){
     var sign=v>0?'+':'';
     return '<td class="num '+cls+'">'+sign+n(v)+'</td>';
 }
+function signedCell(v){
+    if(v===null||v===undefined) return '<td class="num">—</td>';
+    var sign=v>0?'+':'';
+    return '<td class="num" style="color:var(--text-light);">'+sign+n(v)+'</td>';
+}
 
 async function run(){
     var from=document.getElementById('from').value;
@@ -97,16 +102,17 @@ function render(d){
     h+='<h2>Finished goods (units)'+(d.organic_only?' — Organic only':'')+'</h2>';
     if(!d.finished_goods.length){ h+='<div class="empty">No finished-goods activity in this range.</div>'; }
     else{
-        h+='<table><tr><th>Product</th><th>Cert</th><th>Opening</th><th>Produced</th><th>Sold</th><th>Expected closing</th><th>Current stock</th><th>Discrepancy</th></tr>';
+        h+='<table><tr><th>Product</th><th>Cert</th><th>Opening</th><th>Produced</th><th>Sold</th><th>Expected closing</th><th>Current stock</th><th>Discrepancy</th><th title="Signed net of logged manual adjustments (adjustments.json) for this SKU">Logged adj.</th><th title="Discrepancy not explained by any logged adjustment — the part worth investigating">Unexplained</th></tr>';
         d.finished_goods.forEach(function(r){
             h+='<tr><td>'+esc(r.label)+'</td><td style="text-align:left;">'+esc(r.certification||'—')+'</td>'
               +'<td class="num">'+n(r.opening)+'</td><td class="num">'+n(r.produced)+'</td><td class="num">'+n(r.sold)+'</td>'
-              +'<td class="num">'+n(r.expected_closing)+'</td><td class="num">'+n(r.current)+'</td>'+discCell(r.discrepancy)+'</tr>';
+              +'<td class="num">'+n(r.expected_closing)+'</td><td class="num">'+n(r.current)+'</td>'+discCell(r.discrepancy)+signedCell(r.explained)+discCell(r.unexplained)+'</tr>';
         });
         h+='</table>';
     }
     h+='<p class="note"><strong>Reading the report:</strong> Opening + Received − Consumed = Expected closing (raw); Opening + Produced − Sold = Expected closing (finished goods). '
       +'<strong>Discrepancy</strong> = Current stock − Expected closing — it reflects manual stock adjustments, breakage, or loss. It is exact only when <em>To</em> is today (current stock is reconciled as of now). '
+      +'<strong>Logged adj.</strong> is the signed net of recorded manual adjustments (adds, subtracts, physical-count audits) for that SKU; <strong>Unexplained</strong> = Discrepancy − Logged adj. — the part with no recorded explanation, i.e. what to actually investigate (an unrecorded sale, a deleted sale whose stock wasn’t restored). A big discrepancy that is fully explained (Unexplained ≈ 0) is just normal recorded shrink. '
       +'Raw-material lots aren’t certified individually, so the raw table always covers all production; the organic-only toggle filters the finished-goods side by certification. '
       +'Opening leans on your migration baseline counts as the starting point — a range beginning before that baseline won’t have a meaningful opening.</p>';
     document.getElementById('results').innerHTML=h;
@@ -128,9 +134,9 @@ function _emitCSV(){
     });
     lines.push('');
     lines.push('FINISHED GOODS');
-    lines.push('Product,Certification,Opening,Produced,Sold,Expected closing,Current stock,Discrepancy');
+    lines.push('Product,Certification,Opening,Produced,Sold,Expected closing,Current stock,Discrepancy,Logged adj.,Unexplained');
     d.finished_goods.forEach(function(r){
-        lines.push([q(r.label),q(r.certification),r.opening,r.produced,r.sold,r.expected_closing,r.current,r.discrepancy].join(','));
+        lines.push([q(r.label),q(r.certification),r.opening,r.produced,r.sold,r.expected_closing,r.current,r.discrepancy,r.explained,r.unexplained].join(','));
     });
     var blob=new Blob([lines.join('\n')],{type:'text/csv'});
     var a=document.createElement('a');

@@ -3724,7 +3724,10 @@ def _compute_mass_balance(date_from, date_to, organic_only=False):
     current stock. Day-zero migration_baseline entries are folded into Opening
     (they're starting inventory, not production); manual_addition entries are
     intentionally left out so they surface in the discrepancy column, which
-    therefore reads as breakage / loss / logged manual adjustment.
+    therefore reads as breakage / loss / logged manual adjustment. Each FG row
+    also carries 'explained' (signed net of logged adjustments.json entries for
+    that SKU, capped at date_to) and 'unexplained' (discrepancy - explained) so
+    the gap is split into recorded adjustments vs truly unaccounted movement.
 
     Dates: raw received = date_received; raw consumed = the run's PRODUCTION
     (start) date; FG produced = finish date; sold = sale_date. 'Opening' is
@@ -3844,13 +3847,52 @@ def _compute_mass_balance(date_from, date_to, organic_only=False):
         elif in_range(sdate):
             row["sold"] += qn
 
+    # ---- Attribute the FG discrepancy to logged manual adjustments ----
+    # Every manual add / subtract / physical-count audit is logged in
+    # adjustments.json with a signed stock effect. Current stock embeds those
+    # effects, but Opening/Produced/Sold never do — so their net is exactly the
+    # slice of the discrepancy that IS explained by a recorded adjustment. The
+    # remainder ("unexplained") is the truly unaccounted movement (an unrecorded
+    # sale, a deleted sale whose stock wasn't restored, etc.). NOT filtered on
+    # the low end: Opening absorbs no adjustments, so the discrepancy carries
+    # their full history; only capped at date_to so a later adjustment can't leak
+    # into a past window.
+    explained = {}
+    adj_recipes = None  # lazy: subtract records store recipe only, no brand/format
+    for adj in _load_json(ADJUSTMENTS_PATH, []):
+        kind = adj.get("kind")
+        adate = (adj.get("created_at") or "")[:10]
+        if adate and adate > date_to:
+            continue
+        try:
+            if kind == "add":
+                amt = float(adj.get("quantity") or 0)
+                sk = _sku_key(adj.get("brand", ""), adj.get("recipe", ""), adj.get("format", ""))
+            elif kind == "subtract":
+                amt = -float(adj.get("quantity") or 0)
+                if adj_recipes is None:
+                    adj_recipes = load_recipes()
+                meta = adj_recipes.get(adj.get("recipe", "")) or {}
+                sk = _sku_key(meta.get("brand", ""), adj.get("recipe", ""), meta.get("format", ""))
+            elif kind == "audit_fg":
+                amt = float(adj.get("diff") or 0)
+                sk = _sku_key(adj.get("brand", ""), adj.get("recipe", ""), adj.get("format", ""))
+            else:
+                continue  # audit_rm is a raw-material count, not finished goods
+        except (ValueError, TypeError):
+            continue
+        explained[sk] = explained.get(sk, 0.0) + amt
+
     fg_rows = []
     for r in fgr.values():
         exp = r["opening"] + r["produced"] - r["sold"]
+        disc = r["current"] - exp
+        expl = explained.get(r["sku"], 0.0)
         fg_rows.append({
             "sku": r["sku"], "label": r["label"], "certification": r["certification"],
             "opening": r["opening"], "produced": r["produced"], "sold": r["sold"],
-            "expected_closing": exp, "current": r["current"], "discrepancy": r["current"] - exp,
+            "expected_closing": exp, "current": r["current"], "discrepancy": disc,
+            "explained": round(expl), "unexplained": round(disc - expl),
         })
     fg_rows.sort(key=lambda x: x["label"].lower())
 
