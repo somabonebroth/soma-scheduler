@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buyer Cleanup</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 980px; margin: 0 auto; padding: 24px; color: var(--text); background: var(--bg); }
+  h1 { font-size: 22px; }
+  p { font-size: 14px; line-height: 1.5; color: var(--grey-dark); }
+  .warn { background: var(--amber-bg); border: 1px solid var(--amber-border); border-radius: 8px; padding: 12px 16px; font-size: 13px; margin: 16px 0; }
+  .btn { padding: 10px 18px; border-radius: 6px; border: 1px solid var(--action-green); font-size: 14px; cursor: pointer; margin-right: 10px; }
+  .btn-preview { background: var(--white); color: var(--action-green); }
+  .btn-apply { background: var(--action-green); color: var(--white); opacity: 0.5; pointer-events: none; }
+  .btn-apply.ready { opacity: 1; pointer-events: auto; }
+  .summary { font-size: 14px; margin: 14px 0; font-weight: 600; }
+  .action-card { border: 1px solid var(--grey-border); border-radius: 8px; padding: 14px 16px; margin: 12px 0; background: var(--white); }
+  .action-card .head { font-size: 15px; font-weight: 600; }
+  .action-card .tag { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; margin-right: 8px; color: var(--white); }
+  .tag-rename { background: var(--info); }
+  .tag-relocate { background: var(--action-green); }
+  .tag-delete { background: var(--action-red); }
+  .action-card .meta { font-size: 13px; color: var(--grey-dark); margin-top: 6px; }
+  .action-card .det { font-size: 13px; margin-top: 4px; }
+  .action-warn { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark); border-radius: 6px; padding: 8px 12px; font-size: 12px; margin-top: 8px; }
+  .strings { font-size: 12px; color: var(--grey); margin-top: 4px; font-style: italic; }
+  #status { font-size: 13px; margin-left: 8px; color: var(--grey-dark); }
+  .topnav { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-bottom: 6px; }
+  .dash-link { font-size: 13px; text-decoration: none; color: var(--action-green); border: 1px solid var(--grey-border); padding: 7px 12px; border-radius: 6px; background: var(--white); }
+  .dash-link:hover { border-color: var(--action-green); }
+</style>
+</head>
+<body>
+  <div class="topnav">
+    <a class="dash-link" href="/">⌂ Dashboard</a>
+  </div>
+  <h1>Buyer Cleanup</h1>
+  <p>One-time migration that folds outdated buyer names in the sales records into their current
+  identities, so the sales-by-buyer analytics shows only active buyers. Three hardcoded actions:
+  rename <strong>SOMA (Wholesale)</strong> → <strong>SOMA (QBO)</strong>; roll
+  <strong>Natures Emporium (Vaughan)</strong> up under <strong>Natures Emporium</strong> as location
+  <strong>Maple (Vaughan)</strong>; and delete the <strong>Inventory Adjustment (App Dev)</strong>
+  records (finished-goods stock is left untouched).</p>
+
+  <div class="warn">
+    <strong>Preview first.</strong> Nothing is written until you click Apply. The preview shows
+    exactly how many records each action matches against live data, and flags any name that doesn't
+    line up with <code>buyers.json</code>.
+  </div>
+
+  <button class="btn btn-preview" onclick="run(false)">Preview</button>
+  <button class="btn btn-apply" id="apply-btn" onclick="run(true)">Apply</button>
+  <span id="status"></span>
+
+  <div id="results"></div>
+
+<script>
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+async function run(apply){
+  var status = document.getElementById('status');
+  if(apply && !confirm('Apply the buyer cleanup? This rewrites/deletes sales records and cannot be undone.')) return;
+  status.textContent = apply ? 'Applying…' : 'Computing preview…';
+  var res = await fetch('/admin/buyer-cleanup/run', { method: apply ? 'POST' : 'GET' });
+  var d = await res.json();
+  status.textContent = '';
+  render(d);
+  if(!apply){
+    document.getElementById('apply-btn').classList.add('ready');
+  } else {
+    document.getElementById('apply-btn').classList.remove('ready');
+    status.textContent = 'Applied.';
+  }
+}
+
+function render(d){
+  var total = (d.actions||[]).reduce(function(a,x){ return a + x.matched; }, 0);
+  var h = '<div class="summary">' + (d.applied ? '✅ Applied — ' : 'Preview — ')
+        + total + ' records matched across ' + (d.actions||[]).length + ' actions.</div>';
+
+  (d.actions||[]).forEach(function(a){
+    h += '<div class="action-card">';
+    h += '<div class="head"><span class="tag tag-'+esc(a.action)+'">'+esc(a.action)+'</span>'+esc(a.source)+'</div>';
+    h += '<div class="det">'+esc(a.detail)+'</div>';
+    h += '<div class="meta">'+a.matched+' record(s)'
+       + (a.units ? ', '+a.units+' units' : '')+'.</div>';
+    if(a.distinct_strings && a.distinct_strings.length){
+      h += '<div class="strings">stored as: '+a.distinct_strings.map(esc).join(' · ')+'</div>';
+    }
+    (a.warnings||[]).forEach(function(w){
+      h += '<div class="action-warn">⚠ '+esc(w)+'</div>';
+    });
+    h += '</div>';
+  });
+
+  document.getElementById('results').innerHTML = h;
+}
+</script>
+</body>
+</html>
