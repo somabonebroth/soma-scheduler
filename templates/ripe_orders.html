@@ -38,6 +38,15 @@
 .section-header td{background:var(--bg);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-light);padding:10px;border-bottom:2px solid var(--border);border-top:1px solid var(--border);}
 .section-header td .count{color:var(--text);font-weight:700;margin-left:6px;}
 .section-empty td{padding:18px;text-align:center;color:var(--text-light);font-size:12px;font-style:italic;}
+.month-card{margin-bottom:12px;}
+.month-header{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;background:var(--bg);user-select:none;}
+.month-card.open .month-header{border-bottom:1px solid var(--border);}
+.month-caret{font-size:11px;color:var(--text-light);transition:transform .15s;}
+.month-card.open .month-caret{transform:rotate(90deg);}
+.month-label{font-weight:700;font-size:14px;color:var(--text);}
+.month-count{margin-left:auto;font-size:11px;color:var(--text-light);}
+.month-body{display:none;}
+.month-card.open .month-body{display:block;}
 .items-list{font-size:12px;color:var(--text-light);margin:6px 0 0;}
 .items-list li{padding:3px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;}
 .items-list li:last-child{border-bottom:none;}
@@ -188,30 +197,44 @@
     </tr>
   {% endmacro %}
 
-  {% if awaiting_orders or settled_orders %}
-  <div class="card" style="padding:0;overflow:hidden;">
+  {% if awaiting_orders or settled_months %}
+
+  {# Awaiting payment — pinned at the top, always expanded #}
+  {% if awaiting_orders %}
+  <div class="card awaiting-card" style="padding:0;overflow:hidden;margin-bottom:14px;">
   <table class="orders-table">
     <thead>
       <tr><th>Order</th><th>Date</th><th>Delivery</th><th>Cases</th><th>Total</th><th>Payment</th><th>Status</th></tr>
     </thead>
-    <tbody class="section-awaiting">
+    <tbody>
       <tr class="section-header"><td colspan="7">Awaiting payment <span class="count">{{ awaiting_orders|length }}</span></td></tr>
-      {% if awaiting_orders %}
-        {% for o in awaiting_orders %}{{ order_row(o) }}{% endfor %}
-      {% else %}
-        <tr class="section-empty"><td colspan="7">All orders paid or declined.</td></tr>
-      {% endif %}
-    </tbody>
-    <tbody class="section-settled">
-      <tr class="section-header"><td colspan="7">Settled <span class="count">{{ settled_orders|length }}</span></td></tr>
-      {% if settled_orders %}
-        {% for o in settled_orders %}{{ order_row(o) }}{% endfor %}
-      {% else %}
-        <tr class="section-empty"><td colspan="7">No settled orders yet.</td></tr>
-      {% endif %}
+      {% for o in awaiting_orders %}{{ order_row(o) }}{% endfor %}
     </tbody>
   </table>
   </div>
+  {% endif %}
+
+  {# Settled orders — grouped by month, past months collapsed #}
+  {% for m in settled_months %}
+  <div class="card month-card{{ ' open' if m.expanded else '' }}" style="padding:0;overflow:hidden;">
+    <div class="month-header" onclick="toggleMonth(this)">
+      <span class="month-caret">&#9654;</span>
+      <span class="month-label">{{ m.label }}</span>
+      <span class="month-count">{{ m.orders|length }} order{{ '' if m.orders|length == 1 else 's' }}</span>
+    </div>
+    <div class="month-body">
+      <table class="orders-table">
+        <thead>
+          <tr><th>Order</th><th>Date</th><th>Delivery</th><th>Cases</th><th>Total</th><th>Payment</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          {% for o in m.orders %}{{ order_row(o) }}{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+
   {% elif configured and not error %}
   <div class="card" style="text-align:center;color:var(--text-light);padding:40px;">No orders yet.</div>
   {% endif %}
@@ -254,13 +277,17 @@ function setFilter(f, btn) {
     var det = document.getElementById('detail-' + row.dataset.id);
     if (det) det.style.display = show ? '' : 'none';
   });
-  document.querySelectorAll('tbody.section-awaiting, tbody.section-settled').forEach(function(tb){
-    var rows = tb.querySelectorAll('.order-row');
+  // Hide a whole group (awaiting card or month card) when it has no matching rows.
+  document.querySelectorAll('.awaiting-card, .month-card').forEach(function(card){
+    var rows = card.querySelectorAll('.order-row');
     if (rows.length === 0) return;
     var anyVisible = Array.prototype.some.call(rows, function(r){ return r.style.display !== 'none'; });
-    var hdr = tb.querySelector('.section-header');
-    if (hdr) hdr.style.display = anyVisible ? '' : 'none';
+    card.style.display = anyVisible ? '' : 'none';
   });
+}
+
+function toggleMonth(hdr) {
+  hdr.parentElement.classList.toggle('open');
 }
 
 function toggleDetail(id) {

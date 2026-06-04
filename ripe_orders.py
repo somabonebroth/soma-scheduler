@@ -18,6 +18,7 @@ Env vars on Soma's Render service:
 
 import os, json, logging
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from functools import wraps
 import urllib.request, urllib.error
 
@@ -277,6 +278,33 @@ def _is_awaiting_payment(o):
     return o.get("payment_status") != "paid"
 
 
+def _month_label(key):
+    """Render a 'YYYY-MM' key as 'June 2026'. Falls back to the raw key."""
+    try:
+        return datetime.strptime(key, "%Y-%m").strftime("%B %Y")
+    except ValueError:
+        return key or "Undated"
+
+
+def _group_orders_by_month(orders):
+    """Group orders (already sorted newest-first) into month buckets, newest
+    month first. The current Toronto month is flagged expanded; past months
+    collapse. `orders` must be pre-sorted by created_at desc so both the month
+    order and the within-month order come out newest-first."""
+    current_month = datetime.now(ZoneInfo("America/Toronto")).strftime("%Y-%m")
+    months, seen = [], {}
+    for o in orders:
+        key = (o.get("created_at") or "")[:7] or "unknown"
+        grp = seen.get(key)
+        if grp is None:
+            grp = {"key": key, "label": _month_label(key),
+                   "expanded": key == current_month, "orders": []}
+            seen[key] = grp
+            months.append(grp)
+        grp["orders"].append(o)
+    return months
+
+
 @ripe_orders_bp.route("/ripe-orders")
 @_soma_login_required
 def ripe_orders_page():
@@ -285,11 +313,12 @@ def ripe_orders_page():
     orders.sort(key=lambda o: o.get("created_at", ""), reverse=True)
     awaiting_orders = [o for o in orders if _is_awaiting_payment(o)]
     settled_orders  = [o for o in orders if not _is_awaiting_payment(o)]
+    settled_months  = _group_orders_by_month(settled_orders)
     pending_count = sum(1 for o in orders if o.get("status") == "pending")
     configured = _configured()
     error = None if status == 200 else (data.get("error") if isinstance(data, dict) else "Unknown error")
     return render_template("ripe_orders.html",
-        awaiting_orders=awaiting_orders, settled_orders=settled_orders,
+        awaiting_orders=awaiting_orders, settled_months=settled_months,
         pending_count=pending_count, configured=configured, error=error)
 
 
