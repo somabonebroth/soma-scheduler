@@ -83,12 +83,11 @@ pdf_engine.py       — PDF generation (labels, checklists, schedules)
 vision_scan.py      — Receipt photo OCR
 default_recipes.py  — Seed data
 add_pwa_tags.py     — PWA manifest support
-supplier_routes.py  — Placeholder (routes are in app.py)
 templates/          — Jinja2 HTML templates (one per page)
 static/             — CSS, JS, images
 ```
 
-`helpers.py` now exists (foundation layer, 2026-06-03). No `cogs.py` or `equipment.py` — that code is still in `app.py`. `supplier_routes.py` remains a dead placeholder (suppliers are now in `suppliers.py`); it can be deleted.
+`helpers.py` now exists (foundation layer, 2026-06-03). No `cogs.py` or `equipment.py` — that code is still in `app.py`. The dead `supplier_routes.py` placeholder was deleted (2026-06-03, commit after the split); suppliers live in `suppliers.py`.
 
 ---
 
@@ -302,7 +301,7 @@ Render is connected to `github.com/somabonebroth/soma-scheduler` and auto-deploy
 
 ## Pending architectural work
 
-### Blueprint split — IN PROGRESS (started 2026-06-03)
+### Blueprint split — COMPLETE (2026-06-03)
 
 The method (do this in Claude Code, not chat): use the `ast` module to get exact
 `(lineno, end_lineno)` for every function/constant, then **slice by line range —
