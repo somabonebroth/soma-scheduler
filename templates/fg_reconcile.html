@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FG Reconciliation — Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  body{ font-family:-apple-system,system-ui,sans-serif; margin:0; background:#faf8f3; color:var(--text); }
+  .header{ display:flex; align-items:center; gap:12px; padding:16px 24px; background:#fff; border-bottom:1px solid var(--border); }
+  .header img{ height:34px; cursor:pointer; }
+  .header h1{ font-size:19px; margin:0; }
+  .header p{ font-size:12px; color:var(--text-light); margin:2px 0 0; }
+  .header-right{ margin-left:auto; display:flex; align-items:center; gap:8px; }
+  .header-btn{ font-size:13px; text-decoration:none; color:var(--accent); border:1px solid var(--border); padding:7px 12px; border-radius:6px; background:#fff; }
+  .nav-arrows{ display:inline-flex; gap:4px; align-items:center; }
+  .nav-arrow-btn{ width:30px; height:30px; border:1px solid var(--border); background:#fff; border-radius:6px; cursor:pointer; color:var(--accent); font-size:14px; line-height:1; }
+  .nav-arrow-btn:hover{ border-color:var(--accent); }
+  .nav-arrow-btn:disabled{ opacity:.35; cursor:default; }
+  .main{ max-width:1200px; margin:0 auto; padding:22px; }
+  .controls{ display:flex; flex-wrap:wrap; gap:14px; align-items:center; background:#fff; border:1px solid var(--border); border-radius:8px; padding:14px 16px; margin-bottom:18px; }
+  .btn{ padding:8px 16px; border-radius:6px; font-size:13px; cursor:pointer; border:1px solid var(--accent); }
+  .btn-primary{ background:var(--accent); color:#fff; }
+  .btn-outline{ background:#fff; color:var(--accent); }
+  .chk{ display:flex; align-items:center; gap:6px; font-size:13px; }
+  h2{ font-size:15px; margin:22px 0 8px; }
+  .cards{ display:flex; flex-wrap:wrap; gap:12px; margin-bottom:6px; }
+  .stat{ background:#fff; border:1px solid var(--border); border-radius:8px; padding:12px 16px; min-width:120px; }
+  .stat .v{ font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .stat .l{ font-size:11px; color:var(--text-light); margin-top:2px; text-transform:uppercase; letter-spacing:.4px; }
+  .stat.bad .v{ color:#c62828; }
+  .stat.ok .v{ color:#2e7d32; }
+  table{ width:100%; border-collapse:collapse; font-size:13px; background:#fff; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  th,td{ padding:8px 10px; border-bottom:1px solid #f0efe9; text-align:right; }
+  th:first-child,td:first-child{ text-align:left; }
+  th{ background:#1a2e1a; color:#fff; font-weight:600; font-size:12px; }
+  td.left,th.left{ text-align:left; }
+  .num{ font-variant-numeric:tabular-nums; }
+  .disc-ok{ color:#2e7d32; }
+  .disc-bad{ color:#c62828; font-weight:600; }
+  .badge{ display:inline-block; font-size:10px; padding:1px 6px; border-radius:10px; background:var(--border); color:var(--text); margin-left:5px; }
+  .badge.warn{ background:#fde9c8; color:#8a6900; }
+  .cause{ font-size:11px; color:var(--text-light); }
+  .cause.unexplained{ color:#c62828; font-weight:600; }
+  .note{ font-size:12px; color:var(--text-light); margin:6px 2px 0; line-height:1.5; }
+  .empty{ font-size:13px; color:var(--text-light); padding:14px; }
+  #status{ font-size:13px; color:var(--text-light); }
+</style>
+</head>
+<body>
+<div class="header">
+  <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+  <div><h1>FG Reconciliation</h1><p>Per-lot finished-goods drift &mdash; expected vs actual stock</p></div>
+  <div class="header-right">
+    <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button><button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button></div>
+    <a class="header-btn" href="/mass-balance">Mass balance</a>
+    <a class="header-btn" href="/">⌂ Dashboard</a>
+  </div>
+</div>
+<div class="main">
+  <div class="controls">
+    <button class="btn btn-primary" onclick="run()">Refresh</button>
+    <label class="chk"><input type="checkbox" id="show-all"> Show all entries (not just drift)</label>
+    <button class="btn btn-outline" onclick="downloadCSV()">Download CSV</button>
+    <span id="status"></span>
+  </div>
+  <div id="results"></div>
+</div>
+<script>
+let _last = null;
+
+const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const n = v => (v === null || v === undefined) ? '—' : v;
+
+function discCell(v){
+  const cls = (v === 0) ? 'disc-ok' : 'disc-bad';
+  const sign = v > 0 ? '+' : '';
+  return `<td class="num ${cls}">${sign}${n(v)}</td>`;
+}
+
+async function run(){
+  document.getElementById('status').textContent = 'Computing…';
+  const d = await (await fetch('/api/organic/fg-reconcile')).json();
+  _last = d;
+  document.getElementById('status').textContent = 'as of ' + (d.generated_at || '');
+  render(d);
+}
+
+function render(d){
+  const t = d.totals;
+  let h = '';
+
+  h += '<div class="cards">';
+  h += `<div class="stat"><div class="v">${t.entries}</div><div class="l">FG lots</div></div>`;
+  h += `<div class="stat ${t.entries_with_drift ? 'bad' : 'ok'}"><div class="v">${t.entries_with_drift}</div><div class="l">Lots with drift</div></div>`;
+  h += `<div class="stat ${t.unexplained_entries ? 'bad' : 'ok'}"><div class="v">${t.unexplained_entries}</div><div class="l">Unexplained lots</div></div>`;
+  h += `<div class="stat ${t.unexplained_units ? 'bad' : 'ok'}"><div class="v">${t.unexplained_units > 0 ? '+' : ''}${t.unexplained_units}</div><div class="l">Unexplained units</div></div>`;
+  h += `<div class="stat ${t.orphans ? 'bad' : 'ok'}"><div class="v">${t.orphans}</div><div class="l">Orphan refs</div></div>`;
+  h += `<div class="stat ${t.sale_mismatches ? 'bad' : 'ok'}"><div class="v">${t.sale_mismatches}</div><div class="l">Edited-sale gaps</div></div>`;
+  h += `<div class="stat"><div class="v">${t.pending_units}</div><div class="l">Pending (RIPE) units</div></div>`;
+  h += '</div>';
+
+  // ---- SKU rollup ----
+  h += '<h2>By SKU</h2>';
+  if(!d.skus.length){ h += '<div class="empty">No finished goods.</div>'; }
+  else{
+    h += '<table><tr><th class="left">Product</th><th class="left">Cert</th><th>Produced</th><th>Σ Sales</th><th>Σ Sub</th><th>Expected</th><th>Actual</th><th>Drift</th><th>Attributed</th><th>Unexplained</th></tr>';
+    d.skus.forEach(r => {
+      const off = r.offsetting_internal_drift ? '<span class="badge warn" title="Per-lot errors net to zero at SKU level — hidden in the mass balance">offsetting</span>' : '';
+      h += `<tr><td class="left">${esc(r.label)}${off}</td><td class="left">${esc(r.cert || '—')}</td>`
+         + `<td class="num">${n(r.produced)}</td><td class="num">${n(r.out_sales)}</td><td class="num">${n(r.out_sub)}</td>`
+         + `<td class="num">${n(r.expected)}</td><td class="num">${n(r.actual)}</td>`
+         + discCell(r.drift) + `<td class="num cause">${r.attributed ? (r.attributed > 0 ? '+' : '') + r.attributed : '0'}</td>` + discCell(r.unexplained) + '</tr>';
+    });
+    h += '</table>';
+  }
+
+  // ---- Per-lot drift ----
+  const showAll = document.getElementById('show-all').checked;
+  const rows = showAll ? d.entries : d.entries.filter(e => e.drift !== 0);
+  h += `<h2>By lot ${showAll ? '(all)' : '(drift only)'}</h2>`;
+  if(!rows.length){ h += '<div class="empty">No lots with drift — finished goods reconcile cleanly. 🎉</div>'; }
+  else{
+    h += '<table><tr><th class="left">Product</th><th class="left">Lot</th><th class="left">Vessel</th><th>Produced</th><th>Sales</th><th>Sub</th><th>Expected</th><th>Actual</th><th>Drift</th><th class="left">Cause</th></tr>';
+    rows.forEach(e => {
+      const causeCls = e.cause === 'unexplained' ? 'cause unexplained' : 'cause';
+      h += `<tr><td class="left">${esc(e.label)}</td><td class="left">${esc(e.lot)}</td><td class="left">${esc(e.vessel)}</td>`
+         + `<td class="num">${n(e.produced)}</td><td class="num">${n(e.out_sales)}</td><td class="num">${n(e.out_sub)}</td>`
+         + `<td class="num">${n(e.expected)}</td><td class="num">${n(e.actual)}</td>`
+         + discCell(e.drift) + `<td class="left ${causeCls}">${esc(e.cause)}</td></tr>`;
+    });
+    h += '</table>';
+  }
+
+  // ---- Orphans ----
+  if(d.orphans.length){
+    h += '<h2>Orphan references</h2>';
+    h += '<table><tr><th class="left">Kind</th><th class="left">Source</th><th class="left">Missing fg_id</th><th>Units</th></tr>';
+    d.orphans.forEach(o => {
+      h += `<tr><td class="left">${esc(o.kind)}</td><td class="left">${esc(o.ref)}</td><td class="left">${esc(o.fg_id || '—')}${o.approx ? '<span class="badge">approx</span>' : ''}</td><td class="num">${n(o.quantity)}</td></tr>`;
+    });
+    h += '</table>';
+    h += '<p class="note">A sale or adjustment that points at a finished-goods lot which no longer exists — the lot was deleted under it (its stock effect can no longer be reversed).</p>';
+  }
+
+  // ---- Edited-sale gaps ----
+  if(d.sale_mismatches.length){
+    h += '<h2>Edited-sale gaps</h2>';
+    h += '<table><tr><th class="left">Product</th><th class="left">Sale</th><th>Sale qty</th><th>Breakdown sum</th><th>Delta</th></tr>';
+    d.sale_mismatches.forEach(m => {
+      h += `<tr><td class="left">${esc(m.label)}</td><td class="left">${esc(m.sale_id)}</td><td class="num">${n(m.sale_quantity)}</td><td class="num">${n(m.breakdown_sum)}</td>` + discCell(m.delta) + '</tr>';
+    });
+    h += '</table>';
+    h += '<p class="note">The sale’s recorded quantity no longer matches the sum of its per-lot breakdown — the fingerprint of an in-place quantity edit that moved FG stock without updating the breakdown.</p>';
+  }
+
+  // ---- Pending ----
+  if(d.pending.length){
+    h += '<h2>Pending RIPE commitments (not yet deducted)</h2>';
+    h += '<table><tr><th class="left">Product</th><th class="left">Sale</th><th>Units</th><th class="left">Deduction date</th></tr>';
+    d.pending.forEach(p => {
+      h += `<tr><td class="left">${esc(p.label)}</td><td class="left">${esc(p.sale_id)}</td><td class="num">${n(p.quantity)}</td><td class="left">${esc(p.deduction_date || '—')}</td></tr>`;
+    });
+    h += '</table>';
+  }
+
+  h += '<p class="note"><strong>Reading this:</strong> for each FG lot, <strong>Expected = Produced − recorded Sales − recorded manual Subtracts</strong>, compared to the actual remaining stock. '
+     + '<strong>Drift ≠ 0</strong> means the lot changed without a matching record. <strong>Cause</strong>: <em>manual_adjust</em> = a hand edit (direct set / lot-adjust / audit recount) that left no per-lot record; '
+     + '<em>baseline_drift</em> = a day-zero / manual / audit-baseline lot drew down oddly; <em>unexplained</em> = no recorded explanation at all (an unrecorded sale, a delete that didn’t restore, or an in-place sale edit) — these are the rows to investigate. '
+     + 'Unlike the mass balance, this is per-lot, so it catches errors that cancel out within a SKU (the <span class="badge warn">offsetting</span> badge).</p>';
+
+  document.getElementById('results').innerHTML = h;
+}
+
+function q(s){ s = String(s == null ? '' : s); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+
+function downloadCSV(){
+  if(!_last){ run().then(_emitCSV); return; }
+  _emitCSV();
+}
+function _emitCSV(){
+  if(!_last) return;
+  const d = _last;
+  const lines = [];
+  lines.push('FG Reconciliation,as of ' + (d.generated_at || ''));
+  lines.push('');
+  lines.push('BY LOT');
+  lines.push('Product,Lot,Vessel,fg_id,Produced,Sales,Sub,Expected,Actual,Drift,Cause');
+  d.entries.forEach(e => {
+    lines.push([q(e.label), q(e.lot), q(e.vessel), q(e.fg_id), e.produced, e.out_sales, e.out_sub, e.expected, e.actual, e.drift, e.cause].join(','));
+  });
+  const blob = new Blob([lines.join('\n')], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'fg-reconcile_' + (d.generated_at || '').slice(0, 10) + '.csv';
+  a.click();
+}
+
+document.getElementById('show-all').addEventListener('change', () => { if(_last) render(_last); });
+document.addEventListener('DOMContentLoaded', run);
+</script>
+<script>
+(function(){
+  const back = document.getElementById('nav-back'), fwd = document.getElementById('nav-fwd');
+  if(back){ back.disabled = (window.history.length <= 1); back.onclick = () => window.history.back(); }
+  if(fwd){ fwd.onclick = () => window.history.forward(); }
+  window.addEventListener('popstate', () => { if(back) back.disabled = (window.history.length <= 1); });
+})();
+</script>
+</body>
+</html>
