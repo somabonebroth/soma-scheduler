@@ -523,6 +523,57 @@ def is_structured_ingredient(item):
     """Check if an item is already in structured object form."""
     return isinstance(item, dict) and "name" in item and "amount" in item
 
+# Confirmed kitchen-facing dosing units for known 'per L' ingredients (keyed by
+# normalized name). These take priority over inventory inference because an
+# ingredient's dosing unit can differ from how it's stocked (honey is dosed by
+# weight but may be inventoried by volume) and because the strict name matcher
+# would otherwise fall back to 'g' when a recipe name doesn't exactly equal the
+# inventory name (e.g. "Lemon Juice" vs "Organic Lemon Juice"). Confirmed with
+# the operator 2026-06-04. Anything not listed here still infers from inventory.
+_PER_L_UNIT_OVERRIDES = {
+    "grey salt": "g",
+    "pink salt": "g",
+    "ginger juice": "ml",
+    "lemon juice": "ml",
+    "honey": "g",
+}
+
+def _infer_per_l_unit(ingredient_name, raw_materials):
+    """Infer the dosing unit ('g' or 'ml') for a 'per L' recipe ingredient.
+
+    A confirmed override (_PER_L_UNIT_OVERRIDES) wins first; otherwise look at
+    the matching raw-material lot's unit: mass units (g/kg/lbs) -> 'g', volume
+    units (ml/L) -> 'ml'. Defaults to 'g' (the historical assumption) when no
+    lot matches by name."""
+    key = " ".join((ingredient_name or "").lower().split())
+    if key in _PER_L_UNIT_OVERRIDES:
+        return _PER_L_UNIT_OVERRIDES[key]
+    for mat in raw_materials or []:
+        if not isinstance(mat, dict):
+            continue
+        if ingredients_match(mat.get("item", ""), ingredient_name):
+            u = (mat.get("unit") or "").strip().lower()
+            if u in ("ml", "l"):
+                return "ml"
+            if u in ("g", "kg", "lbs"):
+                return "g"
+    return "g"
+
+def _attach_per_l_units(recipe_data, raw_materials=None):
+    """Annotate each 'per L' ingredient in a recipe with a 'per_l_unit' field
+    ('g' or 'ml') inferred from inventory, so recipe cards and the daily
+    production page can show e.g. '3 g per L'. Display-only; not persisted on
+    save (the recipe editor rebuilds ingredients from its own fields)."""
+    if not isinstance(recipe_data, dict):
+        return recipe_data
+    if raw_materials is None:
+        raw_materials = _load_json(ORGANIC_RAW_PATH, [])
+    for section in INGREDIENT_SECTIONS:
+        for item in recipe_data.get(section, []) or []:
+            if isinstance(item, dict) and (item.get("unit") or "").strip() == "per L":
+                item["per_l_unit"] = _infer_per_l_unit(item.get("name", ""), raw_materials)
+    return recipe_data
+
 def _smart_upgrade_ingredient(item, tracking_modes):
     """Upgrade an already-structured ingredient to the new unit scheme.
 

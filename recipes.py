@@ -79,8 +79,13 @@ def recipes_page():
 @recipes_bp.route("/api/recipes", methods=["GET"])
 @login_required
 def get_recipes():
-    """GET /api/recipes - return all recipes."""
-    return jsonify(app.load_recipes())
+    """GET /api/recipes - return all recipes, with 'per L' ingredients
+    annotated with their inferred g/ml dosing unit for display."""
+    recipes = app.load_recipes()
+    raw_materials = app._load_json(app.ORGANIC_RAW_PATH, [])
+    for recipe in recipes.values():
+        app._attach_per_l_units(recipe, raw_materials)
+    return jsonify(recipes)
 
 @recipes_bp.route("/api/recipes", methods=["POST"])
 @login_required

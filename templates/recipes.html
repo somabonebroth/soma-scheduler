@@ -366,6 +366,7 @@ function formatIngredient(item){
     var unit=item.unit||'';
     var name=item.name||'';
     var proc=item.process||'';
+    if(unit==='per L')unit=(item.per_l_unit||'g')+' per L';
     var parts=[];
     if(amt!==0&&amt!=null&&amt!=='')parts.push(String(amt));
     if(unit)parts.push(unit);

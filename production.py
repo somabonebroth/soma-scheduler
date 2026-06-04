@@ -353,6 +353,12 @@ def get_daily_production(week_id, day_idx):
                     "halved": vessel == "115L",
                 }
 
+    # Annotate 'per L' ingredients with their inferred g/ml dosing unit so the
+    # recipe cards show e.g. "3 g per L" for kitchen staff.
+    raw_materials = app._load_json(app.ORGANIC_RAW_PATH, [])
+    for kettle in list(finish_kettles.values()) + list(start_kettles.values()):
+        app._attach_per_l_units(kettle.get("details"), raw_materials)
+
     week_start = datetime.strptime(week_id, "%Y-%m-%d")
     date = week_start + timedelta(days=day_idx)
     prev_date = date - timedelta(days=1)
