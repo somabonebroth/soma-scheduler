@@ -41,9 +41,6 @@
 .day-actions button:hover { background: var(--danger); color: var(--white); }
 .empty-state { text-align: center; padding: 60px 20px; color: var(--text-light); }
 .download-week { font-size: 12px; }
-.filter-bar { display: flex; gap: 8px; margin-bottom: 16px; }
-.filter-btn { padding: 6px 14px; border: 1px solid var(--border); border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; background: var(--card-bg); color: var(--text); }
-.filter-btn.active { background: var(--accent); color: var(--white); border-color: var(--accent); }
 
 /* Week Summary Modal */
 .summary-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:300; align-items:center; justify-content:center; padding:16px; }
@@ -89,11 +86,6 @@
   </div>
 </div>
 <div class="main">
-    <div class="filter-bar">
-        <button class="filter-btn active" id="filter-all" onclick="loadRecords('all',this)">All Records</button>
-        <button class="filter-btn" id="filter-nonorg" onclick="loadRecords('non-organic',this)">Non-Organic</button>
-        <button class="filter-btn" id="filter-org" onclick="loadRecords('organic',this)">Organic</button>
-    </div>
     <div id="stock-exceptions"></div>
     <div id="records-container"><div class="empty-state">Loading...</div></div>
 </div>
@@ -133,21 +125,10 @@ function mobileConfirm(message, opts){
 }
 </script>
 <script>
-var currentFilter='all';
-
 function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-async function loadRecords(filter,btn){
-    if(filter)currentFilter=filter;
-    if(btn){document.querySelectorAll('.filter-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');}
-    var subtitle='All production records — review and confirm weekly';
-    if(currentFilter==='organic')subtitle='Organic-certified production only';
-    else if(currentFilter==='non-organic')subtitle='Non-organic production only';
-    document.getElementById('trace-subtitle').textContent=subtitle;
-
-    var url='/api/traceability';
-    if(currentFilter!=='all')url+='?filter='+currentFilter;
-    var res=await fetch(url);
+async function loadRecords(){
+    var res=await fetch('/api/traceability');
     var records=await res.json();
     var container=document.getElementById('records-container');
     if(!records.length){container.innerHTML='<div class="empty-state"><h2>No Records</h2><p>Completed daily production checklists will appear here.</p></div>';return;}
@@ -294,7 +275,7 @@ async function loadStockExceptions(){
 }
 
 document.addEventListener('DOMContentLoaded',function(){
-    loadRecords('all',document.getElementById('filter-all'));
+    loadRecords();
     loadStockExceptions();
 });
 </script>
