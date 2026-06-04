@@ -471,7 +471,7 @@ the split was never meant to dissolve app.py entirely.
 > closures**, and `_infer_section_for_ingredient` **doesn't exist**. The real, movable
 > foundation is the 34-name set now in `helpers.py` (above).
 
-**COGS model** — was built and worked, then removed due to instability from an unrelated session. Can be re-added once architecture is stable. The feature itself was sound.
+**COGS model** — was built, then removed in a prior session; **not planned to return** (confirmed 2026-06-03). The removal was clean: there is no COGS route, page, data file, nav link, or helper left. NOTE: the `cogs` field that still appears in `buyers.py`, `app.py` (buyer catalogue), and the `buyer_edit` / `ripe_products` / `contacts` templates is the **active buyer-pricing field** (the price = cogs × (1 + margin/100) triangle per buyer SKU) — it is unrelated to the removed COGS model; do not strip it.
 
 ---
 
