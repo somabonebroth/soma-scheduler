@@ -524,6 +524,7 @@ def delete_organic_sale(sale_id):
 @sales_bp.route("/api/organic/sales/<sale_id>/packing-slip", methods=["GET"])
 @login_required
 def get_packing_slip(sale_id):
+    """GET .../packing-slip - render a packing-slip PDF for a sale/order."""
     sales = _load_json(app.ORGANIC_SALES_PATH, [])
     sale = next((s for s in sales if s.get("id") == sale_id), None)
     if not sale:
@@ -706,6 +707,7 @@ def get_packing_slip(sale_id):
 @sales_bp.route("/api/organic/sales/<sale_id>/qbo-csv", methods=["GET"])
 @login_required
 def get_qbo_csv(sale_id):
+    """GET .../qbo-csv - export a sale as a QuickBooks-importable CSV."""
     sales = _load_json(app.ORGANIC_SALES_PATH, [])
     sale = next((s for s in sales if s.get("id") == sale_id), None)
     if not sale:

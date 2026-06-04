@@ -240,10 +240,25 @@ Where `{channel}` is `shopify` or `clover`. The two modules are deliberate near-
 - 127 restatement comments removed (6796 lines, down from 7126)
 
 **Known style debt (not bugs):**
-- JavaScript in templates uses `var` throughout (1781 uses) — 51 `let`/`const` are the inconsistent ones. Mechanical replacement is risky due to `var` hoisting semantics; use `jscodeshift` or eslint `--fix`.
+- **JavaScript `var` — ACCEPTED DEBT (do NOT bulk-convert by hand).** Templates use `var`
+  throughout (~1827 uses across 26 templates). This is valid, working JS — purely a style
+  modernization, zero functional benefit. Bulk var→let/const is risky (hoisting/TDZ/
+  redeclaration/loop-closure semantics) and the breakage only surfaces at browser runtime.
+  The sanctioned fix is tooling (`jscodeshift`/`eslint --fix`) **plus** browser verification —
+  neither was available in the session that triaged this (no node/eslint, no browser). Decision
+  (2026-06-03): leave existing `var` as-is; do the conversion only in an env with the tool + a
+  browser, where it's safe and free. **Forward-only policy: write NEW JS in `let`/`const`** so
+  the debt stops growing.
 - Hardcoded hex colour values remain in templates alongside CSS variable uses, but every non-standalone template has now had its exact-value hexes swept to tokens (2026-06-03). The literals that remain are token-less by design — JS logic/categorical palettes and the round-2 promotion candidates (see "UI styling convention" below). See that section for the cascade + remaining unification work.
-- Only 125/236 functions have docstrings.
-- No type annotations (one exception).
+- Docstrings: **largely DONE (2026-06-03).** Added concise docstrings to all 116 previously
+  undocumented top-level functions/methods across every module EXCEPT `ripe_orders.py` (its 8
+  remain — deliberately skipped per the "don't modify without checking the Ripe portal" rule;
+  docstrings can't change the API contract, so they're safe to add later if desired). Nested
+  closures (e.g. `decorated`, `_walk`) intentionally left bare.
+- Type annotations — **ACCEPTED DEBT / deferred.** Essentially none in the codebase. A blanket
+  pass over ~359 functions is high-churn and low-value with no type checker (no `mypy`/CI) to
+  verify it, and wrong hints are worse than none. Decision (2026-06-03): skip until a type
+  checker is added; if revisited, start with the stable `helpers.py` foundation layer.
 - 126 route handlers have 1 blank line before them instead of PEP 8's 2.
 
 **Recommended tools for the style debt:**

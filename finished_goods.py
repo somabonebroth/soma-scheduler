@@ -435,6 +435,7 @@ def manual_subtract_finished_good():
 @finished_goods_bp.route("/api/organic/finished-goods/grouped", methods=["GET"])
 @login_required
 def get_finished_goods_grouped():
+    """GET /api/organic/finished-goods/grouped - FG grouped by SKU, joined to the catalog."""
     fg = _load_json(app.ORGANIC_FG_PATH, [])
     recipes = app.load_recipes()
     grouped = app._group_fg_with_catalog(fg, recipes)
@@ -488,6 +489,7 @@ def organic_certification_page():
 @finished_goods_bp.route("/organic")
 @login_required
 def organic_page():
+    """Render the Manage Inventory page (Raw Materials / Runs / Finished Goods / Records tabs)."""
     return render_template("organic.html")
 
 @finished_goods_bp.route("/api/sku-meta/<path:sku_key>", methods=["PATCH"])

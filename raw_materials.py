@@ -375,6 +375,7 @@ def add_organic_ingredient():
 @raw_materials_bp.route("/api/organic/raw-materials", methods=["GET"])
 @login_required
 def get_raw_materials():
+    """GET /api/organic/raw-materials - return all raw-material lots."""
     return jsonify(_load_json(app.ORGANIC_RAW_PATH, []))
 
 @raw_materials_bp.route("/api/organic/raw-materials", methods=["POST"])
@@ -708,6 +709,7 @@ def serve_invoice(inv_id):
 @raw_materials_bp.route("/api/organic/invoices/<inv_id>", methods=["DELETE"])
 @login_required
 def delete_invoice(inv_id):
+    """DELETE /api/organic/invoices/<inv_id> - remove an invoice record and its stored file."""
     invoices = _load_json(app.INVOICES_INDEX_PATH, [])
     rec = next((i for i in invoices if i.get("id") == inv_id), None)
     if not rec:
@@ -720,6 +722,7 @@ def delete_invoice(inv_id):
 @raw_materials_bp.route("/api/organic/raw-materials/receipt-photo/<entry_id>", methods=["POST"])
 @login_required
 def upload_rm_receipt_photo(entry_id):
+    """POST a receipt photo for a raw-material delivery (anchored to the entry id)."""
     file = request.files.get("photo")
     if not file or not file.filename:
         return jsonify({"error": "No file"}), 400
@@ -756,6 +759,7 @@ def list_rm_receipt_photos():
 @raw_materials_bp.route("/api/organic/raw-materials/receipt-photo/<entry_id>", methods=["GET"])
 @login_required
 def get_rm_receipt_photo(entry_id):
+    """GET the stored receipt photo for a raw-material entry."""
     for fn in os.listdir(app.RM_RECEIPT_PHOTOS_DIR):
         if fn.startswith(entry_id + "."):
             return send_from_directory(app.RM_RECEIPT_PHOTOS_DIR, fn)
@@ -764,6 +768,7 @@ def get_rm_receipt_photo(entry_id):
 @raw_materials_bp.route("/api/organic/raw-materials/receipt-photo/<entry_id>", methods=["DELETE"])
 @login_required
 def delete_rm_receipt_photo(entry_id):
+    """DELETE the stored receipt photo for a raw-material entry."""
     for fn in os.listdir(app.RM_RECEIPT_PHOTOS_DIR):
         if fn.startswith(entry_id + "."):
             os.remove(os.path.join(app.RM_RECEIPT_PHOTOS_DIR, fn))

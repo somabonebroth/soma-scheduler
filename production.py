@@ -80,17 +80,20 @@ def require_valid_day(f):
 @production_bp.route("/create-schedule")
 @login_required
 def create_schedule_page():
+    """Render the create-schedule page."""
     return render_template("create_schedule.html")
 
 @production_bp.route("/weekly-schedule")
 @login_required
 def weekly_schedule_page():
+    """Render the weekly schedule page."""
     return render_template("weekly_view.html")
 
 @production_bp.route("/api/schedule/<week_id>", methods=["GET"])
 @login_required
 @require_valid_week
 def get_schedule(week_id):
+    """GET /api/schedule/<week_id> - return a week's schedule (or empty)."""
     data = app.load_schedule(week_id)
     if data:
         return jsonify(data)
@@ -99,12 +102,14 @@ def get_schedule(week_id):
 @production_bp.route("/api/schedules", methods=["GET"])
 @login_required
 def get_schedules():
+    """GET /api/schedules - list all saved schedules."""
     return jsonify(app.list_schedules())
 
 @production_bp.route("/api/schedule/<week_id>", methods=["DELETE"])
 @login_required
 @require_valid_week
 def delete_schedule(week_id):
+    """DELETE /api/schedule/<week_id> - delete a week's schedule and its uncompleted organic runs."""
     path = os.path.join(app.SCHEDULES_DIR, week_id + ".json")
     if os.path.exists(path):
         os.unlink(path)
@@ -124,6 +129,7 @@ def delete_schedule(week_id):
 @production_bp.route("/production-tracker")
 @login_required
 def production_tracker_page():
+    """Render the production tracker page."""
     return render_template("production_tracker.html")
 
 @production_bp.route("/api/production-tracker/<week_id>", methods=["GET"])
@@ -278,6 +284,7 @@ def get_production_tracker_year(year):
 @require_valid_week
 @require_valid_day
 def daily_production_page(week_id, day_idx):
+    """Render the daily-production page for a week/day."""
     return render_template("daily_production.html", week_id=week_id, day_idx=day_idx)
 
 @production_bp.route("/checklist/<week_id>/<int:day_idx>")
@@ -285,6 +292,7 @@ def daily_production_page(week_id, day_idx):
 @require_valid_week
 @require_valid_day
 def checklist_page(week_id, day_idx):
+    """Render the daily checklist page for a week/day."""
     return render_template("checklist.html", week_id=week_id, day_idx=day_idx)
 
 @production_bp.route("/api/daily-production/<week_id>/<int:day_idx>", methods=["GET"])
@@ -292,6 +300,7 @@ def checklist_page(week_id, day_idx):
 @require_valid_week
 @require_valid_day
 def get_daily_production(week_id, day_idx):
+    """GET /api/daily-production/<week>/<day> - the day's production data."""
     schedule_data = app.load_schedule(week_id)
     recipes = app.load_recipes()
     checklist = app.load_checklist(week_id, day_idx)
@@ -377,6 +386,7 @@ def get_daily_production(week_id, day_idx):
 @require_valid_week
 @require_valid_day
 def save_daily_production(week_id, day_idx):
+    """POST .../save - save daily production; finishes the prior day's organic runs (consumption chain)."""
     data = request.json or {}
     data["last_updated"] = datetime.now().isoformat()
     app.save_checklist_data(week_id, day_idx, data)
@@ -394,6 +404,7 @@ def save_daily_production(week_id, day_idx):
 @require_valid_week
 @require_valid_day
 def get_checklist_route(week_id, day_idx):
+    """GET /api/checklist/<week>/<day> - return the day's checklist."""
     data = app.load_checklist(week_id, day_idx)
     schedule_data = app.load_schedule(week_id)
     day_info = {}
@@ -408,6 +419,7 @@ def get_checklist_route(week_id, day_idx):
 @require_valid_week
 @require_valid_day
 def save_checklist_route(week_id, day_idx):
+    """POST /api/checklist/<week>/<day> - save the day's checklist."""
     data = request.json or {}
     data["last_updated"] = datetime.now().isoformat()
     app.save_checklist_data(week_id, day_idx, data)
@@ -418,6 +430,7 @@ def save_checklist_route(week_id, day_idx):
 @require_valid_week
 @require_valid_day
 def complete_checklist(week_id, day_idx):
+    """POST .../complete - mark the checklist complete and generate its PDF."""
     data = request.json or {}
     data["last_updated"] = datetime.now().isoformat()
     data["completed"] = True
@@ -461,6 +474,7 @@ def complete_checklist(week_id, day_idx):
 @login_required
 @require_valid_week
 def checklist_status(week_id):
+    """GET /api/checklist-status/<week> - per-day completion flags for a week."""
     statuses = {}
     for d_idx in range(7):
         data = app.load_checklist(week_id, d_idx)
@@ -478,6 +492,7 @@ def checklist_status(week_id):
 @production_bp.route("/traceability")
 @login_required
 def traceability_page():
+    """Render the Completed Production page."""
     return render_template("traceability.html")
 
 @production_bp.route("/api/traceability/<week_id>/summary", methods=["GET"])
@@ -567,6 +582,7 @@ def get_week_summary(week_id):
 @production_bp.route("/api/traceability", methods=["GET"])
 @login_required
 def get_traceability():
+    """GET /api/traceability - completed weekly production records."""
     weeks = app.list_schedules()
     signoffs = app._load_weekly_signoffs()
     recipes = app.load_recipes()
@@ -767,4 +783,5 @@ def unsign_week(week_id):
 @production_bp.route("/api/organic/production-runs", methods=["GET"])
 @login_required
 def get_organic_runs():
+    """GET /api/organic/production-runs - return all organic production runs."""
     return jsonify(_load_json(ORGANIC_RUNS_PATH, []))

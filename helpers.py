@@ -305,6 +305,7 @@ def _runs_using_raw_material(entry_id):
 
 
 def _add_contact(contact_type, name):
+    """Append a contact name to the organic contacts store, de-duplicated by type."""
     contacts = _load_json(ORGANIC_CONTACTS_PATH, {})
     if contact_type not in contacts:
         contacts[contact_type] = []
@@ -390,6 +391,7 @@ def _record_adjustment(record):
 
 
 def _load_company_info():
+    """Load company info / order-rules JSON, falling back to the default template."""
     info = _load_json(COMPANY_INFO_PATH, {})
     merged = dict(_DEFAULT_COMPANY_INFO)
     merged.update(info)

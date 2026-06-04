@@ -41,6 +41,7 @@ legacy_short_re = re.compile(
 
 
 def patch(content):
+    """Inject PWA manifest + meta tags into templates that lack them."""
     if managed_block_re.search(content):
         return managed_block_re.sub(PWA_BLOCK, content), "updated"
     if legacy_re.search(content):

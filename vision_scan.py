@@ -239,6 +239,7 @@ def extract_packing_slip_lines(image_bytes, filename=""):
 
 
 def _clean_invoice_line(item):
+    """Normalize a raw OCR invoice line for parsing."""
     try:
         qty = float(item.get("quantity") or 0)
     except (ValueError, TypeError):
@@ -253,6 +254,7 @@ def _clean_invoice_line(item):
 
 
 def _clean_sale_line(item):
+    """Normalize a raw OCR sales line for parsing."""
     try:
         qty = int(float(item.get("quantity") or 0))
     except (ValueError, TypeError):

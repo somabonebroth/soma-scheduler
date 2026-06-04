@@ -73,16 +73,19 @@ def login_required(f):
 @recipes_bp.route("/recipes")
 @login_required
 def recipes_page():
+    """Render the recipes page."""
     return render_template("recipes.html")
 
 @recipes_bp.route("/api/recipes", methods=["GET"])
 @login_required
 def get_recipes():
+    """GET /api/recipes - return all recipes."""
     return jsonify(app.load_recipes())
 
 @recipes_bp.route("/api/recipes", methods=["POST"])
 @login_required
 def add_recipe():
+    """POST /api/recipes - create a recipe from the JSON body."""
     data = request.json or {}
     name = data.get("name", "").strip()
     if not name:
@@ -95,6 +98,7 @@ def add_recipe():
 @recipes_bp.route("/api/recipes/<path:name>", methods=["GET"])
 @login_required
 def get_recipe(name):
+    """GET /api/recipes/<name> - return a single recipe by name."""
     recipes = app.load_recipes()
     if name in recipes:
         return jsonify({"name": name, "data": recipes[name]})
@@ -303,6 +307,7 @@ def update_recipe(name):
 @recipes_bp.route("/api/recipes/<path:name>", methods=["DELETE"])
 @login_required
 def delete_recipe(name):
+    """DELETE /api/recipes/<name> - remove a recipe."""
     recipes = app.load_recipes()
     if name not in recipes:
         return jsonify({"error": "Recipe not found"}), 404
@@ -501,6 +506,7 @@ def migrate_all_recipes():
 @recipes_bp.route("/api/recipes/<path:name>/photo", methods=["POST"])
 @login_required
 def upload_recipe_photo(name):
+    """POST a photo for a recipe; stored under PHOTOS_DIR."""
     if "photo" not in request.files:
         return jsonify({"error": "No photo provided"}), 400
     file = request.files["photo"]
@@ -574,6 +580,7 @@ def get_recipes_grouped():
 @recipes_bp.route("/api/recipes/order", methods=["POST"])
 @login_required
 def update_recipe_order():
+    """POST /api/recipes/order - persist the recipe display order."""
     data = request.json or {}
     app.save_recipe_order(data)
     return jsonify({"success": True})
@@ -581,6 +588,7 @@ def update_recipe_order():
 @recipes_bp.route("/api/recipes/upload", methods=["POST"])
 @login_required
 def upload_recipe():
+    """POST /api/recipes/upload - create a recipe from an uploaded PDF or JSON text."""
     if request.files and "file" in request.files:
         file = request.files["file"]
         if not file.filename:
@@ -624,6 +632,7 @@ def upload_recipe():
 @recipes_bp.route("/api/recipes/upload-json", methods=["POST"])
 @login_required
 def upload_recipe_json():
+    """POST /api/recipes/upload-json - create a recipe from a JSON body (manual add)."""
     data = request.json or {}
     if not data:
         return jsonify({"error": "No data provided"}), 400

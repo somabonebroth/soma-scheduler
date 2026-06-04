@@ -51,6 +51,7 @@ def login_required(f):
 @audit_tools_bp.route("/admin/reconcile-raw")
 @login_required
 def reconcile_raw_page():
+    """Render the raw-material reconciliation tool page."""
     return render_template("reconcile_raw.html")
 
 @audit_tools_bp.route("/admin/reconcile-raw/run", methods=["GET", "POST"])
@@ -106,6 +107,7 @@ def reconcile_raw_run():
 @audit_tools_bp.route("/api/organic/trace", methods=["GET"])
 @login_required
 def organic_trace():
+    """GET /api/organic/trace - one-step traceability by raw lot or FG lot."""
     search_type = request.args.get("type", "")  # "raw_lot" or "fg_lot"
     query = request.args.get("q", "").strip()
     if not query:
@@ -245,6 +247,7 @@ def organic_stock_exceptions():
 @audit_tools_bp.route("/api/organic/mass-balance", methods=["GET"])
 @login_required
 def organic_mass_balance():
+    """GET /api/organic/mass-balance - opening+received-consumed vs current (raw + FG)."""
     to = (request.args.get("to") or "").strip() or datetime.now().strftime("%Y-%m-%d")
     frm = (request.args.get("from") or "").strip() or (datetime.now().strftime("%Y") + "-01-01")
     organic_only = (request.args.get("organic_only") or "").lower() in ("1", "true", "yes", "on")
@@ -253,4 +256,5 @@ def organic_mass_balance():
 @audit_tools_bp.route("/mass-balance")
 @login_required
 def mass_balance_page():
+    """Render the mass-balance report page."""
     return render_template("mass_balance.html")

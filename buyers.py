@@ -41,11 +41,13 @@ def login_required(f):
 @buyers_bp.route("/api/buyers", methods=["GET"])
 @login_required
 def get_buyers():
+    """GET /api/buyers - return all buyer accounts."""
     return jsonify(app._load_buyers())
 
 @buyers_bp.route("/api/buyers/sku-catalog", methods=["GET"])
 @login_required
 def get_buyer_sku_catalog():
+    """GET /api/buyers/sku-catalog - master SKU catalogue grouped by brand."""
     catalog = app._all_sku_catalog()
     groups = {}
     for sku in catalog:
@@ -58,6 +60,7 @@ def get_buyer_sku_catalog():
 @buyers_bp.route("/api/buyers", methods=["POST"])
 @login_required
 def create_buyer():
+    """POST /api/buyers - create a buyer (optionally with assigned SKUs/pricing)."""
     data = request.get_json(force=True) or {}
     name = (data.get("name") or "").strip()
     if not name:
@@ -108,6 +111,7 @@ def create_buyer():
 @buyers_bp.route("/api/buyers/<bid>", methods=["PUT"])
 @login_required
 def update_buyer(bid):
+    """PUT /api/buyers/<bid> - update a buyer's profile, SKUs, and locations."""
     data = request.get_json(force=True) or {}
     buyers = app._load_buyers()
     idx = next((i for i, b in enumerate(buyers) if b["id"] == bid), None)
@@ -211,5 +215,6 @@ def update_buyer_sku_pricing(bid, sku_key):
 @buyers_bp.route("/api/buyers/<bid>", methods=["DELETE"])
 @login_required
 def delete_buyer(bid):
+    """DELETE /api/buyers/<bid> - remove a buyer."""
     app._save_buyers([b for b in app._load_buyers() if b["id"] != bid])
     return jsonify({"ok": True})

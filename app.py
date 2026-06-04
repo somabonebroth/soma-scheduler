@@ -145,6 +145,7 @@ DEFAULT_CCP_SECTIONS = [
 
 # ── Auth ───────────────────────────────────────────────────────────────
 def login_required(f):
+    """Decorator: require an authenticated session (401 JSON for APIs, redirect for pages)."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get("authenticated"):
@@ -211,6 +212,7 @@ def _load_tracking_modes():
     return {}
 
 def load_recipes():
+    """Load the recipes dict from disk."""
     if os.path.exists(RECIPES_PATH):
         with open(RECIPES_PATH, "r") as f:
             recipes = json.load(f)
@@ -225,10 +227,12 @@ def load_recipes():
     return {}
 
 def save_recipes(recipes):
+    """Persist the recipes dict to disk."""
     with open(RECIPES_PATH, "w") as f:
         json.dump(recipes, f, indent=2)
 
 def load_schedule(week_id):
+    """Load a week's schedule JSON (or None)."""
     path = os.path.join(SCHEDULES_DIR, week_id + ".json")
     if os.path.exists(path):
         with open(path, "r") as f:
@@ -236,17 +240,20 @@ def load_schedule(week_id):
     return None
 
 def save_schedule(week_id, data):
+    """Persist a week's schedule JSON."""
     path = os.path.join(SCHEDULES_DIR, week_id + ".json")
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
 def list_schedules():
+    """Return a list of all saved weekly schedules."""
     if not os.path.exists(SCHEDULES_DIR):
         return []
     files = sorted([f.replace(".json", "") for f in os.listdir(SCHEDULES_DIR) if f.endswith(".json")], reverse=True)
     return files
 
 def load_checklist(week_id, day_idx):
+    """Load a day's checklist JSON (or None)."""
     path = os.path.join(CHECKLISTS_DIR, week_id + "_day" + str(day_idx) + ".json")
     if os.path.exists(path):
         with open(path, "r") as f:
@@ -254,31 +261,37 @@ def load_checklist(week_id, day_idx):
     return None
 
 def save_checklist_data(week_id, day_idx, data):
+    """Persist a day's checklist JSON."""
     path = os.path.join(CHECKLISTS_DIR, week_id + "_day" + str(day_idx) + ".json")
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
 def load_ccp_master():
+    """Load the master CCP document."""
     if os.path.exists(CCP_MASTER_PATH):
         with open(CCP_MASTER_PATH, "r") as f:
             return json.load(f)
     return DEFAULT_CCP_SECTIONS
 
 def save_ccp_master(sections):
+    """Persist the master CCP document."""
     with open(CCP_MASTER_PATH, "w") as f:
         json.dump(sections, f, indent=2)
 
 def load_recipe_order():
+    """Load the saved recipe display order."""
     if os.path.exists(RECIPE_ORDER_PATH):
         with open(RECIPE_ORDER_PATH, "r") as f:
             return json.load(f)
     return None
 
 def save_recipe_order(order):
+    """Persist the recipe display order."""
     with open(RECIPE_ORDER_PATH, "w") as f:
         json.dump(order, f, indent=2)
 
 def get_current_week_id():
+    """Return the current week's Monday as a YYYY-MM-DD id."""
     today = datetime.today()
     monday = today - timedelta(days=today.weekday())
     return monday.strftime("%Y-%m-%d")
@@ -641,6 +654,7 @@ def _detect_format_in_text(text):
     return _normalize_format(m.group(0))
 
 def parse_recipe_pdf_text(text):
+    """Parse extracted recipe-PDF text into a recipe dict (or None)."""
     lines = [l.strip() for l in text.strip().split("\n") if l.strip()]
     if not lines:
         return None
@@ -736,10 +750,12 @@ def parse_recipe_pdf_text(text):
 # ── Auth routes ────────────────────────────────────────────────────────
 @app.route("/login")
 def login_page():
+    """Render the login page."""
     return render_template("login.html")
 
 @app.route("/api/login", methods=["POST"])
 def login():
+    """Handle login form submission and set the session."""
     data = request.json or {}
     if data.get("password") == APP_PASSWORD:
         session.permanent = True   # enables PERMANENT_SESSION_LIFETIME
@@ -750,18 +766,21 @@ def login():
 
 @app.route("/api/logout", methods=["POST"])
 def logout():
+    """Clear the session and log out."""
     session.clear()
     return jsonify({"success": True})
 
 # ── PWA manifest ──────────────────────────────────────────────────────
 @app.route("/manifest.json")
 def manifest():
+    """Serve the PWA manifest.json."""
     return send_from_directory(app.static_folder, "manifest.json", mimetype="application/manifest+json")
 
 # ── Page routes ────────────────────────────────────────────────────────
 @app.route("/")
 @login_required
 def dashboard():
+    """Render the dashboard."""
     return render_template("dashboard.html")
 
 
@@ -772,11 +791,13 @@ def dashboard():
 @app.route("/contacts")
 @login_required
 def contacts_page():
+    """Render the contacts page."""
     return render_template("contacts.html")
 
 @app.route("/company-settings")
 @login_required
 def company_settings_page():
+    """Render the company settings page."""
     return render_template("company_settings.html")
 
 @app.route("/api/verify-manager", methods=["POST"])
@@ -833,6 +854,7 @@ def certifications_page():
 @app.route("/api/certifications", methods=["GET"])
 @login_required
 def list_certifications():
+    """GET - list uploaded certification documents."""
     cert_dir = os.path.join(DATA_DIR, "certifications")
     os.makedirs(cert_dir, exist_ok=True)
     meta_path = os.path.join(cert_dir, "meta.json")
@@ -842,6 +864,7 @@ def list_certifications():
 @app.route("/api/certifications/upload", methods=["POST"])
 @login_required
 def upload_certification():
+    """POST - upload a certification document."""
     import werkzeug.utils
     cert_dir = os.path.join(DATA_DIR, "certifications")
     os.makedirs(cert_dir, exist_ok=True)
@@ -871,6 +894,7 @@ def upload_certification():
 @app.route("/api/certifications/<file_id>", methods=["DELETE"])
 @login_required
 def delete_certification(file_id):
+    """DELETE - remove a certification document."""
     cert_dir = os.path.join(DATA_DIR, "certifications")
     meta_path = os.path.join(cert_dir, "meta.json")
     meta = _load_json(meta_path, [])
@@ -888,6 +912,7 @@ def delete_certification(file_id):
 @app.route("/api/certifications/<file_id>/download")
 @login_required
 def download_certification(file_id):
+    """GET - download a certification document."""
     from flask import send_file
     cert_dir = os.path.join(DATA_DIR, "certifications")
     meta_path = os.path.join(cert_dir, "meta.json")
@@ -1250,6 +1275,7 @@ def api_sales_by_buyer():
 @app.route("/buyers/<bid>/edit")
 @login_required
 def buyer_edit_page(bid):
+    """Render the buyer edit page."""
     buyers = _load_buyers()
     buyer = next((b for b in buyers if b["id"] == bid), None)
     if not buyer:
@@ -1291,6 +1317,7 @@ def buyer_edit_page(bid):
 @app.route("/ccp-master")
 @login_required
 def ccp_master_page():
+    """Render the master CCP page."""
     return render_template("master_ccp.html")
 
 
@@ -1308,6 +1335,7 @@ os.makedirs(PHOTOS_DIR, exist_ok=True)
 @app.route("/api/photos/<filename>")
 @login_required
 def serve_photo(filename):
+    """Serve a recipe photo from PHOTOS_DIR."""
     return send_from_directory(PHOTOS_DIR, filename)
 
 # ── Schedule API ───────────────────────────────────────────────────────
@@ -1318,6 +1346,7 @@ def serve_photo(filename):
 @app.route("/api/generate", methods=["POST"])
 @login_required
 def generate_pdfs():
+    """POST - generate the weekly schedule + daily package PDFs."""
     data = request.json or {}
     week_id = data.get("week_id", get_current_week_id())
     schedule = data.get("schedule", {})
@@ -1372,6 +1401,7 @@ def generate_pdfs():
 @login_required
 @require_valid_week
 def download_pdf(week_id, filename):
+    """GET - download a previously generated PDF."""
     week_pdf_dir = os.path.join(PDF_DIR, week_id)
     return send_from_directory(week_pdf_dir, filename, as_attachment=True)
 
@@ -1379,6 +1409,7 @@ def download_pdf(week_id, filename):
 @login_required
 @require_valid_week
 def list_pdfs(week_id):
+    """GET - list generated PDFs for a week."""
     week_pdf_dir = os.path.join(PDF_DIR, week_id)
     if not os.path.exists(week_pdf_dir):
         return jsonify([])
@@ -1389,6 +1420,7 @@ def list_pdfs(week_id):
 @login_required
 @require_valid_week
 def download_all_pdfs(week_id):
+    """GET - download all of a week's PDFs as a zip."""
     week_pdf_dir = os.path.join(PDF_DIR, week_id)
     if not os.path.exists(week_pdf_dir):
         return jsonify({"error": "No PDFs found"}), 404
@@ -1435,6 +1467,7 @@ def _halve_for_115L(recipe_data):
 @app.route("/api/label", methods=["POST"])
 @login_required
 def generate_label():
+    """POST /api/label - generate a product label PDF."""
     data = request.json or {}
     brand_name = data.get("brand_name", "")
     recipe_name = data.get("recipe_name", "")
@@ -1508,11 +1541,13 @@ def _has_meaningful_data(checklist_data):
 @app.route("/api/ccp-master", methods=["GET"])
 @login_required
 def get_ccp_master():
+    """GET - return the master CCP document."""
     return jsonify(load_ccp_master())
 
 @app.route("/api/ccp-master", methods=["POST"])
 @login_required
 def update_ccp_master():
+    """POST - update the master CCP document."""
     data = request.json or {}
     save_ccp_master(data)
     return jsonify({"success": True})
@@ -1521,9 +1556,11 @@ def update_ccp_master():
 WEEKLY_SIGNOFFS_PATH = os.path.join(DATA_DIR, "weekly_signoffs.json")
 
 def _load_weekly_signoffs():
+    """Load the weekly HOO sign-off records."""
     return _load_json(WEEKLY_SIGNOFFS_PATH, {})
 
 def _save_weekly_signoffs(data):
+    """Persist the weekly HOO sign-off records."""
     _save_json(WEEKLY_SIGNOFFS_PATH, data)
 
 def _week_completion_state(week_id):
@@ -1567,6 +1604,7 @@ TRACKER_BUCKETS = ["SS-876ML", "SS-750ML", "SS-473ML", "FZ", "Other", "Kettles E
 
 
 def _empty_buckets():
+    """Return a zeroed production-tracker bucket dict."""
     return {b: 0 for b in TRACKER_BUCKETS}
 
 def _get_previous_day_schedule(week_id, d_idx, schedule_cache=None):
@@ -1655,6 +1693,7 @@ def _sum_buckets(target, source):
         target[k] = target.get(k, 0) + v
 
 def _bucket_total(buckets):
+    """Sum the values across a production-tracker bucket dict."""
     return sum(buckets.values())
 
 def _week_totals(week_id):
@@ -1905,6 +1944,7 @@ INVOICE_MIME_MAP = {
 }
 
 def _invoice_mime(filename):
+    """Return the MIME type for a stored invoice file, by extension."""
     ext = os.path.splitext(filename)[1].lower()
     return INVOICE_MIME_MAP.get(ext, "application/octet-stream")
 
@@ -1941,6 +1981,7 @@ def _save_invoice_file_bytes(prefix, file_storage):
     }
 
 def _remove_invoice_file(filename):
+    """Delete a stored invoice file from disk (best-effort)."""
     if not filename:
         return False
     safe = os.path.basename(filename)
@@ -2018,6 +2059,7 @@ _cleanup_legacy_invoices()
 @app.route("/api/organic/contacts", methods=["GET"])
 @login_required
 def get_organic_contacts():
+    """GET /api/organic/contacts - return saved organic supplier/buyer contacts."""
     return jsonify(_load_json(ORGANIC_CONTACTS_PATH, {}))
 
 # ── Organic: Production Runs ──────────────────────────────────────────
@@ -2486,6 +2528,7 @@ def _group_fg_with_catalog(fg, recipes):
 @app.route("/important-documents")
 @login_required
 def important_documents_page():
+    """Render the important documents page."""
     return render_template("important_documents.html")
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2493,9 +2536,11 @@ def important_documents_page():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _load_audits():
+    """Load the food-safety audits list."""
     return _load_json(AUDITS_PATH, [])
 
 def _save_audits(data):
+    """Persist the food-safety audits list."""
     _save_json(AUDITS_PATH, data)
 
 @app.route("/audit/<kind>")
@@ -3378,11 +3423,13 @@ def internal_fg_stock():
 @app.route("/api/company-info", methods=["GET"])
 @login_required
 def get_company_info():
+    """GET /api/company-info - return company info / order rules."""
     return jsonify(_load_company_info())
 
 @app.route("/api/company-info", methods=["PATCH"])
 @login_required
 def update_company_info():
+    """POST /api/company-info - update company info / order rules."""
     data = request.get_json() or {}
     info = _load_company_info()
     allowed = set(_DEFAULT_COMPANY_INFO.keys())
@@ -3444,6 +3491,7 @@ def _migrate_legacy_sales():
 BUYERS_PATH = os.path.join(INVENTORY_DIR, "buyers.json")
 
 def _all_sku_catalog():
+    """Build the master SKU catalogue from active recipes."""
     recipes = load_recipes()
     catalog = []
     seen = set()
@@ -3462,9 +3510,11 @@ def _all_sku_catalog():
     return catalog
 
 def _load_buyers():
+    """Load the buyers list from disk."""
     return _load_json(BUYERS_PATH, [])
 
 def _save_buyers(data):
+    """Persist the buyers list to disk."""
     _save_json(BUYERS_PATH, data)
 
 def _buyer_resolver(buyers_list):

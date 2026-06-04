@@ -25,6 +25,7 @@ VESSELS = ["K1", "K2", "K3", "115L"]
 
 
 def draw_header(c, width, height, title, subtitle="", logo_path=None):
+    """Draw the standard page header (logo + title) on a reportlab canvas."""
     header_h = 55
     c.setFillColor(DARK)
     c.rect(0, height - header_h, width, header_h, fill=1, stroke=0)
@@ -50,6 +51,7 @@ def draw_header(c, width, height, title, subtitle="", logo_path=None):
 
 
 def _wrap_text(text, size, max_width):
+    """Wrap text to a max width; return the list of lines."""
     words = text.split()
     lines = []
     current = ""
@@ -96,6 +98,7 @@ def _fmt_ingredient(item):
 
 
 def estimate_card_height(recipe_data, card_w):
+    """Estimate the rendered height of a recipe card."""
     n_items = sum(len(recipe_data.get(k, [])) for k in ["kettle_overnight", "after_skim", "finishing", "add_to_jar"])
     n_sections = sum(1 for k in ["kettle_overnight", "after_skim", "finishing", "add_to_jar"] if recipe_data.get(k))
     si_lines = sum(len(_wrap_text(inst, 7, card_w - 20)) for inst in recipe_data.get("special_instructions", []))
@@ -103,6 +106,7 @@ def estimate_card_height(recipe_data, card_w):
 
 
 def draw_recipe_card(c, x, y, card_w, recipe_name, recipe_data, vessel=""):
+    """Draw a single recipe card on the canvas."""
     start_y = y
     margin = 6
     header_h = 22
@@ -180,6 +184,7 @@ def draw_recipe_card(c, x, y, card_w, recipe_name, recipe_data, vessel=""):
 
 # -- Label PDF --
 def generate_label_pdf(output, brand_name, recipe_format, lot, best_before):
+    """Generate a product label PDF."""
     label_w = 2 * inch
     label_h = 1 * inch
     c = canvas.Canvas(output, pagesize=(label_w, label_h))
@@ -270,6 +275,7 @@ CHECKLIST_SECTIONS = [
 
 
 def _draw_checklist_content(c, w, h, date, active_vessels, logo_path=None, filled_data=None):
+    """Draw the checklist body content on the canvas."""
     day_name = date.strftime("%A").upper()
     lot = date.strftime("%d%m%y")
     checks = filled_data.get("checks", {}) if filled_data else {}
@@ -412,10 +418,12 @@ def _draw_checklist_content(c, w, h, date, active_vessels, logo_path=None, fille
 
 
 def draw_checklist_pages(c, w, h, date, active_vessels, logo_path=None):
+    """Render the checklist across one or more pages."""
     _draw_checklist_content(c, w, h, date, active_vessels, logo_path, filled_data=None)
 
 
 def generate_filled_checklist_pdf(output_path, date, active_vessels, filled_data, logo_path=None):
+    """Generate a completed daily checklist PDF."""
     w, h = letter
     c = canvas.Canvas(output_path, pagesize=letter)
     _draw_checklist_content(c, w, h, date, active_vessels, logo_path, filled_data)
@@ -423,6 +431,7 @@ def generate_filled_checklist_pdf(output_path, date, active_vessels, filled_data
 
 
 def generate_weekly_schedule_pdf(output_path, week_start, days_map, recipes, notes="", logo_path=None):
+    """Generate the weekly schedule PDF."""
     w, h = letter
     c = canvas.Canvas(output_path, pagesize=letter)
     draw_header(c, w, h, "WEEKLY PRODUCTION SCHEDULE", "Week of " + week_start.strftime("%B %d, %Y"), logo_path)
@@ -584,6 +593,7 @@ def generate_all_recipes_pdf(output, ordered_recipes, logo_path=None):
 
 
 def generate_daily_package_pdf(output_path, date, vessel_assignments, recipes, logo_path=None):
+    """Generate the daily production package PDF."""
     w, h = letter
     c = canvas.Canvas(output_path, pagesize=letter)
     day_name = date.strftime("%A").upper()
