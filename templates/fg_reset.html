@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zero-day Reset — Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  body{ font-family:-apple-system,system-ui,sans-serif; margin:0; background:#faf8f3; color:var(--text); }
+  .header{ display:flex; align-items:center; gap:12px; padding:16px 24px; background:#fff; border-bottom:1px solid var(--border); }
+  .header img{ height:34px; cursor:pointer; }
+  .header h1{ font-size:19px; margin:0; }
+  .header p{ font-size:12px; color:var(--text-light); margin:2px 0 0; }
+  .header-right{ margin-left:auto; display:flex; align-items:center; gap:8px; }
+  .header-btn{ font-size:13px; text-decoration:none; color:var(--accent); border:1px solid var(--border); padding:7px 12px; border-radius:6px; background:#fff; }
+  .nav-arrows{ display:inline-flex; gap:4px; align-items:center; }
+  .nav-arrow-btn{ width:30px; height:30px; border:1px solid var(--border); background:#fff; border-radius:6px; cursor:pointer; color:var(--accent); font-size:14px; line-height:1; }
+  .main{ max-width:1000px; margin:0 auto; padding:22px; }
+  .warn{ background:#fdecea; border:1px solid #c62828; border-radius:8px; padding:12px 16px; font-size:13px; margin-bottom:16px; line-height:1.5; }
+  .info{ background:#eef4ff; border:1px solid #1976d2; border-radius:8px; padding:12px 16px; font-size:13px; margin-bottom:16px; line-height:1.5; }
+  .ok{ background:#e8f5e9; border:1px solid #2e7d32; border-radius:8px; padding:12px 16px; font-size:13px; margin-bottom:16px; line-height:1.5; }
+  .controls{ display:flex; flex-wrap:wrap; gap:12px; align-items:center; background:#fff; border:1px solid var(--border); border-radius:8px; padding:12px 16px; margin-bottom:16px; position:sticky; top:0; z-index:5; }
+  .btn{ padding:8px 16px; border-radius:6px; font-size:13px; cursor:pointer; border:1px solid var(--accent); }
+  .btn-primary{ background:var(--accent); color:#fff; }
+  .btn-outline{ background:#fff; color:var(--accent); }
+  .btn-danger{ background:#c62828; color:#fff; border-color:#c62828; }
+  .btn:disabled{ opacity:.4; cursor:default; }
+  .stat{ font-size:13px; color:var(--text-light); }
+  table{ width:100%; border-collapse:collapse; font-size:13px; background:#fff; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  th,td{ padding:7px 10px; border-bottom:1px solid #f0efe9; text-align:right; }
+  th:first-child,td:first-child{ text-align:left; }
+  th{ background:#1a2e1a; color:#fff; font-weight:600; font-size:12px; position:sticky; top:56px; }
+  .num{ font-variant-numeric:tabular-nums; }
+  input.cnt{ width:80px; padding:5px 7px; border:1px solid var(--border); border-radius:5px; font-size:13px; text-align:right; }
+  .pos{ color:#2e7d32; } .neg{ color:#c62828; font-weight:600; }
+  .carried{ color:#8a6900; font-size:11px; }
+  #status{ font-size:13px; color:var(--text-light); }
+</style>
+</head>
+<body>
+<div class="header">
+  <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+  <div><h1>Zero-day Reset</h1><p>Re-baseline finished goods to a physical count</p></div>
+  <div class="header-right">
+    <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button></div>
+    <a class="header-btn" href="/admin/fg-reconcile">Reconciliation</a>
+    <a class="header-btn" href="/">⌂ Dashboard</a>
+  </div>
+</div>
+<div class="main">
+  <div class="info">
+    Enter the <strong>physically counted total units</strong> for each SKU, then <strong>Preview</strong>. Apply will:
+    archive the current inventory files (recoverable), replace every SKU's lots with one clean
+    <em>reset baseline</em> at your counted number, and open the ledger at today's cutover.
+    <strong>SKUs you leave blank are carried forward at their current system stock</strong> — they are not wiped.
+    FG lot/expiry detail before the reset is archived, not carried forward.
+  </div>
+  <div id="result"></div>
+  <div class="controls">
+    <button class="btn btn-outline" onclick="doPreview()">Preview</button>
+    <button class="btn btn-danger" id="apply-btn" onclick="doApply()" disabled>Apply reset</button>
+    <span id="status"></span>
+    <span class="stat" id="summary" style="margin-left:auto;"></span>
+  </div>
+  <div id="grid"></div>
+</div>
+<script>
+let _rows = [];     // last preview rows
+let _previewed = false;
+
+const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const idFor = sku => 'cnt_' + btoa(unescape(encodeURIComponent(sku))).replace(/[^A-Za-z0-9]/g, '');
+
+function collectCounts(){
+  const counts = {};
+  _rows.forEach(r => {
+    const el = document.getElementById(idFor(r.sku_key));
+    if(el && el.value.trim() !== ''){
+      const v = parseInt(el.value, 10);
+      if(!isNaN(v)) counts[r.sku_key] = v;
+    }
+  });
+  return counts;
+}
+
+async function load(initial){
+  document.getElementById('status').textContent = 'Loading…';
+  const counts = initial ? {} : collectCounts();
+  const d = await (await fetch('/admin/fg-reset/preview', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({counts})
+  })).json();
+  _rows = d.skus;
+  document.getElementById('status').textContent = '';
+  renderGrid(d);
+}
+
+function renderGrid(d){
+  const cur = {};   // preserve any typed values across re-render
+  _rows.forEach(r => { const el = document.getElementById(idFor(r.sku_key)); if(el) cur[r.sku_key] = el.value; });
+
+  const s = d.summary;
+  if(s.already_reset){
+    document.getElementById('result').innerHTML =
+      `<div class="warn"><strong>Note:</strong> a reset was already applied with cutover ${s.already_reset}. Re-running will archive again and re-baseline from the current state.</div>`;
+  }
+  document.getElementById('summary').textContent =
+    `${s.sku_count} SKUs · ${s.counted} counted · ${s.carried_uncounted} carried · target ${s.target_units} units (Δ ${s.net_delta >= 0 ? '+' : ''}${s.net_delta})`;
+
+  let h = '<table><tr><th>Product</th><th>Cert</th><th>Lots</th><th>Current</th><th>Counted</th><th>New baseline</th><th>Δ</th></tr>';
+  d.skus.forEach(r => {
+    const id = idFor(r.sku_key);
+    const val = cur[r.sku_key] !== undefined ? cur[r.sku_key] : '';
+    const dCls = r.delta > 0 ? 'pos' : (r.delta < 0 ? 'neg' : '');
+    const carried = !r.counted ? '<div class="carried">carried (uncounted)</div>' : '';
+    h += `<tr><td>${esc(r.label)}${carried}</td><td style="text-align:left;">${esc(r.cert || '—')}</td>`
+       + `<td class="num">${r.lots}</td><td class="num">${r.current}</td>`
+       + `<td><input class="cnt" id="${id}" inputmode="numeric" value="${esc(val)}" placeholder="—"></td>`
+       + `<td class="num">${r.target}</td><td class="num ${dCls}">${r.delta > 0 ? '+' : ''}${r.delta}</td></tr>`;
+  });
+  h += '</table>';
+  document.getElementById('grid').innerHTML = h;
+}
+
+async function doPreview(){
+  await load(false);
+  _previewed = true;
+  document.getElementById('apply-btn').disabled = false;
+}
+
+async function doApply(){
+  const counts = collectCounts();
+  const n = Object.keys(counts).length;
+  if(!confirm(`Apply the zero-day reset?\n\n${n} SKU(s) will be reset to your counted numbers; the rest carried forward at current stock. Current files are archived first (recoverable), but this rewrites finished goods. Proceed?`)) return;
+  document.getElementById('status').textContent = 'Applying…';
+  const d = await (await fetch('/admin/fg-reset/apply', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({counts, confirm: 'RESET'})
+  })).json();
+  document.getElementById('status').textContent = '';
+  if(d.error){
+    document.getElementById('result').innerHTML = `<div class="warn">Error: ${esc(d.error)}</div>`;
+    return;
+  }
+  document.getElementById('result').innerHTML =
+    `<div class="ok"><strong>Reset applied ✓</strong> — cutover ${d.cutover}. ${d.skus_reset} SKUs re-baselined (${d.total_units} units). `
+    + `Archived: ${d.archived_files.map(esc).join(', ')} in inventory/ledger_archive/. `
+    + `Check the <a href="/admin/fg-reconcile">reconciliation</a> — it should now be clean.</div>`;
+  document.getElementById('apply-btn').disabled = true;
+}
+
+document.getElementById('nav-back').onclick = () => window.history.back();
+document.addEventListener('DOMContentLoaded', () => load(true));
+</script>
+</body>
+</html>

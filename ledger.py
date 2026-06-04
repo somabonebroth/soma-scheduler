@@ -27,7 +27,8 @@ from functools import wraps
 from flask import (Blueprint, request, jsonify, session, redirect, url_for,
                    render_template)
 
-from helpers import _load_json, ADJUSTMENTS_PATH, INVENTORY_DIR, _sku_key, _sku_display
+from helpers import (_load_json, _save_json, ADJUSTMENTS_PATH, INVENTORY_DIR,
+                     _sku_key, _sku_display)
 
 import app
 
@@ -65,6 +66,12 @@ def compute_fg_reconciliation():
     sales = _load_json(app.ORGANIC_SALES_PATH, [])
     adjustments = _load_json(ADJUSTMENTS_PATH, [])
 
+    # After a zero-day reset, the books are "closed" before the cutover date:
+    # the reset baselines ARE the opening, so only movements on/after the cutover
+    # are reconciled against them. None (no reset yet) => no filtering, so Inc 1/2
+    # behaviour is unchanged.
+    cutover = _reset_cutover_date()
+
     fg_ids = {f.get("id") for f in fg}
 
     # fg_id -> recorded outflows that actually touched FG stock
@@ -81,6 +88,9 @@ def compute_fg_reconciliation():
 
     # ---- Sales pass: attribute each sale's units to the fg_id(s) it drew from ----
     for s in sales:
+        # Pre-reset sale: its effect is already baked into the counted opening.
+        if cutover and (s.get("sale_date") or s.get("created_at") or "")[:10] < cutover:
+            continue
         # Not-yet-due RIPE commitment: stock not drawn yet, so no fg outflow.
         if s.get("deducted") is False:
             pending.append({
@@ -143,6 +153,8 @@ def compute_fg_reconciliation():
     # (manual 'add' created its own fg entry; 'audit_fg' is SKU-level and its
     #  per-fg effect, if any, is captured by last_adjusted_at on the entry.)
     for a in adjustments:
+        if cutover and (a.get("created_at") or "")[:10] < cutover:
+            continue  # pre-reset adjustment — baked into the counted opening
         if a.get("kind") == "subtract":
             for d in (a.get("drained") or []):
                 fid = d.get("fg_id")
@@ -264,11 +276,27 @@ EV_OPENING = "opening"        # baseline / manual-add / audit-baseline inflow
 EV_PRODUCTION = "production"  # completed-run inflow
 EV_SALE = "sale"              # recorded sale outflow
 EV_ADJUST_SUB = "adjust_sub"  # manual-subtract outflow
+EV_RESET = "reset"            # zero-day reset marker (carries the cutover)
+
+RESET_ARCHIVE_DIR = os.path.join(INVENTORY_DIR, "ledger_archive")
 
 
 def _load_events():
-    """Load the append-only inventory event log (empty until Increment 3)."""
+    """Load the append-only inventory event log (empty until the first reset)."""
     return _load_json(EVENTS_PATH, [])
+
+
+def _reset_cutover_date():
+    """Date (YYYY-MM-DD) of the most recent zero-day reset, or None if none yet.
+    Before any reset this returns None, so reconciliation/backfill apply no
+    period filtering and Increment 1/2 behaviour is unchanged."""
+    latest = None
+    for e in _load_events():
+        if e.get("type") == EV_RESET:
+            ts = (e.get("ts") or "")[:10]
+            if ts and (latest is None or ts > latest):
+                latest = ts
+    return latest
 
 
 def backfill_fg_events():
@@ -282,6 +310,7 @@ def backfill_fg_events():
     sales = _load_json(app.ORGANIC_SALES_PATH, [])
     adjustments = _load_json(ADJUSTMENTS_PATH, [])
 
+    cutover = _reset_cutover_date()
     fg_sku = {f.get("id"): _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", ""))
               for f in fg}
     fg_ids = set(fg_sku)
@@ -307,6 +336,8 @@ def backfill_fg_events():
     for s in sales:
         if s.get("deducted") is False:
             continue  # not-yet-due RIPE commitment — no stock moved yet
+        if cutover and (s.get("sale_date") or s.get("created_at") or "")[:10] < cutover:
+            continue  # pre-reset sale — baked into the counted opening
         sku = s.get("sku_key") or _sku_key(s.get("brand", ""), s.get("recipe", ""), s.get("format", ""))
         sid = s.get("id")
         ts = s.get("sale_date") or s.get("created_at")
@@ -325,6 +356,8 @@ def backfill_fg_events():
             ev(EV_SALE, s.get("fg_id"), -_int(s.get("quantity")), sku, "sale", sid, ts)
 
     for a in adjustments:
+        if cutover and (a.get("created_at") or "")[:10] < cutover:
+            continue  # pre-reset adjustment — baked into the counted opening
         if a.get("kind") == "subtract":
             for d in (a.get("drained") or []):
                 fid = d.get("fg_id")
@@ -391,6 +424,146 @@ def verify_fg_projection():
     }
 
 
+# ── Increment 3: zero-day reset (preview is read-only; apply WRITES) ──────
+#
+# The reset closes the drifted history and opens clean books: every SKU collapses
+# to ONE reset_baseline FG lot at its physically-counted total, the old lots are
+# archived, and a RESET marker + opening events are written to the ledger. The
+# reconciliation/backfill cutover filter then ignores everything before the reset,
+# so post-reset the books are clean (zero drift, zero orphans, verify green). Apply
+# archives the current files first (recoverable) and is gated behind an explicit
+# confirmation token.
+
+
+def _current_sku_stock():
+    """Map sku_key -> {label, cert, current units, lots} from the live FG file."""
+    fg = _load_json(app.ORGANIC_FG_PATH, [])
+    out = {}
+    for f in fg:
+        sku = _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", ""))
+        row = out.get(sku)
+        if row is None:
+            row = out[sku] = {"sku_key": sku, "cert": (f.get("certification") or ""),
+                              "label": _sku_display(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")),
+                              "current": 0, "lots": 0}
+        row["current"] += _int(f.get("quantity_remaining"))
+        row["lots"] += 1
+    return out
+
+
+def _norm_counts(counts):
+    """Coerce a {sku_key: qty} input dict to clean non-negative ints."""
+    clean = {}
+    for k, v in (counts or {}).items():
+        try:
+            q = int(v)
+        except (ValueError, TypeError):
+            continue
+        clean[k] = max(0, q)
+    return clean
+
+
+def compute_reset_preview(counts):
+    """Read-only preview of a zero-day reset. `counts` = {sku_key: counted_units}.
+    Each SKU's target is the count if given, else current system stock ('carried',
+    so an uncounted SKU is never silently wiped). Returns per-SKU rows + summary."""
+    counts = _norm_counts(counts)
+    stock = _current_sku_stock()
+    rows = []
+    carried = 0
+    for sku in (set(stock) | set(counts)):
+        s = stock.get(sku, {"label": sku, "cert": "", "current": 0, "lots": 0})
+        counted = sku in counts
+        target = counts[sku] if counted else s["current"]
+        rows.append({"sku_key": sku, "label": s["label"], "cert": s["cert"],
+                     "current": s["current"], "lots": s["lots"], "counted": counted,
+                     "target": target, "delta": target - s["current"]})
+        if not counted and s["current"] != 0:
+            carried += 1
+    rows.sort(key=lambda r: r["label"].lower())
+    return {
+        "skus": rows,
+        "summary": {
+            "sku_count": len(rows),
+            "counted": sum(1 for r in rows if r["counted"]),
+            "carried_uncounted": carried,
+            "current_units": sum(r["current"] for r in rows),
+            "target_units": sum(r["target"] for r in rows),
+            "net_delta": sum(r["delta"] for r in rows),
+            "already_reset": _reset_cutover_date(),
+        },
+    }
+
+
+def apply_reset(counts, actor=""):
+    """Apply the zero-day reset (WRITES). Archives the current inventory files,
+    replaces finished_goods.json with one reset_baseline lot per SKU at its target,
+    and appends a RESET marker + opening events to the ledger."""
+    counts = _norm_counts(counts)
+    preview = compute_reset_preview(counts)
+    now = datetime.now()
+    stamp = now.strftime("%Y%m%d_%H%M%S")
+    cutover = now.isoformat(timespec="seconds")
+
+    # 1. Archive current files (recoverable snapshot).
+    os.makedirs(RESET_ARCHIVE_DIR, exist_ok=True)
+    archived = []
+    for name, path in [("finished_goods", app.ORGANIC_FG_PATH),
+                       ("sales", app.ORGANIC_SALES_PATH),
+                       ("adjustments", ADJUSTMENTS_PATH),
+                       ("events", EVENTS_PATH)]:
+        _save_json(os.path.join(RESET_ARCHIVE_DIR, f"{name}_{stamp}.json"),
+                   _load_json(path, []))
+        archived.append(f"{name}_{stamp}.json")
+
+    # 2. Preserve brand/recipe/format/cert from existing entries where present.
+    meta = {}
+    for f in _load_json(app.ORGANIC_FG_PATH, []):
+        sku = _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", ""))
+        meta.setdefault(sku, {"brand": f.get("brand", ""), "recipe": f.get("recipe", ""),
+                              "format": f.get("format", ""),
+                              "certification": f.get("certification", "")})
+    recipes = app.load_recipes()
+
+    # 3. Build the clean FG file: one reset_baseline lot per SKU with target > 0.
+    new_fg = []
+    opening_events = []
+    for i, r in enumerate(preview["skus"]):
+        target = r["target"]
+        if target <= 0:
+            continue
+        sku = r["sku_key"]
+        m = meta.get(sku)
+        if m is None:
+            brand, recipe, fmt = (sku.split("|") + ["", "", ""])[:3]
+            m = {"brand": brand, "recipe": recipe, "format": fmt,
+                 "certification": (recipes.get(recipe) or {}).get("certification", "")}
+        fid = f"fg_reset_{stamp}_{i:03d}"
+        new_fg.append({
+            "id": fid, "brand": m["brand"], "recipe": m["recipe"], "format": m["format"],
+            "certification": m["certification"], "lot": "RESET-" + now.strftime("%d%m%y"),
+            "quantity_produced": target, "quantity_remaining": target,
+            "vessel": "Reset baseline", "week_id": None, "day_idx": None,
+            "created_at": cutover, "source": "reset_baseline",
+        })
+        opening_events.append({"type": EV_OPENING, "fg_id": fid, "qty_delta": target,
+                               "sku_key": sku, "source": "reset", "ref": stamp, "ts": cutover})
+
+    # 4. Append RESET marker + opening events; replace the FG file.
+    events = _load_json(EVENTS_PATH, [])
+    events.append({"type": EV_RESET, "fg_id": None, "qty_delta": 0, "sku_key": None,
+                   "source": "reset", "ref": stamp, "ts": cutover,
+                   "meta": {"skus": len(opening_events), "actor": actor}})
+    events.extend(opening_events)
+    _save_json(app.ORGANIC_FG_PATH, new_fg)
+    _save_json(EVENTS_PATH, events)
+
+    return {"applied_at": cutover, "cutover": cutover[:10], "archive_stamp": stamp,
+            "archived_files": archived, "skus_reset": len(opening_events),
+            "total_units": sum(e["qty_delta"] for e in opening_events),
+            "fg_entries": len(new_fg)}
+
+
 @ledger_bp.route("/admin/fg-reconcile")
 @login_required
 def fg_reconcile_page():
@@ -411,3 +584,28 @@ def ledger_verify_api():
     """Read-only self-check that the append-only event projection reproduces the
     reconciliation (and reports projected-vs-actual drift)."""
     return jsonify(verify_fg_projection())
+
+
+@ledger_bp.route("/admin/fg-reset")
+@login_required
+def fg_reset_page():
+    """Render the zero-day reset tool page (preview-then-apply)."""
+    return render_template("fg_reset.html")
+
+
+@ledger_bp.route("/admin/fg-reset/preview", methods=["POST"])
+@login_required
+def fg_reset_preview_api():
+    """Read-only preview of a zero-day reset for the submitted per-SKU counts."""
+    data = request.json or {}
+    return jsonify(compute_reset_preview(data.get("counts") or {}))
+
+
+@ledger_bp.route("/admin/fg-reset/apply", methods=["POST"])
+@login_required
+def fg_reset_apply_api():
+    """Apply the zero-day reset. Gated behind an explicit confirmation token."""
+    data = request.json or {}
+    if data.get("confirm") != "RESET":
+        return jsonify({"error": "Confirmation token required"}), 400
+    return jsonify(apply_reset(data.get("counts") or {}, actor=session.get("user", "")))
