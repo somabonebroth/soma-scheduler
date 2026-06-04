@@ -13,10 +13,14 @@ body.an-page { background:var(--bg); }
 .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); background:#f9faf7; }
 .tab-pane { display:none; }
 .tab-pane.active { display:block; }
-.period-row { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; align-items:center; }
-.period-btn { padding:7px 14px; border:1.5px solid var(--border); border-radius:7px; font-size:12px; font-weight:600; background:var(--white); cursor:pointer; color:var(--text-light); transition:all .15s; }
-.period-btn.active { border-color:var(--accent); color:var(--accent); background:var(--green-tint); }
-.buyer-filter { padding:8px 12px; border:1.5px solid var(--border); border-radius:7px; font-size:13px; outline:none; }
+.period-row { display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; align-items:center; }
+.period-label { font-size:14px; font-weight:600; color:var(--text); }
+.period-toggle { display:inline-flex; }
+.period-btn { padding:8px 20px; border:1px solid var(--border); font-size:13px; font-weight:600; background:var(--card-bg); cursor:pointer; color:var(--text); border-radius:0; margin-left:-1px; transition:all .15s; }
+.period-toggle .period-btn:first-child { border-radius:6px 0 0 6px; margin-left:0; }
+.period-toggle .period-btn:last-child { border-radius:0 6px 6px 0; }
+.period-btn.active { background:var(--accent); color:var(--white); border-color:var(--accent); position:relative; z-index:1; }
+.buyer-filter { padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-size:14px; outline:none; }
 .buyer-filter:focus { border-color:var(--accent); }
 .buyer-card { background:var(--white); border:1px solid var(--border); border-radius:12px; margin-bottom:12px; overflow:hidden; cursor:pointer; transition:box-shadow .15s; }
 .buyer-card:hover { box-shadow:0 2px 12px rgba(0,0,0,.08); border-color:var(--accent); }
@@ -61,11 +65,13 @@ body.an-page { background:var(--bg); }
       <button id="backfill-btn" onclick="runBackfill()" class="btn btn-sm" style="font-size:11px;">🔄 Backfill missing prices</button>
     </div>
     <div class="period-row">
-      <div style="font-size:12px;font-weight:600;color:var(--text-light);margin-right:4px;">Period:</div>
-      <button class="period-btn active" onclick="setPeriod('all',this)">All time</button>
-      <button class="period-btn" onclick="setPeriod('ytd',this)">YTD</button>
-      <button class="period-btn" onclick="setPeriod('90d',this)">90 days</button>
-      <button class="period-btn" onclick="setPeriod('30d',this)">30 days</button>
+      <div class="period-label">Period:</div>
+      <div class="period-toggle">
+        <button class="period-btn active" onclick="setPeriod('all',this)">All time</button>
+        <button class="period-btn" onclick="setPeriod('ytd',this)">YTD</button>
+        <button class="period-btn" onclick="setPeriod('90d',this)">90 days</button>
+        <button class="period-btn" onclick="setPeriod('30d',this)">30 days</button>
+      </div>
       <select class="buyer-filter" id="buyer-filter" onchange="loadSales()">
         <option value="">All buyers</option>
         {% for name in buyer_names %}
