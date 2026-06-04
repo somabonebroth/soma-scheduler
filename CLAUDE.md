@@ -12,7 +12,7 @@ Two Flask apps deployed on Render:
 ## Repository structure
 
 ```
-app.py              — ~5398 lines, 166 routes. Still the core, but the blueprint
+app.py              — ~5218 lines, 166 routes. Still the core, but the blueprint
                       split is now underway (see "Pending architectural work").
 helpers.py          — Foundation layer (extracted 2026-06-03): dependency-free
                       stdlib-only primitives — JSON IO with per-path locks, path/
@@ -53,6 +53,15 @@ audit_tools.py      — Flask Blueprint (256 lines, extracted 2026-06-03): the 6
                       engines (_rebuild_raw_material_consumption, _compute_mass_balance,
                       _sale_touches_fg) + path consts stay in app.py (8 app.-qualified);
                       ORGANIC_RUNS_PATH + IO from helpers.
+production.py       — Flask Blueprint (257 lines, extracted 2026-06-03): FIRST slice
+                      of the production domain — 10 low-risk read/schedule routes:
+                      schedules (create/weekly pages, get/list/delete) + production
+                      tracker (page + week/month/year analytics). PURE routes-move
+                      (12 app.-qualified). Local verbatim copies of login_required AND
+                      require_valid_week (decorators apply at import time → can't be
+                      app.-qualified; require_valid_week calls app.validate_week_id at
+                      request time). Higher-risk production clusters (daily+checklist,
+                      traceability) deferred to later steps appending to production_bp.
 ripe_orders.py      — Flask Blueprint (591 lines) handling Ripe order workflow within Soma
 shopify_importer.py — Shopify Admin API client. Pulls orders for a week,
                       parses SKUs, returns a structured preview. Auth via
@@ -376,6 +385,15 @@ Render restart → browser smoke test → STOP for the next.
   surfaced), mass-balance, raw_lot trace chain, stock-exceptions. **Lesson:** the
   raw_lot trace response keys its chain under `lots`, not `results` (only the empty-query
   early-return uses `results`); the reconcile replay skips runs with `amount_produced<=0`.
+- ✅ **`production.py`** (commit `a18c673`) — first production slice (schedules + tracker,
+  10 read/schedule routes, ~183 lines). Pure routes-move, 12 `app.`-qualifications.
+  **NEW pattern wrinkle (important for the remaining production steps):** decorators are
+  applied at blueprint-IMPORT time, before app.py finishes defining them, so
+  `require_valid_week` / `require_valid_day` (like `login_required`) must be LOCAL
+  verbatim copies in the blueprint — they delegate to `app.validate_week_id` /
+  `app.validate_day_idx` at REQUEST time (validators stay in app.py). app.-qualifying a
+  decorator (`@app.require_valid_week`) would crash at import. Smoke confirmed the local
+  `require_valid_week` returns 400 on a bad week.
 
 **Two reusable blueprint patterns are now established** (both define a local verbatim
 `login_required` to avoid a circular import, matching `ripe_orders.py`):
@@ -389,35 +407,42 @@ because `app.py` re-exports the moved names.
 **Inventory is being split per sub-domain, not as one blueprint** (decided 2026-06-03 —
 it was ~44 routes / ~1385 lines straddling audit-critical code). Done: `finished_goods.py`
 + `raw_materials.py` + `audit_tools.py` (✅ all above). The audit-critical slice is now
-behind us. Remaining inventory tail (small, can ride with another step):
-- **sku-meta + inventory pages** (~4 routes): `update_sku_meta`, `get_all_sku_meta`,
-  `organic_page`, `organic_certification_page`. Deps: `SKU_META_PATH`,
-  `_compute_available_stock`, `_group_fg_with_catalog`, `load_recipes` (all stay in
-  app.py → app.-qualify). Low risk. Plus `internal_fg_stock` (Ripe-internal — could stay
-  in app.py with the other `/api/internal/*` endpoints, or ride along).
-- production-runs / contacts routes (`get_organic_runs`, `get_organic_contacts`) belong to
-  the **production** domain below.
+behind us. Only a small low-risk inventory tail remains (sku-meta + inventory pages +
+`internal_fg_stock`) — see "Small inventory tail still pending" below.
 
-**NEXT (recommended): the `production` domain** (~883 lines) — the last large planned
-extraction (production runs, daily production, checklists, schedule cascade), which also
-absorbs the production-runs/contacts routes above. The sku-meta/pages tail is small and
-can be folded into that step or done as a quick standalone first. Apply the proven method
-end-to-end (re-run line ranges live; they drift):
-1. AST inventory + free-variable report, **classifying each external name by its TRUE
-   home** — helpers.py names → direct `from helpers import`; app.py names → `app.`-qualify;
-   Flask-instance attrs → `app.app.X`. For each app.py-homed name, confirm private-vs-shared
-   by counting refs outside the moved routes (the rm_classify.py approach) — but default to
-   leaving helpers in app.py. **Watch the consumption chain:** production save triggers
-   `_complete_organic_run`/`_deduct_run_ingredients` — those audit-critical helpers must
-   stay in app.py (app.-qualify), never move.
-2. Build via per-function AST line-range slicing only (never `src.replace`); slice
-   around interleaved non-production code.
-3. Strengthened free-variable AST audit on the new file (every name resolves to
-   {local, param, import, builtin, flask, or `app`}).
+**Production domain is being sliced like inventory** (decided 2026-06-03 — ~25 routes /
+~658 lines spanning low-risk reads through the audit-critical deletion cascade). Done:
+`production.py` schedules+tracker (✅ above). Remaining production slices append to the
+same `production_bp`, each its own verified step:
+- **daily-production + checklists** (~8 routes, ~191 lines) — **HIGH RISK:** `save_daily_production`
+  triggers the raw-material consumption chain (`_complete_organic_run` → `_deduct_run_ingredients`).
+  Those audit-critical helpers MUST stay in app.py (app.-qualify), never move. Uses
+  `require_valid_day` too (another local decorator copy). `generate_filled_checklist_pdf`
+  imports from `pdf_engine`.
+- **traceability / completed records** (~6 routes, ~280 lines) — **HIGHEST RISK:** includes
+  `delete_traceability_record` (94-line cascade: refuses 409 if FG sold, else restores raw
+  materials + removes FG + resets runs to scheduled) and weekly sign-off. ~16 app.-qualifications.
+- production-runs / contacts (`get_organic_runs`, `get_organic_contacts`) — trivial, ride along.
+
+**NEXT (recommended): daily-production + checklists.** Apply the proven method (re-run
+line ranges live; they drift):
+1. AST inventory + free-variable report, classifying each name by TRUE home (helpers →
+   direct import; app.py → app.-qualify; decorators → LOCAL verbatim copies — now
+   `require_valid_day` as well as week). Confirm private-vs-shared via the rm_classify.py
+   approach; default to leaving helpers in app.py. **The consumption-chain helpers
+   (`_complete_organic_run`, `_deduct_run_ingredients`, `_check_organic_completion`,
+   `_halve_for_115L`) MUST stay in app.py.**
+2. Per-function AST line-range slicing only (never `src.replace`).
+3. Strengthened free-variable AST audit (every name resolves to {local, param, import,
+   builtin, flask, or `app`}).
 4. Gate: both compile, no dup defs, **byte-identical 166-route URL+method map**,
    `url_for` check, test-client smoke that exercises a production save → FG creation +
-   raw-material deduction (the consumption chain).
+   raw-material deduction (the full consumption chain).
 Assume shared helpers STAY in `app.py`.
+
+**Small inventory tail still pending** (low risk, fold into any step): sku-meta
+(`update_sku_meta`, `get_all_sku_meta`) + inventory pages (`organic_page`,
+`organic_certification_page`) + `internal_fg_stock`.
 
 > Correction to the earlier audit: the helper list once named four functions that don't
 > exist as movable top-level defs — `_revenue`, `_cases`, `_entry_prod_date` are **nested
