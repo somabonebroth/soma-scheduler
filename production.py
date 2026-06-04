@@ -83,11 +83,13 @@ def create_schedule_page():
     """Render the create-schedule page."""
     return render_template("create_schedule.html")
 
+
 @production_bp.route("/weekly-schedule")
 @login_required
 def weekly_schedule_page():
     """Render the weekly schedule page."""
     return render_template("weekly_view.html")
+
 
 @production_bp.route("/api/schedule/<week_id>", methods=["GET"])
 @login_required
@@ -99,11 +101,13 @@ def get_schedule(week_id):
         return jsonify(data)
     return jsonify({"schedule": None, "notes": ""})
 
+
 @production_bp.route("/api/schedules", methods=["GET"])
 @login_required
 def get_schedules():
     """GET /api/schedules - list all saved schedules."""
     return jsonify(app.list_schedules())
+
 
 @production_bp.route("/api/schedule/<week_id>", methods=["DELETE"])
 @login_required
@@ -126,11 +130,13 @@ def delete_schedule(week_id):
         pass
     return jsonify({"success": True})
 
+
 @production_bp.route("/production-tracker")
 @login_required
 def production_tracker_page():
     """Render the production tracker page."""
     return render_template("production_tracker.html")
+
 
 @production_bp.route("/api/production-tracker/<week_id>", methods=["GET"])
 @login_required
@@ -156,6 +162,7 @@ def get_production_tracker(week_id):
         }
         daily_totals.append(entry)
     return jsonify(daily_totals)
+
 
 @production_bp.route("/api/production-tracker/<week_id>/other-details", methods=["GET"])
 @login_required
@@ -208,6 +215,7 @@ def get_tracker_other_details(week_id):
             })
     return jsonify(rows)
 
+
 @production_bp.route("/api/production-tracker/month/<year_month>", methods=["GET"])
 @login_required
 def get_production_tracker_month(year_month):
@@ -238,6 +246,7 @@ def get_production_tracker_month(year_month):
         return jsonify(weeks)
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
 
 @production_bp.route("/api/production-tracker/year/<int:year>", methods=["GET"])
 @login_required
@@ -287,6 +296,7 @@ def daily_production_page(week_id, day_idx):
     """Render the daily-production page for a week/day."""
     return render_template("daily_production.html", week_id=week_id, day_idx=day_idx)
 
+
 @production_bp.route("/checklist/<week_id>/<int:day_idx>")
 @login_required
 @require_valid_week
@@ -294,6 +304,7 @@ def daily_production_page(week_id, day_idx):
 def checklist_page(week_id, day_idx):
     """Render the daily checklist page for a week/day."""
     return render_template("checklist.html", week_id=week_id, day_idx=day_idx)
+
 
 @production_bp.route("/api/daily-production/<week_id>/<int:day_idx>", methods=["GET"])
 @login_required
@@ -387,6 +398,7 @@ def get_daily_production(week_id, day_idx):
         "daily_notes": daily_notes,
     })
 
+
 @production_bp.route("/api/daily-production/<week_id>/<int:day_idx>/save", methods=["POST"])
 @login_required
 @require_valid_week
@@ -405,6 +417,7 @@ def save_daily_production(week_id, day_idx):
         pass
     return jsonify({"success": True, "warnings": warnings})
 
+
 @production_bp.route("/api/checklist/<week_id>/<int:day_idx>", methods=["GET"])
 @login_required
 @require_valid_week
@@ -420,6 +433,7 @@ def get_checklist_route(week_id, day_idx):
             day_info = schedule_data["schedule"][day_key]
     return jsonify({"checklist": data, "day_info": day_info})
 
+
 @production_bp.route("/api/checklist/<week_id>/<int:day_idx>", methods=["POST"])
 @login_required
 @require_valid_week
@@ -430,6 +444,7 @@ def save_checklist_route(week_id, day_idx):
     data["last_updated"] = datetime.now().isoformat()
     app.save_checklist_data(week_id, day_idx, data)
     return jsonify({"success": True})
+
 
 @production_bp.route("/api/checklist/<week_id>/<int:day_idx>/complete", methods=["POST"])
 @login_required
@@ -476,6 +491,7 @@ def complete_checklist(week_id, day_idx):
 
     return jsonify({"success": True, "filename": filename, "warnings": warnings})
 
+
 @production_bp.route("/api/checklist-status/<week_id>", methods=["GET"])
 @login_required
 @require_valid_week
@@ -500,6 +516,7 @@ def checklist_status(week_id):
 def traceability_page():
     """Render the Completed Production page."""
     return render_template("traceability.html")
+
 
 @production_bp.route("/api/traceability/<week_id>/summary", methods=["GET"])
 @login_required
@@ -585,6 +602,7 @@ def get_week_summary(week_id):
         "all_clear": len(flags) == 0 and len(all_notes) == 0,
     })
 
+
 @production_bp.route("/api/traceability", methods=["GET"])
 @login_required
 def get_traceability():
@@ -639,6 +657,7 @@ def get_traceability():
             week_record["hoo_signoff"] = signoffs.get(week_id) or None
             records.append(week_record)
     return jsonify(records)
+
 
 @production_bp.route("/api/traceability/<week_id>/<int:day_idx>", methods=["DELETE"])
 @login_required
@@ -739,6 +758,7 @@ def delete_traceability_record(week_id, day_idx):
         "finished_goods_removed": len(day_fg_ids),
     })
 
+
 @production_bp.route("/api/weekly-signoff/<week_id>", methods=["POST"])
 @login_required
 @require_valid_week
@@ -771,6 +791,7 @@ def sign_off_week(week_id):
     }
     app._save_weekly_signoffs(signoffs)
     return jsonify({"success": True, "signoff": signoffs[week_id]})
+
 
 @production_bp.route("/api/weekly-signoff/<week_id>", methods=["DELETE"])
 @login_required

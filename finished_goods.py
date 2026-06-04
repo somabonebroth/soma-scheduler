@@ -59,6 +59,7 @@ def get_finished_goods():
     """Returns raw per-kettle FG entries. Used by traceability/legacy callers."""
     return jsonify(_load_json(app.ORGANIC_FG_PATH, []))
 
+
 @finished_goods_bp.route("/api/organic/finished-goods/<fg_id>", methods=["PUT"])
 @login_required
 def update_finished_good(fg_id):
@@ -83,6 +84,7 @@ def update_finished_good(fg_id):
     _save_json(app.ORGANIC_FG_PATH, fg)
     return jsonify({"success": True, "entry": entry})
 
+
 @finished_goods_bp.route("/api/organic/finished-goods/<fg_id>", methods=["DELETE"])
 @login_required
 def delete_finished_good(fg_id):
@@ -95,6 +97,7 @@ def delete_finished_good(fg_id):
     fg = [f for f in fg if f.get("id") != fg_id]
     _save_json(app.ORGANIC_FG_PATH, fg)
     return jsonify({"success": True})
+
 
 @finished_goods_bp.route("/api/organic/finished-goods/lot-adjust", methods=["POST"])
 @login_required
@@ -160,6 +163,7 @@ def adjust_lot_remaining():
     return jsonify({"success": True, "previous_total": current_total,
                     "new_total": new_remaining, "warnings": warnings})
 
+
 @finished_goods_bp.route("/api/organic/finished-goods/baseline", methods=["POST"])
 @login_required
 def add_baseline_finished_good():
@@ -207,6 +211,7 @@ def add_baseline_finished_good():
     fg.append(entry)
     _save_json(app.ORGANIC_FG_PATH, fg)
     return jsonify({"success": True, "entry": entry})
+
 
 @finished_goods_bp.route("/api/organic/finished-goods/baseline-bulk", methods=["POST"])
 @login_required
@@ -294,6 +299,7 @@ def add_baseline_finished_goods_bulk():
     _save_json(app.ORGANIC_FG_PATH, fg)
     return jsonify({"success": True, "created": len(created), "lot": lot, "entries": created})
 
+
 @finished_goods_bp.route("/api/organic/finished-goods/manual-add", methods=["POST"])
 @login_required
 def manual_add_finished_good():
@@ -358,6 +364,7 @@ def manual_add_finished_good():
     })
 
     return jsonify({"success": True, "entry": entry, "lot": lot})
+
 
 @finished_goods_bp.route("/api/organic/finished-goods/manual-subtract", methods=["POST"])
 @login_required
@@ -432,6 +439,7 @@ def manual_subtract_finished_good():
         "remaining_total": available - qty,
     })
 
+
 @finished_goods_bp.route("/api/organic/finished-goods/grouped", methods=["GET"])
 @login_required
 def get_finished_goods_grouped():
@@ -449,6 +457,7 @@ def get_finished_goods_grouped():
         g["par"] = m.get("par")          # None = no PAR; int = PAR level
         g["price"] = m.get("price")      # None = unset; float = price per unit
     return jsonify(grouped)
+
 
 @finished_goods_bp.route("/api/organic/finished-goods/sku/<path:sku_key>", methods=["GET"])
 @login_required
@@ -486,11 +495,13 @@ def organic_certification_page():
     """Hub linking the organic-certification tools (reconcile, audits, docs)."""
     return render_template("organic_certification.html")
 
+
 @finished_goods_bp.route("/organic")
 @login_required
 def organic_page():
     """Render the Manage Inventory page (Raw Materials / Runs / Finished Goods / Records tabs)."""
     return render_template("organic.html")
+
 
 @finished_goods_bp.route("/api/sku-meta/<path:sku_key>", methods=["PATCH"])
 @login_required
@@ -517,6 +528,7 @@ def update_sku_meta(sku_key):
         del meta[sku_key]
     _save_json(app.SKU_META_PATH, meta)
     return jsonify({"ok": True, "meta": meta.get(sku_key, {})})
+
 
 @finished_goods_bp.route("/api/sku-meta", methods=["GET"])
 @login_required

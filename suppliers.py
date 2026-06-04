@@ -37,15 +37,18 @@ def _load_suppliers():
     """Load the suppliers list from disk."""
     return _load_json(SUPPLIERS_PATH, [])
 
+
 def _save_suppliers(data):
     """Persist the suppliers list to disk."""
     _save_json(SUPPLIERS_PATH, data)
+
 
 @suppliers_bp.route("/api/suppliers", methods=["GET"])
 @login_required
 def get_suppliers():
     """GET /api/suppliers - return all suppliers."""
     return jsonify(_load_suppliers())
+
 
 @suppliers_bp.route("/api/suppliers", methods=["POST"])
 @login_required
@@ -69,6 +72,7 @@ def create_supplier():
     suppliers.append(supplier)
     _save_suppliers(suppliers)
     return jsonify(supplier), 201
+
 
 @suppliers_bp.route("/api/suppliers/<sid>", methods=["PUT"])
 @login_required
@@ -94,6 +98,7 @@ def update_supplier(sid):
     _save_suppliers(suppliers)
     return jsonify(suppliers[idx])
 
+
 @suppliers_bp.route("/api/suppliers/<sid>", methods=["DELETE"])
 @login_required
 def delete_supplier(sid):
@@ -102,6 +107,7 @@ def delete_supplier(sid):
     suppliers = [s for s in suppliers if s["id"] != sid]
     _save_suppliers(suppliers)
     return jsonify({"ok": True})
+
 
 @suppliers_bp.route("/api/suppliers/<sid>/ingredients", methods=["PUT"])
 @login_required

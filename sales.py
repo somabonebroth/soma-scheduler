@@ -72,6 +72,7 @@ def get_organic_sales():
                  if (s.get("certification") or "").lower() == cert_filter.lower()]
     return jsonify(sales)
 
+
 @sales_bp.route("/api/organic/sales", methods=["POST"])
 @login_required
 def add_organic_sale():
@@ -224,6 +225,7 @@ def add_organic_sale():
     if buyer:
         _add_contact("buyer", buyer)
     return jsonify({"success": True, "id": sale["id"], "sale": sale})
+
 
 @sales_bp.route("/api/organic/sales/order", methods=["POST"])
 @login_required
@@ -397,6 +399,7 @@ def add_sale_order():
         "errors":   errors,
     })
 
+
 @sales_bp.route("/api/organic/sales/<sale_id>", methods=["PATCH"])
 @login_required
 def edit_organic_sale(sale_id):
@@ -477,6 +480,7 @@ def edit_organic_sale(sale_id):
     _save_json(app.ORGANIC_SALES_PATH, sales)
     return jsonify({"ok": True, "sale": sale})
 
+
 @sales_bp.route("/api/organic/sales/<sale_id>", methods=["DELETE"])
 @login_required
 def delete_organic_sale(sale_id):
@@ -520,6 +524,7 @@ def delete_organic_sale(sale_id):
     _save_json(app.ORGANIC_SALES_PATH, sales)
     _save_json(app.ORGANIC_FG_PATH, fg)
     return jsonify({"success": True})
+
 
 @sales_bp.route("/api/organic/sales/<sale_id>/packing-slip", methods=["GET"])
 @login_required
@@ -703,6 +708,7 @@ def get_packing_slip(sale_id):
     safe_buyer = "".join(c for c in buyer_name if c.isalnum() or c in "-_ ")[:20]
     return send_file(buf, mimetype="application/pdf", as_attachment=False,
                      download_name=f"packing-slip-{safe_buyer}-{sale_date}.pdf")
+
 
 @sales_bp.route("/api/organic/sales/<sale_id>/qbo-csv", methods=["GET"])
 @login_required

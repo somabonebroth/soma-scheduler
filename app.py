@@ -144,6 +144,8 @@ DEFAULT_CCP_SECTIONS = [
 ]
 
 # ── Auth ───────────────────────────────────────────────────────────────
+
+
 def login_required(f):
     """Decorator: require an authenticated session (401 JSON for APIs, redirect for pages)."""
     @wraps(f)
@@ -155,6 +157,7 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
+
 def validate_week_id(week_id):
     """Ensure week_id is a valid YYYY-MM-DD date string."""
     if not re.match(r'^\d{4}-\d{2}-\d{2}$', week_id):
@@ -165,9 +168,11 @@ def validate_week_id(week_id):
     except ValueError:
         return False
 
+
 def validate_day_idx(day_idx):
     """Ensure day_idx is 0-6."""
     return 0 <= day_idx <= 6
+
 
 def require_valid_week(f):
     """Decorator: reject requests with invalid week_id."""
@@ -178,6 +183,7 @@ def require_valid_week(f):
             return jsonify({"error": "Invalid week ID"}), 400
         return f(*args, **kwargs)
     return decorated
+
 
 def require_valid_day(f):
     """Decorator: reject requests with day_idx outside 0-6."""
@@ -190,6 +196,8 @@ def require_valid_day(f):
     return decorated
 
 # ── Data helpers ───────────────────────────────────────────────────────
+
+
 def _load_tracking_modes():
     """Read tracking_modes.json directly (used during recipe migration).
     Returns {} if missing.
@@ -211,6 +219,7 @@ def _load_tracking_modes():
                 return {}
     return {}
 
+
 def load_recipes():
     """Load the recipes dict from disk."""
     if os.path.exists(RECIPES_PATH):
@@ -226,10 +235,12 @@ def load_recipes():
         return recipes
     return {}
 
+
 def save_recipes(recipes):
     """Persist the recipes dict to disk."""
     with open(RECIPES_PATH, "w") as f:
         json.dump(recipes, f, indent=2)
+
 
 def load_schedule(week_id):
     """Load a week's schedule JSON (or None)."""
@@ -239,11 +250,13 @@ def load_schedule(week_id):
             return json.load(f)
     return None
 
+
 def save_schedule(week_id, data):
     """Persist a week's schedule JSON."""
     path = os.path.join(SCHEDULES_DIR, week_id + ".json")
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
+
 
 def list_schedules():
     """Return a list of all saved weekly schedules."""
@@ -251,6 +264,7 @@ def list_schedules():
         return []
     files = sorted([f.replace(".json", "") for f in os.listdir(SCHEDULES_DIR) if f.endswith(".json")], reverse=True)
     return files
+
 
 def load_checklist(week_id, day_idx):
     """Load a day's checklist JSON (or None)."""
@@ -260,11 +274,13 @@ def load_checklist(week_id, day_idx):
             return json.load(f)
     return None
 
+
 def save_checklist_data(week_id, day_idx, data):
     """Persist a day's checklist JSON."""
     path = os.path.join(CHECKLISTS_DIR, week_id + "_day" + str(day_idx) + ".json")
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
+
 
 def load_ccp_master():
     """Load the master CCP document."""
@@ -273,10 +289,12 @@ def load_ccp_master():
             return json.load(f)
     return DEFAULT_CCP_SECTIONS
 
+
 def save_ccp_master(sections):
     """Persist the master CCP document."""
     with open(CCP_MASTER_PATH, "w") as f:
         json.dump(sections, f, indent=2)
+
 
 def load_recipe_order():
     """Load the saved recipe display order."""
@@ -285,16 +303,19 @@ def load_recipe_order():
             return json.load(f)
     return None
 
+
 def save_recipe_order(order):
     """Persist the recipe display order."""
     with open(RECIPE_ORDER_PATH, "w") as f:
         json.dump(order, f, indent=2)
+
 
 def get_current_week_id():
     """Return the current week's Monday as a YYYY-MM-DD id."""
     today = datetime.today()
     monday = today - timedelta(days=today.weekday())
     return monday.strftime("%Y-%m-%d")
+
 
 # ── Structured Ingredient Helpers ──────────────────────────────────────
 VALID_UNITS = ["kg", "g", "L", "ml", "lbs", "Bunch", "Pack", "Adjunct", "per L"]
@@ -336,6 +357,7 @@ PER_CONTAINER_RE = re.compile(
 INGREDIENT_LINE_RE = re.compile(
     r"^\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s+(.+?)\s*$"
 )
+
 
 def parse_ingredient_line(line):
     """Parse a free-text ingredient line into a structured ingredient object.
@@ -440,6 +462,7 @@ def parse_ingredient_line(line):
         "needs_review": needs_review,
     }
 
+
 def format_ingredient(ing):
     """Render a structured ingredient back to a display string."""
     if not isinstance(ing, dict):
@@ -465,6 +488,7 @@ def format_ingredient(ing):
         return base + " — " + process
     return base
 
+
 def halve_ingredient(ing):
     """Return a new ingredient with amount halved. 'per L' items are not halved."""
     if not isinstance(ing, dict):
@@ -481,6 +505,7 @@ def halve_ingredient(ing):
     except (ValueError, TypeError):
         pass
     return new
+
 
 def ingredients_match(raw_item_name, recipe_ing_name):
     """Strict-equivalence ingredient matcher.
@@ -510,6 +535,7 @@ def ingredients_match(raw_item_name, recipe_ing_name):
     b = " ".join(recipe_ing_name.lower().split())
     return a == b
 
+
 def is_untracked_ingredient(name):
     """Returns True for ingredients that should never be tracked as raw material
     inventory or trigger insufficient-stock warnings. Water is treated as
@@ -519,9 +545,11 @@ def is_untracked_ingredient(name):
         return False
     return "water" in name.lower()
 
+
 def is_structured_ingredient(item):
     """Check if an item is already in structured object form."""
     return isinstance(item, dict) and "name" in item and "amount" in item
+
 
 # Confirmed kitchen-facing dosing units for known 'per L' ingredients (keyed by
 # normalized name). These take priority over inventory inference because an
@@ -537,6 +565,7 @@ _PER_L_UNIT_OVERRIDES = {
     "lemon juice": "ml",
     "honey": "g",
 }
+
 
 def _infer_per_l_unit(ingredient_name, raw_materials):
     """Infer the dosing unit ('g' or 'ml') for a 'per L' recipe ingredient.
@@ -559,6 +588,7 @@ def _infer_per_l_unit(ingredient_name, raw_materials):
                 return "g"
     return "g"
 
+
 def _attach_per_l_units(recipe_data, raw_materials=None):
     """Annotate each 'per L' ingredient in a recipe with a 'per_l_unit' field
     ('g' or 'ml') inferred from inventory, so recipe cards and the daily
@@ -573,6 +603,7 @@ def _attach_per_l_units(recipe_data, raw_materials=None):
             if isinstance(item, dict) and (item.get("unit") or "").strip() == "per L":
                 item["per_l_unit"] = _infer_per_l_unit(item.get("name", ""), raw_materials)
     return recipe_data
+
 
 def _smart_upgrade_ingredient(item, tracking_modes):
     """Upgrade an already-structured ingredient to the new unit scheme.
@@ -642,6 +673,7 @@ def _smart_upgrade_ingredient(item, tracking_modes):
     # No change
     return item, False
 
+
 def migrate_recipe_ingredients(recipe_data, tracking_modes=None):
     """In-place: convert string-format ingredient lines to structured objects,
     and upgrade structured items per the new unit scheme.
@@ -693,8 +725,6 @@ def migrate_recipe_ingredients(recipe_data, tracking_modes=None):
 # Matches "<separator><letters><separator><digits>ML" at end of string.
 
 
-
-
 def _detect_format_in_text(text):
     """Return the canonical format found in text, or '' if none."""
     if not text:
@@ -703,6 +733,7 @@ def _detect_format_in_text(text):
     if not m:
         return ""
     return _normalize_format(m.group(0))
+
 
 def parse_recipe_pdf_text(text):
     """Parse extracted recipe-PDF text into a recipe dict (or None)."""
@@ -799,10 +830,13 @@ def parse_recipe_pdf_text(text):
     return {"name": name, "data": recipe}
 
 # ── Auth routes ────────────────────────────────────────────────────────
+
+
 @app.route("/login")
 def login_page():
     """Render the login page."""
     return render_template("login.html")
+
 
 @app.route("/api/login", methods=["POST"])
 def login():
@@ -815,6 +849,7 @@ def login():
         return jsonify({"success": True})
     return jsonify({"error": "Invalid password"}), 401
 
+
 @app.route("/api/logout", methods=["POST"])
 def logout():
     """Clear the session and log out."""
@@ -822,21 +857,21 @@ def logout():
     return jsonify({"success": True})
 
 # ── PWA manifest ──────────────────────────────────────────────────────
+
+
 @app.route("/manifest.json")
 def manifest():
     """Serve the PWA manifest.json."""
     return send_from_directory(app.static_folder, "manifest.json", mimetype="application/manifest+json")
 
 # ── Page routes ────────────────────────────────────────────────────────
+
+
 @app.route("/")
 @login_required
 def dashboard():
     """Render the dashboard."""
     return render_template("dashboard.html")
-
-
-
-
 
 
 @app.route("/contacts")
@@ -845,11 +880,13 @@ def contacts_page():
     """Render the contacts page."""
     return render_template("contacts.html")
 
+
 @app.route("/company-settings")
 @login_required
 def company_settings_page():
     """Render the company settings page."""
     return render_template("company_settings.html")
+
 
 @app.route("/api/verify-manager", methods=["POST"])
 @login_required
@@ -864,6 +901,7 @@ def verify_manager():
     import hmac as _hmac
     ok = bool(submitted) and _hmac.compare_digest(submitted.encode(), MANAGER_PASSWORD.encode())
     return jsonify({"ok": ok})
+
 
 @app.route("/api/admin/backup", methods=["POST"])
 @login_required
@@ -895,6 +933,7 @@ def admin_backup():
         download_name=f"soma-backup-{stamp}.zip",
     )
 
+
 @app.route("/certifications")
 @login_required
 def certifications_page():
@@ -911,6 +950,7 @@ def list_certifications():
     meta_path = os.path.join(cert_dir, "meta.json")
     meta = _load_json(meta_path, [])
     return jsonify(meta)
+
 
 @app.route("/api/certifications/upload", methods=["POST"])
 @login_required
@@ -942,6 +982,7 @@ def upload_certification():
     _save_json(meta_path, meta)
     return jsonify({"ok": True, "id": file_id})
 
+
 @app.route("/api/certifications/<file_id>", methods=["DELETE"])
 @login_required
 def delete_certification(file_id):
@@ -960,6 +1001,7 @@ def delete_certification(file_id):
     _save_json(meta_path, meta)
     return jsonify({"ok": True})
 
+
 @app.route("/api/certifications/<file_id>/download")
 @login_required
 def download_certification(file_id):
@@ -977,6 +1019,7 @@ def download_certification(file_id):
         as_attachment=True,
     )
 
+
 @app.route("/analytics")
 @login_required
 def analytics_page():
@@ -986,6 +1029,7 @@ def analytics_page():
     buyers = _load_buyers()
     buyer_names = [b["name"] for b in buyers]
     return render_template("analytics.html", buyer_names=buyer_names)
+
 
 @app.route("/analytics/buyer/<path:buyer_name>")
 @login_required
@@ -997,6 +1041,7 @@ def buyer_analytics_page(buyer_name):
     return render_template("buyer_analytics.html",
                            buyer_name=display_name,
                            buyer_names=[b["name"] for b in buyers])
+
 
 @app.route("/api/analytics/buyer/<path:buyer_name>")
 @login_required
@@ -1207,6 +1252,7 @@ def api_buyer_analytics(buyer_name):
         },
     })
 
+
 @app.route("/api/analytics/backfill-sale-prices", methods=["POST"])
 @login_required
 def backfill_sale_prices():
@@ -1254,6 +1300,7 @@ def backfill_sale_prices():
         "skipped_no_price": no_price,
         "message": f"Updated {updated} records. {no_price} records had no matching buyer price and were left unchanged.",
     })
+
 
 @app.route("/api/analytics/sales-by-buyer", methods=["GET"])
 @login_required
@@ -1323,6 +1370,7 @@ def api_sales_by_buyer():
         })
     return jsonify({"buyers": result, "period": period})
 
+
 @app.route("/buyers/<bid>/edit")
 @login_required
 def buyer_edit_page(bid):
@@ -1365,6 +1413,7 @@ def buyer_edit_page(bid):
 
     return render_template("buyer_edit.html", buyer=buyer, sku_catalog=sku_catalog)
 
+
 @app.route("/ccp-master")
 @login_required
 def ccp_master_page():
@@ -1372,12 +1421,10 @@ def ccp_master_page():
     return render_template("master_ccp.html")
 
 
-
 # ── Recipe API ─────────────────────────────────────────────────────────
 # Recipe routes now live in recipes.py (recipes_bp). The PHOTOS_DIR setup and
 # the serve_photo route below stay here because they're shared infrastructure
 # (recipes.py reaches PHOTOS_DIR via app.PHOTOS_DIR).
-
 # Photo upload
 PHOTOS_DIR = os.path.join(DATA_DIR, "photos")
 os.makedirs(PHOTOS_DIR, exist_ok=True)
@@ -1390,7 +1437,6 @@ def serve_photo(filename):
     return send_from_directory(PHOTOS_DIR, filename)
 
 # ── Schedule API ───────────────────────────────────────────────────────
-
 
 
 # ── Generate PDFs ──────────────────────────────────────────────────────
@@ -1448,6 +1494,8 @@ def generate_pdfs():
             pass
 
 # ── PDF downloads ──────────────────────────────────────────────────────
+
+
 @app.route("/api/pdf/<week_id>/<filename>", methods=["GET"])
 @login_required
 @require_valid_week
@@ -1455,6 +1503,7 @@ def download_pdf(week_id, filename):
     """GET - download a previously generated PDF."""
     week_pdf_dir = os.path.join(PDF_DIR, week_id)
     return send_from_directory(week_pdf_dir, filename, as_attachment=True)
+
 
 @app.route("/api/pdfs/<week_id>", methods=["GET"])
 @login_required
@@ -1466,6 +1515,7 @@ def list_pdfs(week_id):
         return jsonify([])
     files = sorted(os.listdir(week_pdf_dir))
     return jsonify([f for f in files if f.endswith(".pdf")])
+
 
 @app.route("/api/pdfs/<week_id>/download-all", methods=["GET"])
 @login_required
@@ -1487,6 +1537,8 @@ def download_all_pdfs(week_id):
                      download_name=f"Soma_Production_{week_id}.zip")
 
 # ── 115L Halving Helper ──────────────────────────────────────────────
+
+
 def _halve_for_115L(recipe_data):
     """Return a copy of recipe_data with quantities halved for the 115L vessel.
     Structured ingredients with unit='per L' are NOT halved.
@@ -1553,7 +1605,6 @@ def generate_label():
 # ── Digital Checklists ─────────────────────────────────────────────────
 
 
-
 # ── Checklist Status ──────────────────────────────────────────────────
 def _has_meaningful_data(checklist_data):
     """Check if a checklist has any real user input, not just empty auto-save."""
@@ -1595,6 +1646,7 @@ def get_ccp_master():
     """GET - return the master CCP document."""
     return jsonify(load_ccp_master())
 
+
 @app.route("/api/ccp-master", methods=["POST"])
 @login_required
 def update_ccp_master():
@@ -1603,16 +1655,20 @@ def update_ccp_master():
     save_ccp_master(data)
     return jsonify({"success": True})
 
+
 # ── Traceability ──────────────────────────────────────────────────────
 WEEKLY_SIGNOFFS_PATH = os.path.join(DATA_DIR, "weekly_signoffs.json")
+
 
 def _load_weekly_signoffs():
     """Load the weekly HOO sign-off records."""
     return _load_json(WEEKLY_SIGNOFFS_PATH, {})
 
+
 def _save_weekly_signoffs(data):
     """Persist the weekly HOO sign-off records."""
     _save_json(WEEKLY_SIGNOFFS_PATH, data)
+
 
 def _week_completion_state(week_id):
     """Return ('all_complete' | 'partial' | 'none') for a week, plus the
@@ -1643,10 +1699,6 @@ def _week_completion_state(week_id):
     return "partial", complete, incomplete
 
 
-
-
-
-
 # ── Production Tracker ────────────────────────────────────────────────
 # ── Production tracker helpers ────────────────────────────────────────
 # Buckets that appear in the tracker breakdown. Ordered for stacked-bar rendering
@@ -1657,6 +1709,7 @@ TRACKER_BUCKETS = ["SS-876ML", "SS-750ML", "SS-473ML", "FZ", "Other", "Kettles E
 def _empty_buckets():
     """Return a zeroed production-tracker bucket dict."""
     return {b: 0 for b in TRACKER_BUCKETS}
+
 
 def _get_previous_day_schedule(week_id, d_idx, schedule_cache=None):
     """Return the schedule dict for the day BEFORE (week_id, d_idx).
@@ -1681,6 +1734,7 @@ def _get_previous_day_schedule(week_id, d_idx, schedule_cache=None):
     if prev_sched and prev_sched.get("schedule"):
         return prev_sched["schedule"].get("6", {}) or {}
     return {}
+
 
 def _day_buckets(week_id, d_idx, recipes_cache=None, schedule_cache=None):
     """Return per-bucket totals for a single (week_id, day_idx).
@@ -1738,14 +1792,17 @@ def _day_buckets(week_id, d_idx, recipes_cache=None, schedule_cache=None):
 
     return buckets, _has_meaningful_data(cl)
 
+
 def _sum_buckets(target, source):
     """Add all bucket values from source into target in-place."""
     for k, v in source.items():
         target[k] = target.get(k, 0) + v
 
+
 def _bucket_total(buckets):
     """Sum the values across a production-tracker bucket dict."""
     return sum(buckets.values())
+
 
 def _week_totals(week_id):
     """Calculate bucketed totals for a single week. Returns dict with bucket
@@ -1763,11 +1820,7 @@ def _week_totals(week_id):
     return out
 
 
-
-
-
 # ── Init ──────────────────────────────────────────────────────────────
-
 # Inventory data paths.
 #
 # Historical context: prior to the universal-inventory merge (May 2026), the
@@ -1796,6 +1849,7 @@ os.makedirs(RM_RECEIPT_PHOTOS_DIR, exist_ok=True)
 # Raw material section organization. User-defined sections + per-ingredient
 # assignment. Pre-seeded with the 6-section structure on first load.
 
+
 def _migrate_organic_to_inventory():
     """One-time migration: rename data/organic/ → data/inventory/ if applicable.
 
@@ -1821,9 +1875,11 @@ def _migrate_organic_to_inventory():
         print(f"[migration] WARNING: both {legacy_path} and {new_path} exist. "
               f"Manual review needed. Using new path.")
 
+
 _migrate_organic_to_inventory()
 os.makedirs(INVENTORY_DIR, exist_ok=True)
 _ripe_init_paths(INVENTORY_DIR)  # wire Ripe orders sale logic to Soma's inventory
+
 
 def _autotag_existing_organic_data():
     """One-time data tag: stamp existing pre-merge entries with
@@ -1860,10 +1916,7 @@ def _autotag_existing_organic_data():
 # Per-path threading locks — one lock per file, created on demand.
 
 
-
-
 # ── Organic Page ──────────────────────────────────────────────────────
-
 # ── Organic: Get ingredient list from organic recipes ─────────────────
 # Fallback master list used only if no organic recipes exist yet.
 ORGANIC_INGREDIENTS_FALLBACK = [
@@ -1878,6 +1931,7 @@ ORGANIC_INGREDIENTS_FALLBACK = [
 
 ORGANIC_CUSTOM_ITEMS_PATH = os.path.join(ORGANIC_DIR, "custom_ingredients.json")
 
+
 def _format_pack_label(amount, unit):
     """Format a label like '750 ml' or '8 kg' from amount+unit. Used by the
     migrator's smart-upgrade step to recognize pack labels from legacy config."""
@@ -1888,7 +1942,6 @@ def _format_pack_label(amount, unit):
     return str(amount)
 
 
-
 # ── Raw material section organization ─────────────────────────────────
 # User-defined sections (created via /api/organic/raw-materials/sections)
 # replace the previous hardcoded heuristic. Each ingredient is explicitly
@@ -1897,30 +1950,16 @@ def _format_pack_label(amount, unit):
 
 # Default section list seeded on first load. User can rename/reorder/add/
 # delete after that — these are just a starting point.
-
 # Special "Unassigned" section. Not stored in user list; surfaced
 # separately so users can see what still needs classifying.
 UNASSIGNED_SECTION_ID = "_unassigned"
 UNASSIGNED_SECTION_NAME = "Unassigned"
 
 
-
-
-
-
-
-
-
-
 # ── Organic: Raw Material Inventory (FIFO) ────────────────────────────
 # The RM inventory + invoice + receipt-photo ROUTES now live in raw_materials.py
 # (raw_materials_bp). The constants/helpers below stay here (shared with the
 # consumption chain + reconcile tools) and are reached via app.-qualification.
-
-
-
-
-
 
 
 # ── One-time reconciliation: rebuild raw-material consumption ─────────────
@@ -1976,6 +2015,7 @@ def _rebuild_raw_material_consumption(materials, runs, recipes):
 # Audit/traceability ROUTES (reconcile-raw, trace, stock-exceptions, mass-balance)
 # now live in audit_tools.py (audit_tools_bp); the helpers above + below stay here.
 
+
 # ── Organic: Invoices (standalone module, keyed by supplier + date + LOT#s) ──
 INVOICES_DIR = os.path.join(ORGANIC_DIR, "invoices")
 os.makedirs(INVOICES_DIR, exist_ok=True)
@@ -1994,10 +2034,12 @@ INVOICE_MIME_MAP = {
     ".heif": "image/heif",
 }
 
+
 def _invoice_mime(filename):
     """Return the MIME type for a stored invoice file, by extension."""
     ext = os.path.splitext(filename)[1].lower()
     return INVOICE_MIME_MAP.get(ext, "application/octet-stream")
+
 
 def _save_invoice_file_bytes(prefix, file_storage):
     """Save uploaded invoice, return (filename, metadata). Raises ValueError on bad input."""
@@ -2031,6 +2073,7 @@ def _save_invoice_file_bytes(prefix, file_storage):
         "mime_type": _invoice_mime(stored_name),
     }
 
+
 def _remove_invoice_file(filename):
     """Delete a stored invoice file from disk (best-effort)."""
     if not filename:
@@ -2046,6 +2089,7 @@ def _remove_invoice_file(filename):
     except OSError:
         pass
     return False
+
 
 def _parse_lots_field(form_data):
     """Pull LOT#s from a multipart form. Accepts repeated 'lots[]' or 'lots' fields,
@@ -2077,9 +2121,6 @@ def _parse_lots_field(form_data):
     return out
 
 
-
-
-
 def _cleanup_legacy_invoices():
     """One-time cleanup on startup: wipe old per-raw-material invoices and files."""
     try:
@@ -2103,9 +2144,11 @@ def _cleanup_legacy_invoices():
     except Exception:
         pass
 
+
 _cleanup_legacy_invoices()
 
 # ── Organic: Contacts (suppliers, buyers, distributors) ───────────────
+
 
 @app.route("/api/organic/contacts", methods=["GET"])
 @login_required
@@ -2515,6 +2558,7 @@ def _group_fg_by_sku(fg):
     out.sort(key=lambda r: (r["brand"], r["recipe"], r["format"]))
     return out
 
+
 def _group_fg_with_catalog(fg, recipes):
     """Like _group_fg_by_sku, but joins against the recipe catalog so EVERY
     active (non-archived) recipe appears as a SKU, even ones with zero stock
@@ -2584,9 +2628,11 @@ def _load_audits():
     """Load the food-safety audits list."""
     return _load_json(AUDITS_PATH, [])
 
+
 def _save_audits(data):
     """Persist the food-safety audits list."""
     _save_json(AUDITS_PATH, data)
+
 
 @app.route("/audit/<kind>")
 @login_required
@@ -2595,6 +2641,7 @@ def audit_page(kind):
     if kind not in ("rm", "fg"):
         return "Invalid audit type", 400
     return render_template("audit.html", kind=kind)
+
 
 @app.route("/audits")
 @login_required
@@ -2619,6 +2666,7 @@ def audits_history():
         })
     rows.sort(key=lambda r: r.get("completed_at") or "", reverse=True)
     return render_template("audits.html", audits=rows)
+
 
 @app.route("/api/audit/start", methods=["POST"])
 @login_required
@@ -2679,6 +2727,7 @@ def start_audit():
     }
     return jsonify({"ok": True, "audit": audit})
 
+
 def _collect_recipe_ingredients():
     """Return a set of (name, unit) tuples for every ingredient referenced
     across all recipes (kettle_overnight / after_skim / finishing /
@@ -2704,6 +2753,7 @@ def _collect_recipe_ingredients():
                 unit = (ing.get("unit") or "").strip()
                 pairs.add((name, unit))
     return pairs
+
 
 def _build_rm_audit_items(section_name):
     """Build per-(name,unit) audit list for RM, scoped to a single section.
@@ -2764,6 +2814,7 @@ def _build_rm_audit_items(section_name):
 
     items = sorted(items_map.values(), key=lambda x: (x["name"].lower(), x["unit"].lower()))
     return items
+
 
 def _build_fg_audit_items(brand):
     """Build per-SKU audit items for FG inventory, scoped to a single brand.
@@ -2829,12 +2880,14 @@ def _build_fg_audit_items(brand):
     )
     return items
 
+
 @app.route("/api/audit/active/<kind>", methods=["GET"])
 @login_required
 def get_active_audit(kind):
     """Both audit kinds are stateless — no resume — so this always
     returns null. Endpoint retained for back-compat with stale clients."""
     return jsonify({"audit": None})
+
 
 @app.route("/api/audit/<audit_id>/complete", methods=["POST"])
 @login_required
@@ -2905,6 +2958,7 @@ def complete_audit(audit_id):
     audit["adjustments"]  = adjustments
     _save_audits(audits)
     return jsonify({"ok": True, "adjustments": len(adjustments), "audit": audit})
+
 
 def _apply_rm_audit(audit):
     """Apply RM audit results — FIFO drain on shortage, baseline lot on surplus.
@@ -3022,6 +3076,7 @@ def _apply_rm_audit(audit):
 
     return adjustments
 
+
 def _apply_fg_audit(audit):
     """Apply FG audit results — per-SKU FIFO drain on shortage, baseline lot
     creation on surplus.
@@ -3133,6 +3188,7 @@ def _apply_fg_audit(audit):
 
     return adjustments
 
+
 @app.route("/api/audit/categories/<kind>", methods=["GET"])
 @login_required
 def audit_categories(kind):
@@ -3189,11 +3245,6 @@ def audit_categories(kind):
 # ── RM receipt photo upload ──────────────────────────────────────────────
 _RM_PHOTO_ALLOWED = {"jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "pdf"}
 _RM_PHOTO_MAX_BYTES = 20 * 1024 * 1024  # 20 MB
-
-
-
-
-
 
 
 def _compute_available_stock():
@@ -3322,6 +3373,7 @@ def internal_buyer_catalogue():
         },
     })
 
+
 @app.route("/api/internal/sku-audit", methods=["GET"])
 def internal_sku_audit():
     """Cross-reference Soma FG recipes against Ripe product soma_sku_key values.
@@ -3440,6 +3492,7 @@ def internal_sku_audit():
         "ripe_error": ripe_error,
     })
 
+
 @app.route("/api/internal/fg-stock", methods=["GET"])
 def internal_fg_stock():
     """Return available FG stock per SKU for Ripe portal.
@@ -3461,8 +3514,6 @@ def internal_fg_stock():
     })
 
 
-
-
 # ── Company Info ──────────────────────────────────────────────────────────────
 
 @app.route("/api/company-info", methods=["GET"])
@@ -3470,6 +3521,7 @@ def internal_fg_stock():
 def get_company_info():
     """GET /api/company-info - return company info / order rules."""
     return jsonify(_load_company_info())
+
 
 @app.route("/api/company-info", methods=["PATCH"])
 @login_required
@@ -3503,6 +3555,8 @@ def update_company_info():
 # The sales routes now live in sales.py (sales_bp). What stays here is shared:
 # _migrate_legacy_sales (called at startup) and the buyer helpers below
 # (reached from sales.py via app._load_buyers, etc.).
+
+
 def _migrate_legacy_sales():
     """Convert old-style sales (single fg_id) to new lots[] shape.
     Idempotent: only migrates entries that don't already have a 'lots' field."""
@@ -3532,8 +3586,10 @@ def _migrate_legacy_sales():
         except Exception:
             pass
 
+
 # ── Buyer catalog ────────────────────────────────────────────────────────
 BUYERS_PATH = os.path.join(INVENTORY_DIR, "buyers.json")
+
 
 def _all_sku_catalog():
     """Build the master SKU catalogue from active recipes."""
@@ -3554,13 +3610,16 @@ def _all_sku_catalog():
     catalog.sort(key=lambda s: (s["brand"].lower(), s["recipe"].lower()))
     return catalog
 
+
 def _load_buyers():
     """Load the buyers list from disk."""
     return _load_json(BUYERS_PATH, [])
 
+
 def _save_buyers(data):
     """Persist the buyers list to disk."""
     _save_json(BUYERS_PATH, data)
+
 
 def _buyer_resolver(buyers_list):
     """Build a resolver that canonicalises a raw (sale.buyer, sale.location_name)
@@ -3627,6 +3686,8 @@ _migrate_legacy_sales()
 _autotag_existing_organic_data()
 
 # ── Organic: Search / Trace ──────────────────────────────────────────
+
+
 def _sale_touches_fg(s, fids):
     """Return True if sale s drew from any fg_id in fids.
     Handles both new lots[].breakdown and legacy fg_id shapes."""
@@ -3640,7 +3701,6 @@ def _sale_touches_fg(s, fids):
             if fid in fids:
                 return True
     return False
-
 
 
 # ── Mass-balance reconciliation (organic audit) ───────────────────────────
@@ -3668,6 +3728,7 @@ def _compute_mass_balance(date_from, date_to, organic_only=False):
 
     # ---- Raw materials (always all — lots carry no certification) ----
     raw = {}
+
     def rawrow(item, unit):
         k = (item.strip().lower(), unit)
         if k not in raw:
@@ -3722,6 +3783,7 @@ def _compute_mass_balance(date_from, date_to, organic_only=False):
 
     # ---- Finished goods per SKU (organic-only filters by certification) ----
     fgr = {}
+
     def fgrow(sku, label, cert):
         if sku not in fgr:
             fgr[sku] = {"sku": sku, "label": label, "certification": cert,
@@ -3771,7 +3833,6 @@ def _compute_mass_balance(date_from, date_to, organic_only=False):
 
     return {"from": date_from, "to": date_to, "organic_only": organic_only,
             "raw_materials": raw_rows, "finished_goods": fg_rows}
-
 
 
 # ── Hook: Auto-create organic runs when schedule is generated ─────────
@@ -3863,6 +3924,8 @@ def _check_organic_schedule(week_id, schedule):
     _save_json(ORGANIC_RUNS_PATH, out)
 
 # ── Hook: Complete organic runs when daily production is filed ─────────
+
+
 def _check_organic_completion(finish_week_id, finish_day_idx, checklist_data):
     """When daily production is saved on the FINISH day, process any organic
     runs that were scheduled on the PREVIOUS day (which are now finishing).
@@ -3877,12 +3940,14 @@ def _check_organic_completion(finish_week_id, finish_day_idx, checklist_data):
         return _complete_organic_run(finish_week_id, finish_day_idx, checklist_data) or []
     return []
 
+
 if not os.path.exists(RECIPES_PATH):
     from default_recipes import DEFAULT_RECIPES
     save_recipes(DEFAULT_RECIPES)
 
 if not os.path.exists(CCP_MASTER_PATH):
     save_ccp_master(DEFAULT_CCP_SECTIONS)
+
 
 def _backfill_organic_finished_goods():
     """One-time, idempotent: scan past checklists and build finished goods entries
@@ -3937,6 +4002,7 @@ def _backfill_organic_finished_goods():
             print(f"[startup] organic finished-goods backfill processed {backfilled} day(s)")
         except Exception:
             pass
+
 
 _backfill_organic_finished_goods()
 
@@ -4007,7 +4073,9 @@ def _run_scheduled_deductions():
         _save_json(ORGANIC_SALES_PATH, sales)
         _save_json(ORGANIC_FG_PATH, fg)
 
+
 _run_scheduled_deductions()  # run once on startup
+
 
 def _seed_sku_meta_defaults():
     """Seed defaults for any SKU that has never had meta set.
@@ -4033,7 +4101,9 @@ def _seed_sku_meta_defaults():
     if changed:
         _save_json(SKU_META_PATH, meta)
 
+
 _seed_sku_meta_defaults()
+
 
 @app.route("/api/ripe-orders/run-deductions", methods=["POST"])
 @login_required
@@ -4041,6 +4111,7 @@ def api_run_deductions():
     """Manually trigger scheduled deductions (also runs on startup)."""
     _run_scheduled_deductions()
     return jsonify({"ok": True})
+
 
 @app.route("/api/ripe-orders/settle-sale/<sale_id>", methods=["POST"])
 @login_required
@@ -4054,6 +4125,7 @@ def api_settle_ripe_sale(sale_id):
     sales[idx]["settled_at"] = datetime.now().isoformat()
     _save_json(ORGANIC_SALES_PATH, sales)
     return jsonify({"ok": True})
+
 
 @app.route("/api/ripe-orders/settle-by-order/<order_id>", methods=["POST"])
 def api_settle_by_order(order_id):

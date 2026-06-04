@@ -130,11 +130,13 @@ def organic_ingredients():
     all_items.sort(key=lambda x: (x["name"], x["unit"]))
     return jsonify(all_items)
 
+
 @raw_materials_bp.route("/api/organic/raw-materials/sections", methods=["GET"])
 @login_required
 def get_rm_sections():
     """Return the section list + per-ingredient assignments."""
     return jsonify(_load_rm_sections())
+
 
 @raw_materials_bp.route("/api/organic/raw-materials/sections", methods=["PUT"])
 @login_required
@@ -177,6 +179,7 @@ def update_rm_sections():
     _save_json(RM_SECTIONS_PATH, saved)
     return jsonify({"success": True, **saved})
 
+
 @raw_materials_bp.route("/api/organic/raw-materials/assignments", methods=["PUT"])
 @login_required
 def update_rm_assignments():
@@ -208,6 +211,7 @@ def update_rm_assignments():
     existing["assignments"] = merged
     _save_json(RM_SECTIONS_PATH, existing)
     return jsonify({"success": True, "assignments": merged})
+
 
 @raw_materials_bp.route("/api/organic/raw-materials/grouped", methods=["GET"])
 @login_required
@@ -338,6 +342,7 @@ def get_raw_materials_grouped():
         r.pop("_sort_idx", None)
     return jsonify(rows)
 
+
 @raw_materials_bp.route("/api/organic/raw-materials/by-ingredient/<path:item>/<unit>", methods=["GET"])
 @login_required
 def get_raw_material_lots(item, unit):
@@ -351,6 +356,7 @@ def get_raw_material_lots(item, unit):
                 and (m.get("unit") or "").strip() == unit]
     matching.sort(key=lambda m: (m.get("date_received") or "", m.get("created_at") or ""))
     return jsonify(matching)
+
 
 @raw_materials_bp.route("/api/organic/ingredients", methods=["POST"])
 @login_required
@@ -372,11 +378,13 @@ def add_organic_ingredient():
     _save_json(app.ORGANIC_CUSTOM_ITEMS_PATH, custom)
     return jsonify({"success": True})
 
+
 @raw_materials_bp.route("/api/organic/raw-materials", methods=["GET"])
 @login_required
 def get_raw_materials():
     """GET /api/organic/raw-materials - return all raw-material lots."""
     return jsonify(_load_json(app.ORGANIC_RAW_PATH, []))
+
 
 @raw_materials_bp.route("/api/organic/raw-materials", methods=["POST"])
 @login_required
@@ -431,6 +439,7 @@ def add_raw_material():
     if supplier:
         _add_contact("supplier", supplier)
     return jsonify({"success": True, "entry": entry})
+
 
 @raw_materials_bp.route("/api/organic/raw-materials/bulk", methods=["POST"])
 @login_required
@@ -580,6 +589,7 @@ def add_raw_materials_bulk():
         "entries": created,
     })
 
+
 @raw_materials_bp.route("/api/organic/raw-materials/<entry_id>", methods=["PUT"])
 @login_required
 def update_raw_material(entry_id):
@@ -604,12 +614,14 @@ def update_raw_material(entry_id):
     _save_json(app.ORGANIC_RAW_PATH, materials)
     return jsonify({"success": True, "entry": entry})
 
+
 @raw_materials_bp.route("/api/organic/raw-materials/<entry_id>/usage", methods=["GET"])
 @login_required
 def get_raw_material_usage(entry_id):
     """Return list of completed runs that deducted from this entry. Frontend
     uses this to warn the user before deletion."""
     return jsonify({"used_in": _runs_using_raw_material(entry_id)})
+
 
 @raw_materials_bp.route("/api/organic/raw-materials/<entry_id>", methods=["DELETE"])
 @login_required
@@ -631,6 +643,7 @@ def delete_raw_material(entry_id):
     materials = [m for m in materials if m.get("id") != entry_id]
     _save_json(app.ORGANIC_RAW_PATH, materials)
     return jsonify({"success": True})
+
 
 @raw_materials_bp.route("/api/organic/invoices", methods=["POST"])
 @login_required
@@ -674,6 +687,7 @@ def upload_invoice():
         _add_contact("supplier", supplier)
     return jsonify({"success": True, "invoice": record})
 
+
 @raw_materials_bp.route("/api/organic/invoices", methods=["GET"])
 @login_required
 def list_invoices():
@@ -687,6 +701,7 @@ def list_invoices():
     invoices.sort(key=lambda r: (r.get("invoice_date", ""), r.get("uploaded_at", "")),
                   reverse=True)
     return jsonify(invoices)
+
 
 @raw_materials_bp.route("/api/organic/invoices/<inv_id>/file", methods=["GET"])
 @login_required
@@ -706,6 +721,7 @@ def serve_invoice(inv_id):
     return send_file(path, mimetype=app._invoice_mime(safe),
                      as_attachment=False, download_name=safe)
 
+
 @raw_materials_bp.route("/api/organic/invoices/<inv_id>", methods=["DELETE"])
 @login_required
 def delete_invoice(inv_id):
@@ -718,6 +734,7 @@ def delete_invoice(inv_id):
     invoices = [i for i in invoices if i.get("id") != inv_id]
     _save_json(app.INVOICES_INDEX_PATH, invoices)
     return jsonify({"success": True})
+
 
 @raw_materials_bp.route("/api/organic/raw-materials/receipt-photo/<entry_id>", methods=["POST"])
 @login_required
@@ -740,6 +757,7 @@ def upload_rm_receipt_photo(entry_id):
         fh.write(data)
     return jsonify({"ok": True, "filename": filename})
 
+
 @raw_materials_bp.route("/api/organic/raw-materials/receipt-photos", methods=["GET"])
 @login_required
 def list_rm_receipt_photos():
@@ -756,6 +774,7 @@ def list_rm_receipt_photos():
         pass
     return jsonify({"ids": ids})
 
+
 @raw_materials_bp.route("/api/organic/raw-materials/receipt-photo/<entry_id>", methods=["GET"])
 @login_required
 def get_rm_receipt_photo(entry_id):
@@ -764,6 +783,7 @@ def get_rm_receipt_photo(entry_id):
         if fn.startswith(entry_id + "."):
             return send_from_directory(app.RM_RECEIPT_PHOTOS_DIR, fn)
     return jsonify({"error": "Not found"}), 404
+
 
 @raw_materials_bp.route("/api/organic/raw-materials/receipt-photo/<entry_id>", methods=["DELETE"])
 @login_required

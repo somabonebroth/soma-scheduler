@@ -76,6 +76,7 @@ def recipes_page():
     """Render the recipes page."""
     return render_template("recipes.html")
 
+
 @recipes_bp.route("/api/recipes", methods=["GET"])
 @login_required
 def get_recipes():
@@ -86,6 +87,7 @@ def get_recipes():
     for recipe in recipes.values():
         app._attach_per_l_units(recipe, raw_materials)
     return jsonify(recipes)
+
 
 @recipes_bp.route("/api/recipes", methods=["POST"])
 @login_required
@@ -100,6 +102,7 @@ def add_recipe():
     app.save_recipes(recipes)
     return jsonify({"success": True})
 
+
 @recipes_bp.route("/api/recipes/<path:name>", methods=["GET"])
 @login_required
 def get_recipe(name):
@@ -108,6 +111,7 @@ def get_recipe(name):
     if name in recipes:
         return jsonify({"name": name, "data": recipes[name]})
     return jsonify({"error": "Recipe not found"}), 404
+
 
 @recipes_bp.route("/api/recipe-pdf/<path:name>", methods=["GET"])
 @login_required
@@ -125,6 +129,7 @@ def recipe_pdf(name):
     safe = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
     return send_file(buf, mimetype="application/pdf", as_attachment=True,
                      download_name="Recipe_" + safe + ".pdf")
+
 
 @recipes_bp.route("/api/recipe-pdf-all", methods=["GET"])
 @login_required
@@ -156,6 +161,7 @@ def recipe_pdf_all():
     today = datetime.now().strftime("%Y-%m-%d")
     return send_file(buf, mimetype="application/pdf", as_attachment=True,
                      download_name="All_Recipes_" + today + ".pdf")
+
 
 @recipes_bp.route("/api/recipes/<path:name>", methods=["PUT"])
 @login_required
@@ -268,6 +274,7 @@ def update_recipe(name):
                     fpath = os.path.join(app.SCHEDULES_DIR, fname)
                     with open(fpath) as f: sched = json.load(f)
                     dirty = False
+
                     def _walk(obj):
                         nonlocal dirty
                         if isinstance(obj, dict):
@@ -309,6 +316,7 @@ def update_recipe(name):
 
     return jsonify({"success": True, "name": new_name, "cascade": cascade})
 
+
 @recipes_bp.route("/api/recipes/<path:name>", methods=["DELETE"])
 @login_required
 def delete_recipe(name):
@@ -348,6 +356,7 @@ def delete_recipe(name):
     app.save_recipes(recipes)
     return jsonify({"success": True})
 
+
 def _schedules_using_recipe(recipe_name):
     """Return list of (week_id, day_idx, vessel) tuples where recipe_name is scheduled."""
     refs = []
@@ -374,6 +383,7 @@ def _schedules_using_recipe(recipe_name):
                         d_idx = -1
                     refs.append({"week_id": week_id, "day_idx": d_idx, "vessel": vessel})
     return refs
+
 
 @recipes_bp.route("/api/recipes/<path:name>/duplicate", methods=["POST"])
 @login_required
@@ -422,6 +432,7 @@ def duplicate_recipe(name):
     app.save_recipes(recipes)
     return jsonify({"success": True, "name": new_name, "data": new_data})
 
+
 @recipes_bp.route("/api/recipes/<path:name>/archive", methods=["POST"])
 @login_required
 def archive_recipe(name):
@@ -437,6 +448,7 @@ def archive_recipe(name):
     refs = _schedules_using_recipe(name)
     return jsonify({"success": True, "schedule_refs": refs})
 
+
 @recipes_bp.route("/api/recipes/<path:name>/unarchive", methods=["POST"])
 @login_required
 def unarchive_recipe(name):
@@ -447,6 +459,7 @@ def unarchive_recipe(name):
     recipes[name]["archived"] = False
     app.save_recipes(recipes)
     return jsonify({"success": True})
+
 
 @recipes_bp.route("/api/recipes/migrate-all", methods=["POST"])
 @login_required
@@ -508,6 +521,7 @@ def migrate_all_recipes():
         "review_items": review_items,
     })
 
+
 @recipes_bp.route("/api/recipes/<path:name>/photo", methods=["POST"])
 @login_required
 def upload_recipe_photo(name):
@@ -527,6 +541,7 @@ def upload_recipe_photo(name):
         recipes[name]["photo"] = filename
         app.save_recipes(recipes)
     return jsonify({"success": True, "photo": filename})
+
 
 @recipes_bp.route("/api/recipes/grouped", methods=["GET"])
 @login_required
@@ -582,6 +597,7 @@ def get_recipes_grouped():
             groups[brand].sort(key=lambda x: (0 if "SS" in x.get("format", "") else 1, x["name"]))
         return jsonify(groups)
 
+
 @recipes_bp.route("/api/recipes/order", methods=["POST"])
 @login_required
 def update_recipe_order():
@@ -589,6 +605,7 @@ def update_recipe_order():
     data = request.json or {}
     app.save_recipe_order(data)
     return jsonify({"success": True})
+
 
 @recipes_bp.route("/api/recipes/upload", methods=["POST"])
 @login_required
@@ -633,6 +650,7 @@ def upload_recipe():
     recipes[parsed["name"]] = parsed["data"]
     app.save_recipes(recipes)
     return jsonify({"success": True, "name": parsed["name"], "data": parsed["data"]})
+
 
 @recipes_bp.route("/api/recipes/upload-json", methods=["POST"])
 @login_required

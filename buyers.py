@@ -44,6 +44,7 @@ def get_buyers():
     """GET /api/buyers - return all buyer accounts."""
     return jsonify(app._load_buyers())
 
+
 @buyers_bp.route("/api/buyers/sku-catalog", methods=["GET"])
 @login_required
 def get_buyer_sku_catalog():
@@ -56,6 +57,7 @@ def get_buyer_sku_catalog():
             groups[b] = []
         groups[b].append(sku)
     return jsonify([{"brand": b, "skus": groups[b]} for b in sorted(groups.keys())])
+
 
 @buyers_bp.route("/api/buyers", methods=["POST"])
 @login_required
@@ -107,6 +109,7 @@ def create_buyer():
     buyers.append(buyer)
     app._save_buyers(buyers)
     return jsonify(buyer), 201
+
 
 @buyers_bp.route("/api/buyers/<bid>", methods=["PUT"])
 @login_required
@@ -166,6 +169,7 @@ def update_buyer(bid):
     app._save_buyers(buyers)
     return jsonify(buyers[idx])
 
+
 @buyers_bp.route("/api/buyers/<bid>/skus/<path:sku_key>/pricing", methods=["PATCH"])
 @login_required
 def update_buyer_sku_pricing(bid, sku_key):
@@ -211,6 +215,7 @@ def update_buyer_sku_pricing(bid, sku_key):
     buyers[idx]["skus"] = skus
     app._save_buyers(buyers)
     return jsonify({"ok": True, "sku": sku})
+
 
 @buyers_bp.route("/api/buyers/<bid>", methods=["DELETE"])
 @login_required
