@@ -1323,7 +1323,17 @@ def api_sales_by_buyer():
 
     # Roll up sales whose raw buyer is a location-suffixed form (e.g.
     # "Nature's Emporium - Newmarket") under their parent in buyers.json.
-    resolve = _buyer_resolver(_load_buyers())
+    buyers_list = _load_buyers()
+    resolve = _buyer_resolver(buyers_list)
+    # Map each buyer's canonical name -> its registered location names, so the
+    # sales cards can list the company's locations (or nothing if it has none).
+    loc_map = {}
+    for _b in buyers_list:
+        _nm = (_b.get("name") or "").strip()
+        if _nm:
+            loc_map[_nm] = [(_l.get("name") or "").strip()
+                            for _l in (_b.get("locations") or [])
+                            if (_l.get("name") or "").strip()]
 
     # Aggregate
     by_buyer = {}
@@ -1366,6 +1376,7 @@ def api_sales_by_buyer():
             "units":   b_data["units"],
             "cases":   b_data["units"] // 12,
             "revenue": round(b_data["revenue"], 2),
+            "locations": loc_map.get(b_data["buyer"], []),
             "by_sku":  [{**s, "revenue": round(s["revenue"],2)} for s in skus],
         })
     return jsonify({"buyers": result, "period": period})

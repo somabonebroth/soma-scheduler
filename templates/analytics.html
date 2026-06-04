@@ -27,6 +27,8 @@ body.an-page { background:var(--bg); }
 .buyer-card-head { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; gap:12px; flex-wrap:wrap; }
 .bc-name { font-size:16px; font-weight:700; color:var(--dark); margin-bottom:4px; }
 .bc-hint { font-size:11px; color:var(--text-light); }
+.bc-locs { margin-top:2px; }
+.bc-loc { font-size:11px; color:var(--text-light); line-height:1.55; }
 .bc-stats { display:flex; gap:20px; flex-wrap:wrap; }
 .bc-stat { text-align:right; }
 .bc-stat-n { font-size:16px; font-weight:700; color:var(--dark); }
@@ -146,7 +148,10 @@ function renderSales(buyers) {
   var maxRev = Math.max.apply(null, buyers.map(function(b){ return b.revenue; })) || 1;
   var html = buyers.map(function(b) {
     var pct = Math.round((b.revenue / maxRev) * 100);
-    var topSkus = (b.by_sku||[]).slice(0,3).map(function(s){ return s.recipe||s.sku; }).join(' · ');
+    var locs = (b.locations || []);
+    var locHtml = locs.length
+      ? '<div class="bc-locs">' + locs.map(function(l){ return '<div class="bc-loc">'+e(l)+'</div>'; }).join('') + '</div>'
+      : '';
     // encodeURIComponent does NOT escape apostrophes (they're unreserved), so
     // a buyer like "Nature's Emporium" would break the single-quoted JS string
     // in the inline onclick. Replace ' with %27 so the URL is valid both as a
@@ -156,7 +161,7 @@ function renderSales(buyers) {
       + '<div class="buyer-card-head">'
       + '<div style="flex:1;min-width:0;">'
       + '<div class="bc-name">'+e(b.buyer)+'</div>'
-      + (topSkus ? '<div class="bc-hint">'+e(topSkus)+'</div>' : '')
+      + locHtml
       + '<div class="rev-bar-wrap"><div class="rev-bar-fill" style="width:'+pct+'%"></div></div>'
       + '</div>'
       + '<div class="bc-stats">'
