@@ -134,8 +134,11 @@ def delete_schedule(week_id):
 @production_bp.route("/production-tracker")
 @login_required
 def production_tracker_page():
-    """Render the production tracker page."""
-    return render_template("production_tracker.html")
+    """Render the production tracker page.
+    ?embed=1 hides the page header (used when embedded in the Analytics iframe,
+    which already shows a header — avoids a stacked duplicate)."""
+    return render_template("production_tracker.html",
+                           embed=bool(request.args.get("embed")))
 
 
 @production_bp.route("/api/production-tracker/<week_id>", methods=["GET"])

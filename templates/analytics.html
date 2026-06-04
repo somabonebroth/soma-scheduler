@@ -42,7 +42,7 @@ body.an-page { background:var(--bg); }
 <body class="an-page inv-page">
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-  <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Production &amp; Sales Analytics</p></div>
+  <div class="header-text"><h1 id="an-title">Sales by Buyer</h1><p id="an-sub">Revenue by buyer</p></div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <div class="nav-arrows">
       <button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button>
@@ -91,15 +91,27 @@ body.an-page { background:var(--bg); }
 <script>
 var _period = 'all';
 
+var TAB_HEADERS = {
+  sales:      ['Sales by Buyer', 'Revenue by buyer'],
+  production: ['Production Tracker', 'Output overview'],
+};
+
 function showTab(id) {
   document.querySelectorAll('.tab-btn').forEach(function(b,i){
     b.classList.toggle('active', ['sales','production'][i] === id);
   });
   document.querySelectorAll('.tab-pane').forEach(function(p){ p.classList.remove('active'); });
   document.getElementById('tab-'+id).classList.add('active');
+  // Retitle the single page header to the active tab, so each tab keeps a dark
+  // header above its numbers without a stacked duplicate.
+  var hdr = TAB_HEADERS[id];
+  if (hdr) {
+    document.getElementById('an-title').textContent = hdr[0];
+    document.getElementById('an-sub').textContent = hdr[1];
+  }
   if (id === 'production') {
     var frame = document.getElementById('tracker-frame');
-    if (frame && !frame.src.includes('production-tracker')) frame.src = '/production-tracker';
+    if (frame && !frame.src.includes('production-tracker')) frame.src = '/production-tracker?embed=1';
   }
 }
 
