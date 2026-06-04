@@ -24,7 +24,7 @@ dependency on app.py.
 from datetime import datetime
 from functools import wraps
 
-from flask import Blueprint, request, jsonify, session, redirect, url_for
+from flask import Blueprint, request, jsonify, session, redirect, url_for, render_template
 
 from helpers import (
     _load_json,
@@ -475,3 +475,67 @@ def get_finished_goods_sku_detail(sku_key):
         "sku": display_info or {"sku_key": sku_key},
         "lots": lots,
     })
+
+
+# ── Inventory: sku-meta (PAR levels) + inventory page shells ─────────────────
+
+@finished_goods_bp.route("/organic-certification")
+@login_required
+def organic_certification_page():
+    """Hub linking the organic-certification tools (reconcile, audits, docs)."""
+    return render_template("organic_certification.html")
+
+@finished_goods_bp.route("/organic")
+@login_required
+def organic_page():
+    return render_template("organic.html")
+
+@finished_goods_bp.route("/api/sku-meta/<path:sku_key>", methods=["PATCH"])
+@login_required
+def update_sku_meta(sku_key):
+    """Update PAR level for a SKU.
+    Body: { par: int|null }
+    null = remove the field (No PAR).
+    Price is no longer stored here — it lives in the buyer catalogue.
+    """
+    data = request.get_json() or {}
+    meta = _load_json(app.SKU_META_PATH, {})
+    if sku_key not in meta:
+        meta[sku_key] = {}
+    if "par" in data:
+        if data["par"] is None:
+            meta[sku_key].pop("par", None)
+        else:
+            try:
+                meta[sku_key]["par"] = int(data["par"])
+            except (ValueError, TypeError):
+                return jsonify({"error": "par must be an integer or null"}), 400
+    # Silently ignore any price field — price lives in buyer catalogue now
+    if not meta[sku_key]:
+        del meta[sku_key]
+    _save_json(app.SKU_META_PATH, meta)
+    return jsonify({"ok": True, "meta": meta.get(sku_key, {})})
+
+@finished_goods_bp.route("/api/sku-meta", methods=["GET"])
+@login_required
+def get_all_sku_meta():
+    """Return all SKU meta — used by create_schedule page to check PAR warnings."""
+    fg = _load_json(app.ORGANIC_FG_PATH, [])
+    recipes = app.load_recipes()
+    grouped = app._group_fg_with_catalog(fg, recipes)
+    meta = _load_json(app.SKU_META_PATH, {})
+    warnings = []
+    for g in grouped:
+        m = meta.get(g["sku_key"], {})
+        par = m.get("par")
+        if par is not None:
+            remaining = g.get("total_remaining", 0)
+            if remaining < par:
+                warnings.append({
+                    "sku_key": g["sku_key"],
+                    "display": g.get("display", ""),
+                    "par": par,
+                    "remaining": remaining,
+                    "shortfall": par - remaining,
+                })
+    return jsonify({"meta": meta, "par_warnings": warnings})

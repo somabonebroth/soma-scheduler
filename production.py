@@ -760,3 +760,11 @@ def unsign_week(week_id):
         del signoffs[week_id]
         app._save_weekly_signoffs(signoffs)
     return jsonify({"success": True})
+
+
+# ── Production: organic production-runs read ─────────────────────────────────
+
+@production_bp.route("/api/organic/production-runs", methods=["GET"])
+@login_required
+def get_organic_runs():
+    return jsonify(_load_json(ORGANIC_RUNS_PATH, []))

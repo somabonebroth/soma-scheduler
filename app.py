@@ -829,11 +829,6 @@ def certifications_page():
     """Organic & compliance document storage page."""
     return render_template("certifications.html")
 
-@app.route("/organic-certification")
-@login_required
-def organic_certification_page():
-    """Hub linking the organic-certification tools (reconcile, audits, docs)."""
-    return render_template("organic_certification.html")
 
 @app.route("/api/certifications", methods=["GET"])
 @login_required
@@ -1778,10 +1773,6 @@ def _autotag_existing_organic_data():
 
 
 # ── Organic Page ──────────────────────────────────────────────────────
-@app.route("/organic")
-@login_required
-def organic_page():
-    return render_template("organic.html")
 
 # ── Organic: Get ingredient list from organic recipes ─────────────────
 # Fallback master list used only if no organic recipes exist yet.
@@ -2030,10 +2021,6 @@ def get_organic_contacts():
     return jsonify(_load_json(ORGANIC_CONTACTS_PATH, {}))
 
 # ── Organic: Production Runs ──────────────────────────────────────────
-@app.route("/api/organic/production-runs", methods=["GET"])
-@login_required
-def get_organic_runs():
-    return jsonify(_load_json(ORGANIC_RUNS_PATH, []))
 
 
 def _run_start_date_str(week_id, day_idx):
@@ -3383,55 +3370,7 @@ def internal_fg_stock():
         for key, s in stock_map.items()
     })
 
-@app.route("/api/sku-meta/<path:sku_key>", methods=["PATCH"])
-@login_required
-def update_sku_meta(sku_key):
-    """Update PAR level for a SKU.
-    Body: { par: int|null }
-    null = remove the field (No PAR).
-    Price is no longer stored here — it lives in the buyer catalogue.
-    """
-    data = request.get_json() or {}
-    meta = _load_json(SKU_META_PATH, {})
-    if sku_key not in meta:
-        meta[sku_key] = {}
-    if "par" in data:
-        if data["par"] is None:
-            meta[sku_key].pop("par", None)
-        else:
-            try:
-                meta[sku_key]["par"] = int(data["par"])
-            except (ValueError, TypeError):
-                return jsonify({"error": "par must be an integer or null"}), 400
-    # Silently ignore any price field — price lives in buyer catalogue now
-    if not meta[sku_key]:
-        del meta[sku_key]
-    _save_json(SKU_META_PATH, meta)
-    return jsonify({"ok": True, "meta": meta.get(sku_key, {})})
 
-@app.route("/api/sku-meta", methods=["GET"])
-@login_required
-def get_all_sku_meta():
-    """Return all SKU meta — used by create_schedule page to check PAR warnings."""
-    fg = _load_json(ORGANIC_FG_PATH, [])
-    recipes = load_recipes()
-    grouped = _group_fg_with_catalog(fg, recipes)
-    meta = _load_json(SKU_META_PATH, {})
-    warnings = []
-    for g in grouped:
-        m = meta.get(g["sku_key"], {})
-        par = m.get("par")
-        if par is not None:
-            remaining = g.get("total_remaining", 0)
-            if remaining < par:
-                warnings.append({
-                    "sku_key": g["sku_key"],
-                    "display": g.get("display", ""),
-                    "par": par,
-                    "remaining": remaining,
-                    "shortfall": par - remaining,
-                })
-    return jsonify({"meta": meta, "par_warnings": warnings})
 
 
 # ── Company Info ──────────────────────────────────────────────────────────────
