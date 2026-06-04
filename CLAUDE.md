@@ -12,7 +12,7 @@ Two Flask apps deployed on Render:
 ## Repository structure
 
 ```
-app.py              — ~5029 lines, 166 routes. Still the core, but the blueprint
+app.py              — ~4749 lines, 166 routes. Still the core, but the blueprint
                       split is now underway (see "Pending architectural work").
 helpers.py          — Foundation layer (extracted 2026-06-03): dependency-free
                       stdlib-only primitives — JSON IO with per-path locks, path/
@@ -53,17 +53,18 @@ audit_tools.py      — Flask Blueprint (256 lines, extracted 2026-06-03): the 6
                       engines (_rebuild_raw_material_consumption, _compute_mass_balance,
                       _sale_touches_fg) + path consts stay in app.py (8 app.-qualified);
                       ORGANIC_RUNS_PATH + IO from helpers.
-production.py       — Flask Blueprint (474 lines, extracted 2026-06-03): the production
-                      domain, built up over slices. (1) schedules (create/weekly pages,
+production.py       — Flask Blueprint (763 lines, extracted 2026-06-03): the FULL production
+                      domain, built up over 3 slices. (1) schedules (create/weekly pages,
                       get/list/delete) + production tracker (page + week/month/year).
                       (2) daily-production (page/GET/save) + checklists (GET/POST/complete/
                       status) — save_daily_production triggers the consumption chain
                       (_check_organic_completion→_complete_organic_run→_deduct_run_
-                      ingredients, ALL kept in app.py). PURE routes-move (app.-qualified).
+                      ingredients, ALL kept in app.py). (3) traceability/completed-records
+                      (page, week-summary, get_traceability, delete_traceability_record
+                      cascade, weekly sign-off/unsign). PURE routes-move (app.-qualified).
                       Local verbatim copies of login_required + require_valid_week +
                       require_valid_day (decorators apply at import time → can't be
-                      app.-qualified; they call app.validate_week_id/day_idx at request
-                      time). Remaining: traceability/completed-records slice (deferred).
+                      app.-qualified; they call app.validate_week_id/day_idx at request time).
 ripe_orders.py      — Flask Blueprint (591 lines) handling Ripe order workflow within Soma
 shopify_importer.py — Shopify Admin API client. Pulls orders for a week,
                       parses SKUs, returns a structured preview. Auth via
@@ -406,6 +407,16 @@ Render restart → browser smoke test → STOP for the next.
   cert carried), run completed with ingredients_used snapshot. **Lesson:** appending to an
   existing blueprint works cleanly (build script edits the bp file's header + appends route
   chunks, slices routes out of app.py, no new register_blueprint).
+- ✅ **traceability / completed-records** (commit `8f1986f`) — third/final production slice,
+  APPENDED to `production_bp` (6 routes, ~280 lines). Highest-risk slice:
+  `delete_traceability_record`'s 98-line cascade. 14 app.-qualifications (signoff helpers
+  `_load_weekly_signoffs`/`_save_weekly_signoffs`/`_week_completion_state`, `list_schedules`,
+  `load_schedule/checklist/recipes`, `CHECKLISTS_DIR`/`PDF_DIR`, `ORGANIC_FG/RAW/SALES_PATH`,
+  `DAYS`, `VESSELS`) — all stay in app.py. No header changes (production.py already imported
+  everything). Smoke drove the cascade BOTH ways: (a) 409 refusal when FG sold (nothing
+  mutated), (b) successful delete restoring raw (40→50kg), removing FG, resetting run to
+  scheduled + clearing finish coords, deleting checklist, 404 on re-delete; plus sign-off/unsign.
+  **The production domain is now fully extracted.**
 
 **Two reusable blueprint patterns are now established** (both define a local verbatim
 `login_required` to avoid a circular import, matching `ripe_orders.py`):
@@ -422,40 +433,26 @@ it was ~44 routes / ~1385 lines straddling audit-critical code). Done: `finished
 behind us. Only a small low-risk inventory tail remains (sku-meta + inventory pages +
 `internal_fg_stock`) — see "Small inventory tail still pending" below.
 
-**Production domain is being sliced like inventory** (decided 2026-06-03 — ~25 routes /
-~658 lines spanning low-risk reads through the audit-critical deletion cascade). Done:
-`production.py` schedules+tracker + daily-production+checklists (✅ above). One production
-slice remains, appending to the same `production_bp`:
-- **traceability / completed records** (~6 routes, ~280 lines) — **HIGHEST RISK in the
-  whole split:** `traceability_page`, `get_week_summary`, `get_traceability`,
-  `delete_traceability_record`, `sign_off_week`, `unsign_week`. The cascade in
-  `delete_traceability_record` (94 lines): refuses 409 if any FG from that day was sold,
-  else restores consumed raw materials + removes that day's FG + resets runs to
-  `scheduled` + deletes checklist/PDF. ~16 app.-qualifications incl. `_load_weekly_signoffs`,
-  `_save_weekly_signoffs`, `_week_completion_state`, `CHECKLISTS_DIR`, `PDF_DIR`,
-  `ORGANIC_FG_PATH/RAW_PATH/SALES_PATH`, `load_schedule/checklist/recipes`, `DAYS`,
-  `VESSELS`, `list_schedules`. Uses require_valid_week (+ require_valid_day on the delete) —
-  both local copies already in production.py.
-- production-runs / contacts (`get_organic_runs`, `get_organic_contacts`) — trivial, ride along.
+**Production domain is FULLY extracted** (sliced like inventory, 3 verified steps —
+schedules+tracker, daily-production+checklists, traceability/completed-records, ✅ all
+above; one `production_bp` in `production.py`). The audit-critical consumption chain and
+deletion cascade are now behind a blueprint, with all the audit helpers still in app.py.
 
-**NEXT (recommended): traceability / completed records.** Apply the proven method (re-run
-line ranges live; they drift):
-1. AST inventory + free-variable report, classifying each name by TRUE home; confirm
-   private-vs-shared via the rm_classify.py approach; default to leaving helpers in app.py.
-   Decorators already have local copies in production.py — reuse them. Check for
-   `app.static_folder` (→ `app.app.static_folder`).
-2. Per-function AST line-range slicing only (never `src.replace`); append to production_bp.
-3. Strengthened free-variable AST audit (every name resolves to {local, param, import,
-   builtin, flask, or `app`}).
-4. Gate: both compile, no dup defs, **byte-identical 166-route URL+method map**,
-   `url_for` check, test-client smoke that MUST exercise the delete cascade BOTH ways:
-   (a) 409 refusal when FG from that day was sold, (b) successful delete restoring raw
-   materials + removing FG + resetting runs to scheduled. Plus weekly sign-off/unsign.
+**NEXT (recommended): the small inventory/misc tail.** This is the only planned blueprint
+work left and it is all LOW-RISK:
+- sku-meta (`update_sku_meta`, `get_all_sku_meta`) + inventory pages (`organic_page`,
+  `organic_certification_page`) + `internal_fg_stock`.
+- production-runs / contacts (`get_organic_runs`, `get_organic_contacts`) — trivial.
+Decide with the user whether these are worth their own blueprint(s) or simply left in
+app.py as part of the core — they're small, low-churn, and not obviously a cohesive
+domain. Apply the same proven method if extracted (re-run line ranges live; classify each
+name by TRUE home; pure routes-move; byte-identical 166-route map; free-var audit; smoke).
 Assume shared helpers STAY in `app.py`.
 
-**Small inventory tail still pending** (low risk, fold into any step): sku-meta
-(`update_sku_meta`, `get_all_sku_meta`) + inventory pages (`organic_page`,
-`organic_certification_page`) + `internal_fg_stock`.
+Everything beyond that (dashboard, auth, channel imports, analytics, equipment,
+company-info, certifications, CCP, audits, important-documents, Ripe internal endpoints,
+PWA, and all the shared helpers reached via `import app`) is the INTENDED app.py core —
+the split was never meant to dissolve app.py entirely.
 
 > Correction to the earlier audit: the helper list once named four functions that don't
 > exist as movable top-level defs — `_revenue`, `_cases`, `_entry_prod_date` are **nested
