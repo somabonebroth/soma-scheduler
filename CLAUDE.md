@@ -494,6 +494,70 @@ the split was never meant to dissolve app.py entirely.
 
 ---
 
+## Hardening / resilience audit (2026-06-04) — findings & backlog
+
+A code-grounded resilience assessment was run on 2026-06-04 (four parallel read-only
+probes: deploy/runtime, error-handling, security, data durability). **Nothing here was
+fixed** — this is a risk register for future sessions. The app is fundamentally sound
+(atomic writes, per-path locks, hardened audit chain, timing-safe internal API that fails
+*closed*, no committed secrets, path-traversal defended, no injection vectors). The gaps
+cluster into four failure modes; most high-leverage fixes are cheap. Build one at a time,
+each with a test + smoke per the deploy workflow. Order below is the recommended sequence.
+
+**🟥 Availability — CHEAPEST HIGH-LEVERAGE FIX (do first, ~20 min, doesn't touch audit logic).**
+One corrupt JSON file can currently take down the *entire* app, not just one page:
+- `_run_scheduled_deductions()` runs at startup with **no try/except** (`app.py` ~L4077). A
+  malformed sales/FG record → app won't boot → looks like a total outage. Wrap it (and
+  `_seed_sku_meta_defaults`) so a bad record logs + the app still serves.
+- `_load_json()` (`helpers.py` ~L80) doesn't catch `json.JSONDecodeError` → a truncated
+  file 500s every route that reads it. Make it fail soft (log + return default, or a
+  guarded variant for non-critical reads).
+- No `/health` endpoint; root requires auth, so Render can't distinguish "crashed" from
+  "needs login." Add an unauthenticated `/health` returning 200.
+
+**🟥 Durability — #1 BUSINESS RISK (worst consequence).** All data is JSON on a *single*
+Render disk; the only backup is the **manual** `/api/admin/backup` zip (manager-gated,
+download-by-hand, no offsite/versioning). Disk failure between manual downloads = total
+loss of everything since. Fix = **automated daily offsite backup** (Render cron → S3/GCS,
+or scheduled email of the zip). This was always the spirit of Track A item 1 — the gap is
+it's still manual.
+
+**🟧 Integrity — the "no transactions" tax (architectural; mitigate or eventually move to a DB).**
+All stem from JSON files lacking cross-file/optimistic-concurrency guarantees:
+- **Lost-update under concurrency:** per-path lock is released *between* read and write, so
+  two simultaneous saves to e.g. `finished_goods.json` silently clobber (inventory wrong,
+  no error). Low probability at 1–2 users, bad for the audit trail. Mitigation: re-read
+  inside the lock / add a version field.
+- **Torn multi-file writes:** production completion writes runs→raw→FG as 3 separate files
+  (`app.py` ~L2492; same shape in `_run_scheduled_deductions` and `delete_traceability_record`).
+  Crash between them = raw consumed with no FG (or vice versa).
+- **Ripe approve cross-system desync (money path):** `ripe_order_action` (`ripe_orders.py`
+  ~L465) deducts FG + records the sale *before* notifying Ripe; if that call fails it
+  returns 502 but inventory already moved, and a retry can double-approve. Worth a closer
+  look despite being rare.
+- Clean long-horizon answer for the inventory/sales/audit core is **SQLite/Postgres** — a
+  real project, a deliberate fork, NOT a squeeze-in.
+
+**🟨 Security / config — mostly internal hardening (not outsider-exploitable; behind Render HTTPS).**
+- **Fail-open defaults:** `APP_PASSWORD` defaults to `"soma2026"`, `SECRET_KEY` to a known
+  string if env vars unset (`app.py` ~L80/L97). Add a startup assertion that *refuses to
+  boot* without them — removes the "forgot the env var" footgun. (APP_PASSWORD default was
+  already a known weakness pre-audit.)
+- Login uses `==` not `hmac.compare_digest` (`app.py` ~L845); `SESSION_COOKIE_SECURE` not
+  set. Both small.
+
+**⬜ Operational backlog (overlaps Track A, still open):** no tests, no CI, no staging branch,
+Python version unpinned (`render.yaml` says only `python`; deps are `==`-pinned but no lock
+for transitives), no written runbook. The **runbook** (one page: how to roll back, where
+data lives, who to call) is the highest-value of these. Also: `vision_scan.py` Claude API
+call has no timeout; Shopify/Clover importers have timeouts but no retry.
+
+**Recommended sequence:** (1) availability fix → (2) automated backup → (3) startup
+secret/password assertions. All three are small, clearly safe, and avoid the consumption
+chain. The integrity items + JSON→DB question are deliberate conversations, not quick wins.
+
+---
+
 ## What NOT to do
 
 - Do not use string replacement (`src.replace(block, '')`) to extract functions from app.py — this caused major damage in a previous session by silently truncating adjacent functions
