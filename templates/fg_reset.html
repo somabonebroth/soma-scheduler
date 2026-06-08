@@ -15,7 +15,7 @@
   .header-btn{ font-size:13px; text-decoration:none; color:var(--accent); border:1px solid var(--border); padding:7px 12px; border-radius:6px; background:#fff; }
   .nav-arrows{ display:inline-flex; gap:4px; align-items:center; }
   .nav-arrow-btn{ width:30px; height:30px; border:1px solid var(--border); background:#fff; border-radius:6px; cursor:pointer; color:var(--accent); font-size:14px; line-height:1; }
-  .main{ max-width:1000px; margin:0 auto; padding:22px; }
+  .main{ max-width:1040px; margin:0 auto; padding:22px; }
   .warn{ background:#fdecea; border:1px solid #c62828; border-radius:8px; padding:12px 16px; font-size:13px; margin-bottom:16px; line-height:1.5; }
   .info{ background:#eef4ff; border:1px solid #1976d2; border-radius:8px; padding:12px 16px; font-size:13px; margin-bottom:16px; line-height:1.5; }
   .ok{ background:#e8f5e9; border:1px solid #2e7d32; border-radius:8px; padding:12px 16px; font-size:13px; margin-bottom:16px; line-height:1.5; }
@@ -34,13 +34,14 @@
   input.cnt{ width:84px; padding:5px 7px; border:1px solid var(--border); border-radius:5px; font-size:13px; text-align:right; }
   .pos{ color:#2e7d32; } .neg{ color:#c62828; font-weight:600; }
   .tag{ font-size:11px; color:#8a6900; }
-  #status{ font-size:13px; color:var(--text-light); }
+  .org-row td{ background:#f4f9f4; }
+  .badge-org{ font-size:10px; background:#1b5e20; color:#fff; padding:1px 6px; border-radius:4px; margin-left:6px; }
 </style>
 </head>
 <body>
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-  <div><h1>Zero-day Reset</h1><p>Re-baseline finished goods to a physical count, by SKU</p></div>
+  <div><h1>Zero-day Reset</h1><p>Two-tier re-baseline: organic by lot, everything else by SKU</p></div>
   <div class="header-right">
     <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button></div>
     <a class="header-btn" href="/admin/fg-reconcile">Reconciliation</a>
@@ -49,12 +50,10 @@
 </div>
 <div class="main">
   <div class="info">
-    Enter <strong>one counted total per SKU</strong>, then <strong>Preview</strong>. Apply will:
-    archive the current inventory files (recoverable), and replace each SKU's lots with one clean
-    <em>reset baseline</em> at your counted number — tagged with that SKU's <strong>newest lot code</strong>
-    (so the surviving stock carries the freshest expiry) — and open the ledger at today's cutover.
-    <strong>SKUs you leave blank are carried forward at current system stock</strong> (not wiped).
-    Lot-level detail before the reset is archived; per-lot balances were FIFO estimates, so SKU totals are the truth.
+    <strong>Organic-certified SKUs</strong> are counted <strong>per LOT</strong> (one row per lot — full traceability kept).
+    <strong>Everything else</strong> is one <strong>SKU total</strong> (collapses to the newest lot — backward trace only).
+    Enter your counts, then <strong>Preview</strong>. Apply archives the current files (recoverable), rebuilds finished goods
+    to your counts, and opens the ledger at today's cutover. <strong>Rows left blank carry forward at current stock</strong> (not wiped).
   </div>
   <div id="result"></div>
   <div class="controls">
@@ -66,55 +65,67 @@
   <div id="grid"></div>
 </div>
 <script>
-let _rows = [];     // last preview rows
+let _rows = [];
 
 const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const idFor = sku => 'cnt_' + btoa(unescape(encodeURIComponent(sku))).replace(/[^A-Za-z0-9]/g, '');
+const idFor = (sku, key) => 'cnt_' + btoa(unescape(encodeURIComponent(sku + '||' + (key || '')))).replace(/[^A-Za-z0-9]/g, '');
 
 function collectCounts(){
-  const counts = {};
+  const out = [];
   _rows.forEach(r => {
-    const el = document.getElementById(idFor(r.sku_key));
+    const el = document.getElementById(idFor(r.sku_key, r.count_key));
     if(el && el.value.trim() !== ''){
       const v = parseInt(el.value, 10);
-      if(!isNaN(v)) counts[r.sku_key] = v;
+      if(!isNaN(v)) out.push({sku_key: r.sku_key, lot: r.count_key, counted: v});
     }
   });
-  return counts;
+  return out;
 }
 
 async function load(initial){
   document.getElementById('status').textContent = 'Loading…';
-  const counts = initial ? {} : collectCounts();
+  const counts = initial ? [] : collectCounts();
   const d = await (await fetch('/admin/fg-reset/preview', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({counts})
   })).json();
-  _rows = d.skus;
+  _rows = d.rows;
   document.getElementById('status').textContent = '';
   renderGrid(d.summary);
 }
 
 function renderGrid(s){
-  const typed = {};   // preserve typed values across re-render
-  _rows.forEach(r => { const el = document.getElementById(idFor(r.sku_key)); if(el) typed[r.sku_key] = el.value; });
+  const typed = {};
+  _rows.forEach(r => { const el = document.getElementById(idFor(r.sku_key, r.count_key)); if(el) typed[idFor(r.sku_key, r.count_key)] = el.value; });
 
   if(s.already_reset){
     document.getElementById('result').innerHTML =
       `<div class="warn"><strong>Note:</strong> a reset was already applied with cutover ${s.already_reset}. Re-running archives again and re-baselines from the current state.</div>`;
   }
   document.getElementById('summary').textContent =
-    `${s.sku_count} SKUs · ${s.counted} counted · ${s.carried_uncounted} carried · target ${s.target_units} units (Δ ${s.net_delta >= 0 ? '+' : ''}${s.net_delta})`;
+    `${s.organic_skus} organic SKUs (${s.organic_lots} lots) · ${s.other_skus} other SKUs · ${s.counted} counted · ${s.carried} carried · target ${s.target_units} units (Δ ${s.net_delta >= 0 ? '+' : ''}${s.net_delta})`;
 
-  let h = '<table><tr><th>Product</th><th>Cert</th><th>Newest lot</th><th>Lots</th><th>Current</th><th>Counted total</th><th>New baseline</th><th>Δ</th></tr>';
+  let h = '<table><tr><th>Product</th><th>Cert</th><th>Lot</th><th>Current</th><th>Counted</th><th>New baseline</th><th>Δ</th></tr>';
+  let lastSku = null;
   _rows.forEach(r => {
-    const id = idFor(r.sku_key);
-    const val = typed[r.sku_key] !== undefined ? typed[r.sku_key] : '';
+    const id = idFor(r.sku_key, r.count_key);
+    const val = typed[id] !== undefined ? typed[id] : '';
     const dCls = r.delta > 0 ? 'pos' : (r.delta < 0 ? 'neg' : '');
+    const org = r.tier === 'organic';
+    // Product name shown once per SKU group
+    const prod = (lastSku === r.sku_key) ? '' : esc(r.label) + (org ? ' <span class="badge-org">ORGANIC</span>' : '');
+    lastSku = r.sku_key;
+    // Lot column: organic shows the lot code; non-organic shows "SKU total → newest lot"
+    let lotCell;
+    if(org){
+      lotCell = esc(r.lot || '—') + (r.new_lot ? ' <span class="tag">new</span>' : '');
+    } else {
+      lotCell = '<span style="color:var(--text-light);">all lots → ' + esc(r.lot || 'RESET') + '</span>';
+    }
     const carried = !r.counted ? ' <span class="tag">carried</span>' : '';
-    h += `<tr><td>${esc(r.label)}</td><td style="text-align:left;">${esc(r.cert || '—')}</td>`
-       + `<td style="text-align:left;">${esc(r.latest_lot || '—')}</td>`
-       + `<td class="num">${r.lots}</td><td class="num">${r.current}</td>`
+    h += `<tr class="${org ? 'org-row' : ''}"><td>${prod}</td><td style="text-align:left;">${esc(r.cert || '—')}</td>`
+       + `<td style="text-align:left;">${lotCell}</td>`
+       + `<td class="num">${r.current}</td>`
        + `<td><input class="cnt" id="${id}" inputmode="numeric" value="${esc(val)}" placeholder="—">${carried}</td>`
        + `<td class="num">${r.target}</td><td class="num ${dCls}">${r.delta > 0 ? '+' : ''}${r.delta}</td></tr>`;
   });
@@ -129,8 +140,7 @@ async function doPreview(){
 
 async function doApply(){
   const counts = collectCounts();
-  const n = Object.keys(counts).length;
-  if(!confirm(`Apply the zero-day reset?\n\n${n} SKU(s) counted; uncounted SKUs carried forward at current stock. Current files are archived first (recoverable), but this rewrites finished goods. Proceed?`)) return;
+  if(!confirm(`Apply the zero-day reset?\n\n${counts.length} count(s) entered; uncounted rows carry forward at current stock. Current files are archived first (recoverable), but this rewrites finished goods. Proceed?`)) return;
   document.getElementById('status').textContent = 'Applying…';
   const d = await (await fetch('/admin/fg-reset/apply', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -142,7 +152,8 @@ async function doApply(){
     return;
   }
   document.getElementById('result').innerHTML =
-    `<div class="ok"><strong>Reset applied ✓</strong> — cutover ${d.cutover}. ${d.skus_reset} SKUs re-baselined (${d.total_units} units). `
+    `<div class="ok"><strong>Reset applied ✓</strong> — cutover ${d.cutover}. ${d.entries_reset} entries re-baselined `
+    + `(${d.organic_lots} organic lots; ${d.total_units} units). `
     + `Archived: ${d.archived_files.map(esc).join(', ')} in inventory/ledger_archive/. `
     + `Check the <a href="/admin/fg-reconcile">reconciliation</a> — it should now be clean.</div>`;
   document.getElementById('apply-btn').disabled = true;

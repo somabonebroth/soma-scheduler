@@ -424,87 +424,176 @@ def verify_fg_projection():
     }
 
 
-# ── Increment 3: zero-day reset (preview is read-only; apply WRITES) ──────
+# ── Increment 3: TWO-TIER zero-day reset (preview read-only; apply WRITES) ──
 #
-# The reset closes the drifted history and opens clean books. Per the SKU-level
-# books decision (sales are SKU-accurate but not lot-accurate, so per-lot balances
-# are FIFO fiction), it counts ONE total per SKU. Each SKU collapses to a single
-# clean reset_baseline FG entry at its counted total, tagged with the SKU's NEWEST
-# lot code + production date (the best surviving expiry/FIFO reference). Old lots
-# are archived, a RESET marker + opening events are written, and the cutover filter
-# makes everything before the reset "closed" — so post-reset the books are clean.
-# Apply archives the current files first (recoverable), gated behind a confirmation.
+# Traceability rigor is matched to requirement (the two-tier decision):
+#   • Organic-certified SKUs (cert == "Organic") are counted/reset PER LOT — each
+#     physical lot becomes one clean reset_baseline entry, preserving the lot code
+#     and production date. Forward traceability is kept (organic is wholesale-only
+#     and lot is captured at pack-out in a later increment).
+#   • Everything else collapses to ONE total per SKU, tagged with the newest lot —
+#     SKU-level books, backward-trace only.
+# Old lots are archived, a RESET marker + opening events written, and the cutover
+# filter closes everything before the reset. Apply archives first (recoverable),
+# gated behind a confirmation token.
 
 
-def _current_sku_stock():
-    """Group the live FG file by SKU: current remaining total, lot count, and the
-    SKU's NEWEST lot code + production date (the surviving reset entry's expiry/
-    FIFO reference). brand/recipe/format/cert come from a representative entry."""
-    out = {}
+def _is_org(cert):
+    """A SKU is in the lot-tracked tier iff it is organic-certified."""
+    return (cert or "").strip().lower() == "organic"
+
+
+def _current_stock():
+    """One pass over the live FG file. Returns (by_lot, by_sku):
+      by_lot[(sku, lot)] = {sku_key, lot, label, brand, recipe, format, cert,
+                            current, prod_date}
+      by_sku[sku]        = {sku_key, label, brand, recipe, format, cert,
+                            current, lots, latest_lot, latest_date}
+    Certs default to the recipe's certification when the entry omits one."""
+    by_lot = {}
     for f in _load_json(app.ORGANIC_FG_PATH, []):
         sku = _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", ""))
-        prod_date = _prod_date(f) or (f.get("created_at") or "")
         lot = (f.get("lot") or "")
-        row = out.get(sku)
-        if row is None:
-            row = out[sku] = {
-                "sku_key": sku,
+        prod = _prod_date(f) or (f.get("created_at") or "")
+        cert = (f.get("certification") or "").strip()
+        r = by_lot.get((sku, lot))
+        if r is None:
+            r = by_lot[(sku, lot)] = {
+                "sku_key": sku, "lot": lot,
                 "label": _sku_display(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")),
-                "cert": (f.get("certification") or ""),
                 "brand": f.get("brand", ""), "recipe": f.get("recipe", ""),
-                "format": f.get("format", ""), "current": 0, "lots": 0,
-                "latest_lot": lot, "latest_date": prod_date,
-            }
-        row["current"] += _int(f.get("quantity_remaining"))
-        row["lots"] += 1
-        if prod_date >= (row["latest_date"] or ""):   # track the newest lot
-            row["latest_date"] = prod_date
-            row["latest_lot"] = lot or row["latest_lot"]
-    return out
+                "format": f.get("format", ""), "cert": cert, "current": 0, "prod_date": prod}
+        r["current"] += _int(f.get("quantity_remaining"))
+        if prod and (not r["prod_date"] or prod < r["prod_date"]):
+            r["prod_date"] = prod
+        if cert and not r["cert"]:
+            r["cert"] = cert
+
+    by_sku = {}
+    for (sku, lot), r in by_lot.items():
+        s = by_sku.get(sku)
+        if s is None:
+            s = by_sku[sku] = {"sku_key": sku, "label": r["label"], "brand": r["brand"],
+                               "recipe": r["recipe"], "format": r["format"], "cert": r["cert"],
+                               "current": 0, "lots": 0, "latest_lot": "", "latest_date": ""}
+        s["current"] += r["current"]
+        s["lots"] += 1
+        if r["cert"] and not s["cert"]:
+            s["cert"] = r["cert"]
+        if (r["prod_date"] or "") >= (s["latest_date"] or ""):
+            s["latest_date"] = r["prod_date"]
+            s["latest_lot"] = lot or s["latest_lot"]
+
+    recipes = None
+    for s in by_sku.values():
+        if not s["cert"]:
+            if recipes is None:
+                recipes = app.load_recipes()
+            s["cert"] = (recipes.get(s["recipe"] or "", {}) or {}).get("certification", "").strip()
+    for (sku, lot), r in by_lot.items():
+        if not r["cert"]:
+            r["cert"] = by_sku[sku]["cert"]
+    return by_lot, by_sku
 
 
 def _norm_counts(counts):
-    """Coerce a {sku_key: qty} input dict to clean non-negative ints."""
+    """Coerce a list of {sku_key, lot, counted} into {(sku, lot): qty}.
+    A blank lot ('') marks a SKU-level total (the non-organic tier)."""
     clean = {}
-    for k, v in (counts or {}).items():
+    for item in (counts or []):
+        if not isinstance(item, dict):
+            continue
+        sku = (item.get("sku_key") or "").strip()
+        if not sku:
+            continue
+        lot = (item.get("lot") or "").strip()
         try:
-            q = int(v)
+            q = int(item.get("counted"))
         except (ValueError, TypeError):
             continue
-        clean[k] = max(0, q)
+        clean[(sku, lot)] = max(0, q)
     return clean
 
 
 def compute_reset_preview(counts):
-    """Read-only preview of a SKU-level zero-day reset. `counts` = {sku_key: total}.
-    Each SKU's target is the counted total if given, else current system stock
-    ('carried', so an uncounted SKU is never silently wiped). The SKU collapses to
-    one entry under its newest lot."""
-    counts = _norm_counts(counts)
-    stock = _current_sku_stock()
+    """Read-only preview of the two-tier reset. `counts` is a list of
+    {sku_key, lot, counted}: organic SKUs send one entry per lot; non-organic send
+    one entry with lot='' (the SKU total). Uncounted rows carry forward at current
+    stock (never silently wiped). Returns {rows, summary}; each row carries enough
+    metadata (lot, assign_date, brand/recipe/format/cert) for apply to build it."""
+    cmap = _norm_counts(counts)
+    by_lot, by_sku = _current_stock()
+
+    lots_by_sku = {}
+    for (sku, lot), r in by_lot.items():
+        lots_by_sku.setdefault(sku, []).append((lot, r))
+
+    recipes = None
+
+    def cert_for(sku):
+        if sku in by_sku:
+            return by_sku[sku]["cert"]
+        nonlocal recipes
+        if recipes is None:
+            recipes = app.load_recipes()
+        recipe = (sku.split("|") + ["", "", ""])[1]
+        return (recipes.get(recipe, {}) or {}).get("certification", "").strip()
+
     rows = []
     carried = 0
-    for sku in (set(stock) | set(counts)):
-        s = stock.get(sku)
-        if s is None:
-            brand, recipe, fmt = (sku.split("|") + ["", "", ""])[:3]
-            s = {"sku_key": sku, "label": _sku_display(brand, recipe, fmt) or sku,
-                 "cert": "", "current": 0, "lots": 0, "latest_lot": ""}
-        counted = sku in counts
-        target = counts[sku] if counted else s["current"]
-        rows.append({"sku_key": sku, "label": s["label"], "cert": s["cert"],
-                     "current": s["current"], "lots": s["lots"],
-                     "latest_lot": s["latest_lot"], "counted": counted,
-                     "target": target, "delta": target - s["current"]})
-        if not counted and s["current"] != 0:
-            carried += 1
-    rows.sort(key=lambda r: r["label"].lower())
+    new_lots = 0
+    for sku in (set(by_sku) | {s for (s, l) in cmap}):
+        cert = cert_for(sku)
+        s = by_sku.get(sku)
+        parts = (sku.split("|") + ["", "", ""])[:3]
+        label = s["label"] if s else (_sku_display(*parts) or sku)
+        if _is_org(cert):
+            seen = set()
+            for lot, r in sorted(lots_by_sku.get(sku, []), key=lambda x: x[0]):
+                counted = (sku, lot) in cmap
+                target = cmap[(sku, lot)] if counted else r["current"]
+                rows.append({"tier": "organic", "sku_key": sku, "count_key": lot,
+                             "lot": lot, "label": label, "cert": cert, "lots": 1,
+                             "brand": r["brand"], "recipe": r["recipe"], "format": r["format"],
+                             "current": r["current"], "counted": counted, "target": target,
+                             "delta": target - r["current"], "assign_date": r["prod_date"],
+                             "new_lot": False})
+                seen.add(lot)
+                if not counted and r["current"] != 0:
+                    carried += 1
+            for (csku, clot), q in cmap.items():
+                if csku == sku and clot and clot not in seen:
+                    rows.append({"tier": "organic", "sku_key": sku, "count_key": clot,
+                                 "lot": clot, "label": label, "cert": cert, "lots": 0,
+                                 "brand": parts[0], "recipe": parts[1], "format": parts[2],
+                                 "current": 0, "counted": True, "target": q, "delta": q,
+                                 "assign_date": "", "new_lot": True})
+                    new_lots += 1
+        else:
+            counted = (sku, "") in cmap
+            cur = s["current"] if s else 0
+            target = cmap[(sku, "")] if counted else cur
+            rows.append({"tier": "sku", "sku_key": sku, "count_key": "",
+                         "lot": (s["latest_lot"] if s else ""), "label": label, "cert": cert,
+                         "lots": (s["lots"] if s else 0),
+                         "brand": (s["brand"] if s else parts[0]),
+                         "recipe": (s["recipe"] if s else parts[1]),
+                         "format": (s["format"] if s else parts[2]),
+                         "current": cur, "counted": counted, "target": target,
+                         "delta": target - cur, "assign_date": (s["latest_date"] if s else ""),
+                         "new_lot": (s is None)})
+            if not counted and cur != 0:
+                carried += 1
+    rows.sort(key=lambda r: (r["label"].lower(), r["lot"]))
     return {
-        "skus": rows,
+        "rows": rows,
         "summary": {
-            "sku_count": len(rows),
+            "organic_skus": len({r["sku_key"] for r in rows if r["tier"] == "organic"}),
+            "organic_lots": sum(1 for r in rows if r["tier"] == "organic"),
+            "other_skus": sum(1 for r in rows if r["tier"] == "sku"),
             "counted": sum(1 for r in rows if r["counted"]),
-            "carried_uncounted": carried,
+            "carried": carried,
+            "new_lots": new_lots,
             "current_units": sum(r["current"] for r in rows),
             "target_units": sum(r["target"] for r in rows),
             "net_delta": sum(r["delta"] for r in rows),
@@ -514,13 +603,12 @@ def compute_reset_preview(counts):
 
 
 def apply_reset(counts, actor=""):
-    """Apply the SKU-level zero-day reset (WRITES). Archives the current inventory
-    files, replaces finished_goods.json with one reset_baseline entry per SKU at its
-    counted total — tagged with the SKU's newest lot code + production date — and
-    appends a RESET marker + opening events to the ledger."""
+    """Apply the two-tier zero-day reset (WRITES). Archives the current inventory
+    files, then replaces finished_goods.json with one reset_baseline entry per
+    preview row (organic = per lot, non-organic = per SKU), and appends a RESET
+    marker + opening events to the ledger. Each entry carries reset_tier so later
+    increments can branch on it."""
     preview = compute_reset_preview(counts)
-    stock = _current_sku_stock()
-    recipes = app.load_recipes()
     now = datetime.now()
     stamp = now.strftime("%Y%m%d_%H%M%S")
     cutover = now.isoformat(timespec="seconds")
@@ -536,45 +624,40 @@ def apply_reset(counts, actor=""):
                    _load_json(path, []))
         archived.append(f"{name}_{stamp}.json")
 
-    # 2. Build the clean FG file: one reset_baseline entry per SKU with target > 0.
+    # 2. Build the clean FG file from the preview rows (tier-agnostic at this point).
     new_fg = []
     opening_events = []
-    for i, r in enumerate(preview["skus"]):
+    for i, r in enumerate(preview["rows"]):
         target = r["target"]
         if target <= 0:
             continue
-        sku = r["sku_key"]
-        s = stock.get(sku)
-        if s is None:
-            brand, recipe, fmt = (sku.split("|") + ["", "", ""])[:3]
-            s = {"brand": brand, "recipe": recipe, "format": fmt,
-                 "cert": (recipes.get(recipe) or {}).get("certification", ""),
-                 "latest_lot": "", "latest_date": ""}
         fid = f"fg_reset_{stamp}_{i:03d}"
+        lot = r["lot"] or ("RESET-" + now.strftime("%d%m%y"))
         new_fg.append({
-            "id": fid, "brand": s["brand"], "recipe": s["recipe"], "format": s["format"],
-            "certification": s["cert"],
-            "lot": s["latest_lot"] or ("RESET-" + now.strftime("%d%m%y")),
+            "id": fid, "brand": r["brand"], "recipe": r["recipe"], "format": r["format"],
+            "certification": r["cert"], "lot": lot,
             "quantity_produced": target, "quantity_remaining": target,
             "vessel": "Reset baseline", "week_id": None, "day_idx": None,
-            "created_at": s["latest_date"] or cutover,  # newest lot's production date
-            "reset_at": cutover, "source": "reset_baseline",
+            "created_at": r["assign_date"] or cutover,  # preserve lot's production date
+            "reset_at": cutover, "source": "reset_baseline", "reset_tier": r["tier"],
         })
         opening_events.append({"type": EV_OPENING, "fg_id": fid, "qty_delta": target,
-                               "sku_key": sku, "lot": new_fg[-1]["lot"], "source": "reset",
+                               "sku_key": r["sku_key"], "lot": lot, "source": "reset",
                                "ref": stamp, "ts": cutover})
 
     # 3. Append RESET marker + opening events; replace the FG file.
     events = _load_json(EVENTS_PATH, [])
     events.append({"type": EV_RESET, "fg_id": None, "qty_delta": 0, "sku_key": None,
                    "source": "reset", "ref": stamp, "ts": cutover,
-                   "meta": {"skus": len(opening_events), "actor": actor}})
+                   "meta": {"entries": len(opening_events), "actor": actor}})
     events.extend(opening_events)
     _save_json(app.ORGANIC_FG_PATH, new_fg)
     _save_json(EVENTS_PATH, events)
 
     return {"applied_at": cutover, "cutover": cutover[:10], "archive_stamp": stamp,
-            "archived_files": archived, "skus_reset": len(opening_events),
+            "archived_files": archived, "entries_reset": len(opening_events),
+            "organic_lots": sum(1 for r in preview["rows"]
+                                if r["tier"] == "organic" and r["target"] > 0),
             "total_units": sum(e["qty_delta"] for e in opening_events),
             "fg_entries": len(new_fg)}
 
@@ -613,7 +696,7 @@ def fg_reset_page():
 def fg_reset_preview_api():
     """Read-only preview of a SKU-level zero-day reset for the submitted counts."""
     data = request.json or {}
-    return jsonify(compute_reset_preview(data.get("counts") or {}))
+    return jsonify(compute_reset_preview(data.get("counts") or []))
 
 
 @ledger_bp.route("/admin/fg-reset/apply", methods=["POST"])
@@ -623,4 +706,4 @@ def fg_reset_apply_api():
     data = request.json or {}
     if data.get("confirm") != "RESET":
         return jsonify({"error": "Confirmation token required"}), 400
-    return jsonify(apply_reset(data.get("counts") or {}, actor=session.get("user", "")))
+    return jsonify(apply_reset(data.get("counts") or [], actor=session.get("user", "")))
