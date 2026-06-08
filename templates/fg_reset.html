@@ -26,6 +26,8 @@
   .btn-danger{ background:#c62828; color:#fff; border-color:#c62828; }
   .btn:disabled{ opacity:.4; cursor:default; }
   .stat{ font-size:13px; color:var(--text-light); }
+  .addbar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; background:#fff; border:1px dashed var(--border); border-radius:8px; padding:10px 14px; margin-bottom:16px; font-size:13px; }
+  .addbar select, .addbar input{ padding:5px 7px; border:1px solid var(--border); border-radius:5px; font-size:13px; }
   table{ width:100%; border-collapse:collapse; font-size:13px; background:#fff; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
   th,td{ padding:7px 10px; border-bottom:1px solid #f0efe9; text-align:right; }
   th:first-child,td:first-child{ text-align:left; }
@@ -62,17 +64,38 @@
     <span id="status"></span>
     <span class="stat" id="summary" style="margin-left:auto;"></span>
   </div>
+  <div class="addbar">
+    <strong>Add an organic lot</strong>
+    <span style="color:var(--text-light);">— a physical case LOT# the system is missing (e.g. the off-by-one code on your cases):</span>
+    <select id="add-sku"></select>
+    <input id="add-lot" placeholder="case LOT#" size="10">
+    <input id="add-qty" class="cnt" inputmode="numeric" placeholder="units">
+    <button class="btn btn-outline" onclick="addLot()">+ Add</button>
+  </div>
   <div id="grid"></div>
 </div>
 <script>
 let _rows = [];
+let _added = [];          // organic case-lots the user added that the system lacked
+let _lastSummary = {};
 
 const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const idFor = (sku, key) => 'cnt_' + btoa(unescape(encodeURIComponent(sku + '||' + (key || '')))).replace(/[^A-Za-z0-9]/g, '');
 
+// Displayed rows = server rows + any manually-added organic lots not yet echoed back.
+function displayRows(){
+  const present = new Set(_rows.map(r => r.sku_key + '||' + r.count_key));
+  const extra = _added
+    .filter(a => !present.has(a.sku_key + '||' + a.lot))
+    .map(a => ({tier: 'organic', sku_key: a.sku_key, count_key: a.lot, lot: a.lot,
+                label: a.label, cert: a.cert || 'Organic', lots: 0, current: 0,
+                counted: false, target: 0, delta: 0, new_lot: true}));
+  return _rows.concat(extra);
+}
+
 function collectCounts(){
   const out = [];
-  _rows.forEach(r => {
+  displayRows().forEach(r => {
     const el = document.getElementById(idFor(r.sku_key, r.count_key));
     if(el && el.value.trim() !== ''){
       const v = parseInt(el.value, 10);
@@ -80,6 +103,23 @@ function collectCounts(){
     }
   });
   return out;
+}
+
+function addLot(){
+  const sku = document.getElementById('add-sku').value;
+  const lot = document.getElementById('add-lot').value.trim();
+  const qty = document.getElementById('add-qty').value.trim();
+  if(!sku || !lot){ alert('Pick an organic SKU and enter the case LOT#.'); return; }
+  const ref = _rows.find(r => r.sku_key === sku) || {};
+  if(!_added.some(a => a.sku_key === sku && a.lot === lot) &&
+     !_rows.some(r => r.sku_key === sku && r.count_key === lot)){
+    _added.push({sku_key: sku, lot, label: ref.label || sku, cert: ref.cert || 'Organic'});
+  }
+  renderGrid(_lastSummary);
+  const el = document.getElementById(idFor(sku, lot));
+  if(el && qty){ el.value = qty; }
+  document.getElementById('add-lot').value = '';
+  document.getElementById('add-qty').value = '';
 }
 
 async function load(initial){
@@ -95,19 +135,32 @@ async function load(initial){
 }
 
 function renderGrid(s){
+  _lastSummary = s || _lastSummary;
+  const rows = displayRows();
   const typed = {};
-  _rows.forEach(r => { const el = document.getElementById(idFor(r.sku_key, r.count_key)); if(el) typed[idFor(r.sku_key, r.count_key)] = el.value; });
+  rows.forEach(r => { const el = document.getElementById(idFor(r.sku_key, r.count_key)); if(el) typed[idFor(r.sku_key, r.count_key)] = el.value; });
 
-  if(s.already_reset){
+  if(s && s.already_reset){
     document.getElementById('result').innerHTML =
       `<div class="warn"><strong>Note:</strong> a reset was already applied with cutover ${s.already_reset}. Re-running archives again and re-baselines from the current state.</div>`;
   }
-  document.getElementById('summary').textContent =
+  if(s) document.getElementById('summary').textContent =
     `${s.organic_skus} organic SKUs (${s.organic_lots} lots) · ${s.other_skus} other SKUs · ${s.counted} counted · ${s.carried} carried · target ${s.target_units} units (Δ ${s.net_delta >= 0 ? '+' : ''}${s.net_delta})`;
+
+  // Populate the add-lot SKU dropdown with the organic SKUs.
+  const orgSkus = {};
+  _rows.forEach(r => { if(r.tier === 'organic' && !(r.sku_key in orgSkus)) orgSkus[r.sku_key] = r.label; });
+  const sel = document.getElementById('add-sku');
+  if(sel){
+    const prev = sel.value;
+    sel.innerHTML = Object.keys(orgSkus).sort((a, b) => orgSkus[a].localeCompare(orgSkus[b]))
+      .map(k => `<option value="${esc(k)}">${esc(orgSkus[k])}</option>`).join('');
+    if(prev) sel.value = prev;
+  }
 
   let h = '<table><tr><th>Product</th><th>Cert</th><th>Lot</th><th>Current</th><th>Counted</th><th>New baseline</th><th>Δ</th></tr>';
   let lastSku = null;
-  _rows.forEach(r => {
+  rows.forEach(r => {
     const id = idFor(r.sku_key, r.count_key);
     const val = typed[id] !== undefined ? typed[id] : '';
     const dCls = r.delta > 0 ? 'pos' : (r.delta < 0 ? 'neg' : '');

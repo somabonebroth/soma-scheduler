@@ -2332,7 +2332,7 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
       2. Matches each run's vessel against produced_data[vessel]
       3. Deducts raw materials based on amount produced
       4. Creates / updates a finished goods entry, timestamped to the FINISH day
-         with LOT# = finish_date + 365 days (packaging day expiry)
+         with LOT# = production(start) date + 365 days, matching the case label
     Idempotent: re-saving updates in place. Sales already made against an
     edited entry are preserved (quantity_remaining = new_qty - already_sold).
     """
@@ -2348,10 +2348,18 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
 
     try:
         finish_date = datetime.strptime(finish_week_id, "%Y-%m-%d") + timedelta(days=finish_day_idx)
-        expiry_lot = (finish_date + timedelta(days=365)).strftime("%d%m%y")
     except ValueError:
         finish_date = datetime.now()
-        expiry_lot = (finish_date + timedelta(days=365)).strftime("%d%m%y")
+    # LOT# must match the physical case label, which /api/label prints as the
+    # production (start) date + 365. Deriving it from the FINISH date instead put
+    # the system one day ahead of the case on any batch produced one day and
+    # packaged the next — the systemic "case 140527 vs system 150527" mismatch.
+    # Use the start date; fall back to finish_date only if it's unparseable.
+    try:
+        start_date = datetime.strptime(start_week_id, "%Y-%m-%d") + timedelta(days=int(start_day_idx))
+    except (ValueError, TypeError):
+        start_date = finish_date
+    expiry_lot = (start_date + timedelta(days=365)).strftime("%d%m%y")
 
     produced = (produced_data or {}).get("produced") or {}
 
