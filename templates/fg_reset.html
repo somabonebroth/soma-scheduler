@@ -15,7 +15,7 @@
   .header-btn{ font-size:13px; text-decoration:none; color:var(--accent); border:1px solid var(--border); padding:7px 12px; border-radius:6px; background:#fff; }
   .nav-arrows{ display:inline-flex; gap:4px; align-items:center; }
   .nav-arrow-btn{ width:30px; height:30px; border:1px solid var(--border); background:#fff; border-radius:6px; cursor:pointer; color:var(--accent); font-size:14px; line-height:1; }
-  .main{ max-width:1040px; margin:0 auto; padding:22px; }
+  .main{ max-width:1000px; margin:0 auto; padding:22px; }
   .warn{ background:#fdecea; border:1px solid #c62828; border-radius:8px; padding:12px 16px; font-size:13px; margin-bottom:16px; line-height:1.5; }
   .info{ background:#eef4ff; border:1px solid #1976d2; border-radius:8px; padding:12px 16px; font-size:13px; margin-bottom:16px; line-height:1.5; }
   .ok{ background:#e8f5e9; border:1px solid #2e7d32; border-radius:8px; padding:12px 16px; font-size:13px; margin-bottom:16px; line-height:1.5; }
@@ -26,24 +26,21 @@
   .btn-danger{ background:#c62828; color:#fff; border-color:#c62828; }
   .btn:disabled{ opacity:.4; cursor:default; }
   .stat{ font-size:13px; color:var(--text-light); }
-  .addbar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; background:#fff; border:1px dashed var(--border); border-radius:8px; padding:10px 14px; margin-bottom:16px; font-size:13px; }
-  .addbar select, .addbar input{ padding:5px 7px; border:1px solid var(--border); border-radius:5px; font-size:13px; }
   table{ width:100%; border-collapse:collapse; font-size:13px; background:#fff; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
   th,td{ padding:7px 10px; border-bottom:1px solid #f0efe9; text-align:right; }
   th:first-child,td:first-child{ text-align:left; }
   th{ background:#1a2e1a; color:#fff; font-weight:600; font-size:12px; position:sticky; top:0; z-index:2; }
   .num{ font-variant-numeric:tabular-nums; }
-  input.cnt{ width:80px; padding:5px 7px; border:1px solid var(--border); border-radius:5px; font-size:13px; text-align:right; }
+  input.cnt{ width:84px; padding:5px 7px; border:1px solid var(--border); border-radius:5px; font-size:13px; text-align:right; }
   .pos{ color:#2e7d32; } .neg{ color:#c62828; font-weight:600; }
   .tag{ font-size:11px; color:#8a6900; }
-  .tag-new{ font-size:11px; color:#1565c0; }
   #status{ font-size:13px; color:var(--text-light); }
 </style>
 </head>
 <body>
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-  <div><h1>Zero-day Reset</h1><p>Re-baseline finished goods to a physical count, by lot</p></div>
+  <div><h1>Zero-day Reset</h1><p>Re-baseline finished goods to a physical count, by SKU</p></div>
   <div class="header-right">
     <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button></div>
     <a class="header-btn" href="/admin/fg-reconcile">Reconciliation</a>
@@ -52,12 +49,12 @@
 </div>
 <div class="main">
   <div class="info">
-    Enter the <strong>physically counted units for each lot</strong> (SKU + LOT#), then <strong>Preview</strong>. Apply will:
-    archive the current inventory files (recoverable), replace finished goods with one clean
-    <em>reset baseline</em> per lot at your counted number &mdash; <strong>keeping the lot code and production date</strong>
-    (so expiry and FIFO order survive) &mdash; and open the ledger at today's cutover.
-    <strong>Lots you leave blank are carried forward at current system stock</strong> (not wiped).
-    A physical lot the system doesn't know about? Add it below.
+    Enter <strong>one counted total per SKU</strong>, then <strong>Preview</strong>. Apply will:
+    archive the current inventory files (recoverable), and replace each SKU's lots with one clean
+    <em>reset baseline</em> at your counted number — tagged with that SKU's <strong>newest lot code</strong>
+    (so the surviving stock carries the freshest expiry) — and open the ledger at today's cutover.
+    <strong>SKUs you leave blank are carried forward at current system stock</strong> (not wiped).
+    Lot-level detail before the reset is archived; per-lot balances were FIFO estimates, so SKU totals are the truth.
   </div>
   <div id="result"></div>
   <div class="controls">
@@ -66,119 +63,63 @@
     <span id="status"></span>
     <span class="stat" id="summary" style="margin-left:auto;"></span>
   </div>
-  <div class="addbar">
-    <strong>Add a lot:</strong>
-    <select id="add-sku"></select>
-    <input id="add-lot" placeholder="LOT#" size="12">
-    <input id="add-qty" class="cnt" inputmode="numeric" placeholder="units">
-    <button class="btn btn-outline" onclick="addLot()">+ Add</button>
-  </div>
   <div id="grid"></div>
 </div>
 <script>
-let _server = [];      // rows from last preview (current system lots + counted news)
-let _added = [];       // manually-added lots: {sku_key, lot, label, cert}
+let _rows = [];     // last preview rows
 
 const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const keyOf = (sku, lot) => sku + '||' + (lot || '');
-const idFor = (sku, lot) => 'cnt_' + btoa(unescape(encodeURIComponent(keyOf(sku, lot)))).replace(/[^A-Za-z0-9]/g, '');
+const idFor = sku => 'cnt_' + btoa(unescape(encodeURIComponent(sku))).replace(/[^A-Za-z0-9]/g, '');
 
-// Rows currently displayed = server rows + any added lots not already present.
-function displayRows(){
-  const seen = new Set(_server.map(r => keyOf(r.sku_key, r.lot)));
-  const extra = _added
-    .filter(a => !seen.has(keyOf(a.sku_key, a.lot)))
-    .map(a => ({sku_key: a.sku_key, lot: a.lot, label: a.label, cert: a.cert,
-                current: 0, entries: 0, counted: false, target: 0, delta: 0, new_lot: true}));
-  return _server.concat(extra);
-}
-
-// Collect every input with a value into the {sku_key, lot, counted} payload.
-function collectLots(){
-  const lots = [];
-  displayRows().forEach(r => {
-    const el = document.getElementById(idFor(r.sku_key, r.lot));
+function collectCounts(){
+  const counts = {};
+  _rows.forEach(r => {
+    const el = document.getElementById(idFor(r.sku_key));
     if(el && el.value.trim() !== ''){
       const v = parseInt(el.value, 10);
-      if(!isNaN(v)) lots.push({sku_key: r.sku_key, lot: r.lot, counted: v});
+      if(!isNaN(v)) counts[r.sku_key] = v;
     }
   });
-  return lots;
+  return counts;
 }
 
 async function load(initial){
   document.getElementById('status').textContent = 'Loading…';
-  const lots = initial ? [] : collectLots();
+  const counts = initial ? {} : collectCounts();
   const d = await (await fetch('/admin/fg-reset/preview', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({lots})
+    body: JSON.stringify({counts})
   })).json();
-  _server = d.lots;
+  _rows = d.skus;
   document.getElementById('status').textContent = '';
   renderGrid(d.summary);
 }
 
 function renderGrid(s){
-  // Preserve any typed values across the re-render.
-  const typed = {};
-  displayRows().forEach(r => { const el = document.getElementById(idFor(r.sku_key, r.lot)); if(el) typed[keyOf(r.sku_key, r.lot)] = el.value; });
+  const typed = {};   // preserve typed values across re-render
+  _rows.forEach(r => { const el = document.getElementById(idFor(r.sku_key)); if(el) typed[r.sku_key] = el.value; });
 
   if(s.already_reset){
     document.getElementById('result').innerHTML =
       `<div class="warn"><strong>Note:</strong> a reset was already applied with cutover ${s.already_reset}. Re-running archives again and re-baselines from the current state.</div>`;
   }
   document.getElementById('summary').textContent =
-    `${s.lot_count} lots · ${s.sku_count} SKUs · ${s.counted} counted · ${s.carried_uncounted} carried · ${s.new_lots} new · target ${s.target_units} units (Δ ${s.net_delta >= 0 ? '+' : ''}${s.net_delta})`;
+    `${s.sku_count} SKUs · ${s.counted} counted · ${s.carried_uncounted} carried · target ${s.target_units} units (Δ ${s.net_delta >= 0 ? '+' : ''}${s.net_delta})`;
 
-  // Refresh the add-lot SKU dropdown from known SKUs.
-  const skus = {};
-  _server.forEach(r => { if(!(r.sku_key in skus)) skus[r.sku_key] = r.label; });
-  const sel = document.getElementById('add-sku');
-  const prev = sel.value;
-  sel.innerHTML = Object.keys(skus).sort((a, b) => skus[a].localeCompare(skus[b]))
-    .map(k => `<option value="${esc(k)}">${esc(skus[k])}</option>`).join('');
-  if(prev) sel.value = prev;
-
-  let h = '<table><tr><th>Product</th><th>Cert</th><th>Lot</th><th>Current</th><th>Counted</th><th>New baseline</th><th>Δ</th></tr>';
-  let lastSku = null;
-  displayRows().forEach(r => {
-    const id = idFor(r.sku_key, r.lot);
-    const k = keyOf(r.sku_key, r.lot);
-    const val = typed[k] !== undefined ? typed[k] : '';
+  let h = '<table><tr><th>Product</th><th>Cert</th><th>Newest lot</th><th>Lots</th><th>Current</th><th>Counted total</th><th>New baseline</th><th>Δ</th></tr>';
+  _rows.forEach(r => {
+    const id = idFor(r.sku_key);
+    const val = typed[r.sku_key] !== undefined ? typed[r.sku_key] : '';
     const dCls = r.delta > 0 ? 'pos' : (r.delta < 0 ? 'neg' : '');
-    let tag = '';
-    if(r.new_lot) tag = ' <span class="tag-new">new lot</span>';
-    else if(!r.counted) tag = ' <span class="tag">carried</span>';
-    const prod = (lastSku === r.sku_key) ? '' : esc(r.label); // de-dupe the product name within a SKU group
-    lastSku = r.sku_key;
-    h += `<tr><td>${prod}</td><td style="text-align:left;">${esc(r.cert || '—')}</td>`
-       + `<td style="text-align:left;">${esc(r.lot || '—')}${tag}</td>`
-       + `<td class="num">${r.current}</td>`
-       + `<td><input class="cnt" id="${id}" inputmode="numeric" value="${esc(val)}" placeholder="—"></td>`
+    const carried = !r.counted ? ' <span class="tag">carried</span>' : '';
+    h += `<tr><td>${esc(r.label)}</td><td style="text-align:left;">${esc(r.cert || '—')}</td>`
+       + `<td style="text-align:left;">${esc(r.latest_lot || '—')}</td>`
+       + `<td class="num">${r.lots}</td><td class="num">${r.current}</td>`
+       + `<td><input class="cnt" id="${id}" inputmode="numeric" value="${esc(val)}" placeholder="—">${carried}</td>`
        + `<td class="num">${r.target}</td><td class="num ${dCls}">${r.delta > 0 ? '+' : ''}${r.delta}</td></tr>`;
   });
   h += '</table>';
   document.getElementById('grid').innerHTML = h;
-}
-
-function addLot(){
-  const sku = document.getElementById('add-sku').value;
-  const lot = document.getElementById('add-lot').value.trim();
-  const qty = document.getElementById('add-qty').value.trim();
-  if(!sku || !lot){ alert('Pick a SKU and enter a lot code.'); return; }
-  const label = (_server.find(r => r.sku_key === sku) || {}).label || sku;
-  const cert = (_server.find(r => r.sku_key === sku) || {}).cert || '';
-  if(!_added.some(a => a.sku_key === sku && a.lot === lot) &&
-     !_server.some(r => r.sku_key === sku && r.lot === lot)){
-    _added.push({sku_key: sku, lot, label, cert});
-  }
-  // Re-render, then seed the count for the new row.
-  renderGrid({lot_count: _server.length + _added.length, sku_count: 0, counted: 0,
-              carried_uncounted: 0, new_lots: _added.length, target_units: 0, net_delta: 0});
-  const el = document.getElementById(idFor(sku, lot));
-  if(el && qty){ el.value = qty; }
-  document.getElementById('add-lot').value = '';
-  document.getElementById('add-qty').value = '';
 }
 
 async function doPreview(){
@@ -187,13 +128,13 @@ async function doPreview(){
 }
 
 async function doApply(){
-  const lots = collectLots();
-  const n = lots.length;
-  if(!confirm(`Apply the zero-day reset?\n\n${n} lot(s) counted; uncounted lots carried forward at current stock. Current files are archived first (recoverable), but this rewrites finished goods. Proceed?`)) return;
+  const counts = collectCounts();
+  const n = Object.keys(counts).length;
+  if(!confirm(`Apply the zero-day reset?\n\n${n} SKU(s) counted; uncounted SKUs carried forward at current stock. Current files are archived first (recoverable), but this rewrites finished goods. Proceed?`)) return;
   document.getElementById('status').textContent = 'Applying…';
   const d = await (await fetch('/admin/fg-reset/apply', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({lots, confirm: 'RESET'})
+    body: JSON.stringify({counts, confirm: 'RESET'})
   })).json();
   document.getElementById('status').textContent = '';
   if(d.error){
@@ -201,7 +142,7 @@ async function doApply(){
     return;
   }
   document.getElementById('result').innerHTML =
-    `<div class="ok"><strong>Reset applied ✓</strong> — cutover ${d.cutover}. ${d.lots_reset} lots re-baselined (${d.total_units} units). `
+    `<div class="ok"><strong>Reset applied ✓</strong> — cutover ${d.cutover}. ${d.skus_reset} SKUs re-baselined (${d.total_units} units). `
     + `Archived: ${d.archived_files.map(esc).join(', ')} in inventory/ledger_archive/. `
     + `Check the <a href="/admin/fg-reconcile">reconciliation</a> — it should now be clean.</div>`;
   document.getElementById('apply-btn').disabled = true;
