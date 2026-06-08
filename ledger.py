@@ -28,7 +28,7 @@ from flask import (Blueprint, request, jsonify, session, redirect, url_for,
                    render_template)
 
 from helpers import (_load_json, _save_json, ADJUSTMENTS_PATH, INVENTORY_DIR,
-                     _sku_key, _sku_display)
+                     _sku_key, _sku_display, _prod_date)
 
 import app
 
@@ -426,67 +426,95 @@ def verify_fg_projection():
 
 # ── Increment 3: zero-day reset (preview is read-only; apply WRITES) ──────
 #
-# The reset closes the drifted history and opens clean books: every SKU collapses
-# to ONE reset_baseline FG lot at its physically-counted total, the old lots are
-# archived, and a RESET marker + opening events are written to the ledger. The
-# reconciliation/backfill cutover filter then ignores everything before the reset,
-# so post-reset the books are clean (zero drift, zero orphans, verify green). Apply
-# archives the current files first (recoverable) and is gated behind an explicit
-# confirmation token.
+# The reset closes the drifted history and opens clean books. It counts at
+# (SKU, LOT#) grain: each physical lot becomes one clean reset_baseline FG entry
+# at its counted units, preserving the lot code (expiry/traceability) and the
+# original production date (so FIFO order survives). Old lots are archived, and a
+# RESET marker + opening events are written to the ledger. The reconciliation/
+# backfill cutover filter then ignores everything before the reset, so post-reset
+# the books are clean (zero drift, zero orphans, verify green). Apply archives the
+# current files first (recoverable) and is gated behind an explicit confirmation.
 
 
-def _current_sku_stock():
-    """Map sku_key -> {label, cert, current units, lots} from the live FG file."""
-    fg = _load_json(app.ORGANIC_FG_PATH, [])
+def _current_lot_stock():
+    """Group the live FG file by (sku_key, lot): current remaining, cert, brand/
+    recipe/format, the production/FIFO date, and entry count — for the reset grid."""
     out = {}
-    for f in fg:
+    for f in _load_json(app.ORGANIC_FG_PATH, []):
         sku = _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", ""))
-        row = out.get(sku)
+        lot = (f.get("lot") or "")
+        key = (sku, lot)
+        prod_date = _prod_date(f) or (f.get("created_at") or "")
+        row = out.get(key)
         if row is None:
-            row = out[sku] = {"sku_key": sku, "cert": (f.get("certification") or ""),
-                              "label": _sku_display(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")),
-                              "current": 0, "lots": 0}
+            row = out[key] = {
+                "sku_key": sku, "lot": lot,
+                "label": _sku_display(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")),
+                "cert": (f.get("certification") or ""),
+                "brand": f.get("brand", ""), "recipe": f.get("recipe", ""),
+                "format": f.get("format", ""), "current": 0, "entries": 0,
+                "prod_date": prod_date,
+            }
         row["current"] += _int(f.get("quantity_remaining"))
-        row["lots"] += 1
+        row["entries"] += 1
+        if prod_date and (not row["prod_date"] or prod_date < row["prod_date"]):
+            row["prod_date"] = prod_date
     return out
 
 
-def _norm_counts(counts):
-    """Coerce a {sku_key: qty} input dict to clean non-negative ints."""
+def _norm_lot_counts(lots):
+    """Coerce a list of {sku_key, lot, counted} into {(sku, lot): qty} ints."""
     clean = {}
-    for k, v in (counts or {}).items():
+    for item in (lots or []):
+        if not isinstance(item, dict):
+            continue
+        sku = (item.get("sku_key") or "").strip()
+        if not sku:
+            continue
+        lot = (item.get("lot") or "").strip()
         try:
-            q = int(v)
+            q = int(item.get("counted"))
         except (ValueError, TypeError):
             continue
-        clean[k] = max(0, q)
+        clean[(sku, lot)] = max(0, q)
     return clean
 
 
-def compute_reset_preview(counts):
-    """Read-only preview of a zero-day reset. `counts` = {sku_key: counted_units}.
-    Each SKU's target is the count if given, else current system stock ('carried',
-    so an uncounted SKU is never silently wiped). Returns per-SKU rows + summary."""
-    counts = _norm_counts(counts)
-    stock = _current_sku_stock()
+def compute_reset_preview(lots):
+    """Read-only preview of a lot-level zero-day reset. `lots` is a list of
+    {sku_key, lot, counted}. Each lot's target is the count if given, else its
+    current system remaining ('carried', so an uncounted lot is never silently
+    wiped). Counted (sku, lot) pairs not in the system are surfaced as new lots."""
+    counts = _norm_lot_counts(lots)
+    stock = _current_lot_stock()
     rows = []
     carried = 0
-    for sku in (set(stock) | set(counts)):
-        s = stock.get(sku, {"label": sku, "cert": "", "current": 0, "lots": 0})
-        counted = sku in counts
-        target = counts[sku] if counted else s["current"]
-        rows.append({"sku_key": sku, "label": s["label"], "cert": s["cert"],
-                     "current": s["current"], "lots": s["lots"], "counted": counted,
-                     "target": target, "delta": target - s["current"]})
+    new_lots = 0
+    for key in (set(stock) | set(counts)):
+        counted = key in counts
+        s = stock.get(key)
+        if s is None:
+            sku, lot = key
+            brand, recipe, fmt = (sku.split("|") + ["", "", ""])[:3]
+            s = {"sku_key": sku, "lot": lot, "cert": "", "current": 0, "entries": 0,
+                 "label": _sku_display(brand, recipe, fmt) or sku}
+            new_lots += 1
+        target = counts[key] if counted else s["current"]
+        rows.append({"sku_key": s["sku_key"], "lot": s["lot"], "label": s["label"],
+                     "cert": s["cert"], "current": s["current"], "entries": s["entries"],
+                     "counted": counted, "target": target, "delta": target - s["current"],
+                     "new_lot": s["entries"] == 0})
         if not counted and s["current"] != 0:
             carried += 1
-    rows.sort(key=lambda r: r["label"].lower())
+    rows.sort(key=lambda r: (r["label"].lower(), r["lot"]))
     return {
-        "skus": rows,
+        "lots": rows,
         "summary": {
-            "sku_count": len(rows),
+            "lot_count": len(rows),
+            "sku_count": len({r["sku_key"] for r in rows}),
             "counted": sum(1 for r in rows if r["counted"]),
             "carried_uncounted": carried,
+            "new_lots": new_lots,
             "current_units": sum(r["current"] for r in rows),
             "target_units": sum(r["target"] for r in rows),
             "net_delta": sum(r["delta"] for r in rows),
@@ -495,12 +523,12 @@ def compute_reset_preview(counts):
     }
 
 
-def apply_reset(counts, actor=""):
-    """Apply the zero-day reset (WRITES). Archives the current inventory files,
-    replaces finished_goods.json with one reset_baseline lot per SKU at its target,
-    and appends a RESET marker + opening events to the ledger."""
-    counts = _norm_counts(counts)
-    preview = compute_reset_preview(counts)
+def apply_reset(lots, actor=""):
+    """Apply the lot-level zero-day reset (WRITES). Archives the current inventory
+    files, replaces finished_goods.json with one reset_baseline entry per counted
+    (SKU, LOT) at its target — preserving the lot code and original production date
+    — and appends a RESET marker + opening events to the ledger."""
+    preview = compute_reset_preview(lots)
     now = datetime.now()
     stamp = now.strftime("%Y%m%d_%H%M%S")
     cutover = now.isoformat(timespec="seconds")
@@ -516,50 +544,57 @@ def apply_reset(counts, actor=""):
                    _load_json(path, []))
         archived.append(f"{name}_{stamp}.json")
 
-    # 2. Preserve brand/recipe/format/cert from existing entries where present.
+    # 2. Preserve brand/recipe/format/cert/prod-date per (sku, lot) where present.
     meta = {}
     for f in _load_json(app.ORGANIC_FG_PATH, []):
         sku = _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", ""))
-        meta.setdefault(sku, {"brand": f.get("brand", ""), "recipe": f.get("recipe", ""),
-                              "format": f.get("format", ""),
-                              "certification": f.get("certification", "")})
+        key = (sku, (f.get("lot") or ""))
+        if key not in meta:
+            meta[key] = {"brand": f.get("brand", ""), "recipe": f.get("recipe", ""),
+                         "format": f.get("format", ""),
+                         "certification": f.get("certification", ""),
+                         "prod_date": _prod_date(f) or (f.get("created_at") or "")}
     recipes = app.load_recipes()
 
-    # 3. Build the clean FG file: one reset_baseline lot per SKU with target > 0.
+    # 3. Build the clean FG file: one reset_baseline entry per counted lot, target>0.
     new_fg = []
     opening_events = []
-    for i, r in enumerate(preview["skus"]):
+    for i, r in enumerate(preview["lots"]):
         target = r["target"]
         if target <= 0:
             continue
-        sku = r["sku_key"]
-        m = meta.get(sku)
+        sku, lot = r["sku_key"], r["lot"]
+        m = meta.get((sku, lot))
         if m is None:
             brand, recipe, fmt = (sku.split("|") + ["", "", ""])[:3]
             m = {"brand": brand, "recipe": recipe, "format": fmt,
-                 "certification": (recipes.get(recipe) or {}).get("certification", "")}
+                 "certification": (recipes.get(recipe) or {}).get("certification", ""),
+                 "prod_date": ""}
         fid = f"fg_reset_{stamp}_{i:03d}"
         new_fg.append({
             "id": fid, "brand": m["brand"], "recipe": m["recipe"], "format": m["format"],
-            "certification": m["certification"], "lot": "RESET-" + now.strftime("%d%m%y"),
+            "certification": m["certification"],
+            "lot": lot or ("RESET-" + now.strftime("%d%m%y")),
             "quantity_produced": target, "quantity_remaining": target,
             "vessel": "Reset baseline", "week_id": None, "day_idx": None,
-            "created_at": cutover, "source": "reset_baseline",
+            "created_at": m["prod_date"] or cutover,  # preserve FIFO order
+            "reset_at": cutover, "source": "reset_baseline",
         })
         opening_events.append({"type": EV_OPENING, "fg_id": fid, "qty_delta": target,
-                               "sku_key": sku, "source": "reset", "ref": stamp, "ts": cutover})
+                               "sku_key": sku, "lot": lot, "source": "reset",
+                               "ref": stamp, "ts": cutover})
 
     # 4. Append RESET marker + opening events; replace the FG file.
     events = _load_json(EVENTS_PATH, [])
     events.append({"type": EV_RESET, "fg_id": None, "qty_delta": 0, "sku_key": None,
                    "source": "reset", "ref": stamp, "ts": cutover,
-                   "meta": {"skus": len(opening_events), "actor": actor}})
+                   "meta": {"lots": len(opening_events), "actor": actor}})
     events.extend(opening_events)
     _save_json(app.ORGANIC_FG_PATH, new_fg)
     _save_json(EVENTS_PATH, events)
 
     return {"applied_at": cutover, "cutover": cutover[:10], "archive_stamp": stamp,
-            "archived_files": archived, "skus_reset": len(opening_events),
+            "archived_files": archived, "lots_reset": len(opening_events),
             "total_units": sum(e["qty_delta"] for e in opening_events),
             "fg_entries": len(new_fg)}
 
@@ -596,9 +631,9 @@ def fg_reset_page():
 @ledger_bp.route("/admin/fg-reset/preview", methods=["POST"])
 @login_required
 def fg_reset_preview_api():
-    """Read-only preview of a zero-day reset for the submitted per-SKU counts."""
+    """Read-only preview of a lot-level zero-day reset for the submitted counts."""
     data = request.json or {}
-    return jsonify(compute_reset_preview(data.get("counts") or {}))
+    return jsonify(compute_reset_preview(data.get("lots") or []))
 
 
 @ledger_bp.route("/admin/fg-reset/apply", methods=["POST"])
@@ -608,4 +643,4 @@ def fg_reset_apply_api():
     data = request.json or {}
     if data.get("confirm") != "RESET":
         return jsonify({"error": "Confirmation token required"}), 400
-    return jsonify(apply_reset(data.get("counts") or {}, actor=session.get("user", "")))
+    return jsonify(apply_reset(data.get("lots") or [], actor=session.get("user", "")))
