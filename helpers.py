@@ -44,6 +44,7 @@ _DEFAULT_COMPANY_INFO = {
     "registration": "",
     "notes": "",
     "ripe_inventory_buffer": 12,   # units withheld from Ripe's visible stock
+    "ripe_credit": 0.0,            # account credit (CAD) Ripe can apply to an e-transfer order; auto-depletes on Soma approval
     "ss_small_order_threshold":  20,    # SS delivery minimum: below this delivery is rejected; at/above it delivery is free
     "fzbb_small_lead_days":  3,    # min days notice for FZ/BB ≤ threshold
     "fzbb_large_lead_days":  7,    # min days notice for FZ/BB ≥ threshold

@@ -491,6 +491,22 @@ def ripe_order_action(order_id):
                 "ripe_error": ripe_resp.get("error") if isinstance(ripe_resp, dict) else str(ripe_resp),
             }), 502
 
+        # Auto-deplete any account credit the order applied (e-transfer only).
+        # Runs exactly once per order: a re-approve hits the "already {status}"
+        # 409 guard above before reaching here. Floored at 0 if the balance has
+        # since dropped below what the order applied. Best-effort: a failure here
+        # must not undo the approval that already succeeded.
+        _credit_used = float(order.get("credit_applied") or 0)
+        if _credit_used > 0:
+            try:
+                from app import _save_json as _sj, COMPANY_INFO_PATH as _cip
+                _ci = _load_company_info()
+                _bal = float(_ci.get("ripe_credit") or 0.0)
+                _ci["ripe_credit"] = round(max(0.0, _bal - _credit_used), 2)
+                _sj(_cip, _ci)
+            except Exception:
+                logger.warning("Failed to deplete ripe_credit on approve of %s", order_id, exc_info=True)
+
         return jsonify({"ok": True, "payment_pending": payment_key == "cc_net14"})
 
     if action in ("decline", "fulfill"):

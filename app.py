@@ -3397,6 +3397,7 @@ def internal_buyer_catalogue():
         "catalogue": catalogue,
         "units_per_case": 12,
         "buffer_units": buffer_units,
+        "ripe_credit": float(company.get("ripe_credit") or 0.0),
         "rules": {
             "ss_small_order_threshold": int(company.get("ss_small_order_threshold") or 20),
             "fzbb_small_lead_days":     int(company.get("fzbb_small_lead_days")  or 3),
@@ -3565,11 +3566,17 @@ def update_company_info():
     _numeric_int_keys = {"ripe_inventory_buffer", "ss_small_order_threshold",
                          "fzbb_small_lead_days", "fzbb_large_lead_days",
                          "fzbb_large_threshold"}
+    _numeric_float_keys = {"ripe_credit"}
     for k, v in data.items():
         if k in allowed:
             if k in _numeric_int_keys:
                 try:
                     info[k] = max(0, int(v))
+                except (TypeError, ValueError):
+                    pass
+            elif k in _numeric_float_keys:
+                try:
+                    info[k] = max(0.0, round(float(v), 2))
                 except (TypeError, ValueError):
                     pass
             else:
