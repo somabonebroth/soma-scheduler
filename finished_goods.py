@@ -392,9 +392,27 @@ def manual_subtract_finished_good():
         return jsonify({"error": "reason required"}), 400
     notes = (data.get("notes") or "").strip()
 
+    # Match on the full SKU key (brand|recipe|format) when the caller provides
+    # the components, so a recipe name shared across formats/brands doesn't drain
+    # the wrong SKU. Falls back to recipe-only matching for legacy callers that
+    # send just {recipe}.
+    # Prefer recomputing the key from components (normalised the same way the FG
+    # entries are) over trusting the client's pre-built sku_key string.
+    if data.get("brand") or data.get("format"):
+        sku_key = _sku_key(data.get("brand", ""), recipe_name, data.get("format", ""))
+    else:
+        sku_key = (data.get("sku_key") or "").strip()
+
     fg = _load_json(app.ORGANIC_FG_PATH, [])
-    # Find all entries for this recipe, sorted oldest-first for FIFO
-    matching = [f for f in fg if (f.get("recipe") or "") == recipe_name and int(f.get("quantity_remaining") or 0) > 0]
+    # Find all entries for this SKU, sorted oldest-first for FIFO
+    if sku_key:
+        matching = [f for f in fg
+                    if _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")) == sku_key
+                    and int(f.get("quantity_remaining") or 0) > 0]
+    else:
+        matching = [f for f in fg
+                    if (f.get("recipe") or "") == recipe_name
+                    and int(f.get("quantity_remaining") or 0) > 0]
     matching.sort(key=lambda f: (f.get("created_at") or ""))
 
     available = sum(int(f.get("quantity_remaining") or 0) for f in matching)
@@ -425,6 +443,7 @@ def manual_subtract_finished_good():
         "id": "adj_" + datetime.now().strftime("%Y%m%d%H%M%S") + str(qty),
         "kind": "subtract",
         "recipe": recipe_name,
+        "sku_key": sku_key,
         "quantity": qty,
         "drained": drained,
         "reason": reason,
