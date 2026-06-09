@@ -27,6 +27,7 @@ Defines its own login_required (verbatim copy) so it has no import-time
 dependency on app.py.
 """
 import os
+import copy
 from datetime import datetime, timedelta
 from functools import wraps
 
@@ -155,6 +156,37 @@ def _deduct_allocation(fg, sku_key, allocation, quantity):
             rec["breakdown"].append({"fg_id": e.get("id"), "quantity": take})
         sale_lots.append(rec)
     return sale_lots, rep.get("brand", ""), rep.get("recipe", ""), rep.get("format", "")
+
+
+def _restore_sale_lots(fg, sale):
+    """Restore the FG quantities a sale drew from, back into `fg` (mutated in
+    place) — the exact inverse of a deduction. Handles all three sale shapes:
+    new lots[] with per-fg_id breakdown (restores to the exact entries),
+    legacy lots[] without breakdown (best-effort to the first fg_id),
+    and the pre-multi-LOT single-fg_id shape. Shared by delete and edit so
+    both reverse a deduction identically."""
+    if sale.get("lots"):
+        for lot_entry in sale["lots"]:
+            qty_to_restore = int(lot_entry.get("quantity") or 0)
+            if qty_to_restore <= 0:
+                continue
+            breakdown = lot_entry.get("breakdown")
+            if breakdown:
+                for b in breakdown:
+                    target = next((f for f in fg if f.get("id") == b.get("fg_id")), None)
+                    if target:
+                        target["quantity_remaining"] = int(target.get("quantity_remaining") or 0) + int(b.get("quantity") or 0)
+                continue
+            fg_ids = lot_entry.get("fg_ids") or []
+            for fid in fg_ids:
+                target = next((f for f in fg if f.get("id") == fid), None)
+                if target:
+                    target["quantity_remaining"] = int(target.get("quantity_remaining") or 0) + qty_to_restore
+                    break
+    elif sale.get("fg_id"):
+        target = next((f for f in fg if f.get("id") == sale["fg_id"]), None)
+        if target:
+            target["quantity_remaining"] = int(target.get("quantity_remaining") or 0) + int(sale.get("quantity") or 0)
 
 
 @sales_bp.route("/api/organic/sales", methods=["GET"])
@@ -452,50 +484,40 @@ def edit_organic_sale(sale_id):
         if new_qty < 0:
             return jsonify({"error": "Quantity must be non-negative"}), 400
         old_qty = int(sale.get("quantity") or 0)
-        delta = new_qty - old_qty
 
-        if delta > 0:
-            # Need to deduct more — FIFO from same SKU
-            sku_key = sale.get("sku_key", "")
-            candidates = [
-                f for f in fg
-                if _sku_key(f.get("brand",""), f.get("recipe",""), f.get("format","")) == sku_key
-                and int(f.get("quantity_remaining") or 0) > 0
-            ]
-            candidates.sort(key=lambda e: (e.get("created_at",""), e.get("lot","")))
-            remaining = delta
-            for entry in candidates:
-                if remaining <= 0:
-                    break
-                avail = int(entry.get("quantity_remaining") or 0)
-                take = min(avail, remaining)
-                entry["quantity_remaining"] = avail - take
-                remaining -= take
-            if remaining > 0:
-                return jsonify({"error": f"Insufficient FG stock for delta of +{delta} units"}), 422
+        if new_qty != old_qty:
+            # Organic sales are lot-exact — the units shipped tie to specific
+            # packer-recorded lots. Re-quantifying needs a fresh lot allocation
+            # we don't have here, so refuse and direct to delete + re-record.
+            if (sale.get("certification") or "").strip().lower() == "organic":
+                return jsonify({"error": "Editing the quantity of an organic (lot-tracked) sale isn't supported. Delete it and re-record with the correct lot allocation."}), 422
 
-        elif delta < 0:
-            # Restore units — put back into the most recent LOT drawn
-            restore = abs(delta)
-            lots = sale.get("lots") or []
-            for lot_info in reversed(lots):
-                if restore <= 0:
-                    break
-                for fg_entry in fg:
-                    if fg_entry.get("lot") == lot_info.get("lot") and restore > 0:
-                        fg_entry["quantity_remaining"] = int(fg_entry.get("quantity_remaining") or 0) + restore
-                        restore = 0
-                        break
-            # If we couldn't trace back to a specific LOT, restore to most recent entry
-            if restore > 0:
-                sku_key = sale.get("sku_key", "")
-                matching = [f for f in fg if _sku_key(f.get("brand",""), f.get("recipe",""), f.get("format","")) == sku_key]
-                if matching:
-                    matching.sort(key=lambda e: e.get("created_at",""), reverse=True)
-                    matching[0]["quantity_remaining"] = int(matching[0].get("quantity_remaining") or 0) + restore
+            sku_key = sale.get("sku_key") or _sku_key(
+                sale.get("brand", ""), sale.get("recipe", ""), sale.get("format", ""))
 
-        sale["quantity"] = new_qty
-        _save_json(app.ORGANIC_FG_PATH, fg)
+            # Reverse the ORIGINAL deduction in full, then re-deduct the new
+            # quantity FIFO — on a trial copy so an insufficient-stock failure
+            # leaves both FG and the sale record untouched (no partial drift).
+            trial = copy.deepcopy(fg)
+            _restore_sale_lots(trial, sale)
+            if new_qty == 0:
+                new_lots = []
+            else:
+                try:
+                    new_lots, _b, _r, _f = _deduct_fifo(trial, sku_key, new_qty)
+                except ValueError as e:
+                    return jsonify({"error": str(e)}), 422
+
+            # Commit the trial inventory and rewrite the sale's lot record so it
+            # always reflects what is actually deducted (a later delete then
+            # restores the right amount).
+            fg[:] = trial
+            sale["lots"] = new_lots
+            sale["fg_lot"] = (new_lots[0]["lot"] if len(new_lots) == 1 else "")
+            sale["fg_id"] = (new_lots[0]["fg_ids"][0]
+                             if len(new_lots) == 1 and len(new_lots[0]["fg_ids"]) == 1 else "")
+            sale["quantity"] = new_qty
+            _save_json(app.ORGANIC_FG_PATH, fg)
 
     sale["edited_at"] = datetime.now().isoformat()
     sales[idx] = sale
@@ -514,33 +536,7 @@ def delete_organic_sale(sale_id):
     if not sale:
         return jsonify({"success": True})  # Already gone
 
-    if sale.get("lots"):
-        for lot_entry in sale["lots"]:
-            qty_to_restore = int(lot_entry.get("quantity") or 0)
-            if qty_to_restore <= 0:
-                continue
-            # Preferred: per-fg_id breakdown (post-2026-05 sales) — restores
-            # exactly to where each unit was deducted from.
-            breakdown = lot_entry.get("breakdown")
-            if breakdown:
-                for b in breakdown:
-                    target = next((f for f in fg if f.get("id") == b.get("fg_id")), None)
-                    if target:
-                        target["quantity_remaining"] = int(target.get("quantity_remaining") or 0) + int(b.get("quantity") or 0)
-                continue
-            # Fallback: legacy lot record without breakdown — restore everything
-            # to the first matching fg_id (best-effort; preserves SKU total).
-            fg_ids = lot_entry.get("fg_ids") or []
-            for fid in fg_ids:
-                target = next((f for f in fg if f.get("id") == fid), None)
-                if target:
-                    target["quantity_remaining"] = int(target.get("quantity_remaining") or 0) + qty_to_restore
-                    break
-    elif sale.get("fg_id"):
-        # Pre-multi-LOT legacy shape
-        target = next((f for f in fg if f.get("id") == sale["fg_id"]), None)
-        if target:
-            target["quantity_remaining"] = int(target.get("quantity_remaining") or 0) + int(sale.get("quantity") or 0)
+    _restore_sale_lots(fg, sale)
 
     sales = [s for s in sales if s.get("id") != sale_id]
     _save_json(app.ORGANIC_SALES_PATH, sales)
