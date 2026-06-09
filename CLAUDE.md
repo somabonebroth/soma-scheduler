@@ -249,6 +249,48 @@ reset (only the existing reconcile-raw tool).
 
 ---
 
+## FG mutation-surface audit (2026-06-09)
+
+Audited every code path that adds/subtracts FG inventory (20 write sites across 8
+modules). The ADD side (production completion, reset, backfill, rename cascade) is
+sound and the 2026-06-09 doubling vector is genuinely closed (frozen-run guard fires
+in `_complete_organic_run` for both live-save and boot-backfill). Three SUBTRACT-side
+bugs were found and **fixed**:
+
+- **manual-subtract drained the wrong SKU** (`finished_goods.py` `manual_subtract_finished_good`):
+  matched FG on bare `recipe`, so a recipe name shared across formats/brands drained as
+  one pool. Now matches on the full `brand|recipe|format` SKU key (recomputed from the
+  components the "Adjust Inventory" modal already sends), recipe-only fallback for legacy
+  callers; stamps `sku_key` into the adjustments audit line.
+- **edit-sale corrupted the lot record + drifted FG** (`sales.py` `edit_organic_sale`):
+  adjusted FG by a delta in place — a delta>0 partial deduction wasn't rolled back on the
+  422, and neither direction updated `sale.lots[]` (only the scalar qty), so a later delete
+  restored the OLD quantity. Now reverses the original deduction in full and re-applies the
+  new qty FIFO on a **trial copy** (commit only on success → a shortfall changes nothing),
+  rewriting `sale.lots[]` to match. Organic (lot-tracked) sales REFUSE a quantity edit
+  (delete + re-record with a real allocation instead). Canonical restore extracted to
+  `sales._restore_sale_lots()`, shared by edit and delete.
+- **Ripe approve double-deducted on retry** (`ripe_orders.py` `create_ripe_sale_records`):
+  FG is deducted + sales written BEFORE the status push to Ripe; if that push failed (502)
+  the order stayed `pending` on Ripe, so a retry passed the pending-check and deducted again.
+  Now an idempotency guard keyed on `ripe_order_id` skips the deduction if sale records
+  already exist for that order (internal-only; no Ripe API contract change).
+
+**Two systemic gaps left UNFIXED (by design — deliberate conversations, not squeeze-ins):**
+1. **No FG write path emits an inventory ledger event.** All ~18 mutating sites write
+   `finished_goods.json` directly; `ledger.py` is read-only + the reset. The ledger
+   reconstructs history by re-projecting from FG/sales records (`backfill_fg_events`), not
+   a write-through log. This is the known architecture, not a regression.
+2. **The two-tier organic boundary is convention-only, not enforced in code.** No automated
+   subtract path (scheduled deductions, Shopify/Clover commit, Ripe approve) excludes
+   `certification == "Organic"` SKUs, and Ripe/channels even copy the organic cert onto the
+   sale. Organic stays lot-accurate only because it's catalogued wholesale-manual-only. A
+   mis-catalogued organic SKU on a retail channel would silently FIFO-deduct an organic lot.
+   Likewise both sales *add* paths choose allocation-vs-FIFO on whether `allocated_lots` was
+   sent, NOT on the cert flag — no server guard requires an organic sale to carry an allocation.
+
+---
+
 ## Environment variables
 
 **Soma:**
