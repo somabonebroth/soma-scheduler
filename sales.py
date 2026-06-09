@@ -59,6 +59,104 @@ def login_required(f):
     return decorated
 
 
+def _fg_prod_date(e):
+    """Production date for FIFO ordering: week_id+day_idx, else the created_at date."""
+    wid, d_idx = e.get("week_id"), e.get("day_idx")
+    if wid and d_idx is not None:
+        try:
+            return (datetime.strptime(wid, "%Y-%m-%d") + timedelta(days=int(d_idx))).strftime("%Y-%m-%d")
+        except (ValueError, TypeError):
+            pass
+    return (e.get("created_at") or "")[:10]
+
+
+def _deduct_fifo(fg, sku_key, quantity):
+    """FIFO-deduct `quantity` of sku_key across its lots (oldest production date
+    first), mutating fg in place. Returns (sale_lots, brand, recipe, fmt). Raises
+    ValueError if the SKU has no stock or not enough. (Extracted verbatim from the
+    prior inline logic so non-allocation sales behave identically.)"""
+    candidates = [f for f in fg
+                  if _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")) == sku_key
+                  and int(f.get("quantity_remaining") or 0) > 0]
+    if not candidates:
+        raise ValueError("No inventory available for this SKU")
+    candidates.sort(key=lambda e: (_fg_prod_date(e), e.get("lot", ""), e.get("id", "")))
+    total = sum(int(e.get("quantity_remaining") or 0) for e in candidates)
+    if quantity > total:
+        raise ValueError(f"Not enough inventory: requested {quantity}, available {total}")
+    first = candidates[0]
+    remaining = quantity
+    lot_summary = {}
+    for entry in candidates:
+        if remaining <= 0:
+            break
+        avail = int(entry.get("quantity_remaining") or 0)
+        if avail <= 0:
+            continue
+        take = min(avail, remaining)
+        entry["quantity_remaining"] = avail - take
+        remaining -= take
+        lot = entry.get("lot", "")
+        if lot not in lot_summary:
+            lot_summary[lot] = {"lot": lot, "quantity": 0, "fg_ids": [], "breakdown": []}
+        lot_summary[lot]["quantity"] += take
+        lot_summary[lot]["fg_ids"].append(entry.get("id"))
+        lot_summary[lot]["breakdown"].append({"fg_id": entry.get("id"), "quantity": take})
+    return (list(lot_summary.values()), first.get("brand", ""),
+            first.get("recipe", ""), first.get("format", ""))
+
+
+def _deduct_allocation(fg, sku_key, allocation, quantity):
+    """Deduct EXACTLY the lots named in `allocation` (list of {lot, quantity}) —
+    for organic sales where the packer records the real lot(s) shipped instead of
+    FIFO-guessing. Validates the allocation sums to `quantity` and each lot has
+    enough stock; deducts FIFO within a lot if it spans entries. Mutates fg.
+    Returns (sale_lots, brand, recipe, fmt). Raises ValueError on any mismatch."""
+    items = [a for a in (allocation or []) if isinstance(a, dict)]
+    total = 0
+    for a in items:
+        try:
+            total += int(a.get("quantity") or 0)
+        except (ValueError, TypeError):
+            pass
+    if total != quantity:
+        raise ValueError(f"Lot allocation ({total}) must equal the sale quantity ({quantity})")
+    rep = next((f for f in fg
+                if _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")) == sku_key), None)
+    if rep is None:
+        raise ValueError("No inventory available for this SKU")
+    sale_lots = []
+    for a in items:
+        lot = (a.get("lot") or "").strip()
+        try:
+            need = int(a.get("quantity") or 0)
+        except (ValueError, TypeError):
+            need = 0
+        if need <= 0:
+            continue
+        entries = [f for f in fg
+                   if _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")) == sku_key
+                   and (f.get("lot") or "") == lot
+                   and int(f.get("quantity_remaining") or 0) > 0]
+        entries.sort(key=lambda e: (e.get("created_at") or "", e.get("id", "")))
+        avail = sum(int(e.get("quantity_remaining") or 0) for e in entries)
+        if need > avail:
+            raise ValueError(f"Lot {lot or '(blank)'}: requested {need}, only {avail} available")
+        rec = {"lot": lot, "quantity": 0, "fg_ids": [], "breakdown": []}
+        rem = need
+        for e in entries:
+            if rem <= 0:
+                break
+            take = min(int(e.get("quantity_remaining") or 0), rem)
+            e["quantity_remaining"] = int(e.get("quantity_remaining") or 0) - take
+            rem -= take
+            rec["quantity"] += take
+            rec["fg_ids"].append(e.get("id"))
+            rec["breakdown"].append({"fg_id": e.get("id"), "quantity": take})
+        sale_lots.append(rec)
+    return sale_lots, rep.get("brand", ""), rep.get("recipe", ""), rep.get("format", "")
+
+
 @sales_bp.route("/api/organic/sales", methods=["GET"])
 @login_required
 def get_organic_sales():
@@ -113,61 +211,18 @@ def add_organic_sale():
     sale_lots = []   # records what was deducted
     brand = recipe = fmt = ""
 
+    allocation = data.get("allocated_lots") or None
     if sku_key:
-        # NEW path: FIFO across the SKU's LOTs (oldest production date first)
-        # Build a list of FG entries belonging to this SKU, ordered FIFO
-        candidates = [f for f in fg
-                      if _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")) == sku_key
-                      and (f.get("quantity_remaining") or 0) > 0]
-        if not candidates:
-            return jsonify({"error": "No inventory available for this SKU"}), 400
-
-        def _entry_prod_date(e):
-            wid = e.get("week_id")
-            d_idx = e.get("day_idx")
-            if wid is not None and d_idx is not None:
-                try:
-                    return (datetime.strptime(wid, "%Y-%m-%d") + timedelta(days=int(d_idx))).strftime("%Y-%m-%d")
-                except (ValueError, TypeError):
-                    pass
-            return (e.get("created_at") or "")[:10]
-
-        candidates.sort(key=lambda e: (_entry_prod_date(e), e.get("lot", ""), e.get("id", "")))
-
-        total_available = sum(int(e.get("quantity_remaining") or 0) for e in candidates)
-        if quantity > total_available:
-            return jsonify({"error": f"Not enough inventory: requested {quantity}, available {total_available}"}), 400
-
-        first = candidates[0]
-        brand = first.get("brand", "")
-        recipe = first.get("recipe", "")
-        fmt = first.get("format", "")
-
-        remaining_to_deduct = quantity
-        lot_summary = {}
-        for entry in candidates:
-            if remaining_to_deduct <= 0:
-                break
-            avail = int(entry.get("quantity_remaining") or 0)
-            if avail <= 0:
-                continue
-            take = min(avail, remaining_to_deduct)
-            entry["quantity_remaining"] = avail - take
-            remaining_to_deduct -= take
-            lot = entry.get("lot", "")
-            if lot not in lot_summary:
-                lot_summary[lot] = {
-                    "lot": lot, "quantity": 0,
-                    "fg_ids": [],            # legacy/display convenience
-                    "breakdown": [],         # exact per-fg_id deduction (for accurate restore)
-                }
-            lot_summary[lot]["quantity"] += take
-            lot_summary[lot]["fg_ids"].append(entry.get("id"))
-            lot_summary[lot]["breakdown"].append({
-                "fg_id": entry.get("id"),
-                "quantity": take,
-            })
-        sale_lots = list(lot_summary.values())
+        # Organic sales pass an explicit lot allocation (the packer-recorded
+        # lots); everything else FIFO-deducts oldest production date first. Both
+        # paths produce the same sale_lots / breakdown shape.
+        try:
+            if allocation:
+                sale_lots, brand, recipe, fmt = _deduct_allocation(fg, sku_key, allocation, quantity)
+            else:
+                sale_lots, brand, recipe, fmt = _deduct_fifo(fg, sku_key, quantity)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
 
     else:
         # LEGACY path: single fg_id
@@ -296,48 +351,20 @@ def add_sale_order():
                 errors.append(f"Line missing sku_key and recipe: {line}")
                 continue
 
-        # FIFO deduction across this SKU's LOTs
-        candidates = [
-            f for f in fg
-            if _sku_key(f.get("brand",""), f.get("recipe",""), f.get("format","")) == sku_key
-            and int(f.get("quantity_remaining") or 0) > 0
-        ]
-        if not candidates:
-            errors.append(f"No inventory for {sku_key}")
+        # Organic lines carry an explicit lot allocation (packer-recorded);
+        # others FIFO-deduct. Same sale_lots/breakdown shape either way.
+        allocation = line.get("allocated_lots") or None
+        try:
+            if allocation:
+                sale_lots, brand_d, recipe_d, fmt_d = _deduct_allocation(fg, sku_key, allocation, quantity)
+            else:
+                sale_lots, brand_d, recipe_d, fmt_d = _deduct_fifo(fg, sku_key, quantity)
+        except ValueError as e:
+            errors.append(f"{sku_key}: {e}")
             continue
-
-        def _prod_date(e):
-            wid, d_idx = e.get("week_id"), e.get("day_idx")
-            if wid and d_idx is not None:
-                try:
-                    return (datetime.strptime(wid, "%Y-%m-%d") + timedelta(days=int(d_idx))).strftime("%Y-%m-%d")
-                except Exception:
-                    pass
-            return (e.get("created_at") or "")[:10]
-
-        candidates.sort(key=lambda e: (_prod_date(e), e.get("lot",""), e.get("id","")))
-        total_available = sum(int(e.get("quantity_remaining") or 0) for e in candidates)
-        if quantity > total_available:
-            errors.append(f"Insufficient stock for {sku_key}: need {quantity}, have {total_available}")
-            continue
-
-        remaining = quantity
-        lot_summary = {}
-        for entry in candidates:
-            if remaining <= 0:
-                break
-            avail = int(entry.get("quantity_remaining") or 0)
-            take  = min(avail, remaining)
-            entry["quantity_remaining"] = avail - take
-            remaining -= take
-            lot = entry.get("lot", "")
-            if lot not in lot_summary:
-                lot_summary[lot] = {"lot": lot, "quantity": 0, "fg_ids": [], "breakdown": []}
-            lot_summary[lot]["quantity"]  += take
-            lot_summary[lot]["fg_ids"].append(entry.get("id"))
-            lot_summary[lot]["breakdown"].append({"fg_id": entry.get("id"), "quantity": take})
-
-        sale_lots = list(lot_summary.values())
+        brand  = brand_d  or brand
+        recipe = recipe_d or recipe
+        fmt    = fmt_d    or fmt
 
         sale_cert = ""
         for lot_entry in sale_lots:
@@ -348,11 +375,6 @@ def add_sale_order():
                     break
             if sale_cert:
                 break
-
-        first = candidates[0]
-        brand   = first.get("brand",   brand)
-        recipe  = first.get("recipe",  recipe)
-        fmt     = first.get("format",  fmt)
 
         line_total = round(unit_price * quantity, 2) if unit_price is not None else None
         sale = {
