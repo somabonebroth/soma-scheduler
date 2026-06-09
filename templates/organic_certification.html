@@ -15,8 +15,12 @@
 .dash-btn .label { font-size: 14px; font-weight: 600; color: var(--dark); }
 .dash-btn .sublabel { font-size: 11px; color: var(--text-light); }
 .dash-btn.highlight { border-color: var(--accent); background: linear-gradient(135deg, var(--bg), #e8efe5); }
+.dash-btn { position: relative; }
+.dash-btn .step { position: absolute; top: 8px; left: 8px; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; line-height: 1; }
 .section-label { font-size: 11px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 1px; margin-top: 16px; margin-bottom: 6px; border-left: 3px solid var(--accent); padding-left: 8px; }
+.section-note { font-size: 12px; color: var(--text-light); margin: 0 0 8px; }
 .oc-intro { margin: 0 0 4px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
+.oc-intro strong { color: var(--dark); }
 </style>
 </head>
 <body>
@@ -30,17 +34,19 @@
 </div>
 <div class="main">
     <div class="dashboard-grid">
-        <p class="oc-intro">Everything needed for the organic certification chain — reconciliation, audits, and compliance documents — in one place.</p>
-        <div class="section-label">Reconciliation &amp; Audits</div>
+        <p class="oc-intro">Everything needed for the organic certification chain in one place. <strong>Getting ready for an audit?</strong> Work through steps 1–3 in order to get your inventory accurate and proven, then have your records and documents ready to show.</p>
+        <div class="section-label">Before an audit — work through in order</div>
+        <p class="section-note">Each step builds on the one before it.</p>
         <div class="dash-row">
-            <a href="/mass-balance" class="dash-btn"><span class="icon">&#128202;</span><span class="label">Mass Balance</span><span class="sublabel">Opening + Received &minus; Consumed reconciliation</span></a>
-            <a href="/admin/reconcile-raw" class="dash-btn"><span class="icon">&#9851;</span><span class="label">Reconcile Raw Materials</span><span class="sublabel">Replay completed runs date-aware</span></a>
-            <a href="/audit/rm" class="dash-btn"><span class="icon">&#128269;</span><span class="label">Audit Inventory</span><span class="sublabel">Count raw materials against the books</span></a>
+            <a href="/admin/reconcile-raw" class="dash-btn"><span class="step">1</span><span class="icon">&#9851;</span><span class="label">Reconcile Raw Materials</span><span class="sublabel">Make the books accurate first — replay every completed production run so raw-material balances match what was actually used.</span></a>
+            <a href="/mass-balance" class="dash-btn"><span class="step">2</span><span class="icon">&#128202;</span><span class="label">Mass Balance</span><span class="sublabel">Check the numbers add up — Opening + Received &minus; Consumed should equal what's on the shelf. Investigate any gap.</span></a>
+            <a href="/audit/rm" class="dash-btn"><span class="step">3</span><span class="icon">&#128269;</span><span class="label">Audit Inventory</span><span class="sublabel">Confirm it for real — physically count raw materials and compare them to the books.</span></a>
         </div>
-        <div class="section-label">Records &amp; Documents</div>
+        <div class="section-label">Records &amp; documents — keep these ready</div>
+        <p class="section-note">Reference material an auditor may ask to see at any time.</p>
         <div class="dash-row">
-            <a href="/audits" class="dash-btn"><span class="icon">&#128220;</span><span class="label">Audit History</span><span class="sublabel">Past inventory audits</span></a>
-            <a href="/certifications" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Documents</span><span class="sublabel">Organic &amp; compliance documents</span></a>
+            <a href="/audits" class="dash-btn"><span class="icon">&#128220;</span><span class="label">Audit History</span><span class="sublabel">Your past inventory counts, with dates.</span></a>
+            <a href="/certifications" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Documents</span><span class="sublabel">Organic certificates and compliance paperwork.</span></a>
         </div>
     </div>
 </div>
