@@ -2344,6 +2344,15 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
 
     warnings = []
 
+    # Runs frozen by a zero-day reset: their FG output is already embodied in the
+    # reset baselines, so we must NOT regenerate it (doing so doubled inventory).
+    # Fetched once; degrade to no-freeze on any error so a save/boot never crashes.
+    try:
+        import ledger
+        _frozen_runs = ledger._reset_frozen_run_ids()
+    except Exception:
+        _frozen_runs = set()
+
     start_week_id, start_day_idx = _previous_day_coords(finish_week_id, finish_day_idx)
 
     try:
@@ -2374,6 +2383,10 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
 
     for run in runs:
         if run.get("week_id") != start_week_id or run.get("day_idx") != start_day_idx:
+            continue
+        if run.get("id") in _frozen_runs:
+            # Completed as of a reset cutover — its output is in the reset baseline.
+            # Skip entirely: never regenerate FG or touch raw for a frozen run.
             continue
         # Universal inventory: process every scheduled run, regardless of
         # the recipe's certification status. The recipe is our source of truth

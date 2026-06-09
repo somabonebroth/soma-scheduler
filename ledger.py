@@ -299,6 +299,24 @@ def _reset_cutover_date():
     return latest
 
 
+def _reset_frozen_run_ids():
+    """Run ids that were COMPLETED as of the most recent reset's cutover. Their
+    output is already embodied in the reset baselines, so the production-completion
+    chain must NOT regenerate their FG (that's what doubled inventory). Returns the
+    set from the latest RESET event's meta (by full ts), or set() if there's no
+    reset — or an older reset that predates this snapshot (no retroactive freeze)."""
+    latest_ts = None
+    latest_ev = None
+    for e in _load_events():
+        if e.get("type") == EV_RESET:
+            ts = e.get("ts") or ""
+            if ts and (latest_ts is None or ts > latest_ts):
+                latest_ts, latest_ev = ts, e
+    if not latest_ev:
+        return set()
+    return set((latest_ev.get("meta") or {}).get("frozen_run_ids") or [])
+
+
 def backfill_fg_events():
     """Express the CURRENT finished-goods records as the canonical event stream
     (in-memory; no writes). Each FG entry is an inflow — `opening` for baseline /
@@ -613,12 +631,20 @@ def apply_reset(counts, actor=""):
     stamp = now.strftime("%Y%m%d_%H%M%S")
     cutover = now.isoformat(timespec="seconds")
 
+    # Snapshot the runs that are COMPLETED as of the cutover — their FG output is
+    # now embodied in the reset baselines, so the completion chain must freeze them
+    # (never regenerate their FG, or it doubles on the next save/boot).
+    runs = _load_json(app.ORGANIC_RUNS_PATH, [])
+    frozen_run_ids = sorted({r.get("id") for r in runs
+                             if r.get("status") == "completed" and r.get("id")})
+
     # 1. Archive current files (recoverable snapshot).
     os.makedirs(RESET_ARCHIVE_DIR, exist_ok=True)
     archived = []
     for name, path in [("finished_goods", app.ORGANIC_FG_PATH),
                        ("sales", app.ORGANIC_SALES_PATH),
                        ("adjustments", ADJUSTMENTS_PATH),
+                       ("production_runs", app.ORGANIC_RUNS_PATH),
                        ("events", EVENTS_PATH)]:
         _save_json(os.path.join(RESET_ARCHIVE_DIR, f"{name}_{stamp}.json"),
                    _load_json(path, []))
@@ -649,7 +675,8 @@ def apply_reset(counts, actor=""):
     events = _load_json(EVENTS_PATH, [])
     events.append({"type": EV_RESET, "fg_id": None, "qty_delta": 0, "sku_key": None,
                    "source": "reset", "ref": stamp, "ts": cutover,
-                   "meta": {"entries": len(opening_events), "actor": actor}})
+                   "meta": {"entries": len(opening_events), "actor": actor,
+                            "frozen_run_ids": frozen_run_ids}})
     events.extend(opening_events)
     _save_json(app.ORGANIC_FG_PATH, new_fg)
     _save_json(EVENTS_PATH, events)
