@@ -42,6 +42,7 @@ from helpers import (
     _load_rm_sections,
     _section_for_ingredient,
     _runs_using_raw_material,
+    _record_adjustment,
 )
 
 import app
@@ -588,6 +589,124 @@ def add_raw_materials_bulk():
         "ids": [e["id"] for e in created],  # receipt-photo anchor (first id)
         "entries": created,
     })
+
+
+@raw_materials_bp.route("/api/organic/raw-materials/adjust", methods=["POST"])
+@login_required
+def adjust_raw_materials():
+    """Apply manual inventory corrections (spillage/spoilage/theft/audit count)
+    to raw materials. JSON body:
+      { reason, notes, date, entries: [{item, unit, quantity}, ...] }
+    where `quantity` is SIGNED — negative reduces stock, positive adds it.
+
+    Negative adjustments FIFO-deduct from existing lots of that ingredient
+    (oldest date_received first, never below zero on any lot); positive
+    adjustments add a dedicated ADJ- lot. Each non-zero line is written to the
+    adjustments ledger (kind 'raw_manual') so mass-balance reconciles it as
+    loss/correction. Mirrors the FG audit's per-item FIFO drain (_apply_fg_audit).
+
+    This is the ONLY raw-materials route that lowers `remaining` outside the
+    consumption chain. It does not touch ingredients_used snapshots, so the
+    reconcile tool can still replay completed runs over the corrected lots.
+    """
+    data = request.json or {}
+    entries_in = data.get("entries") or []
+    if not isinstance(entries_in, list):
+        return jsonify({"error": "entries must be a list"}), 400
+    reason = (data.get("reason") or "Adjustment").strip()
+    notes = (data.get("notes") or "").strip()
+    date_str = (data.get("date") or "").strip() or datetime.now().strftime("%Y-%m-%d")
+
+    materials = _load_json(app.ORGANIC_RAW_PATH, [])
+    now_iso = datetime.now().isoformat()
+    applied = []
+    new_rows = []
+
+    for idx, e in enumerate(entries_in):
+        if not isinstance(e, dict):
+            continue
+        item = (e.get("item") or "").strip()
+        unit = (e.get("unit") or "").strip()
+        if not item or not unit:
+            continue
+        try:
+            qty = float(e.get("quantity") or 0)
+        except (ValueError, TypeError):
+            qty = 0
+        if qty == 0:
+            continue
+
+        # Existing lots for this ingredient (same item + unit), oldest first.
+        matching = [m for m in materials
+                    if (m.get("item") or "").strip().lower() == item.lower()
+                    and (m.get("unit") or "").strip() == unit]
+        matching.sort(key=lambda m: (m.get("date_received") or "",
+                                     m.get("created_at") or ""))
+        system_total = round(sum(float(m.get("remaining") or 0) for m in matching), 4)
+
+        line = {"item": item, "unit": unit, "requested": qty,
+                "system_qty": system_total}
+
+        if qty < 0:
+            to_remove = -qty
+            removed = 0.0
+            for m in matching:
+                if to_remove <= 0:
+                    break
+                avail = float(m.get("remaining") or 0)
+                if avail <= 0:
+                    continue
+                take = min(avail, to_remove)
+                m["remaining"] = round(avail - take, 4)
+                m["last_adjusted_at"] = now_iso
+                to_remove -= take
+                removed += take
+            line["removed"] = round(-removed, 4)
+            line["shortfall"] = round(to_remove, 4)  # >0 if books were short
+        else:
+            lot = "ADJ-" + datetime.now().strftime("%d%m%y")
+            new_rows.append({
+                "id": "rm_adj_" + datetime.now().strftime("%Y%m%d%H%M%S") + f"_{idx:03d}",
+                "item": item,
+                "supplier": reason + (": " + notes if notes else ""),
+                "supplier_lot": lot,
+                "date_received": date_str,
+                "quantity": qty,
+                "remaining": qty,
+                "unit": unit,
+                "created_at": now_iso,
+                "adjustment": True,
+            })
+            line["added"] = qty
+            line["lot"] = lot
+
+        applied.append(line)
+
+    if not applied:
+        return jsonify({"success": True, "applied": 0, "entries": []})
+
+    if new_rows:
+        materials.extend(new_rows)
+    _save_json(app.ORGANIC_RAW_PATH, materials)
+
+    for i, a in enumerate(applied):
+        _record_adjustment({
+            "id": "rm_adjust_" + datetime.now().strftime("%Y%m%d%H%M%S") + "_" + str(i),
+            "kind": "raw_manual",
+            "item": a["item"],
+            "unit": a["unit"],
+            "reason": reason,
+            "notes": notes,
+            "requested": a["requested"],
+            "removed": a.get("removed", 0),
+            "added": a.get("added", 0),
+            "shortfall": a.get("shortfall", 0),
+            "system_qty": a["system_qty"],
+            "date": date_str,
+            "created_at": now_iso,
+        })
+
+    return jsonify({"success": True, "applied": len(applied), "entries": applied})
 
 
 @raw_materials_bp.route("/api/organic/raw-materials/<entry_id>", methods=["PUT"])

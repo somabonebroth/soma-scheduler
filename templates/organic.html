@@ -5692,10 +5692,6 @@ async function submitAdjustment(){
                 item: input.getAttribute('data-adj-item'),
                 unit: input.getAttribute('data-adj-unit'),
                 quantity: val,
-                supplier: reason + (notes ? ': ' + notes : ''),
-                supplier_lot: 'ADJ-' + date.replace(/-/g,'').substring(2),
-                date_received: date,
-                adjustment: true,
             });
         }
     });
@@ -5707,10 +5703,10 @@ async function submitAdjustment(){
 
     btn.disabled=true; btn.textContent='Saving…';
     try {
-        var res = await fetch('/api/organic/raw-materials/bulk', {
+        var res = await fetch('/api/organic/raw-materials/adjust', {
             method:'POST',
             headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({entries: entries, baseline: false}),
+            body: JSON.stringify({reason: reason, notes: notes, date: date, entries: entries}),
         });
         var data = await res.json();
         if(!res.ok) throw new Error(data.error||'Save failed');
