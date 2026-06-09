@@ -803,7 +803,6 @@ body.inv-page .modal-actions {
             <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;">
                 <button class="btn btn-primary" onclick="openRecordSaleModal()" style="background:var(--info);border-color:var(--info);">&#128176; Record Sale</button>
                 <button class="btn-outline" onclick="openFgAdjustModal()" style="font-size:13px;">&#9881; Adjust Inventory</button>
-                <button class="btn-outline" onclick="openBaselineSingle()" style="font-size:13px;">+ Add SKU</button>
                 <a href="/audits" class="btn btn-outline" style="font-size:13px;text-decoration:none;margin-left:auto;">🗂 History</a>
                 <a href="/audit/fg" class="btn btn-outline" style="font-size:13px;text-decoration:none;">📋 Audit Inventory</a>
             </div>
@@ -930,6 +929,7 @@ body.inv-page .modal-actions {
                     <select id="fg-adj-reason">
                         <option value="Spillage">Spillage</option>
                         <option value="Spoilage">Spoilage</option>
+                        <option value="Quality Control">Quality Control</option>
                         <option value="Theft">Theft</option>
                         <option value="Sample">Sample</option>
                         <option value="Donation">Donation</option>
