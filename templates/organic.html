@@ -2911,6 +2911,8 @@ async function submitAddInventory(){
 var _rsLastSaleId = null;  // track last saved sale for doc export
 var _rsBuyers = [];
 var _rsFgGrouped = [];  // current FG inventory snapshot for stock display
+var _rsCertMap = {};    // sku_key -> certification (to flag organic lines)
+var _rsAlloc = {};      // organic: sku_key -> {lot: units packed}
 
 async function openRecordSaleModal(){
     var today = new Date().toISOString().split('T')[0];
@@ -2986,7 +2988,13 @@ function goToSaleStep2(){
     // Build SKU grid — grouped by format, sorted by position, out-of-stock at bottom
     var grid = document.getElementById('sale-sku-grid');
     var stockMap = {};
-    _rsFgGrouped.forEach(function(row){ stockMap[row.sku_key] = row.total_remaining || 0; });
+    _rsCertMap = {};
+    _rsAlloc = {};
+    var _rsOrgToLoad = [];   // organic rows whose lot panels need fetching
+    _rsFgGrouped.forEach(function(row){
+        stockMap[row.sku_key] = row.total_remaining || 0;
+        _rsCertMap[row.sku_key] = row.certification || '';
+    });
 
     // Sort skus: by position, then out-of-stock to bottom within each group
     var sorted = (buyer.skus || []).slice().sort(function(a, b){
@@ -3024,18 +3032,97 @@ function goToSaleStep2(){
             var stock = stockMap[sku.sku_key] || 0;
             var outOfStock = stock <= 0;
             var bg = idx % 2 === 0 ? '#fff' : '#fafaf8';
+            var isOrg = (_rsCertMap[sku.sku_key] || '').toLowerCase() === 'organic';
             var row = document.createElement('div');
-            row.style.cssText = 'display:grid;grid-template-columns:1fr 90px 60px;gap:8px;padding:8px 12px;background:'+bg+';align-items:center;border-bottom:1px solid #f0f0eb;'+(outOfStock?'opacity:0.45;':'');
-            row.innerHTML =
-                '<div style="font-size:13px;font-weight:500;">'+escHtml(sku.display||sku.recipe)+'</div>'
-                +'<div style="font-size:13px;color:'+(outOfStock?'#c62828':'var(--accent)')+';">'+(outOfStock?'Out':stock+' u')+'</div>'
-                +'<div><input type="number" data-rs-sku="'+escHtml(sku.sku_key)+'" min="0" step="1" inputmode="numeric" placeholder="0" '+(outOfStock?'disabled':'')+' style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;'+(outOfStock?'background:#f0f0f0;':'')+'"></div>';
-            grid.appendChild(row);
+
+            if(isOrg && !outOfStock){
+                // ORGANIC: no plain qty box — the packer builds the order by
+                // allocating from the actual physical LOTs below (qty = the sum).
+                row.style.cssText = 'display:grid;grid-template-columns:1fr 90px 110px;gap:8px;padding:8px 12px;background:'+bg+';align-items:center;border-bottom:1px solid #f0f0eb;';
+                row.innerHTML =
+                    '<div style="font-size:13px;font-weight:500;">'+escHtml(sku.display||sku.recipe)
+                    +' <span style="font-size:9px;background:#1b5e20;color:#fff;padding:1px 5px;border-radius:3px;vertical-align:middle;">ORGANIC</span></div>'
+                    +'<div style="font-size:13px;color:var(--accent);">'+stock+' u</div>'
+                    +'<div style="text-align:right;"><span class="rs-packed" style="font-size:13px;font-weight:600;color:var(--text-light);">0 packed</span>'
+                    +'<input type="hidden" data-rs-sku="'+escHtml(sku.sku_key)+'"></div>';
+                grid.appendChild(row);
+                var panel = document.createElement('div');
+                panel.style.cssText = 'background:#f4f9f4;border-bottom:1px solid #e6ece6;padding:6px 12px 6px 24px;font-size:12px;color:var(--text-light);';
+                panel.textContent = 'Loading lots…';
+                grid.appendChild(panel);
+                _rsOrgToLoad.push({sku: sku.sku_key, panel: panel,
+                                   packed: row.querySelector('.rs-packed'),
+                                   hidden: row.querySelector('input[data-rs-sku]')});
+            } else {
+                row.style.cssText = 'display:grid;grid-template-columns:1fr 90px 60px;gap:8px;padding:8px 12px;background:'+bg+';align-items:center;border-bottom:1px solid #f0f0eb;'+(outOfStock?'opacity:0.45;':'');
+                row.innerHTML =
+                    '<div style="font-size:13px;font-weight:500;">'+escHtml(sku.display||sku.recipe)+'</div>'
+                    +'<div style="font-size:13px;color:'+(outOfStock?'#c62828':'var(--accent)')+';">'+(outOfStock?'Out':stock+' u')+'</div>'
+                    +'<div><input type="number" data-rs-sku="'+escHtml(sku.sku_key)+'" min="0" step="1" inputmode="numeric" placeholder="0" '+(outOfStock?'disabled':'')+' style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;'+(outOfStock?'background:#f0f0f0;':'')+'"></div>';
+                grid.appendChild(row);
+            }
         });
     });
 
     document.getElementById('sale-step1').style.display = 'none';
     document.getElementById('sale-step2').style.display = '';
+
+    // Fetch + render the per-LOT allocation steppers for each organic SKU.
+    _rsOrgToLoad.forEach(function(t){ loadLotPanel(t.sku, t.panel, t.packed, t.hidden); });
+}
+
+// Render the available-lots steppers for one organic SKU. The packer +/- adds
+// units per physical LOT to match what they pack; the hidden qty input and the
+// "N packed" label track the running sum.
+async function loadLotPanel(sku, panelEl, packedEl, hiddenEl){
+    var lots;
+    try {
+        var d = await (await fetch('/api/organic/finished-goods/sku/' + encodeURIComponent(sku))).json();
+        lots = (d.lots || []).filter(function(l){ return (l.remaining || 0) > 0; });
+    } catch(e){ panelEl.textContent = 'Could not load lots.'; return; }
+    if(!lots.length){ panelEl.textContent = 'No lots in stock for this organic SKU.'; return; }
+
+    panelEl.innerHTML = '';
+    var hint = document.createElement('div');
+    hint.style.cssText = 'font-size:11px;color:var(--text-light);margin-bottom:4px;';
+    hint.textContent = 'Allocate the units you physically packed, by LOT:';
+    panelEl.appendChild(hint);
+
+    function recompute(){
+        var a = _rsAlloc[sku] || {};
+        var sum = 0;
+        Object.keys(a).forEach(function(k){ sum += a[k]; });
+        packedEl.textContent = sum + ' packed';
+        packedEl.style.color = sum > 0 ? 'var(--accent)' : 'var(--text-light)';
+        hiddenEl.value = sum > 0 ? sum : '';
+    }
+
+    lots.forEach(function(l){
+        var avail = l.remaining || 0;
+        var lot = l.lot || '';
+        var r = document.createElement('div');
+        r.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #eef3ee;';
+        var label = document.createElement('span');
+        label.style.cssText = 'flex:1;font-size:12px;color:var(--text);';
+        label.innerHTML = 'LOT <b>' + escHtml(lot || '—') + '</b>'
+            + (l.best_before ? ' · exp ' + escHtml(l.best_before) : '')
+            + ' <span style="color:var(--text-light);">· ' + avail + ' avail</span>';
+        var bStyle = 'width:26px;height:26px;border:1px solid var(--border);background:#fff;border-radius:5px;cursor:pointer;font-size:15px;line-height:1;';
+        var minus = document.createElement('button'); minus.type = 'button'; minus.textContent = '−'; minus.style.cssText = bStyle;
+        var cnt = document.createElement('span'); cnt.textContent = '0'; cnt.style.cssText = 'min-width:28px;text-align:center;font-weight:600;font-size:13px;';
+        var plus = document.createElement('button'); plus.type = 'button'; plus.textContent = '+'; plus.style.cssText = bStyle;
+        function stepLot(delta){
+            if(!_rsAlloc[sku]) _rsAlloc[sku] = {};
+            var cur = _rsAlloc[sku][lot] || 0;
+            _rsAlloc[sku][lot] = Math.max(0, Math.min(avail, cur + delta));
+            cnt.textContent = String(_rsAlloc[sku][lot]);
+            recompute();
+        }
+        minus.addEventListener('click', function(){ stepLot(-1); });
+        plus.addEventListener('click', function(){ stepLot(1); });
+        r.appendChild(label); r.appendChild(minus); r.appendChild(cnt); r.appendChild(plus);
+        panelEl.appendChild(r);
+    });
 }
 
 async function submitRecordSale(){
@@ -3057,14 +3144,22 @@ async function submitRecordSale(){
         if(!isNaN(qty) && qty > 0){
             var skuKey = input.getAttribute('data-rs-sku');
             var skuInfo = (buyer && buyer.skus || []).find(function(s){ return s.sku_key === skuKey; }) || {};
-            lines.push({
+            var line = {
                 sku_key:    skuKey,
                 brand:      skuInfo.brand   || '',
                 recipe:     skuInfo.recipe  || '',
                 format:     skuInfo.format  || '',
                 quantity:   qty,
                 unit_price: (skuInfo.price != null ? parseFloat(skuInfo.price) : null),
-            });
+            };
+            // Organic lines carry the packer's actual LOT allocation (qty = its sum).
+            if((_rsCertMap[skuKey] || '').toLowerCase() === 'organic'){
+                var a = _rsAlloc[skuKey] || {};
+                line.allocated_lots = Object.keys(a)
+                    .filter(function(k){ return a[k] > 0; })
+                    .map(function(k){ return {lot: k, quantity: a[k]}; });
+            }
+            lines.push(line);
         }
     });
 
