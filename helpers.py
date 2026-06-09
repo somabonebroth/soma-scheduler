@@ -44,9 +44,7 @@ _DEFAULT_COMPANY_INFO = {
     "registration": "",
     "notes": "",
     "ripe_inventory_buffer": 12,   # units withheld from Ripe's visible stock
-    "ss_min_cases_delivery":     40,    # SS cases above which no small-order fee applies (fee-free threshold)
-    "ss_small_order_threshold":  20,    # SS cases below which delivery is rejected outright (hard minimum)
-    "ss_small_order_fee":        50.0,  # Flat fee added when ss_small_order_threshold ≤ cases < ss_min_cases_delivery
+    "ss_small_order_threshold":  20,    # SS delivery minimum: below this delivery is rejected; at/above it delivery is free
     "fzbb_small_lead_days":  3,    # min days notice for FZ/BB ≤ threshold
     "fzbb_large_lead_days":  7,    # min days notice for FZ/BB ≥ threshold
     "fzbb_large_threshold":  8,    # cases at which large lead time applies

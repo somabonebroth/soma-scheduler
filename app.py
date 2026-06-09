@@ -3398,9 +3398,7 @@ def internal_buyer_catalogue():
         "units_per_case": 12,
         "buffer_units": buffer_units,
         "rules": {
-            "ss_min_cases_delivery":    int(company.get("ss_min_cases_delivery") or 40),
             "ss_small_order_threshold": int(company.get("ss_small_order_threshold") or 20),
-            "ss_small_order_fee":       float(company.get("ss_small_order_fee") or 50.0),
             "fzbb_small_lead_days":     int(company.get("fzbb_small_lead_days")  or 3),
             "fzbb_large_lead_days":     int(company.get("fzbb_large_lead_days")  or 7),
             "fzbb_large_threshold":     int(company.get("fzbb_large_threshold")  or 8),
@@ -3564,20 +3562,14 @@ def update_company_info():
     data = request.get_json() or {}
     info = _load_company_info()
     allowed = set(_DEFAULT_COMPANY_INFO.keys())
-    _numeric_int_keys = {"ripe_inventory_buffer", "ss_min_cases_delivery",
-                         "ss_small_order_threshold", "fzbb_small_lead_days",
-                         "fzbb_large_lead_days", "fzbb_large_threshold"}
-    _numeric_float_keys = {"ss_small_order_fee"}
+    _numeric_int_keys = {"ripe_inventory_buffer", "ss_small_order_threshold",
+                         "fzbb_small_lead_days", "fzbb_large_lead_days",
+                         "fzbb_large_threshold"}
     for k, v in data.items():
         if k in allowed:
             if k in _numeric_int_keys:
                 try:
                     info[k] = max(0, int(v))
-                except (TypeError, ValueError):
-                    pass
-            elif k in _numeric_float_keys:
-                try:
-                    info[k] = max(0.0, float(v))
                 except (TypeError, ValueError):
                     pass
             else:

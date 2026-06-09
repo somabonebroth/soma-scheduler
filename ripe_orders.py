@@ -382,7 +382,6 @@ def ripe_order_action(order_id):
         from app import _load_company_info
         from datetime import datetime as _dt, timedelta as _td
         _company  = _load_company_info()
-        _ss_min          = int(_company.get("ss_min_cases_delivery") or 40)
         _ss_hard_min     = int(_company.get("ss_small_order_threshold") or 20)
         _fzbb_small      = int(_company.get("fzbb_small_lead_days")  or 3)
         _fzbb_large      = int(_company.get("fzbb_large_lead_days")  or 7)

@@ -72,17 +72,9 @@
     <div style="border-top:1px solid var(--border);padding-top:16px;">
       <div style="font-size:12px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">Order Rules</div>
       <div class="rule-grid">
-        <div class="ff"><label>SS fee-free threshold (delivery)</label>
-          <input id="ci-ss-min" type="number" min="0" step="1" placeholder="40" oninput="dCI()" style="padding:8px 10px;font-size:15px;font-weight:600;text-align:center;">
-          <div style="font-size:11px;color:var(--text-light);margin-top:3px;">Cases of SS above which no small-order fee applies</div>
-        </div>
-        <div class="ff"><label>SS hard minimum (delivery)</label>
+        <div class="ff"><label>SS delivery minimum (cases)</label>
           <input id="ci-ss-small-thresh" type="number" min="0" step="1" placeholder="20" oninput="dCI()" style="padding:8px 10px;font-size:15px;font-weight:600;text-align:center;">
-          <div style="font-size:11px;color:var(--text-light);margin-top:3px;">Cases below which delivery is rejected entirely</div>
-        </div>
-        <div class="ff"><label>Small order fee (CAD)</label>
-          <input id="ci-ss-small-fee" type="number" min="0" step="0.01" placeholder="50.00" oninput="dCI()" style="padding:8px 10px;font-size:15px;font-weight:600;text-align:center;">
-          <div style="font-size:11px;color:var(--text-light);margin-top:3px;">Flat fee added on delivery orders between hard min and fee-free threshold</div>
+          <div style="font-size:11px;color:var(--text-light);margin-top:3px;">Minimum SS cases for delivery; below this it's rejected, at/above it delivery is free</div>
         </div>
         <div class="ff"><label>FZ/BB lead time threshold</label>
           <input id="ci-fzbb-thresh" type="number" min="1" step="1" placeholder="8" oninput="dCI()" style="padding:8px 10px;font-size:15px;font-weight:600;text-align:center;">
@@ -117,9 +109,7 @@ async function loadCI() {
   G('ci-reg').value     = d.registration || '';
   G('ci-notes').value   = d.notes   || '';
   G('ci-buf').value     = d.ripe_inventory_buffer !== undefined ? d.ripe_inventory_buffer : 12;
-  G('ci-ss-min').value         = d.ss_min_cases_delivery    !== undefined ? d.ss_min_cases_delivery    : 40;
   G('ci-ss-small-thresh').value= d.ss_small_order_threshold !== undefined ? d.ss_small_order_threshold : 20;
-  G('ci-ss-small-fee').value   = d.ss_small_order_fee       !== undefined ? d.ss_small_order_fee       : 50;
   G('ci-fzbb-thresh').value    = d.fzbb_large_threshold     !== undefined ? d.fzbb_large_threshold     : 8;
   G('ci-fzbb-small').value     = d.fzbb_small_lead_days     !== undefined ? d.fzbb_small_lead_days     : 3;
   G('ci-fzbb-large').value     = d.fzbb_large_lead_days     !== undefined ? d.fzbb_large_lead_days     : 7;
@@ -134,9 +124,7 @@ async function saveCI() {
     address: G('ci-address').value, city: G('ci-city').value,
     registration: G('ci-reg').value, notes: G('ci-notes').value,
     ripe_inventory_buffer:       parseInt(G('ci-buf').value)            || 0,
-    ss_min_cases_delivery:       parseInt(G('ci-ss-min').value)         || 40,
     ss_small_order_threshold:    parseInt(G('ci-ss-small-thresh').value) || 20,
-    ss_small_order_fee:          parseFloat(G('ci-ss-small-fee').value)  || 50,
     fzbb_large_threshold:        parseInt(G('ci-fzbb-thresh').value)    || 8,
     fzbb_small_lead_days:        parseInt(G('ci-fzbb-small').value)     || 3,
     fzbb_large_lead_days:        parseInt(G('ci-fzbb-large').value)     || 7,
