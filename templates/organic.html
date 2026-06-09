@@ -1888,7 +1888,6 @@ function renderRMRow(r){
     html += '</div>';
     html += '<div class="rm-qty'+(outOfStock?' negative':'')+'">'+r.total_remaining+' <span style="font-size:11px;color:var(--text-light);font-weight:500;">'+escSku(r.unit)+'</span></div>';
     html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
-    html += '<button class="btn-sm" data-rm-action="receive" data-rm-name="'+escSku(r.name)+'" data-rm-unit="'+escSku(r.unit)+'" title="Pre-fill the form above with this ingredient" style="padding:8px 12px;min-height:38px;color:#2e7d32;border-color:#a5d6a7;background:#fff;">+ Receive</button>';
     var expandDisabled = (r.lot_count === 0);
     var expandAttrs = expandDisabled
         ? 'disabled title="No lots to show" style="padding:8px 12px;min-height:38px;opacity:0.4;cursor:not-allowed;"'
