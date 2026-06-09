@@ -73,6 +73,14 @@ production.py       — Flask Blueprint (771 lines, extracted 2026-06-03): the F
                       require_valid_day (decorators apply at import time → can't be
                       app.-qualified; they call app.validate_week_id/day_idx at request time).
 ripe_orders.py      — Flask Blueprint (591 lines) handling Ripe order workflow within Soma
+ledger.py           — Flask Blueprint: inventory event-ledger subsystem (added
+                      2026-06-09). Read-only FG reconciliation/drift detector
+                      (/admin/fg-reconcile), append-only event model + projection
+                      + verify, the two-tier zero-day reset (/admin/fg-reset) with
+                      run-freeze + archive restore. See "Inventory ledger & two-tier
+                      organic traceability" below. Owns inventory_events.json +
+                      ledger_archive/; foundation IO from helpers, app.-qualified
+                      shared paths via `import app`.
 shopify_importer.py — Shopify Admin API client. Pulls orders for a week,
                       parses SKUs, returns a structured preview. Auth via
                       OAuth client_credentials (mandatory since Jan 2026).
@@ -178,6 +186,66 @@ This is the audit-critical chain: supplier lot → production run → finished g
 **Receipt photos:** one per delivery, stored as `<entry_id>.<ext>` in `rm_receipt_photos/`, anchored to the first entry of a bulk save. `GET /api/organic/raw-materials/receipt-photos` lists which entry ids have one; the Receiving list shows a "📎 Invoice" button per delivery.
 
 **Two pages, confusingly named:** "Manage Inventory" = `templates/organic.html` (4 tabs: Raw Materials / Production Runs / Finished Goods / Records). "Completed Production" = `templates/traceability.html` (the page formerly called Traceability; week records, HOO sign-off, stock exceptions, per-vessel certs). Two more standalone tool pages: `mass_balance.html` and `reconcile_raw.html` (both link the shared `static/style.css`).
+
+---
+
+## Inventory ledger & two-tier organic traceability (`ledger.py`, 2026-06-09)
+
+A subsystem built to fix accumulating FG inventory drift and lock in organic
+traceability. Full history in the memory note `project_inventory_event_ledger`.
+
+**Why FG drifts:** sales are entered **SKU-accurate but NOT lot-accurate** (the
+warehouse can't pick true-FIFO, so the lot recorded on a sale is a FIFO *guess*; the
+real lot is only on the physical case). So per-lot FG *balances* are fiction; only SKU
+totals are trustworthy. Plus several paths mutate FG with no ledger record
+(`update_finished_good`, `adjust_lot_remaining`, in-place `edit_organic_sale`).
+
+**The two-tier model (keyed on `certification == "Organic"`):**
+- **Organic-certified SKUs** → full lot tracking. They are **wholesale-only and never
+  flow through Ripe or the retail channels** — only the manual sale entry. The Record
+  Sale modal (`organic.html`) shows each organic SKU's available LOTs with +/- steppers;
+  the packer allocates the units actually packed; the sale carries `allocated_lots` and
+  FG deducts **those exact lots** (`sales._deduct_allocation`), not FIFO. Forward trace is
+  real and prints on the packing slip / QBO CSV / Records / trace (all already lot-aware).
+- **Everything else** → SKU-level books, backward trace only.
+
+**Read-only tools (`ledger.py`):**
+- `compute_fg_reconciliation()` + `/admin/fg-reconcile` — per-fg_id drift detector:
+  Expected = produced − recorded sales − recorded manual subtracts, vs actual remaining;
+  flags cause (manual_adjust / baseline_drift / unexplained), orphan refs, edited-sale
+  gaps, pending Ripe. SKU rollup carries `tier` (organic = judge per-lot; sku = judge at
+  SKU total, per-lot split is FIFO noise). Catches SKU-internal offsetting errors the
+  mass balance hides.
+- Event model: append-only `inventory_events.json`, `backfill_fg_events()`,
+  `project_fg()`, `verify_fg_projection()` + a self-check banner.
+
+**Zero-day reset (`/admin/fg-reset`, `apply_reset` — the only WRITE path here):**
+counts at two-tier grain (organic per LOT, others one SKU total), archives the 5
+inventory files to `inventory/ledger_archive/*_<stamp>.json`, replaces FG with clean
+`reset_baseline` entries, writes a RESET event + opening events with a **cutover**.
+Reconciliation/backfill are cutover-aware (skip pre-cutover sales/adjustments).
+**CRITICAL — run-freeze:** FG is *regenerated from completed production runs* by
+`_complete_organic_run` (fires on the daily-production save AND on
+`_backfill_organic_finished_goods` at every boot). A naive replace-FG reset let those
+runs re-materialise old FG ON TOP of the baselines → inventory doubled (the 2026-06-09
+incident). Fix: `apply_reset` snapshots `frozen_run_ids` (run ids `status=="completed"`
+as of cutover) into the RESET event meta; `_complete_organic_run` fetches
+`ledger._reset_frozen_run_ids()` (lazy `import ledger`, degrades to `set()` on error so a
+save/boot never crashes) and **skips any frozen run** — no FG regen, no raw touch. New
+runs and runs still `scheduled` at cutover are NOT frozen, so real production flows.
+Freeze by run-id, NOT `completed_at` (a first-time post-reset completion has stale/empty
+`completed_at` at guard time). **Undo:** the "↩ Undo a reset" panel restores
+finished_goods+events from a snapshot (`restore_reset_archive`, re-archives current as
+`pre_restore_*` first).
+
+**FG LOT# = production(start) date + 365** (`_complete_organic_run`), matching the case
+label which `/api/label` prints as production+365. (Was finish+365, which put the system
+one day ahead of the case on any batch produced one day / packaged the next.)
+
+**Known caveat (R3, unfixed):** `delete_traceability_record` on a *pre-cutover* (frozen)
+run restores raw against current lots while the baseline stands → raw inflation. Avoid
+deleting pre-cutover production days; harden later if needed. RAW materials have no
+reset (only the existing reconcile-raw tool).
 
 ---
 
