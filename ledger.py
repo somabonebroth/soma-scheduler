@@ -238,6 +238,10 @@ def compute_fg_reconciliation():
     skus = list(sku_agg.values())
     for g in skus:
         g["offsetting_internal_drift"] = (g["drift"] == 0 and g["entries_with_drift"] > 0)
+        # Two-tier reading: organic SKUs are lot-controlled (lots captured at sale),
+        # so per-lot drift is real. Everything else is SKU-level — its per-lot split
+        # is a FIFO estimate, so judge those at the SKU total, not per lot.
+        g["tier"] = "organic" if _is_org(g.get("cert")) else "sku"
     skus.sort(key=lambda x: (abs(x["unexplained"]), abs(x["drift"])), reverse=True)
     entries.sort(key=lambda x: (abs(x["drift"]), x["label"]), reverse=True)
 

@@ -125,7 +125,10 @@ function render(d){
     h += '<table><tr><th class="left">Product</th><th class="left">Cert</th><th>Produced</th><th>Σ Sales</th><th>Σ Sub</th><th>Expected</th><th>Actual</th><th>Drift</th><th>Attributed</th><th>Unexplained</th></tr>';
     d.skus.forEach(r => {
       const off = r.offsetting_internal_drift ? '<span class="badge warn" title="Per-lot errors net to zero at SKU level — hidden in the mass balance">offsetting</span>' : '';
-      h += `<tr><td class="left">${esc(r.label)}${off}</td><td class="left">${esc(r.cert || '—')}</td>`
+      const tier = r.tier === 'organic'
+        ? '<span class="badge" style="background:#1b5e20;color:#fff;" title="Lot-controlled: lots are captured at the sale, so per-lot drift is real">ORG · per-lot</span>'
+        : '<span class="badge" style="background:#eee;color:#666;" title="SKU-level: the per-lot split is a FIFO estimate — judge this SKU at the total, not per lot">SKU-level</span>';
+      h += `<tr><td class="left">${esc(r.label)}${off} ${tier}</td><td class="left">${esc(r.cert || '—')}</td>`
          + `<td class="num">${n(r.produced)}</td><td class="num">${n(r.out_sales)}</td><td class="num">${n(r.out_sub)}</td>`
          + `<td class="num">${n(r.expected)}</td><td class="num">${n(r.actual)}</td>`
          + discCell(r.drift) + `<td class="num cause">${r.attributed ? (r.attributed > 0 ? '+' : '') + r.attributed : '0'}</td>` + discCell(r.unexplained) + '</tr>';
@@ -185,7 +188,8 @@ function render(d){
   h += '<p class="note"><strong>Reading this:</strong> for each FG lot, <strong>Expected = Produced − recorded Sales − recorded manual Subtracts</strong>, compared to the actual remaining stock. '
      + '<strong>Drift ≠ 0</strong> means the lot changed without a matching record. <strong>Cause</strong>: <em>manual_adjust</em> = a hand edit (direct set / lot-adjust / audit recount) that left no per-lot record; '
      + '<em>baseline_drift</em> = a day-zero / manual / audit-baseline lot drew down oddly; <em>unexplained</em> = no recorded explanation at all (an unrecorded sale, a delete that didn’t restore, or an in-place sale edit) — these are the rows to investigate. '
-     + 'Unlike the mass balance, this is per-lot, so it catches errors that cancel out within a SKU (the <span class="badge warn">offsetting</span> badge).</p>';
+     + 'Unlike the mass balance, this is per-lot, so it catches errors that cancel out within a SKU (the <span class="badge warn">offsetting</span> badge). '
+     + '<strong>Tier:</strong> <span class="badge" style="background:#1b5e20;color:#fff;">ORG · per-lot</span> SKUs are lot-controlled (real lots captured at the sale) — trust their per-lot drift. <span class="badge" style="background:#eee;color:#666;">SKU-level</span> SKUs have a FIFO-estimated lot split — judge those at the SKU total, where per-lot noise cancels.</p>';
 
   document.getElementById('results').innerHTML = h;
 }
