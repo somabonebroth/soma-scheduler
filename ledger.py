@@ -662,6 +662,74 @@ def apply_reset(counts, actor=""):
             "fg_entries": len(new_fg)}
 
 
+def list_reset_archives():
+    """List archive snapshots (newest first): stamp + the FG entry count / units in
+    each snapshot, so a restore shows exactly what it would bring back. Read-only."""
+    out = []
+    if not os.path.isdir(RESET_ARCHIVE_DIR):
+        return out
+    stamps = set()
+    for name in os.listdir(RESET_ARCHIVE_DIR):
+        if name.startswith("finished_goods_") and name.endswith(".json"):
+            stamps.add(name[len("finished_goods_"):-len(".json")])
+    for stamp in sorted(stamps, reverse=True):
+        fg = _load_json(os.path.join(RESET_ARCHIVE_DIR, "finished_goods_" + stamp + ".json"), [])
+        out.append({"stamp": stamp, "fg_entries": len(fg),
+                    "units": sum(_int(e.get("quantity_remaining")) for e in fg)})
+    return out
+
+
+def restore_reset_archive(stamp):
+    """Undo a reset: restore finished_goods + events from the archive snapshot
+    `stamp` (the pre-reset state the reset saved). Re-archives the CURRENT files
+    first (so a restore is itself reversible), then writes the snapshot back.
+    sales/adjustments are not touched (the reset never modified them). WRITES."""
+    fgpath = os.path.join(RESET_ARCHIVE_DIR, "finished_goods_" + stamp + ".json")
+    if not os.path.exists(fgpath):
+        raise ValueError("No archive snapshot " + stamp)
+
+    # Safety: snapshot the current (corrupt) state before overwriting it.
+    now = datetime.now()
+    pre = now.strftime("pre_restore_%Y%m%d_%H%M%S")
+    os.makedirs(RESET_ARCHIVE_DIR, exist_ok=True)
+    _save_json(os.path.join(RESET_ARCHIVE_DIR, "finished_goods_" + pre + ".json"),
+               _load_json(app.ORGANIC_FG_PATH, []))
+    _save_json(os.path.join(RESET_ARCHIVE_DIR, "events_" + pre + ".json"),
+               _load_json(EVENTS_PATH, []))
+
+    fg = _load_json(fgpath, [])
+    _save_json(app.ORGANIC_FG_PATH, fg)
+    evpath = os.path.join(RESET_ARCHIVE_DIR, "events_" + stamp + ".json")
+    if os.path.exists(evpath):
+        _save_json(EVENTS_PATH, _load_json(evpath, []))
+    return {"restored_stamp": stamp, "fg_entries": len(fg),
+            "units": sum(_int(e.get("quantity_remaining")) for e in fg),
+            "current_backed_up_as": pre}
+
+
+@ledger_bp.route("/admin/fg-reset/archives", methods=["GET"])
+@login_required
+def fg_reset_archives_api():
+    """List restorable pre-reset snapshots."""
+    return jsonify({"archives": list_reset_archives()})
+
+
+@ledger_bp.route("/admin/fg-reset/restore", methods=["POST"])
+@login_required
+def fg_reset_restore_api():
+    """Restore finished goods from an archive snapshot (undo a reset). Gated."""
+    data = request.json or {}
+    if data.get("confirm") != "RESTORE":
+        return jsonify({"error": "Confirmation token required"}), 400
+    stamp = (data.get("stamp") or "").strip()
+    if not stamp:
+        return jsonify({"error": "stamp required"}), 400
+    try:
+        return jsonify(restore_reset_archive(stamp))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
 @ledger_bp.route("/admin/fg-reconcile")
 @login_required
 def fg_reconcile_page():

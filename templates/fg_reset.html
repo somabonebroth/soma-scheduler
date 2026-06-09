@@ -58,6 +58,10 @@
     to your counts, and opens the ledger at today's cutover. <strong>Rows left blank carry forward at current stock</strong> (not wiped).
   </div>
   <div id="result"></div>
+  <div id="restore-panel" style="background:#fff8e1;border:1px solid #b26a00;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;display:none;">
+    <strong>↩ Undo a reset</strong> — restore finished goods to a pre-reset snapshot (the current state is backed up first, so this is reversible too):
+    <div id="restore-list" style="margin-top:8px;"></div>
+  </div>
   <div class="controls">
     <button class="btn btn-outline" onclick="doPreview()">Preview</button>
     <button class="btn btn-danger" id="apply-btn" onclick="doApply()" disabled>Apply reset</button>
@@ -212,8 +216,38 @@ async function doApply(){
   document.getElementById('apply-btn').disabled = true;
 }
 
+async function loadArchives(){
+  let d;
+  try { d = await (await fetch('/admin/fg-reset/archives')).json(); }
+  catch(e){ return; }
+  const archives = (d.archives || []);
+  if(!archives.length) return;
+  const panel = document.getElementById('restore-panel');
+  const list = document.getElementById('restore-list');
+  list.innerHTML = archives.map(a =>
+    `<div style="display:flex;align-items:center;gap:10px;padding:4px 0;">`
+    + `<span style="flex:1;">Snapshot <b>${esc(a.stamp)}</b> — ${a.fg_entries} lots · ${a.units} units</span>`
+    + `<button class="btn btn-outline" onclick="doRestore('${esc(a.stamp)}')">Restore this</button></div>`
+  ).join('');
+  panel.style.display = '';
+}
+
+async function doRestore(stamp){
+  if(!confirm('Restore finished goods to snapshot ' + stamp + '?\n\nThis replaces current finished goods with that pre-reset snapshot. The current state is backed up first, so it is reversible. Proceed?')) return;
+  const d = await (await fetch('/admin/fg-reset/restore', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({stamp, confirm: 'RESTORE'})
+  })).json();
+  if(d.error){ document.getElementById('result').innerHTML = `<div class="warn">Restore failed: ${esc(d.error)}</div>`; return; }
+  document.getElementById('result').innerHTML =
+    `<div class="ok"><strong>Restored ✓</strong> — finished goods back to snapshot ${esc(d.restored_stamp)} (${d.fg_entries} lots · ${d.units} units). `
+    + `The pre-restore state was saved as ${esc(d.current_backed_up_as)}. Check the <a href="/admin/fg-reconcile">reconciliation</a>.</div>`;
+  load(true);
+  loadArchives();
+}
+
 document.getElementById('nav-back').onclick = () => window.history.back();
-document.addEventListener('DOMContentLoaded', () => load(true));
+document.addEventListener('DOMContentLoaded', () => { load(true); loadArchives(); });
 </script>
 </body>
 </html>
