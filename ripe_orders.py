@@ -103,6 +103,21 @@ def create_ripe_sale_records(order, delivery_date, payment_key):
 
     sales  = _load(_SALES_PATH, [])
     fg_all = _load(_FG_PATH, [])
+
+    # Idempotency guard (keyed on the Ripe order id). FG is deducted + sales
+    # written BEFORE the status push to Ripe; if that push fails the caller
+    # returns 502 with inventory already moved, and the order stays "pending"
+    # on Ripe — so a retry would otherwise pass the pending-status check and
+    # deduct a SECOND time. If sale records already exist for this order, the
+    # deduction already happened: skip it and let the caller re-push the status.
+    order_id = order.get("id", "")
+    if order_id and any(s.get("ripe_order_id") == order_id for s in sales):
+        logger.warning(
+            "Ripe order %s already has sale records — skipping duplicate FG deduction",
+            order_id,
+        )
+        return True, None
+
     payment_pending = (payment_key == "cc_net14")
     created = []
     shortfalls = []
