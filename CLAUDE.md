@@ -231,6 +231,13 @@ as baseline + every old sale of bogus unexplained discrepancy. Raw side is
 untouched (raw is never reset). Reconcile-raw and the trace endpoints needed no
 change: raw lots + runs are never wiped, and reset baselines deliberately carry
 no `run_id` (pre-cutover production linkage lives in `ledger_archive/`).
+The mass-balance FG "sold" column + cutover skip key off the date stock actually
+LEFT FG — `deducted_at` (Ripe deducts at APPROVAL) else `sale_date` else
+`created_at` — NOT a Ripe order's `sale_date`, which is its (often future)
+DELIVERY date (2026-06-10). Keying on sale_date double-counted a pre-reset order
+delivered after the cutover (phantom +discrepancy = the order) and dropped a
+just-deducted order delivered beyond `to` (phantom −discrepancy). Manual sales
+carry no `deducted_at` → fall back to sale_date, so the manual path is unchanged.
 **CRITICAL — run-freeze:** FG is *regenerated from completed production runs* by
 `_complete_organic_run` (fires on the daily-production save AND on
 `_backfill_organic_finished_goods` at every boot). A naive replace-FG reset let those
