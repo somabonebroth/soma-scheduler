@@ -224,6 +224,13 @@ counts at two-tier grain (organic per LOT, others one SKU total), archives the 5
 inventory files to `inventory/ledger_archive/*_<stamp>.json`, replaces FG with clean
 `reset_baseline` entries, writes a RESET event + opening events with a **cutover**.
 Reconciliation/backfill are cutover-aware (skip pre-cutover sales/adjustments).
+The **mass-balance FG side** is likewise cutover-aware (2026-06-10): it folds
+`reset_baseline` entries into Opening (like `migration_baseline`) and skips
+pre-cutover sales/adjustments — otherwise, post-reset, every organic SKU read
+as baseline + every old sale of bogus unexplained discrepancy. Raw side is
+untouched (raw is never reset). Reconcile-raw and the trace endpoints needed no
+change: raw lots + runs are never wiped, and reset baselines deliberately carry
+no `run_id` (pre-cutover production linkage lives in `ledger_archive/`).
 **CRITICAL — run-freeze:** FG is *regenerated from completed production runs* by
 `_complete_organic_run` (fires on the daily-production save AND on
 `_backfill_organic_finished_goods` at every boot). A naive replace-FG reset let those
