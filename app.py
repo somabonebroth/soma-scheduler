@@ -3743,8 +3743,12 @@ def _compute_mass_balance(date_from, date_to, organic_only=False):
     Raw materials per ingredient: Opening + Received - Consumed = Expected
     closing, compared to current stock; the discrepancy is manual adjustments /
     loss. Finished goods per SKU: Opening + Produced - Sold = Expected, vs
-    current stock. Day-zero migration_baseline entries are folded into Opening
-    (they're starting inventory, not production); manual_addition entries are
+    current stock. Day-zero migration_baseline AND zero-day reset_baseline
+    entries are folded into Opening (they're starting inventory, not
+    production); after a reset the FG side is cutover-aware — pre-cutover sales
+    and adjustments are skipped (already embodied in the baseline), so the
+    baseline + old sales don't read as bogus discrepancy. The raw side is
+    unaffected (raw materials are never reset). manual_addition entries are
     intentionally left out so they surface in the discrepancy column, which
     therefore reads as breakage / loss / logged manual adjustment. Each FG row
     also carries 'explained' (signed net of logged adjustments.json entries for
@@ -3764,6 +3768,18 @@ def _compute_mass_balance(date_from, date_to, organic_only=False):
 
     def in_range(ds): return bool(ds) and date_from <= ds <= date_to
     def before(ds):   return bool(ds) and ds < date_from
+
+    # Zero-day reset cutover (YYYY-MM-DD or None). The reset replaced FG with
+    # clean reset_baseline opening stock but LEFT sales/adjustments intact, so
+    # the FG side must treat the baseline as Opening and ignore pre-cutover
+    # sales/adjustments (already embodied in the baseline) — otherwise every
+    # SKU shows the baseline + every old sale as bogus discrepancy. FG-side
+    # ONLY: raw materials were never reset, so the raw table is untouched.
+    try:
+        import ledger
+        cutover = ledger._reset_cutover_date()
+    except Exception:
+        cutover = None
 
     # ---- Raw materials (always all — lots carry no certification) ----
     raw = {}
@@ -3840,10 +3856,11 @@ def _compute_mass_balance(date_from, date_to, organic_only=False):
         try: rem = int(f.get("quantity_remaining") or 0)
         except (ValueError, TypeError): rem = 0
         row["current"] += rem
-        if f.get("migration_baseline"):
-            # Day-zero migration stock = opening inventory, not production.
-            # Always the earliest inflow, so it lands in Opening (any sales
-            # of it dated before the range net it down via the sales loop).
+        if f.get("migration_baseline") or f.get("source") == "reset_baseline":
+            # Day-zero migration / zero-day reset stock = opening inventory,
+            # not production (the reset baseline is a post-audit physical count).
+            # Always the earliest inflow, so it lands in Opening (any sales of it
+            # dated before the range net it down via the sales loop).
             row["opening"] += produced
             continue
         # Manual additions (manual_addition=True) carry no production date and
@@ -3859,9 +3876,11 @@ def _compute_mass_balance(date_from, date_to, organic_only=False):
         cert = (s.get("certification") or "").strip()
         if organic_only and cert.lower() != "organic":
             continue
+        sdate = (s.get("sale_date") or "").strip()
+        if cutover and sdate and sdate < cutover:
+            continue  # pre-reset sale already embodied in the baseline
         sku = s.get("sku_key") or _sku_key(s.get("brand", ""), s.get("recipe", ""), s.get("format", ""))
         row = fgrow(sku, _sku_display(s.get("brand", ""), s.get("recipe", ""), s.get("format", "")), cert)
-        sdate = (s.get("sale_date") or "").strip()
         try: qn = int(s.get("quantity") or 0)
         except (ValueError, TypeError): qn = 0
         if before(sdate):
@@ -3886,6 +3905,8 @@ def _compute_mass_balance(date_from, date_to, organic_only=False):
         adate = (adj.get("created_at") or "")[:10]
         if adate and adate > date_to:
             continue
+        if cutover and adate and adate < cutover:
+            continue  # pre-reset adjustment already embodied in the baseline
         try:
             if kind == "add":
                 amt = float(adj.get("quantity") or 0)
