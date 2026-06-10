@@ -21,6 +21,26 @@
 .section-note { font-size: 12px; color: var(--text-light); margin: 0 0 8px; }
 .oc-intro { margin: 0 0 4px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
 .oc-intro strong { color: var(--dark); }
+/* Page-local layout for the inventory + trace section (mirrored from organic.html
+   so this page stays self-contained — these classes are page-local there, not in style.css). */
+.count-badge { font-size: 12px; font-weight: 500; color: var(--text-light); background: var(--row-alt); padding: 3px 10px; border-radius: 10px; margin-left: 6px; }
+.empty-state { text-align: center; padding: 40px 20px; color: var(--text-light); font-size: 14px; line-height: 1.6; }
+.search-bar { display: flex; gap: 12px; margin-bottom: 0; flex-wrap: wrap; align-items: flex-end; }
+.search-bar input { flex: 1; min-width: 180px; padding: 11px 13px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; min-height: 44px; }
+.inv-table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.inv-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
+.inv-table th { text-align: left; padding: 10px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-light); background: var(--row-alt); border-bottom: 1px solid var(--border); }
+.inv-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.inv-table tr:nth-child(even) { background: var(--row-alt); }
+/* Organic FG quick-view rows */
+.oc-fg-row { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.oc-fg-row:hover { background: #f5f7f0; }
+.oc-fg-row .oc-fg-name { flex: 1; min-width: 160px; font-weight: 600; color: var(--dark); }
+.oc-fg-row .oc-fg-sub { font-size: 11px; color: var(--text-light); font-weight: 400; margin-top: 3px; }
+.oc-fg-row .oc-fg-stock { font-size: 16px; font-weight: 700; min-width: 64px; text-align: right; }
+.oc-fg-row .oc-fg-stock.zero { color: var(--text-light); }
+.oc-fg-detail { background: #fafaf5; padding: 10px 18px; border-left: 3px solid var(--accent); margin-bottom: 4px; }
+@media (max-width: 640px) { .search-bar input { min-width: 0; } }
 </style>
 </head>
 <body>
@@ -49,6 +69,28 @@
             <a href="/certifications" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Documents</span><span class="sublabel">Organic certificates and compliance paperwork.</span></a>
         </div>
     </div>
+
+    <div class="section-label">Current organic inventory &amp; trace</div>
+    <p class="section-note">A read-only snapshot of organic finished goods, plus a search to trace any LOT end-to-end.</p>
+
+    <!-- Organic FG quick view (read-only) -->
+    <div class="card" style="margin-top:8px;">
+        <h2 style="margin-bottom:4px;">Organic Finished Goods <span class="count-badge" id="oc-fg-count">—</span></h2>
+        <p style="font-size:13px;color:var(--text-light);margin-bottom:14px;">Organic-certified SKUs currently in finished-goods inventory. Read-only — click a row to see its active LOTs. To record sales or adjust stock, use Manage Inventory.</p>
+        <div id="oc-fg-container"><div class="empty-state">Loading…</div></div>
+    </div>
+
+    <!-- Search & Trace (embedded) -->
+    <div class="card">
+        <h2 style="margin-bottom:4px;">Search &amp; Trace</h2>
+        <p style="font-size:13px;color:var(--text-light);margin-bottom:14px;">Search by supplier, buyer, product name, LOT#, or date across all receiving and sales transactions.</p>
+        <div class="search-bar">
+            <input id="trace-query" placeholder="Supplier, buyer, product, LOT#, or date…" oninput="doTraceDebounced()">
+            <button class="btn btn-primary" onclick="doTrace()">Search</button>
+            <button class="btn btn-outline" onclick="document.getElementById('trace-query').value='';doTrace()" style="font-size:13px;">Clear</button>
+        </div>
+        <div id="trace-results" style="margin-top:12px;"></div>
+    </div>
 </div>
 <script>
 (function(){
@@ -61,6 +103,225 @@
     if(back) back.disabled = (window.history.length <= 1);
   });
 })();
+
+// ── Shared escaping (mirrored from organic.html) ──
+function escSku(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function escHtml(s){return escSku(s);}
+
+// ── Organic finished-goods quick view (read-only) ──────────────────────────
+var _ocFgExpanded = null;   // sku_key of the currently expanded row
+
+async function loadOrganicFg(){
+    var container = document.getElementById('oc-fg-container');
+    var countEl = document.getElementById('oc-fg-count');
+    try {
+        var res = await fetch('/api/organic/finished-goods/grouped?certification=Organic');
+        var skus = await res.json();
+        if(!Array.isArray(skus) || !skus.length){
+            if(countEl) countEl.textContent = '0';
+            container.innerHTML = '<div class="empty-state">No organic-certified SKUs in inventory.</div>';
+            return;
+        }
+        // Stock first, then alphabetical by display name.
+        skus.sort(function(a,b){
+            var sa=(a.total_remaining||0)>0?0:1, sb=(b.total_remaining||0)>0?0:1;
+            if(sa!==sb) return sa-sb;
+            return String(a.display||'').localeCompare(String(b.display||''));
+        });
+        if(countEl){
+            var inStock = skus.filter(function(s){return (s.total_remaining||0)>0;}).length;
+            var totalUnits = skus.reduce(function(a,s){return a+(s.total_remaining||0);},0);
+            countEl.textContent = inStock+' in stock / '+skus.length+' SKUs • '+totalUnits+' units';
+        }
+        var html='';
+        skus.forEach(function(s){
+            var keyAttr = encodeURIComponent(s.sku_key);
+            var zero = (s.total_remaining||0)<=0;
+            var hasHistory = (s.lot_count||0)>0;
+            var lotNote='';
+            if(s.active_lot_count>0){
+                lotNote = s.active_lot_count+' active LOT'+(s.active_lot_count===1?'':'s');
+                if(s.lot_count>s.active_lot_count){ lotNote += ' • '+(s.lot_count-s.active_lot_count)+' depleted'; }
+            } else if(hasHistory){
+                lotNote = s.lot_count+' LOT'+(s.lot_count===1?'':'s')+' (all depleted)';
+            } else {
+                lotNote = 'No production history yet';
+            }
+            var caret = hasHistory ? (_ocFgExpanded===s.sku_key?'▲':'▼') : '';
+            html += '<div class="oc-fg-row" data-sku-key="'+keyAttr+'"'+(hasHistory?'':' style="cursor:default;"')+'>';
+            html += '<div style="width:16px;color:var(--text-light);font-size:11px;">'+caret+'</div>';
+            html += '<div class="oc-fg-name">'+escSku(s.display)+'<div class="oc-fg-sub">'+escHtml(lotNote)+(s.total_produced?' • '+s.total_produced+' produced lifetime':'')+'</div></div>';
+            html += '<div class="oc-fg-stock'+(zero?' zero':'')+'">'+(s.total_remaining||0)+'<div style="font-size:10px;font-weight:400;color:var(--text-light);">units</div></div>';
+            html += '</div>';
+            if(_ocFgExpanded===s.sku_key && hasHistory){
+                html += '<div class="oc-fg-detail" id="oc-fg-detail-'+keyAttr+'">Loading…</div>';
+            }
+        });
+        container.innerHTML = html;
+        if(_ocFgExpanded){ renderOcFgDetail(_ocFgExpanded); }
+    } catch(e){
+        container.innerHTML = '<div class="empty-state">Could not load organic inventory.</div>';
+    }
+}
+
+async function renderOcFgDetail(skuKey){
+    var keyAttr = encodeURIComponent(skuKey);
+    var el = document.getElementById('oc-fg-detail-'+keyAttr);
+    if(!el) return;
+    try {
+        var res = await fetch('/api/organic/finished-goods/sku/'+encodeURIComponent(skuKey));
+        var data = await res.json();
+        if(!data.lots || !data.lots.length){
+            el.innerHTML = '<span style="color:var(--text-light);font-size:12px;">No LOTs.</span>';
+            return;
+        }
+        var html = '<div class="inv-table-wrap"><table class="inv-table" style="margin:0;font-size:12px;"><tr>'+
+                   '<th>LOT#</th><th>Production Date</th><th>Best Before</th><th>Vessels</th><th>Produced</th><th>Remaining</th></tr>';
+        data.lots.forEach(function(l){
+            var rowStyle = l.remaining<=0 ? ' style="opacity:0.45;"' : '';
+            var vessels = (l.vessels||[]).join(', ') || '—';
+            html += '<tr'+rowStyle+'>'+
+                    '<td><strong>'+escSku(l.lot)+'</strong></td>'+
+                    '<td>'+escSku(l.production_date||'—')+'</td>'+
+                    '<td>'+escSku(l.best_before||'—')+'</td>'+
+                    '<td>'+escSku(vessels)+'</td>'+
+                    '<td>'+l.produced+'</td>'+
+                    '<td>'+l.remaining+(l.remaining<=0?' <span style="font-size:10px;color:var(--text-light);">(depleted)</span>':'')+'</td>'+
+                    '</tr>';
+        });
+        html += '</table></div>';
+        el.innerHTML = html;
+    } catch(e){
+        el.innerHTML = '<span style="color:var(--text-light);font-size:12px;">Could not load LOT detail.</span>';
+    }
+}
+
+// Click delegation — toggle LOT detail on row click (only rows with history).
+document.getElementById('oc-fg-container').addEventListener('click', function(e){
+    var row = e.target.closest('.oc-fg-row');
+    if(!row) return;
+    var rawKey = row.getAttribute('data-sku-key');
+    if(!rawKey) return;
+    var skuKey = decodeURIComponent(rawKey);
+    _ocFgExpanded = (_ocFgExpanded===skuKey) ? null : skuKey;
+    loadOrganicFg();
+});
+
+// ── Search & Trace (mirrored from organic.html Records tab) ─────────────────
+var _traceDebounceTimer = null;
+function doTraceDebounced(){
+    clearTimeout(_traceDebounceTimer);
+    _traceDebounceTimer = setTimeout(doTrace, 350);
+}
+
+async function doTrace(){
+    var q=document.getElementById('trace-query').value.trim();
+    var container=document.getElementById('trace-results');
+    if(!q){container.innerHTML='';return;}
+    container.innerHTML='<div class="empty-state">Searching…</div>';
+    // Search both raw LOT and FG LOT + text fields
+    var [rawRes, fgRes, rmRes, salesRes] = await Promise.all([
+        fetch('/api/organic/trace?type=raw_lot&q='+encodeURIComponent(q)),
+        fetch('/api/organic/trace?type=fg_lot&q='+encodeURIComponent(q)),
+        fetch('/api/organic/raw-materials'),
+        fetch('/api/organic/sales'),
+    ]);
+    var rawData = await rawRes.json();
+    var fgData = await fgRes.json();
+    var allRM = await rmRes.json();
+    var allSales = await salesRes.json();
+    var ql = q.toLowerCase();
+
+    // Text-match receiving entries (supplier, item, lot#, date)
+    var matchedRM = allRM.filter(function(r){
+        return (r.item||'').toLowerCase().includes(ql)
+            || (r.supplier||'').toLowerCase().includes(ql)
+            || (r.supplier_lot||'').toLowerCase().includes(ql)
+            || (r.date_received||'').includes(ql);
+    });
+    // Text-match sales (buyer, recipe, lot, date)
+    var matchedSales = allSales.filter(function(s){
+        return (s.buyer||'').toLowerCase().includes(ql)
+            || (s.recipe||'').toLowerCase().includes(ql)
+            || (s.brand||'').toLowerCase().includes(ql)
+            || (s.fg_lot||'').toLowerCase().includes(ql)
+            || (s.sale_date||'').includes(ql)
+            || ((s.lots||[]).some(function(l){ return (l.lot||'').toLowerCase().includes(ql); }));
+    });
+
+    var html = '';
+
+    // LOT trace results
+    var rawLots = (rawData.lots) || [];
+    var hasRawTrace = rawLots.length > 0;
+    var hasFGTrace = fgData.finished_goods && fgData.finished_goods.length;
+    if(hasRawTrace || hasFGTrace){
+        html += '<div style="background:#f0f7f0;border:1px solid #a5d6a7;border-radius:8px;padding:14px 16px;margin-bottom:14px;">';
+        html += '<div style="font-size:12px;font-weight:600;color:#2e7d32;margin-bottom:8px;">&#128270; LOT# Trace Results for &ldquo;'+escHtml(q)+'&rdquo;</div>';
+        if(hasRawTrace){
+            // One block per physical lot entry — distinct lots that happen to share
+            // a lot number (e.g. day-zero baseline) are shown separately, never merged.
+            rawLots.forEach(function(L){
+                var hdr = escHtml(L.item||'(unknown)');
+                if(L.supplier) hdr += ' · '+escHtml(L.supplier);
+                if(L.date_received) hdr += ' · recv '+escHtml(L.date_received);
+                hdr += ' · LOT# '+escHtml(L.supplier_lot||q);
+                html += '<div style="margin:6px 0;padding:6px 0;border-top:1px solid #d6ead6;">';
+                html += '<div style="font-size:12px;font-weight:600;">'+hdr+'</div>';
+                if(!L.raw_material_id){
+                    html += '<div style="font-size:11px;color:#b26a00;">⚠ This lot is no longer in current inventory; shown from production history.</div>';
+                }
+                (L.runs||[]).forEach(function(r){
+                    html += '<div style="font-size:13px;padding:2px 0 2px 10px;">→ Used in: '+escHtml(r.day_name||'')+' '+escHtml(r.week_id||'')+' · '+escHtml(r.vessel||'')+' · '+escHtml((r.brand?r.brand+'-':'')+r.recipe)+' (Batch LOT# '+escHtml(r.lot||'')+')</div>';
+                });
+                (L.finished_goods||[]).forEach(function(f){
+                    html += '<div style="font-size:13px;padding:2px 0 2px 20px;color:#2e7d32;">↳ Produced: '+escHtml((f.brand?f.brand+'-':'')+f.recipe+' '+(f.format||''))+' · FG LOT# '+escHtml(f.lot||'')+'</div>';
+                });
+                (L.sales||[]).forEach(function(s){
+                    var prod=(s.brand?s.brand+' ':'')+s.recipe+(s.format?' '+s.format:'');
+                    html += '<div style="font-size:13px;padding:2px 0 2px 30px;color:#555;">↳ Sold: '+escHtml(prod.trim())+' → '+escHtml(s.buyer||'')+' ('+escHtml(s.sale_date||'')+')</div>';
+                });
+                if(!(L.runs||[]).length){
+                    html += '<div style="font-size:12px;color:var(--text-light);padding:2px 0 2px 10px;">Not yet used in any completed production.</div>';
+                }
+                html += '</div>';
+            });
+        }
+        if(hasFGTrace){
+            fgData.finished_goods.forEach(function(f){
+                html += '<div style="font-size:13px;padding:4px 0;">FG: '+escHtml((f.brand?f.brand+'-':'')+f.recipe+' '+f.format)+' · LOT# '+escHtml(f.lot)+'</div>';
+            });
+        }
+        html += '</div>';
+    }
+
+    // Receiving matches
+    if(matchedRM.length){
+        html += '<div style="margin-bottom:14px;"><div style="font-size:12px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Receiving Matches</div>';
+        html += '<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Ingredient</th><th>Supplier</th><th>LOT#</th><th>Qty</th></tr>';
+        matchedRM.slice(0,20).forEach(function(r){
+            html += '<tr><td>'+(r.date_received||'')+'</td><td>'+escHtml(r.item||'')+'</td><td>'+escHtml(r.supplier||'')+'</td><td>'+escHtml(r.supplier_lot||'')+'</td><td>'+(r.remaining!==undefined?r.remaining:r.quantity)+' '+escHtml(r.unit||'')+'</td></tr>';
+        });
+        html += '</table></div></div>';
+    }
+
+    // Sales matches
+    if(matchedSales.length){
+        html += '<div><div style="font-size:12px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Sales Matches</div>';
+        html += '<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Product</th><th>Buyer</th><th>LOT#</th><th>Qty</th></tr>';
+        matchedSales.slice(0,20).forEach(function(s){
+            var lots=(s.lots||[]).map(function(l){return l.lot;}).filter(Boolean).join(', ')||s.fg_lot||'';
+            var prod=(s.brand?s.brand+' ':'')+s.recipe+(s.format?' '+s.format:'');
+            html += '<tr><td>'+(s.sale_date||'')+'</td><td>'+escHtml(prod.trim())+'</td><td>'+escHtml(s.buyer||'')+'</td><td>'+escHtml(lots)+'</td><td>'+(s.quantity||'')+'</td></tr>';
+        });
+        html += '</table></div></div>';
+    }
+
+    if(!html) html = '<div class="empty-state">No results for &ldquo;'+escHtml(q)+'&rdquo;</div>';
+    container.innerHTML = html;
+}
+
+loadOrganicFg();
 </script>
 </body>
 </html>
