@@ -19,6 +19,11 @@
 .dash-btn .step { position: absolute; top: 8px; left: 8px; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; line-height: 1; }
 .section-label { font-size: 11px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 1px; margin-top: 16px; margin-bottom: 6px; border-left: 3px solid var(--accent); padding-left: 8px; }
 .section-note { font-size: 12px; color: var(--text-light); margin: 0 0 8px; }
+/* Separate the inventory/trace block from the dashboard grid above it, matching
+   the rhythm between the two dashboard sections. */
+.oc-trace-label { margin-top: 32px; }
+/* Card descriptions — same size/colour as .oc-intro for a consistent type scale. */
+.card-desc { font-size: 13px; line-height: 1.5; color: var(--text-light); margin: 0 0 14px; }
 .oc-intro { margin: 0 0 4px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
 .oc-intro strong { color: var(--dark); }
 /* Page-local layout for the inventory + trace section (mirrored from organic.html
@@ -35,7 +40,7 @@
 /* Organic FG quick-view rows */
 .oc-fg-row { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--border); cursor: pointer; }
 .oc-fg-row:hover { background: #f5f7f0; }
-.oc-fg-row .oc-fg-name { flex: 1; min-width: 160px; font-weight: 600; color: var(--dark); }
+.oc-fg-row .oc-fg-name { flex: 1; min-width: 160px; font-size: 14px; font-weight: 600; color: var(--dark); }
 .oc-fg-row .oc-fg-sub { font-size: 11px; color: var(--text-light); font-weight: 400; margin-top: 3px; }
 .oc-fg-row .oc-fg-stock { font-size: 16px; font-weight: 700; min-width: 64px; text-align: right; }
 .oc-fg-row .oc-fg-stock.zero { color: var(--text-light); }
@@ -70,20 +75,20 @@
         </div>
     </div>
 
-    <div class="section-label">Current organic inventory &amp; trace</div>
+    <div class="section-label oc-trace-label">Current organic inventory &amp; trace</div>
     <p class="section-note">A read-only snapshot of organic finished goods, plus a search to trace any LOT end-to-end.</p>
 
     <!-- Organic FG quick view (read-only) -->
-    <div class="card" style="margin-top:8px;">
-        <h2 style="margin-bottom:4px;">Organic Finished Goods <span class="count-badge" id="oc-fg-count">—</span></h2>
-        <p style="font-size:13px;color:var(--text-light);margin-bottom:14px;">Organic-certified SKUs currently in finished-goods inventory. Read-only — click a row to see its active LOTs. To record sales or adjust stock, use Manage Inventory.</p>
+    <div class="card" style="margin-top:12px;">
+        <h2>Organic Finished Goods <span class="count-badge" id="oc-fg-count">—</span></h2>
+        <p class="card-desc">Organic-certified SKUs currently in finished-goods inventory. Read-only — click a row to see its active LOTs. To record sales or adjust stock, use Manage Inventory.</p>
         <div id="oc-fg-container"><div class="empty-state">Loading…</div></div>
     </div>
 
     <!-- Search & Trace (embedded) -->
     <div class="card">
-        <h2 style="margin-bottom:4px;">Search &amp; Trace</h2>
-        <p style="font-size:13px;color:var(--text-light);margin-bottom:14px;">Search by supplier, buyer, product name, LOT#, or date across all receiving and sales transactions.</p>
+        <h2>Search &amp; Trace</h2>
+        <p class="card-desc">Search by supplier, buyer, product name, LOT#, or date across all receiving and sales transactions.</p>
         <div class="search-bar">
             <input id="trace-query" placeholder="Supplier, buyer, product, LOT#, or date…" oninput="doTraceDebounced()">
             <button class="btn btn-primary" onclick="doTrace()">Search</button>
