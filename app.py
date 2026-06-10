@@ -3756,8 +3756,10 @@ def _compute_mass_balance(date_from, date_to, organic_only=False):
     the gap is split into recorded adjustments vs truly unaccounted movement.
 
     Dates: raw received = date_received; raw consumed = the run's PRODUCTION
-    (start) date; FG produced = finish date; sold = sale_date. 'Opening' is
-    derived from flows dated before the range. The discrepancy column is exact
+    (start) date; FG produced = finish date; sold = the date stock LEFT FG
+    (deducted_at for Ripe approvals, else sale_date) — NOT a Ripe order's
+    future delivery date. 'Opening' is derived from flows dated before the
+    range. The discrepancy column is exact
     only when date_to is today (current stock is reconciled as-of-now); the
     organic-only toggle filters the finished-goods side by certification — raw
     lots aren't certified individually, so the raw table always shows all."""
@@ -3876,16 +3878,23 @@ def _compute_mass_balance(date_from, date_to, organic_only=False):
         cert = (s.get("certification") or "").strip()
         if organic_only and cert.lower() != "organic":
             continue
-        sdate = (s.get("sale_date") or "").strip()
-        if cutover and sdate and sdate < cutover:
-            continue  # pre-reset sale already embodied in the baseline
+        # Reconcile each sale on the date stock actually LEFT FG, not the
+        # sale_date. Ripe sales deduct at approval (deducted_at) but are dated
+        # by their (often future) DELIVERY date — keying on sale_date both
+        # double-counts a pre-reset order delivered after the cutover (phantom
+        # surplus) and drops a just-deducted order whose delivery is beyond
+        # `to` (phantom shortfall). Manual sales carry no deducted_at, so they
+        # fall back to sale_date — identical to the prior behaviour.
+        mdate = (s.get("deducted_at") or s.get("sale_date") or s.get("created_at") or "")[:10]
+        if cutover and mdate and mdate < cutover:
+            continue  # stock left before the reset — already in the baseline
         sku = s.get("sku_key") or _sku_key(s.get("brand", ""), s.get("recipe", ""), s.get("format", ""))
         row = fgrow(sku, _sku_display(s.get("brand", ""), s.get("recipe", ""), s.get("format", "")), cert)
         try: qn = int(s.get("quantity") or 0)
         except (ValueError, TypeError): qn = 0
-        if before(sdate):
+        if before(mdate):
             row["opening"] -= qn
-        elif in_range(sdate):
+        elif in_range(mdate):
             row["sold"] += qn
 
     # ---- Attribute the FG discrepancy to logged manual adjustments ----
