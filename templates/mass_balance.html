@@ -51,7 +51,7 @@
   <div class="controls">
     <div><label>From</label><input type="date" id="from"></div>
     <div><label>To</label><input type="date" id="to"></div>
-    <label class="chk"><input type="checkbox" id="organic-only"> Organic finished goods only</label>
+    <label class="chk"><input type="checkbox" id="organic-only" checked onchange="run()"> Organic finished goods only</label>
     <button class="btn btn-primary" onclick="run()">Run report</button>
     <button class="btn btn-outline" onclick="downloadCSV()">Download CSV</button>
     <span id="status"></span>
