@@ -170,7 +170,7 @@
             <span>Subtotal: <strong>${{ "%.2f"|format(o.subtotal) }}</strong></span>
             {% if o.surcharge %}<span>Surcharge: <strong>${{ "%.2f"|format(o.surcharge) }}</strong></span>{% endif %}
             {% if o.small_order_fee %}<span style="color:#a66b1e;">Small order fee: <strong>${{ "%.2f"|format(o.small_order_fee) }}</strong></span>{% endif %}
-            {% if o.credit_applied %}<span style="color:var(--action-green);">Account credit: <strong>-${{ "%.2f"|format(o.credit_applied) }}</strong></span>{% endif %}
+            {% if o.credits_applied %}<span style="color:var(--action-green);">Account credit: <strong>-${{ "%.2f"|format(o.credit_applied) }}</strong> ({{ o.credits_applied|map(attribute='name')|join(', ') }})</span>{% elif o.credit_applied %}<span style="color:var(--action-green);">Account credit: <strong>-${{ "%.2f"|format(o.credit_applied) }}</strong></span>{% endif %}
             <span>Total: <strong>${{ "%.2f"|format(o.total) }}</strong></span>
           </div>
 

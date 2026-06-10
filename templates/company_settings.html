@@ -69,13 +69,11 @@
         <span style="font-size:13px;color:var(--text-light);line-height:1.4;">units per SKU<br><span style="font-size:11px;">Keeps a safety buffer so Ripe can't order your last cases</span></span>
       </div>
     </div>
-    <div class="ff" style="max-width:320px;margin-bottom:18px;">
-      <label>Account Credit — applied by Ripe to an e-transfer order</label>
-      <div style="display:flex;align-items:center;gap:12px;margin-top:6px;">
-        <span style="font-size:20px;font-weight:700;">$</span>
-        <input id="ci-ripe-credit" type="number" min="0" step="0.01" placeholder="0.00" oninput="dCI()" style="width:110px;font-size:20px;font-weight:700;text-align:center;padding:8px;">
-        <span style="font-size:13px;color:var(--text-light);line-height:1.4;">CAD credit<br><span style="font-size:11px;">Ripe can apply this to an e-transfer order; auto-depletes when you approve</span></span>
-      </div>
+    <div class="ff" style="max-width:480px;margin-bottom:18px;">
+      <label>Account Credits — Ripe can apply these to e-transfer orders</label>
+      <div id="credits-list" style="margin-top:8px;display:flex;flex-direction:column;gap:8px;"></div>
+      <button type="button" id="add-credit-btn" class="btn btn-secondary" style="margin-top:10px;">+ Add credit</button>
+      <div style="font-size:11px;color:var(--text-light);margin-top:6px;">Give each credit a name and amount. Ripe can apply any portion of each to an e-transfer order; the balance auto-depletes when you approve.</div>
     </div>
     <div style="border-top:1px solid var(--border);padding-top:16px;">
       <div style="font-size:12px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">Order Rules</div>
@@ -117,7 +115,7 @@ async function loadCI() {
   G('ci-reg').value     = d.registration || '';
   G('ci-notes').value   = d.notes   || '';
   G('ci-buf').value     = d.ripe_inventory_buffer !== undefined ? d.ripe_inventory_buffer : 12;
-  G('ci-ripe-credit').value = d.ripe_credit !== undefined ? d.ripe_credit : 0;
+  renderCredits(Array.isArray(d.ripe_credits) ? d.ripe_credits : []);
   G('ci-ss-small-thresh').value= d.ss_small_order_threshold !== undefined ? d.ss_small_order_threshold : 20;
   G('ci-fzbb-thresh').value    = d.fzbb_large_threshold     !== undefined ? d.fzbb_large_threshold     : 8;
   G('ci-fzbb-small').value     = d.fzbb_small_lead_days     !== undefined ? d.fzbb_small_lead_days     : 3;
@@ -133,7 +131,7 @@ async function saveCI() {
     address: G('ci-address').value, city: G('ci-city').value,
     registration: G('ci-reg').value, notes: G('ci-notes').value,
     ripe_inventory_buffer:       parseInt(G('ci-buf').value)            || 0,
-    ripe_credit:                 parseFloat(G('ci-ripe-credit').value)  || 0,
+    ripe_credits:                scrapeCredits(),
     ss_small_order_threshold:    parseInt(G('ci-ss-small-thresh').value) || 20,
     fzbb_large_threshold:        parseInt(G('ci-fzbb-thresh').value)    || 8,
     fzbb_small_lead_days:        parseInt(G('ci-fzbb-small').value)     || 3,
@@ -146,6 +144,36 @@ async function saveCI() {
     setTimeout(function(){ ind.style.display='none'; }, 2000);
   }
 }
+
+// ─── Account credits manager ─────────────────────────────────────────────
+function genCreditId() {
+  return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+function escAttr(s) { return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+function creditRowHTML(c) {
+  return '<div class="credit-row" data-id="' + escAttr(c.id) + '" style="display:flex;gap:8px;align-items:center;">'
+    + '<input class="cr-name" type="text" placeholder="Credit name" value="' + escAttr(c.name) + '" oninput="dCI()" style="flex:1;padding:7px 9px;">'
+    + '<span style="font-weight:600;">$</span>'
+    + '<input class="cr-amt" type="number" min="0" step="0.01" placeholder="0.00" value="' + (c.amount || 0) + '" oninput="dCI()" style="width:100px;padding:7px 9px;text-align:right;">'
+    + '<button type="button" class="btn btn-secondary" onclick="removeCredit(this)" title="Remove credit" style="padding:6px 11px;">✕</button>'
+    + '</div>';
+}
+function renderCredits(list) {
+  G('credits-list').innerHTML = (list || []).map(creditRowHTML).join('');
+}
+function removeCredit(btn) { btn.closest('.credit-row').remove(); dCI(); }
+function scrapeCredits() {
+  return Array.from(document.querySelectorAll('#credits-list .credit-row')).map(function (r) {
+    return {
+      id: r.dataset.id,
+      name: r.querySelector('.cr-name').value.trim(),
+      amount: parseFloat(r.querySelector('.cr-amt').value) || 0,
+    };
+  });
+}
+document.getElementById('add-credit-btn').addEventListener('click', function () {
+  G('credits-list').insertAdjacentHTML('beforeend', creditRowHTML({ id: genCreditId(), name: '', amount: '' }));
+});
 
 (function(){
   var back = document.getElementById('nav-back');

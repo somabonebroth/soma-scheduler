@@ -62,6 +62,8 @@ from helpers import (
     _ingredient_section_key,
     _jar_volume_liters,
     _load_company_info,
+    _sanitize_ripe_credits,
+    _active_ripe_credits,
     _load_json,
     _load_rm_sections,
     _normalize_format,
@@ -3397,7 +3399,7 @@ def internal_buyer_catalogue():
         "catalogue": catalogue,
         "units_per_case": 12,
         "buffer_units": buffer_units,
-        "ripe_credit": float(company.get("ripe_credit") or 0.0),
+        "ripe_credits": _active_ripe_credits(company),
         "rules": {
             "ss_small_order_threshold": int(company.get("ss_small_order_threshold") or 20),
             "fzbb_small_lead_days":     int(company.get("fzbb_small_lead_days")  or 3),
@@ -3553,7 +3555,12 @@ def internal_fg_stock():
 @login_required
 def get_company_info():
     """GET /api/company-info - return company info / order rules."""
-    return jsonify(_load_company_info())
+    info = _load_company_info()
+    # Surface credits as the canonical list, migrating a legacy v1 scalar so the
+    # settings UI always renders the manageable form (persists on next save).
+    if not isinstance(info.get("ripe_credits"), list):
+        info["ripe_credits"] = _active_ripe_credits(info)
+    return jsonify(info)
 
 
 @app.route("/api/company-info", methods=["PATCH"])
@@ -3566,21 +3573,19 @@ def update_company_info():
     _numeric_int_keys = {"ripe_inventory_buffer", "ss_small_order_threshold",
                          "fzbb_small_lead_days", "fzbb_large_lead_days",
                          "fzbb_large_threshold"}
-    _numeric_float_keys = {"ripe_credit"}
     for k, v in data.items():
-        if k in allowed:
-            if k in _numeric_int_keys:
-                try:
-                    info[k] = max(0, int(v))
-                except (TypeError, ValueError):
-                    pass
-            elif k in _numeric_float_keys:
-                try:
-                    info[k] = max(0.0, round(float(v), 2))
-                except (TypeError, ValueError):
-                    pass
-            else:
-                info[k] = (v or "").strip() if isinstance(v, str) else v
+        if k not in allowed:
+            continue
+        if k == "ripe_credits":
+            info["ripe_credits"] = _sanitize_ripe_credits(v)
+            info.pop("ripe_credit", None)  # retire the legacy v1 scalar once migrated
+        elif k in _numeric_int_keys:
+            try:
+                info[k] = max(0, int(v))
+            except (TypeError, ValueError):
+                pass
+        else:
+            info[k] = (v or "").strip() if isinstance(v, str) else v
     _save_json(COMPANY_INFO_PATH, info)
     return jsonify({"ok": True, "info": info})
 

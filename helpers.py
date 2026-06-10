@@ -44,7 +44,7 @@ _DEFAULT_COMPANY_INFO = {
     "registration": "",
     "notes": "",
     "ripe_inventory_buffer": 12,   # units withheld from Ripe's visible stock
-    "ripe_credit": 0.0,            # account credit (CAD) Ripe can apply to an e-transfer order; auto-depletes on Soma approval
+    "ripe_credits": [],            # list of {id, name, amount} account credits Ripe can apply to e-transfer orders; auto-deplete on Soma approval
     "ss_small_order_threshold":  20,    # SS delivery minimum: below this delivery is rejected; at/above it delivery is free
     "fzbb_small_lead_days":  3,    # min days notice for FZ/BB ≤ threshold
     "fzbb_large_lead_days":  7,    # min days notice for FZ/BB ≥ threshold
@@ -395,6 +395,40 @@ def _load_company_info():
     merged = dict(_DEFAULT_COMPANY_INFO)
     merged.update(info)
     return merged
+
+
+def _sanitize_ripe_credits(raw):
+    """Coerce a raw ripe_credits payload into a clean list for storage.
+    Each entry: {id, name, amount}. Drops fully-blank rows; clamps amount >= 0."""
+    out = []
+    if not isinstance(raw, list):
+        return out
+    for i, c in enumerate(raw):
+        if not isinstance(c, dict):
+            continue
+        name = str(c.get("name") or "").strip()
+        try:
+            amt = max(0.0, round(float(c.get("amount") or 0), 2))
+        except (TypeError, ValueError):
+            amt = 0.0
+        if not name and amt <= 0:
+            continue  # fully blank row — drop
+        cid = str(c.get("id") or "").strip() or f"c{i}"
+        out.append({"id": cid, "name": name or "Credit", "amount": amt})
+    return out
+
+
+def _active_ripe_credits(company):
+    """Usable credits Ripe should see: only amount > 0. Migrates a legacy
+    scalar `ripe_credit` (v1) into a single named credit when no list exists."""
+    raw = company.get("ripe_credits")
+    if isinstance(raw, list):
+        return [c for c in _sanitize_ripe_credits(raw) if c["amount"] > 0]
+    try:
+        legacy = round(float(company.get("ripe_credit") or 0), 2)
+    except (TypeError, ValueError):
+        legacy = 0.0
+    return [{"id": "legacy", "name": "Credit", "amount": legacy}] if legacy > 0 else []
 
 
 def _prod_date(e):
