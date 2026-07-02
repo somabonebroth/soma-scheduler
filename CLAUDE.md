@@ -157,6 +157,8 @@ Both use `_FILE_LOCKS` (threading.Lock per path) added in the latest session.
 
 **Ripe→Soma:** Ripe calls Soma's `/api/internal/*` endpoints with `X-Internal-Key` header matching `INTERNAL_API_KEY` env var.
 
+**Product photos → portals:** `/api/internal/catalogue` includes each SKU's recipe `photo` filename (from recipes.json, uploaded via the Recipes page); portals fetch the bytes from the key-gated `GET /api/internal/photo/<filename>` and proxy them to their buyers (added 2026-07-02 for the SBBC portal storefront).
+
 **FIFO deduction:** `_run_scheduled_deductions()` runs at startup — auto-deducts Ripe sale records from FG inventory when `deduction_date <= today`.
 
 **Sales channels:** Sale records optionally have a `channel` field (`'shopify'`, `'clover'`, or absent for legacy/manual). Channel-imported sales also carry `week_id`, `source_order_ids` (list of upstream Shopify/Clover order IDs for traceability), and a deterministic `order_id` of the form `ORD-{CHANNEL}-{week_id}` so multi-SKU imports group as one transaction in Soma's UI (matching the existing `add_sale_order` order_id grouping).

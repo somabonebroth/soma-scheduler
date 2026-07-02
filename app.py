@@ -3369,6 +3369,7 @@ def internal_buyer_catalogue():
     meta = _load_json(SKU_META_PATH, {})
     company = _load_company_info()
     buffer_units = int(company.get("ripe_inventory_buffer") or 0)
+    recipes = load_recipes()
 
     catalogue = []
     for sku in (buyer.get("skus") or []):
@@ -3388,6 +3389,8 @@ def internal_buyer_catalogue():
             "margin_pct":  sku.get("margin_pct"),
             "buyer_sku":   sku.get("buyer_sku", ""),
             "active":      sku.get("active", True),
+            # Recipe photo filename (portals fetch bytes via /api/internal/photo)
+            "photo":       recipes.get(sku.get("recipe", ""), {}).get("photo"),
             # Live stock
             "available_units": available,
             "available_cases": available // 12,
@@ -3410,6 +3413,19 @@ def internal_buyer_catalogue():
             "fzbb_large_threshold":     int(company.get("fzbb_large_threshold")  or 8),
         },
     })
+
+
+@app.route("/api/internal/photo/<filename>", methods=["GET"])
+def internal_photo(filename):
+    """Serve a recipe photo to a buyer portal. Key-gated (portals can't use the
+    login-gated /api/photos route); the portal proxies the bytes to its buyers.
+    send_from_directory guards against path traversal."""
+    internal_key = os.environ.get("INTERNAL_API_KEY", "")
+    provided = request.headers.get("X-Internal-Key", "")
+    import hmac as _hmac
+    if not internal_key or not _hmac.compare_digest(provided.encode(), internal_key.encode()):
+        return jsonify({"error": "Unauthorized"}), 401
+    return send_from_directory(PHOTOS_DIR, filename)
 
 
 @app.route("/api/internal/sku-audit", methods=["GET"])
