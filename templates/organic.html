@@ -746,12 +746,6 @@ body.inv-page .modal-actions {
     }
     .tab-btn.active { color: var(--white); }
 }
-
-/* Record Sale LOT allocation: the count box has its own −/+ buttons, so hide
-   the browser's native number spinners (they crowd the 44px box on hover). */
-input.lot-qty-input::-webkit-outer-spin-button,
-input.lot-qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-input.lot-qty-input { -moz-appearance: textfield; appearance: textfield; }
 </style>
 </head>
 <body class="inv-page">
@@ -901,7 +895,7 @@ input.lot-qty-input { -moz-appearance: textfield; appearance: textfield; }
                 </div>
                 <p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Enter quantity for each product sold. Leave blank to skip.</p>
                 <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px;">
-                    <div id="sale-sku-grid-header" style="display:grid;grid-template-columns:1fr 90px 60px;background:var(--bg);padding:8px 12px;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;gap:8px;">
+                    <div id="sale-sku-grid-header" style="display:grid;grid-template-columns:1fr 90px 110px;background:var(--bg);padding:8px 12px;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;gap:8px;">
                         <div>Product</div><div>In Stock</div><div>Qty</div>
                     </div>
                     <div id="sale-sku-grid" style="max-height:45vh;overflow-y:auto;"></div>
@@ -949,7 +943,7 @@ input.lot-qty-input { -moz-appearance: textfield; appearance: textfield; }
                 </div>
             </div>
             <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px;">
-                <div id="fg-adj-grid-header" style="display:grid;grid-template-columns:1fr 80px 80px;background:var(--bg);padding:8px 12px;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;gap:8px;">
+                <div id="fg-adj-grid-header" style="display:grid;grid-template-columns:1fr 80px 110px;background:var(--bg);padding:8px 12px;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;gap:8px;">
                     <div>SKU</div><div>Stock</div><div>Adjust</div>
                 </div>
                 <div id="fg-adj-grid" style="max-height:50vh;overflow-y:auto;"></div>
@@ -3077,7 +3071,7 @@ function goToSaleStep2(){
                                    packed: row.querySelector('.rs-packed'),
                                    hidden: row.querySelector('input[data-rs-sku]')});
             } else {
-                row.style.cssText = 'display:grid;grid-template-columns:1fr 90px 60px;gap:8px;padding:8px 12px;background:'+bg+';align-items:center;border-bottom:1px solid #f0f0eb;'+(outOfStock?'opacity:0.45;':'');
+                row.style.cssText = 'display:grid;grid-template-columns:1fr 90px 110px;gap:8px;padding:8px 12px;background:'+bg+';align-items:center;border-bottom:1px solid #f0f0eb;'+(outOfStock?'opacity:0.45;':'');
                 row.innerHTML =
                     '<div style="font-size:13px;font-weight:500;">'+escHtml(sku.display||sku.recipe)+'</div>'
                     +'<div style="font-size:13px;color:'+(outOfStock?'#c62828':'var(--accent)')+';">'+(outOfStock?'Out':stock+' u')+'</div>'
@@ -3087,11 +3081,45 @@ function goToSaleStep2(){
         });
     });
 
+    // −/+ steppers on the plain qty boxes (hidden inputs excluded by type).
+    grid.querySelectorAll('input[type="number"][data-rs-sku]').forEach(attachQtyStepper);
+
     document.getElementById('sale-step1').style.display = 'none';
     document.getElementById('sale-step2').style.display = '';
 
     // Fetch + render the per-LOT allocation steppers for each organic SKU.
     _rsOrgToLoad.forEach(function(t){ loadLotPanel(t.sku, t.panel, t.packed, t.hidden); });
+}
+
+// Wrap a number input with −/+ buttons (the shared .qty-stepper component in
+// style.css). The input stays fully typeable; buttons step by its step attr
+// (step="any" → 1), clamp to its min/max, and dispatch input+change events so
+// every existing listener and submit path keeps reading the same DOM value.
+function attachQtyStepper(input){
+    if(input.closest('.qty-stepper')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'qty-stepper';
+    input.parentNode.insertBefore(wrap, input);
+    function mk(sym, dir){
+        const b = document.createElement('button');
+        b.type = 'button'; b.textContent = sym; b.tabIndex = -1;
+        b.disabled = input.disabled;
+        b.addEventListener('click', function(){
+            const step = parseFloat(input.step) || 1;
+            let v = parseFloat(input.value);
+            if(isNaN(v)) v = 0;
+            v += dir * step;
+            if(input.min !== '' && v < parseFloat(input.min)) v = parseFloat(input.min);
+            if(input.max !== '' && v > parseFloat(input.max)) v = parseFloat(input.max);
+            input.value = String(v);
+            input.dispatchEvent(new Event('input', {bubbles:true}));
+            input.dispatchEvent(new Event('change', {bubbles:true}));
+        });
+        return b;
+    }
+    wrap.appendChild(mk('−', -1));
+    wrap.appendChild(input);
+    wrap.appendChild(mk('+', 1));
 }
 
 // Render the available-lots steppers for one organic SKU. The packer +/- adds
@@ -3130,15 +3158,13 @@ async function loadLotPanel(sku, panelEl, packedEl, hiddenEl){
         label.innerHTML = 'LOT <b>' + escHtml(lot || '—') + '</b>'
             + (l.best_before ? ' · exp ' + escHtml(l.best_before) : '')
             + ' <span style="color:var(--text-light);">· ' + avail + ' avail</span>';
-        var bStyle = 'width:26px;height:26px;border:1px solid var(--border);background:#fff;border-radius:5px;cursor:pointer;font-size:15px;line-height:1;';
-        var minus = document.createElement('button'); minus.type = 'button'; minus.textContent = '−'; minus.style.cssText = bStyle;
         const cnt = document.createElement('input');
-        cnt.type = 'number'; cnt.inputMode = 'numeric'; cnt.className = 'lot-qty-input';
+        cnt.type = 'number'; cnt.inputMode = 'numeric';
         cnt.min = '0'; cnt.max = String(avail); cnt.step = '1';
         cnt.value = '0';
-        cnt.style.cssText = 'width:44px;text-align:center;font-weight:600;font-size:13px;border:1px solid var(--border);border-radius:5px;padding:4px 2px;';
-        var plus = document.createElement('button'); plus.type = 'button'; plus.textContent = '+'; plus.style.cssText = bStyle;
-        // Single write path: buttons and typing both land here, same clamp [0, avail].
+        cnt.style.fontWeight = '600';
+        // Single write path: typing AND the −/+ buttons (attachQtyStepper below
+        // dispatches 'input') both land here, same clamp [0, avail].
         function setLot(val, syncBox){
             if(!_rsAlloc[sku]) _rsAlloc[sku] = {};
             const clamped = Math.max(0, Math.min(avail, Math.floor(val) || 0));
@@ -3146,11 +3172,6 @@ async function loadLotPanel(sku, panelEl, packedEl, hiddenEl){
             if(syncBox) cnt.value = String(clamped);
             recompute();
         }
-        function stepLot(delta){
-            setLot((_rsAlloc[sku] && _rsAlloc[sku][lot] || 0) + delta, true);
-        }
-        minus.addEventListener('click', function(){ stepLot(-1); });
-        plus.addEventListener('click', function(){ stepLot(1); });
         cnt.addEventListener('focus', function(){ cnt.select(); });
         // While typing: keep the running total live, but only rewrite the box if
         // the typed value is out of range (so a cleared box stays clear mid-edit).
@@ -3163,7 +3184,9 @@ async function loadLotPanel(sku, panelEl, packedEl, hiddenEl){
         cnt.addEventListener('blur', function(){
             cnt.value = String((_rsAlloc[sku] && _rsAlloc[sku][lot]) || 0);
         });
-        r.appendChild(label); r.appendChild(minus); r.appendChild(cnt); r.appendChild(plus);
+        r.appendChild(label); r.appendChild(cnt);
+        attachQtyStepper(cnt);
+        cnt.parentNode.style.cssText += ';width:112px;flex:none;';
         panelEl.appendChild(r);
     });
 }
@@ -3315,13 +3338,14 @@ async function openFgAdjustModal(){
         var h='';
         skus.forEach(function(sku,idx){
             var bg = idx%2===0?'#fff':'#fafaf8';
-            h+='<div style="display:grid;grid-template-columns:1fr 80px 80px;gap:8px;padding:8px 12px;background:'+bg+';align-items:center;border-bottom:1px solid #f0f0eb;">'
+            h+='<div style="display:grid;grid-template-columns:1fr 80px 110px;gap:8px;padding:8px 12px;background:'+bg+';align-items:center;border-bottom:1px solid #f0f0eb;">'
              +'<div style="font-size:13px;">'+escHtml(sku.display||sku.recipe)+'<div style="font-size:11px;color:var(--text-light);">Stock: '+(sku.total_remaining||0)+'</div></div>'
              +'<div style="font-size:13px;color:var(--accent);">'+(sku.total_remaining||0)+'</div>'
              +'<div><input type="number" data-fg-adj-sku="'+escHtml(sku.sku_key)+'" data-fg-adj-brand="'+escHtml(sku.brand||'')+'" data-fg-adj-recipe="'+escHtml(sku.recipe||'')+'" data-fg-adj-format="'+escHtml(sku.format||'')+'" placeholder="±" step="1" inputmode="decimal" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;"></div>'
              +'</div>';
         });
         grid.innerHTML=h;
+        grid.querySelectorAll('input[data-fg-adj-sku]').forEach(attachQtyStepper);
     }
     document.getElementById('fg-adjust-modal').classList.add('active');
 }
@@ -5766,6 +5790,9 @@ document.addEventListener('DOMContentLoaded',function(){
     loadIngredients();
     loadRawMaterials();
     loadContacts();
+    // −/+ steppers on the static manual add/subtract qty boxes
+    attachQtyStepper(document.getElementById('manual-add-qty'));
+    attachQtyStepper(document.getElementById('manual-sub-qty'));
     var today=new Date().toISOString().split('T')[0];
     var saleDateEl=document.getElementById('sale-date-modal');
     if(saleDateEl) saleDateEl.value=today;

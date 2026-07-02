@@ -188,3 +188,26 @@ body {
 }
 .nav-arrow-btn:hover { background:rgba(255,255,255,0.25); }
 .nav-arrow-btn:disabled { opacity:0.3; cursor:default; }
+
+/* ── Quantity stepper: number input flanked by −/+ buttons ──────────────── */
+/* Wrap markup: <div class="qty-stepper"><button>−</button><input type="number"><button>+</button></div>
+   Buttons step by the input's step attr and clamp to its min/max; the input
+   stays fully typeable. Native number spinners are hidden (the −/+ replace them). */
+.qty-stepper { display: flex; align-items: stretch; gap: 4px; }
+.qty-stepper input {
+    flex: 1; min-width: 0; box-sizing: border-box;
+    text-align: center; padding: 7px 4px;
+    border: 1px solid var(--border); border-radius: 5px;
+    font-size: 13px;
+    -moz-appearance: textfield; appearance: textfield;
+}
+.qty-stepper input::-webkit-outer-spin-button,
+.qty-stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.qty-stepper button {
+    flex: none; width: 26px; padding: 0;
+    border: 1px solid var(--border); border-radius: 5px;
+    background: var(--white); color: var(--text);
+    font-size: 15px; line-height: 1; cursor: pointer;
+}
+.qty-stepper button:active { background: var(--bg); }
+.qty-stepper input:disabled, .qty-stepper button:disabled { opacity: 0.5; cursor: default; }
