@@ -26,6 +26,7 @@ import re
 import zipfile
 import io
 from ripe_orders import ripe_orders_bp, init_paths as _ripe_init_paths
+from retail_orders import retail_orders_bp, init_paths as _retail_init_paths
 from suppliers import suppliers_bp
 from buyers import buyers_bp
 from recipes import recipes_bp
@@ -82,6 +83,7 @@ from helpers import (
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ.get("SECRET_KEY", "soma-bone-broth-2026-change-me")
 app.register_blueprint(ripe_orders_bp)
+app.register_blueprint(retail_orders_bp)
 app.register_blueprint(suppliers_bp)
 app.register_blueprint(buyers_bp)
 app.register_blueprint(recipes_bp)
@@ -1894,6 +1896,7 @@ def _migrate_organic_to_inventory():
 _migrate_organic_to_inventory()
 os.makedirs(INVENTORY_DIR, exist_ok=True)
 _ripe_init_paths(INVENTORY_DIR)  # wire Ripe orders sale logic to Soma's inventory
+_retail_init_paths(INVENTORY_DIR)  # wire SBBC retail orders sale logic likewise
 
 
 def _autotag_existing_organic_data():

@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Soma">
+<meta name="theme-color" content="var(--black)">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+<title>Soma – SBBC Orders</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.orders-table{width:100%;border-collapse:collapse;font-size:13px;}
+.orders-table th{background:var(--bg);color:var(--text-light);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:8px 10px;border-bottom:2px solid var(--border);text-align:left;}
+.orders-table td{padding:10px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.orders-table tr:last-child td{border-bottom:none;}
+.order-row{cursor:pointer;transition:background .15s;}
+.order-row:hover td{background:var(--bg);}
+.order-detail{display:none;}
+.order-detail.open{display:table-row;}
+.order-detail-inner{background:var(--bg);border-radius:8px;padding:16px;margin:4px 0 8px;}
+.tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;white-space:nowrap;}
+.tag-pending{background:var(--warning);color:var(--warning-text);}
+.tag-approved{background:#cfe2ff;color:#0a4081;}
+.tag-fulfilled{background:var(--success);color:var(--success-text);}
+.tag-declined{background:var(--error);color:#721c24;}
+.tag-paid{background:var(--success);color:var(--success-text);}
+.tag-refunded{background:#eceff1;color:#546e7a;}
+.payment-stack{display:flex;flex-direction:column;gap:4px;align-items:flex-start;}
+.section-header td{background:var(--bg);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-light);padding:10px;border-bottom:2px solid var(--border);border-top:1px solid var(--border);}
+.section-header td .count{color:var(--text);font-weight:700;margin-left:6px;}
+.month-card{margin-bottom:12px;}
+.month-header{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;background:var(--bg);user-select:none;}
+.month-card.open .month-header{border-bottom:1px solid var(--border);}
+.month-caret{font-size:11px;color:var(--text-light);transition:transform .15s;}
+.month-card.open .month-caret{transform:rotate(90deg);}
+.month-label{font-weight:700;font-size:14px;color:var(--text);}
+.month-count{margin-left:auto;font-size:11px;color:var(--text-light);}
+.month-body{display:none;}
+.month-card.open .month-body{display:block;}
+.items-list{font-size:12px;color:var(--text-light);margin:6px 0 0;}
+.items-list li{padding:3px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;}
+.items-list li:last-child{border-bottom:none;}
+.action-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+.btn-approve{background:var(--action-green);color:var(--white);border:none;border-radius:6px;padding:9px 16px;font-size:12px;font-weight:600;cursor:pointer;}
+.btn-approve:hover{background:#1b5e20;}
+.btn-decline{background:var(--white);color:var(--action-red);border:1px solid #ef9a9a;border-radius:6px;padding:9px 16px;font-size:12px;font-weight:600;cursor:pointer;}
+.btn-decline:hover{background:var(--action-red-bg);}
+.btn-fulfill{background:var(--info);color:var(--white);border:none;border-radius:6px;padding:9px 16px;font-size:12px;font-weight:600;cursor:pointer;}
+.btn-fulfill:hover{background:var(--action-blue);}
+.filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+.filter-btn{background:var(--card-bg);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;cursor:pointer;transition:all .15s;}
+.filter-btn.active{background:var(--accent);color:var(--white);border-color:var(--accent);}
+.info-msg{background:var(--action-blue-bg);border:1px solid #90caf9;border-radius:8px;padding:14px;font-size:13px;color:var(--info-dark);margin-bottom:16px;}
+.err-msg{background:var(--action-red-bg);border:1px solid #ef9a9a;border-radius:8px;padding:14px;font-size:13px;color:var(--action-red);margin-bottom:16px;}
+
+/* Approve modal */
+.modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;align-items:center;justify-content:center;}
+.modal-backdrop.open{display:flex;}
+.modal-card{background:var(--white);border-radius:14px;width:100%;max-width:420px;margin:16px;padding:26px 22px;position:relative;}
+.modal-card h3{margin:0 0 4px;font-size:16px;}
+.modal-card p{margin:0 0 18px;font-size:13px;color:var(--text-light);}
+.modal-field{margin-bottom:14px;}
+.modal-field label{display:block;font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;}
+.modal-field input{width:100%;box-sizing:border-box;padding:11px;border:1px solid var(--grey-border);border-radius:8px;font-size:14px;}
+.modal-actions{display:flex;gap:10px;margin-top:18px;}
+.modal-actions button{flex:1;padding:12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;}
+.modal-cancel{background:var(--white);border:1px solid var(--grey-border);color:var(--text);}
+.modal-confirm{background:var(--action-green);border:none;color:var(--white);}
+.modal-confirm:disabled{background:#aaa;}
+.success-banner{background:var(--action-green-bg);border:1px solid var(--green-light);border-radius:8px;padding:14px;font-size:13px;color:var(--action-green);margin-top:12px;display:none;}
+
+.toast{position:fixed;bottom:20px;right:20px;background:var(--text);color:var(--white);padding:10px 16px;border-radius:8px;font-size:13px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;}
+.toast.show{opacity:1;}
+</style>
+</head>
+<body>
+<div class="header">
+  <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+  <div class="header-text"><h1>SOMA BONE BROTH</h1><p>SBBC Orders</p></div>
+  <div class="header-right" style="display:flex;align-items:center;gap:8px;">
+    <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button><button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button></div>
+    <a href="/" class="header-btn">⌂ Dashboard</a>
+  </div>
+</div>
+<div class="main">
+
+  {% if not configured %}
+  <div class="info-msg"><strong>SBBC portal not connected.</strong> Set <code>RETAIL_PORTAL_URL</code> and <code>INTERNAL_API_KEY</code> in Render env vars.</div>
+  {% elif error %}
+  <div class="err-msg"><strong>Could not reach the SBBC portal:</strong> {{ error }}</div>
+  {% endif %}
+
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+    <h2 style="margin:0;font-size:18px;">SBBC Wholesale Portal Orders</h2>
+    {% if pending_count > 0 %}<span class="tag tag-pending">{{ pending_count }} pending</span>{% endif %}
+  </div>
+
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+    <button class="filter-btn" onclick="setFilter('pending',this)">Pending</button>
+    <button class="filter-btn" onclick="setFilter('approved',this)">Approved</button>
+    <button class="filter-btn" onclick="setFilter('fulfilled',this)">Fulfilled</button>
+    <button class="filter-btn" onclick="setFilter('declined',this)">Declined</button>
+  </div>
+
+  {% macro order_row(o) %}
+    <tr class="order-row" data-id="{{ o.id }}" data-status="{{ o.status }}" onclick="toggleDetail('{{ o.id }}')">
+      <td><strong>{{ o.id }}</strong></td>
+      <td>{{ o.created_at[:10] }}</td>
+      <td style="font-size:12px;">{{ (o.delivery or {}).contact_name }}<br><span style="color:var(--text-light);">{{ (o.delivery or {}).postal }}</span></td>
+      <td>{{ o['items']|sum(attribute='qty') }} units</td>
+      <td>${{ "%.2f"|format(o.total) }}</td>
+      <td>
+        <div class="payment-stack">
+          <span style="font-size:11px;color:var(--text-light);">Card</span>
+          {% if o.payment_status == 'paid' %}<span class="tag tag-paid">paid{% if o.paid_at %} · {{ o.paid_at[:10] }}{% endif %}</span>
+          {% elif o.payment_status == 'refunded' %}<span class="tag tag-refunded">refunded</span>{% endif %}
+        </div>
+      </td>
+      <td>
+        {% if o.status == 'pending' %}<span class="tag tag-pending">pending</span>
+        {% elif o.status == 'approved' %}
+          <span class="tag tag-approved">approved</span>
+          {% if o.fulfillment_date %}<br><span style="font-size:10px;color:var(--text-light);">{{ o.fulfillment_date }}</span>{% endif %}
+        {% elif o.status == 'fulfilled' %}<span class="tag tag-fulfilled">fulfilled</span>
+        {% elif o.status == 'declined' %}<span class="tag tag-declined">declined</span>
+        {% else %}<span class="tag">{{ o.status }}</span>{% endif %}
+      </td>
+    </tr>
+    <tr id="detail-{{ o.id }}" class="order-detail">
+      <td colspan="7" style="padding:0 10px 10px;">
+        <div class="order-detail-inner">
+          {% set d = o.delivery or {} %}
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px;font-size:13px;">
+            <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Ship To</div>{{ d.contact_name }}<br><span style="font-size:11px;color:var(--text-light);">{{ d.address }}, {{ d.postal }}</span></div>
+            <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Contact</div>{{ d.phone or '—' }}<br><span style="font-size:11px;color:var(--text-light);">{{ d.email or '' }}</span></div>
+            <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Zone</div>{{ o.delivery_zone or '—' }}</div>
+            {% if o.fulfillment_date %}<div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Ship Date</div><strong>{{ o.fulfillment_date }}</strong></div>{% endif %}
+            {% if o.decline_reason %}<div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Decline Reason</div>{{ o.decline_reason }}</div>{% endif %}
+          </div>
+
+          <div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Items</div>
+          <ul class="items-list">
+          {% for item in o['items'] %}
+            <li><span>{{ item.name }} <span style="color:var(--text-light);">({{ item.format }})</span></span><span>{{ item.qty }} × ${{ "%.2f"|format(item.unit_price) }} · ${{ "%.2f"|format(item.line_total) }}</span></li>
+          {% endfor %}
+          </ul>
+          <div style="display:flex;justify-content:flex-end;gap:16px;font-size:12px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+            <span>Subtotal: <strong>${{ "%.2f"|format(o.subtotal) }}</strong></span>
+            <span>Delivery: <strong>${{ "%.2f"|format(o.delivery_fee or 0) }}</strong></span>
+            <span>Total: <strong>${{ "%.2f"|format(o.total) }}</strong></span>
+          </div>
+
+          {% if d.notes %}<div style="font-size:12px;margin-top:10px;color:var(--text-light);">Note: {{ d.notes }}</div>{% endif %}
+
+          <div class="action-row">
+            {% if o.status == 'pending' %}
+            <button class="btn-approve" onclick="openApproveModal('{{ o.id }}',event)">✓ Approve &amp; Set Ship Date</button>
+            <button class="btn-decline" onclick="doDecline('{{ o.id }}',event)">✗ Decline &amp; Refund</button>
+            {% endif %}
+            {% if o.status == 'approved' %}
+            <button class="btn-fulfill" onclick="doFulfill('{{ o.id }}',event)">📦 Mark Shipped</button>
+            {% endif %}
+          </div>
+          {% if o.status == 'approved' %}
+          <div style="font-size:11px;color:var(--action-green);margin-top:8px;">✓ Paid at checkout. Inventory deducted on approval — pack &amp; mail by {{ o.fulfillment_date or 'the ship date' }}.</div>
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+  {% endmacro %}
+
+  {% if pending_orders or settled_months %}
+
+  {# Pending approval — pinned at the top, always expanded #}
+  {% if pending_orders %}
+  <div class="card awaiting-card" style="padding:0;overflow:hidden;margin-bottom:14px;">
+  <table class="orders-table">
+    <thead>
+      <tr><th>Order</th><th>Placed</th><th>Ship To</th><th>Units</th><th>Total</th><th>Payment</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr class="section-header"><td colspan="7">Pending approval <span class="count">{{ pending_orders|length }}</span></td></tr>
+      {% for o in pending_orders %}{{ order_row(o) }}{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+
+  {# Settled orders — grouped by month, past months collapsed #}
+  {% for m in settled_months %}
+  <div class="card month-card{{ ' open' if m.expanded else '' }}" style="padding:0;overflow:hidden;">
+    <div class="month-header" onclick="toggleMonth(this)">
+      <span class="month-caret">&#9654;</span>
+      <span class="month-label">{{ m.label }}</span>
+      <span class="month-count">{{ m.orders|length }} order{{ '' if m.orders|length == 1 else 's' }}</span>
+    </div>
+    <div class="month-body">
+      <table class="orders-table">
+        <thead>
+          <tr><th>Order</th><th>Placed</th><th>Ship To</th><th>Units</th><th>Total</th><th>Payment</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          {% for o in m.orders %}{{ order_row(o) }}{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+
+  {% elif configured and not error %}
+  <div class="card" style="text-align:center;color:var(--text-light);padding:40px;">No orders yet.</div>
+  {% endif %}
+
+</div>
+
+<!-- Approve Modal -->
+<div class="modal-backdrop" id="approve-modal">
+  <div class="modal-card">
+    <h3>✓ Approve Order</h3>
+    <p>The card was already charged at checkout. Approving deducts inventory <strong>immediately</strong> — set the date you'll mail it.</p>
+    <div class="modal-field">
+      <label>Ship Date</label>
+      <input type="date" id="approve-date">
+    </div>
+    <div id="approve-error" style="font-size:12px;color:var(--action-red);margin-top:-8px;margin-bottom:8px;display:none;"></div>
+    <div class="success-banner" id="approve-success">
+      ✓ Order approved. Inventory deducted and sale recorded.
+    </div>
+    <div class="modal-actions" id="approve-modal-actions">
+      <button class="modal-cancel" onclick="closeApproveModal()">Cancel</button>
+      <button class="modal-confirm" id="approve-confirm-btn" onclick="submitApprove()">Confirm Approval</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+let _approveOrderId = null;
+
+function setFilter(f, btn) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.order-row').forEach(row => {
+    const show = f === 'all' || row.dataset.status === f;
+    row.style.display = show ? '' : 'none';
+    const det = document.getElementById('detail-' + row.dataset.id);
+    if (det) det.style.display = show ? '' : 'none';
+  });
+  // Hide a whole group (pending card or month card) when it has no matching rows.
+  document.querySelectorAll('.awaiting-card, .month-card').forEach(card => {
+    const rows = card.querySelectorAll('.order-row');
+    if (rows.length === 0) return;
+    const anyVisible = Array.prototype.some.call(rows, r => r.style.display !== 'none');
+    card.style.display = anyVisible ? '' : 'none';
+  });
+}
+
+function toggleMonth(hdr) {
+  hdr.parentElement.classList.toggle('open');
+}
+
+function toggleDetail(id) {
+  const det = document.getElementById('detail-' + id);
+  if (det) det.classList.toggle('open');
+}
+
+function showToast(msg, ok) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = ok ? 'var(--action-green)' : 'var(--action-red)';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+function openApproveModal(orderId, e) {
+  e.stopPropagation();
+  _approveOrderId = orderId;
+  // Default to tomorrow
+  const d = new Date(); d.setDate(d.getDate() + 1);
+  document.getElementById('approve-date').value = d.toISOString().split('T')[0];
+  document.getElementById('approve-error').style.display = 'none';
+  document.getElementById('approve-success').style.display = 'none';
+  document.getElementById('approve-modal-actions').style.display = 'flex';
+  const btn = document.getElementById('approve-confirm-btn');
+  btn.disabled = false; btn.textContent = 'Confirm Approval';
+  document.getElementById('approve-modal').classList.add('open');
+}
+
+function closeApproveModal() {
+  document.getElementById('approve-modal').classList.remove('open');
+}
+
+async function submitApprove() {
+  const date = document.getElementById('approve-date').value;
+  const errEl = document.getElementById('approve-error');
+  if (!date) { errEl.textContent = 'Please select a date.'; errEl.style.display = 'block'; return; }
+  errEl.style.display = 'none';
+  const btn = document.getElementById('approve-confirm-btn');
+  btn.disabled = true; btn.textContent = 'Approving…';
+  try {
+    const resp = await fetch('/api/retail-orders/' + _approveOrderId, {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({action: 'approve', ship_date: date})
+    });
+    const data = await resp.json();
+    if (resp.ok) {
+      document.getElementById('approve-modal-actions').style.display = 'none';
+      document.getElementById('approve-success').style.display = 'block';
+      setTimeout(() => { closeApproveModal(); location.reload(); }, 2000);
+    } else {
+      errEl.textContent = data.error || data.warning || 'Failed to approve order.';
+      errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Confirm Approval';
+    }
+  } catch(err) {
+    errEl.textContent = 'Network error — please try again.';
+    errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Confirm Approval';
+  }
+}
+
+async function doDecline(orderId, e) {
+  e.stopPropagation();
+  if (!confirm('Decline this order?\n\nThis issues a FULL REFUND to the customer’s card. This cannot be undone.')) return;
+  const reason = prompt('Decline reason (optional):');
+  if (reason === null) return;
+  const body = {action: 'decline'};
+  if (reason.trim()) body.reason = reason.trim();
+  const resp = await fetch('/api/retail-orders/' + orderId, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  const data = await resp.json();
+  if (resp.ok) { showToast('Order declined — refund issued', true); setTimeout(() => location.reload(), 900); }
+  else showToast(data.error || 'Failed', false);
+}
+
+async function doFulfill(orderId, e) {
+  e.stopPropagation();
+  if (!confirm('Mark this order as shipped?')) return;
+  const resp = await fetch('/api/retail-orders/' + orderId, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'fulfill'})});
+  const data = await resp.json();
+  if (resp.ok) { showToast('Order marked shipped', true); setTimeout(() => location.reload(), 800); }
+  else showToast(data.error || 'Failed', false);
+}
+
+// Close modal on backdrop click
+document.getElementById('approve-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeApproveModal();
+});
+</script>
+<script>
+(function(){
+  const back = document.getElementById('nav-back');
+  const fwd  = document.getElementById('nav-fwd');
+  if(back) back.disabled = (window.history.length <= 1);
+  if(back) back.onclick = function(){ window.history.back(); };
+  if(fwd)  fwd.onclick  = function(){ window.history.forward(); };
+  window.addEventListener('popstate', function(){
+    if(back) back.disabled = (window.history.length <= 1);
+  });
+})();
+</script>
+</body>
+</html>

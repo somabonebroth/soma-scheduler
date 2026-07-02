@@ -69,8 +69,8 @@
                 <span class="sublabel" style="color:rgba(255,255,255,0.75);">Select buyer and date</span>
             </div>
         </div>
-        <div class="section-label">Ripe Wholesale</div>
-        <div class="dash-row" style="grid-template-columns:1fr;">
+        <div class="section-label">Buyer Portals</div>
+        <div class="dash-row">
             <a href="/ripe-orders" class="dash-btn" id="ripe-orders-btn"
                style="flex-direction:row;justify-content:flex-start;gap:16px;padding:20px 24px;position:relative;">
                 <span class="icon" style="font-size:24px;flex-shrink:0;">&#128203;</span>
@@ -80,6 +80,17 @@
                         <span id="ripe-badge" style="display:none;background:var(--action-red);color:var(--white);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
                     </div>
                     <div class="sublabel">Manage incoming wholesale orders</div>
+                </div>
+            </a>
+            <a href="/retail-orders" class="dash-btn" id="retail-orders-btn"
+               style="flex-direction:row;justify-content:flex-start;gap:16px;padding:20px 24px;position:relative;">
+                <span class="icon" style="font-size:24px;flex-shrink:0;">&#128666;</span>
+                <div style="text-align:left;">
+                    <div class="label" style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+                        SBBC Orders
+                        <span id="retail-badge" style="display:none;background:var(--action-red);color:var(--white);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
+                    </div>
+                    <div class="sublabel">Paid portal orders — approve &amp; mail</div>
                 </div>
             </a>
         </div>
@@ -242,6 +253,20 @@ document.addEventListener('keydown', function(e) {
     if (d.count > 0) {
       var badge = document.getElementById('ripe-badge');
       var btn = document.getElementById('ripe-orders-btn');
+      if (badge) { badge.textContent = d.count; badge.style.display = 'inline-block'; }
+      if (btn) { btn.classList.add('has-pending'); }
+    }
+  } catch(e) {}
+})();
+
+// SBBC Orders pending badge
+(async function loadRetailBadge() {
+  try {
+    const r = await fetch('/api/retail-orders/pending-count');
+    const d = await r.json();
+    if (d.count > 0) {
+      const badge = document.getElementById('retail-badge');
+      const btn = document.getElementById('retail-orders-btn');
       if (badge) { badge.textContent = d.count; badge.style.display = 'inline-block'; }
       if (btn) { btn.classList.add('has-pending'); }
     }
