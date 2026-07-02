@@ -746,6 +746,12 @@ body.inv-page .modal-actions {
     }
     .tab-btn.active { color: var(--white); }
 }
+
+/* Record Sale LOT allocation: the count box has its own −/+ buttons, so hide
+   the browser's native number spinners (they crowd the 44px box on hover). */
+input.lot-qty-input::-webkit-outer-spin-button,
+input.lot-qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input.lot-qty-input { -moz-appearance: textfield; appearance: textfield; }
 </style>
 </head>
 <body class="inv-page">
@@ -3126,17 +3132,37 @@ async function loadLotPanel(sku, panelEl, packedEl, hiddenEl){
             + ' <span style="color:var(--text-light);">· ' + avail + ' avail</span>';
         var bStyle = 'width:26px;height:26px;border:1px solid var(--border);background:#fff;border-radius:5px;cursor:pointer;font-size:15px;line-height:1;';
         var minus = document.createElement('button'); minus.type = 'button'; minus.textContent = '−'; minus.style.cssText = bStyle;
-        var cnt = document.createElement('span'); cnt.textContent = '0'; cnt.style.cssText = 'min-width:28px;text-align:center;font-weight:600;font-size:13px;';
+        const cnt = document.createElement('input');
+        cnt.type = 'number'; cnt.inputMode = 'numeric'; cnt.className = 'lot-qty-input';
+        cnt.min = '0'; cnt.max = String(avail); cnt.step = '1';
+        cnt.value = '0';
+        cnt.style.cssText = 'width:44px;text-align:center;font-weight:600;font-size:13px;border:1px solid var(--border);border-radius:5px;padding:4px 2px;';
         var plus = document.createElement('button'); plus.type = 'button'; plus.textContent = '+'; plus.style.cssText = bStyle;
-        function stepLot(delta){
+        // Single write path: buttons and typing both land here, same clamp [0, avail].
+        function setLot(val, syncBox){
             if(!_rsAlloc[sku]) _rsAlloc[sku] = {};
-            var cur = _rsAlloc[sku][lot] || 0;
-            _rsAlloc[sku][lot] = Math.max(0, Math.min(avail, cur + delta));
-            cnt.textContent = String(_rsAlloc[sku][lot]);
+            const clamped = Math.max(0, Math.min(avail, Math.floor(val) || 0));
+            _rsAlloc[sku][lot] = clamped;
+            if(syncBox) cnt.value = String(clamped);
             recompute();
+        }
+        function stepLot(delta){
+            setLot((_rsAlloc[sku] && _rsAlloc[sku][lot] || 0) + delta, true);
         }
         minus.addEventListener('click', function(){ stepLot(-1); });
         plus.addEventListener('click', function(){ stepLot(1); });
+        cnt.addEventListener('focus', function(){ cnt.select(); });
+        // While typing: keep the running total live, but only rewrite the box if
+        // the typed value is out of range (so a cleared box stays clear mid-edit).
+        cnt.addEventListener('input', function(){
+            if(cnt.value === '') { setLot(0, false); return; }
+            const typed = parseInt(cnt.value, 10);
+            if(isNaN(typed)) { setLot(0, false); return; }
+            setLot(typed, typed < 0 || typed > avail);
+        });
+        cnt.addEventListener('blur', function(){
+            cnt.value = String((_rsAlloc[sku] && _rsAlloc[sku][lot]) || 0);
+        });
         r.appendChild(label); r.appendChild(minus); r.appendChild(cnt); r.appendChild(plus);
         panelEl.appendChild(r);
     });
