@@ -73,6 +73,16 @@ production.py       — Flask Blueprint (771 lines, extracted 2026-06-03): the F
                       require_valid_day (decorators apply at import time → can't be
                       app.-qualified; they call app.validate_week_id/day_idx at request time).
 ripe_orders.py      — Flask Blueprint (591 lines) handling Ripe order workflow within Soma
+retail_orders.py    — Flask Blueprint (added 2026-07-02): SBBC Wholesale Portal order
+                      ingestion, mirroring ripe_orders.py (which shares a live contract
+                      with Ripe and stays untouched). /retail-orders admin page +
+                      PATCH /api/retail-orders/<id>. Orders arrive ALREADY PAID (Stripe
+                      Checkout on the portal): approve deducts FG (sales._deduct_fifo,
+                      all-or-nothing, idempotency-guarded on retail_order_id, and REFUSES
+                      organic-certified SKUs — two-tier boundary enforced for this
+                      channel); decline proxies to the portal, which issues a full Stripe
+                      refund. NO auto-approve. Env: RETAIL_PORTAL_URL + INTERNAL_API_KEY.
+                      Portal repo: github.com/somabonebroth/SBBC-Wholesale-Portal.
 ledger.py           — Flask Blueprint: inventory event-ledger subsystem (added
                       2026-06-09). Read-only FG reconciliation/drift detector
                       (/admin/fg-reconcile), append-only event model + projection
@@ -314,6 +324,7 @@ bugs were found and **fixed**:
 - `MANAGER_PASSWORD`
 - `INTERNAL_API_KEY` — used by Ripe→Soma calls AND by the Shopify/Clover cron jobs
 - `RIPE_PORTAL_URL`
+- `RETAIL_PORTAL_URL` — the SBBC Wholesale Portal (retail_orders.py); set 2026-07-02
 - `SHOPIFY_CLIENT_ID` — public hex from the custom app's API credentials
 - `SHOPIFY_CLIENT_SECRET` — `shpss_...` value from the same page
 - `SHOPIFY_STORE` — store handle only (e.g. `fat-top`); `.myshopify.com` is appended in code
