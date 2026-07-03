@@ -110,6 +110,7 @@
   {% macro order_row(o) %}
     <tr class="order-row" data-id="{{ o.id }}" data-status="{{ o.status }}" onclick="toggleDetail('{{ o.id }}')">
       <td><strong>{{ o.id }}</strong></td>
+      <td style="font-size:12px;">{{ o.buyer or '—' }}</td>
       <td>{{ o.created_at[:10] }}</td>
       <td style="font-size:12px;">{{ (o.delivery or {}).contact_name }}<br><span style="color:var(--text-light);">{{ (o.delivery or {}).postal }}</span></td>
       <td>{{ o['items']|sum(attribute='qty') }} units</td>
@@ -132,7 +133,7 @@
       </td>
     </tr>
     <tr id="detail-{{ o.id }}" class="order-detail">
-      <td colspan="7" style="padding:0 10px 10px;">
+      <td colspan="8" style="padding:0 10px 10px;">
         <div class="order-detail-inner">
           {% set d = o.delivery or {} %}
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px;font-size:13px;">
@@ -181,10 +182,10 @@
   <div class="card awaiting-card" style="padding:0;overflow:hidden;margin-bottom:14px;">
   <table class="orders-table">
     <thead>
-      <tr><th>Order</th><th>Placed</th><th>Ship To</th><th>Units</th><th>Total</th><th>Payment</th><th>Status</th></tr>
+      <tr><th>Order</th><th>Buyer</th><th>Placed</th><th>Ship To</th><th>Units</th><th>Total</th><th>Payment</th><th>Status</th></tr>
     </thead>
     <tbody>
-      <tr class="section-header"><td colspan="7">Pending approval <span class="count">{{ pending_orders|length }}</span></td></tr>
+      <tr class="section-header"><td colspan="8">Pending approval <span class="count">{{ pending_orders|length }}</span></td></tr>
       {% for o in pending_orders %}{{ order_row(o) }}{% endfor %}
     </tbody>
   </table>
@@ -202,7 +203,7 @@
     <div class="month-body">
       <table class="orders-table">
         <thead>
-          <tr><th>Order</th><th>Placed</th><th>Ship To</th><th>Units</th><th>Total</th><th>Payment</th><th>Status</th></tr>
+          <tr><th>Order</th><th>Buyer</th><th>Placed</th><th>Ship To</th><th>Units</th><th>Total</th><th>Payment</th><th>Status</th></tr>
         </thead>
         <tbody>
           {% for o in m.orders %}{{ order_row(o) }}{% endfor %}
