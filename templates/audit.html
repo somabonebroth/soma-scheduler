@@ -517,8 +517,9 @@ function updateDiff(kind) {
       document.getElementById('fg-total').innerHTML =
         '<span style="color:var(--text-light);">Not counted yet — use Skip to leave unchanged, or enter 0 to confirm zero on hand.</span>';
     } else {
-      var cases = parseInt(cRaw)||0;
-      var units = parseInt(uRaw)||0;
+      // HTML min/max are only hints on typed input — clamp for real (units 0–11)
+      var cases = Math.max(0, parseInt(cRaw)||0);
+      var units = Math.min(11, Math.max(0, parseInt(uRaw)||0));
       counted = cases*12 + units;
       valid = true;
       document.getElementById('fg-total').innerHTML =
@@ -549,15 +550,18 @@ function updateDiff(kind) {
 
 function getCountedValue() {
   if (KIND === 'rm') {
+    // match updateDiff's validity rule: a negative count is "not counted", not data
     var v = document.getElementById('count-input').value;
-    return v !== '' ? parseFloat(v) : null;
+    if (v === '' || isNaN(parseFloat(v)) || parseFloat(v) < 0) return null;
+    return parseFloat(v);
   } else {
     var cRaw = document.getElementById('count-cases').value;
     var uRaw = document.getElementById('count-units').value;
     // Both fields blank = not counted (skip). A single 0 anywhere = real count.
     if (cRaw === '' && uRaw === '') return null;
-    var c = parseInt(cRaw)||0;
-    var u = parseInt(uRaw)||0;
+    // same clamps as updateDiff so the saved count always equals the displayed one
+    var c = Math.max(0, parseInt(cRaw)||0);
+    var u = Math.min(11, Math.max(0, parseInt(uRaw)||0));
     return c*12 + u;
   }
 }

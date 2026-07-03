@@ -2829,7 +2829,7 @@ function goToAddInvStep2(){
         row.innerHTML =
             '<div style="font-size:13px;font-weight:500;">'+ing.name+'</div>' +
             '<div><input type="text" data-lot="'+idx+'" placeholder="LOT#" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;"></div>' +
-            '<div><input type="number" data-qty="'+idx+'" placeholder="0" step="any" inputmode="decimal" oninput="onInvQtyInput('+idx+')" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;"><div data-conv="'+idx+'" style="font-size:10px;color:#2e7d32;margin-top:2px;height:12px;line-height:12px;"></div></div>' +
+            '<div><input type="number" data-qty="'+idx+'" placeholder="0" step="any" min="0" inputmode="decimal" oninput="onInvQtyInput('+idx+')" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;"><div data-conv="'+idx+'" style="font-size:10px;color:#2e7d32;margin-top:2px;height:12px;line-height:12px;"></div></div>' +
             unitCell;
         row.setAttribute('data-ing-idx', idx);
         grid.appendChild(row);
@@ -3994,7 +3994,7 @@ function renderScanSaleReview(data){
         });
         html += '</select></div>';
         html += '<div style="width:80px;"><label style="font-size:11px;color:var(--text-light);">Qty</label>';
-        html += '<input type="number" data-sale-qty="'+i+'" value="'+(line.quantity||'')+'" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:13px;" inputmode="decimal"></div>';
+        html += '<input type="number" data-sale-qty="'+i+'" value="'+(line.quantity||'')+'" min="0" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:13px;" inputmode="decimal"></div>';
         html += '<div style="flex:1;min-width:120px;"><label style="font-size:11px;color:var(--text-light);">Case LOT (opt)</label>';
         html += '<input type="text" data-sale-lot="'+i+'" value="'+(line.case_lot||'')+'" placeholder="Case LOT" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:13px;"></div>';
         html += '</div></div>';

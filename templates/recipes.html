@@ -400,7 +400,7 @@ function ingRowHTML(sectionId,idx,item){
     var unitOpts='<option value=""></option>';
     UNITS.forEach(function(u){var lbl=u==='per L'?'g/L (per litre)':u;unitOpts+='<option value="'+u+'"'+(u===unit?' selected':'')+'>'+lbl+'</option>';});
     return '<div class="ing-row'+review+'" data-section="'+sectionId+'" data-idx="'+idx+'">'+
-        '<input type="number" inputmode="decimal" step="any" class="ing-amount" value="'+esc(amt)+'" placeholder="Qty">'+
+        '<input type="number" inputmode="decimal" step="any" min="0" class="ing-amount" value="'+esc(amt)+'" placeholder="Qty">'+
         '<select class="ing-unit">'+unitOpts+'</select>'+
         '<input type="text" class="ing-name" value="'+esc(name)+'" placeholder="Ingredient name">'+
         '<input type="text" class="ing-process" value="'+esc(proc)+'" placeholder="Process (optional)">'+
@@ -440,6 +440,7 @@ function collectIngRows(sectionId){
         if(!name&&!amtStr&&!unit&&!proc)return;
         var amt=0;
         if(amtStr!==''){var n=parseFloat(amtStr);if(!isNaN(n))amt=(n===Math.floor(n))?Math.floor(n):n;}
+        if(amt<0)amt=0; // a negative ingredient amount is never valid recipe data
         out.push({name:name,amount:amt,unit:unit,process:proc,needs_review:false});
     });
     return out;

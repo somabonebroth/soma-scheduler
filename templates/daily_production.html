@@ -219,8 +219,8 @@ function buildRecipeCard(data,vessel,side){
     if(side==='finish'){
         var vid=vessel.replace(/[()]/g,'');
         html+='<div class="finish-inputs">';
-        html+='<div class="prod-row"><div><label>Amount Produced</label><input type="number" id="produced-'+vid+'" inputmode="numeric" placeholder="units" oninput="autoSave();updatePct()"></div>';
-        html+='<div><label>BB Produced</label><input type="number" id="bb-'+vid+'" inputmode="numeric" placeholder="BB units" oninput="autoSave();updatePct()"></div></div>';
+        html+='<div class="prod-row"><div><label>Amount Produced</label><input type="number" id="produced-'+vid+'" inputmode="numeric" min="0" step="1" placeholder="units" oninput="autoSave();updatePct()"></div>';
+        html+='<div><label>BB Produced</label><input type="number" id="bb-'+vid+'" inputmode="numeric" min="0" step="1" placeholder="BB units" oninput="autoSave();updatePct()"></div></div>';
         html+='<div style="display:flex;gap:8px;margin-bottom:8px;">';
         html+='<button class="label-btn" onclick="generateLabel(\''+name.replace(/'/g,"\\'")+'\',\''+(r.brand||'').replace(/'/g,"\\'")+'\',\''+(r.format||'').replace(/'/g,"\\'")+'\')">Generate Label</button>';
         html+='<button class="label-btn" style="background:#5b9bd5;" onclick="generateLabel(\''+name.replace(/'/g,"\\'")+'\',\''+(r.brand||'').replace(/'/g,"\\'")+'\',\'BB-750ML\')">Generate BB Label</button>';
