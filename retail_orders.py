@@ -16,6 +16,8 @@ the Ripe portal) for the SBBC retail portal. Key differences from Ripe:
 Status flow pushed to the portal via its internal API:
   pending → approve (+ ship date) → approved → fulfill → fulfilled
   pending|approved → decline → declined (+ Stripe refund)
+  (fulfill = courier-CONFIRMED delivery, portal commit 0c22e5c — buyers see
+  "Delivered ✓ <date>"; Soma's UI labels it "Mark Delivered")
 
 Env vars on Soma's Render service:
   RETAIL_PORTAL_URL — e.g. https://sbbc-wholesale-portalinternal-api-key.onrender.com
@@ -300,7 +302,9 @@ def retail_order_action(order_id):
     approve — requires ship_date in body. Deducts FG + writes sale records,
               then pushes approve to the portal.
     decline — proxies to the portal, which issues a full Stripe REFUND.
-    fulfill — proxies to the portal, records the actual ship date.
+    fulfill — proxies to the portal, marking courier-confirmed DELIVERY
+              (optional fulfillment_date in body; portal defaults to today).
+              Portal returns 409 unless the order is approved.
     """
     body = request.get_json() or {}
     action = body.get("action")

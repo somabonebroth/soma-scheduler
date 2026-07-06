@@ -103,7 +103,7 @@
     <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
     <button class="filter-btn" onclick="setFilter('pending',this)">Pending</button>
     <button class="filter-btn" onclick="setFilter('approved',this)">Approved</button>
-    <button class="filter-btn" onclick="setFilter('fulfilled',this)">Fulfilled</button>
+    <button class="filter-btn" onclick="setFilter('fulfilled',this)">Delivered</button>
     <button class="filter-btn" onclick="setFilter('declined',this)">Declined</button>
   </div>
 
@@ -127,7 +127,9 @@
         {% elif o.status == 'approved' %}
           <span class="tag tag-approved">approved</span>
           {% if o.fulfillment_date %}<br><span style="font-size:10px;color:var(--text-light);">{{ o.fulfillment_date }}</span>{% endif %}
-        {% elif o.status == 'fulfilled' %}<span class="tag tag-fulfilled">fulfilled</span>
+        {% elif o.status == 'fulfilled' %}
+          <span class="tag tag-fulfilled">delivered ✓</span>
+          {% if o.fulfillment_date %}<br><span style="font-size:10px;color:var(--text-light);">{{ o.fulfillment_date }}</span>{% endif %}
         {% elif o.status == 'declined' %}<span class="tag tag-declined">declined</span>
         {% else %}<span class="tag">{{ o.status }}</span>{% endif %}
       </td>
@@ -140,7 +142,7 @@
             <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Ship To</div>{{ d.contact_name }}<br><span style="font-size:11px;color:var(--text-light);">{{ d.address }}, {{ d.postal }}</span></div>
             <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Contact</div>{{ d.phone or '—' }}<br><span style="font-size:11px;color:var(--text-light);">{{ d.email or '' }}</span></div>
             <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Zone</div>{{ o.delivery_zone or '—' }}</div>
-            {% if o.fulfillment_date %}<div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Ship Date</div><strong>{{ o.fulfillment_date }}</strong></div>{% endif %}
+            {% if o.fulfillment_date %}<div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">{{ 'Delivered' if o.status == 'fulfilled' else 'Ship Date' }}</div><strong>{{ o.fulfillment_date }}</strong></div>{% endif %}
             {% if o.decline_reason %}<div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Decline Reason</div>{{ o.decline_reason }}</div>{% endif %}
           </div>
 
@@ -164,11 +166,12 @@
             <button class="btn-decline" onclick="doDecline('{{ o.id }}',event)">✗ Decline &amp; Refund</button>
             {% endif %}
             {% if o.status == 'approved' %}
-            <button class="btn-fulfill" onclick="doFulfill('{{ o.id }}',event)">📦 Mark Shipped</button>
+            <button class="btn-fulfill" onclick="doFulfill('{{ o.id }}',event)" title="Only once the courier has confirmed delivery — the buyer sees “Delivered ✓” on their order">✓ Mark Delivered</button>
             {% endif %}
           </div>
           {% if o.status == 'approved' %}
           <div style="font-size:11px;color:var(--action-green);margin-top:8px;">✓ Paid at checkout. Inventory deducted on approval — pack &amp; mail by {{ o.fulfillment_date or 'the ship date' }}.</div>
+          <div style="font-size:11px;color:var(--text-light);margin-top:4px;">Mark Delivered only after the courier has <strong>confirmed</strong> delivery (not when it's booked) — the buyer sees “Delivered ✓” on their order.</div>
           {% endif %}
         </div>
       </td>
@@ -341,10 +344,19 @@ async function doDecline(orderId, e) {
 
 async function doFulfill(orderId, e) {
   e.stopPropagation();
-  if (!confirm('Mark this order as shipped?')) return;
-  const resp = await fetch('/api/retail-orders/' + orderId, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'fulfill'})});
+  if (!confirm('Mark this order as DELIVERED?\n\nOnly do this once the courier has CONFIRMED delivery — not when the pickup is booked. The buyer will see "Delivered ✓" on their order.')) return;
+  const today = new Date().toISOString().split('T')[0];
+  const dateInput = prompt('Delivery date (YYYY-MM-DD):', today);
+  if (dateInput === null) return;
+  const body = {action: 'fulfill'};
+  const date = dateInput.trim();
+  if (date) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { showToast('Invalid date — use YYYY-MM-DD', false); return; }
+    body.fulfillment_date = date;
+  }
+  const resp = await fetch('/api/retail-orders/' + orderId, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
   const data = await resp.json();
-  if (resp.ok) { showToast('Order marked shipped', true); setTimeout(() => location.reload(), 800); }
+  if (resp.ok) { showToast('Order marked delivered', true); setTimeout(() => location.reload(), 800); }
   else showToast(data.error || 'Failed', false);
 }
 
