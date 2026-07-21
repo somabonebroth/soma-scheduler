@@ -55,6 +55,9 @@
 .filter-btn{background:var(--card-bg);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;cursor:pointer;transition:all .15s;}
 .filter-btn.active{background:var(--accent);color:var(--white);border-color:var(--accent);}
 .info-msg{background:var(--action-blue-bg);border:1px solid #90caf9;border-radius:8px;padding:14px;font-size:13px;color:var(--info-dark);margin-bottom:16px;}
+.notify-emails-box{background:var(--action-blue-bg);border:1px solid #90caf9;border-radius:8px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:var(--info-dark);}
+.btn-copy-emails{background:var(--info);color:var(--white);border:none;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;flex:0 0 auto;}
+.btn-copy-emails:hover{background:var(--action-blue);}
 .err-msg{background:var(--action-red-bg);border:1px solid #ef9a9a;border-radius:8px;padding:14px;font-size:13px;color:var(--action-red);margin-bottom:16px;}
 
 /* Approve modal */
@@ -145,6 +148,17 @@
             {% if o.fulfillment_date %}<div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">{{ 'Delivered' if o.status == 'fulfilled' else 'Ship Date' }}</div><strong>{{ o.fulfillment_date }}</strong></div>{% endif %}
             {% if o.decline_reason %}<div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Decline Reason</div>{{ o.decline_reason }}</div>{% endif %}
           </div>
+
+          {% if d.notification_emails %}
+          <div class="notify-emails-box">
+            <div style="flex:1;min-width:200px;">
+              <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">📧 Notification emails — add to the courier booking</div>
+              <div id="notify-emails-{{ o.id }}" style="font-size:13px;word-break:break-all;">{{ d.notification_emails|join(', ') }}</div>
+              <div style="font-size:11px;color:var(--text-light);margin-top:2px;">These contacts expect the delivery service's arrival updates.</div>
+            </div>
+            <button class="btn-copy-emails" onclick="copyNotifyEmails('{{ o.id }}',event)">Copy</button>
+          </div>
+          {% endif %}
 
           <div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Items</div>
           <ul class="items-list">
@@ -326,6 +340,27 @@ async function submitApprove() {
     errEl.textContent = 'Network error — please try again.';
     errEl.style.display = 'block';
     btn.disabled = false; btn.textContent = 'Confirm Approval';
+  }
+}
+
+async function copyNotifyEmails(orderId, e) {
+  e.stopPropagation();
+  const el = document.getElementById('notify-emails-' + orderId);
+  if (!el) return;
+  const text = el.textContent.trim();
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('Notification emails copied', true);
+  } catch (err) {
+    // Older WebViews / denied clipboard permission — textarea fallback.
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    showToast(ok ? 'Notification emails copied' : 'Copy failed — select the emails and copy manually', ok);
   }
 }
 
