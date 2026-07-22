@@ -351,14 +351,17 @@ def ripe_orders_page():
 @ripe_orders_bp.route("/api/ripe-orders/pending-count")
 @_soma_login_required
 def ripe_pending_count():
-    """Return the count of pending Ripe orders for the nav badge (0 when unconfigured)."""
+    """Return counts for the dashboard badges: new (pending) and in-progress
+    (approved but not yet fulfilled) Ripe orders. Both 0 when unconfigured."""
     if not _configured():
-        return jsonify({"count": 0, "configured": False})
+        return jsonify({"count": 0, "in_progress": 0, "configured": False})
     status, data = _ripe_request("GET", "/api/internal/orders")
     if status != 200 or not isinstance(data, list):
-        return jsonify({"count": 0, "configured": True})
+        return jsonify({"count": 0, "in_progress": 0, "configured": True})
     count = sum(1 for o in data if o.get("status") == "pending")
-    return jsonify({"count": count, "configured": True})
+    in_progress = sum(1 for o in data
+                      if o.get("status") in ("approved", "approved-for-production"))
+    return jsonify({"count": count, "in_progress": in_progress, "configured": True})
 
 
 @ripe_orders_bp.route("/api/ripe-orders/<order_id>", methods=["PATCH"])

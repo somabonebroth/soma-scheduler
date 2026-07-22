@@ -77,7 +77,8 @@
                 <div style="text-align:left;">
                     <div class="label" style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
                         Ripe Orders
-                        <span id="ripe-badge" style="display:none;background:var(--action-red);color:var(--white);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
+                        <span id="ripe-badge" title="New orders awaiting approval" style="display:none;background:var(--action-red);color:var(--white);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
+                        <span id="ripe-badge-progress" title="Approved orders awaiting fulfillment" style="display:none;background:var(--amber-text);color:var(--white);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
                     </div>
                     <div class="sublabel">Manage incoming wholesale orders</div>
                 </div>
@@ -88,7 +89,8 @@
                 <div style="text-align:left;">
                     <div class="label" style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
                         SBBC Orders
-                        <span id="retail-badge" style="display:none;background:var(--action-red);color:var(--white);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
+                        <span id="retail-badge" title="New orders awaiting approval" style="display:none;background:var(--action-red);color:var(--white);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
+                        <span id="retail-badge-progress" title="Approved orders awaiting delivery" style="display:none;background:var(--amber-text);color:var(--white);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
                     </div>
                     <div class="sublabel">Paid portal orders — approve &amp; mail</div>
                 </div>
@@ -245,21 +247,25 @@ document.addEventListener('keydown', function(e) {
   } catch(e) {}
 })();
 
-// Ripe Orders pending badge
+// Ripe Orders badges — red = new (pending), amber = approved awaiting fulfillment
 (async function loadRipeBadge() {
   try {
-    var r = await fetch('/api/ripe-orders/pending-count');
-    var d = await r.json();
+    const r = await fetch('/api/ripe-orders/pending-count');
+    const d = await r.json();
     if (d.count > 0) {
-      var badge = document.getElementById('ripe-badge');
-      var btn = document.getElementById('ripe-orders-btn');
+      const badge = document.getElementById('ripe-badge');
+      const btn = document.getElementById('ripe-orders-btn');
       if (badge) { badge.textContent = d.count; badge.style.display = 'inline-block'; }
       if (btn) { btn.classList.add('has-pending'); }
+    }
+    if (d.in_progress > 0) {
+      const prog = document.getElementById('ripe-badge-progress');
+      if (prog) { prog.textContent = d.in_progress; prog.style.display = 'inline-block'; }
     }
   } catch(e) {}
 })();
 
-// SBBC Orders pending badge
+// SBBC Orders badges — red = new (pending), amber = approved awaiting delivery
 (async function loadRetailBadge() {
   try {
     const r = await fetch('/api/retail-orders/pending-count');
@@ -269,6 +275,10 @@ document.addEventListener('keydown', function(e) {
       const btn = document.getElementById('retail-orders-btn');
       if (badge) { badge.textContent = d.count; badge.style.display = 'inline-block'; }
       if (btn) { btn.classList.add('has-pending'); }
+    }
+    if (d.in_progress > 0) {
+      const prog = document.getElementById('retail-badge-progress');
+      if (prog) { prog.textContent = d.in_progress; prog.style.display = 'inline-block'; }
     }
   } catch(e) {}
 })();
