@@ -32,7 +32,7 @@ import urllib.request, urllib.error
 
 from flask import Blueprint, render_template, request, jsonify, session
 
-from helpers import _sku_key
+from helpers import _sku_key, _load_company_info
 
 logger = logging.getLogger(__name__)
 retail_orders_bp = Blueprint("retail_orders", __name__)
@@ -295,6 +295,29 @@ def retail_pending_count():
     count = sum(1 for o in data if o.get("status") == "pending")
     in_progress = sum(1 for o in data if o.get("status") == "approved")
     return jsonify({"count": count, "in_progress": in_progress, "configured": True})
+
+
+@retail_orders_bp.route("/retail-orders/<order_id>/packing-slip")
+@_soma_login_required
+def retail_packing_slip(order_id):
+    """Fetch order detail from the SBBC portal and render a packing slip.
+
+    No pricing anywhere on the slip. Orders from Alma Care get an extra
+    "Special Ingredient Package" line — an item they supply for us to include
+    in every box alongside the broth.
+    """
+    status, data = _retail_request("GET", f"/api/internal/order-detail/{order_id}")
+    if status != 200 or not isinstance(data, dict) or not data.get("id"):
+        from flask import abort
+        abort(404)
+    buyer = (data.get("buyer") or "").strip().lower()
+    return render_template(
+        "retail_packing_slip.html",
+        order=data,
+        company=_load_company_info(),
+        today=datetime.now().strftime("%B %d, %Y"),
+        alma_extra="alma care" in buyer,
+    )
 
 
 @retail_orders_bp.route("/api/retail-orders/<order_id>", methods=["PATCH"])

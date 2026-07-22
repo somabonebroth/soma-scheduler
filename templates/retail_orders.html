@@ -51,6 +51,8 @@
 .btn-decline:hover{background:var(--action-red-bg);}
 .btn-fulfill{background:var(--info);color:var(--white);border:none;border-radius:6px;padding:9px 16px;font-size:12px;font-weight:600;cursor:pointer;}
 .btn-fulfill:hover{background:var(--action-blue);}
+.btn-slip{background:var(--white);color:var(--text);border:1px solid var(--grey-border);border-radius:6px;padding:9px 16px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-block;}
+.btn-slip:hover{background:var(--bg);}
 .filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
 .filter-btn{background:var(--card-bg);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;cursor:pointer;transition:all .15s;}
 .filter-btn.active{background:var(--accent);color:var(--white);border-color:var(--accent);}
@@ -175,6 +177,9 @@
           {% if d.notes %}<div style="font-size:12px;margin-top:10px;color:var(--text-light);">Note: {{ d.notes }}</div>{% endif %}
 
           <div class="action-row">
+            {% if o.status != 'declined' %}
+            <a class="btn-slip" href="/retail-orders/{{ o.id }}/packing-slip" target="_blank" onclick="event.stopPropagation()">🖨 Packing Slip</a>
+            {% endif %}
             {% if o.status == 'pending' %}
             <button class="btn-approve" onclick="openApproveModal('{{ o.id }}',event)">✓ Approve &amp; Set Ship Date</button>
             <button class="btn-decline" onclick="doDecline('{{ o.id }}',event)">✗ Decline &amp; Refund</button>
