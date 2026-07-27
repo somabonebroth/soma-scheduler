@@ -51,6 +51,7 @@ table.ps-tbl th.r, table.ps-tbl td.r { text-align:right; }
   </div>
   <div class="ps-meta">
     <div class="lbl">Order Number</div><div class="val" style="font-family:ui-monospace,monospace;">{{ order.id }}</div>
+    {% if order.order_number %}<div class="lbl" style="margin-top:8px;">Ripe Order #</div><div class="val" style="font-family:ui-monospace,monospace;">{{ order.order_number }}</div>{% endif %}
     <div class="lbl" style="margin-top:8px;">Printed</div><div class="val" style="font-size:13px;">{{ today }}</div>
   </div>
 </div>
