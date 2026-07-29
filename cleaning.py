@@ -3,17 +3,17 @@
 Self-contained blueprint (suppliers.py pattern): owns its data file and
 helpers, defines a local login_required, pulls IO from helpers.py.
 
-Concept: a pool of ~1hr micro cleaning jobs, each with a rough target
-frequency (every ~2 weeks or every ~6 months). Jobs are ordered by how
-overdue they are relative to their frequency (days since last done ÷
-interval), so completing a job naturally sends it to the back of the
-line and skipped jobs simply stay near the front. Staff pick from the
-top, do the job, and sign off with their name. No manager sign-off, no
-penalty for skipped days.
+Concept: a pool of ~1hr micro cleaning jobs, each with a rest interval
+(1 / 3 / 6 month presets). Completing a job takes it OUT of the active
+list; it re-enters interval_days after completion. Never-done jobs are
+active immediately. Active jobs are ordered most-overdue first (days
+since last done ÷ interval); skipped jobs simply stay near the front.
+Staff pick from the top, do the job, and sign off with their name. No
+manager sign-off, no penalty for skipped days.
 """
 import os
 from functools import wraps
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 from flask import Blueprint, request, jsonify, session, redirect, url_for, render_template
 
@@ -23,9 +23,9 @@ cleaning_bp = Blueprint("cleaning", __name__)
 
 CLEANING_PATH = os.path.join(DATA_DIR, "cleaning_jobs.json")
 
-# Frequency presets offered by the UI; interval_days is stored per job so
+# UI presets are 30 / 90 / 180 days; interval_days is stored per job so
 # custom values are also accepted.
-DEFAULT_INTERVALS = {"frequent": 14, "rare": 180}
+DEFAULT_INTERVAL_DAYS = 30
 
 
 def login_required(f):
@@ -63,16 +63,20 @@ def _parse_date(s):
 
 
 def _job_view(job):
-    """Return the job with computed rotation fields: days_since (since last
-    done, or since creation if never done), due_ratio, and status."""
+    """Return the job with computed rotation fields. `ready` means the job
+    is in the active list: never done yet, or its rest interval has elapsed
+    since the last completion. Resting jobs carry `returns_on`."""
     today = date.today()
-    anchor = _parse_date(job.get("last_done")) or _parse_date(job.get("created_at")) or today
+    last_done = _parse_date(job.get("last_done"))
+    anchor = last_done or _parse_date(job.get("created_at")) or today
     days_since = max(0, (today - anchor).days)
-    interval = max(1, int(job.get("interval_days") or DEFAULT_INTERVALS["frequent"]))
+    interval = max(1, int(job.get("interval_days") or DEFAULT_INTERVAL_DAYS))
     view = dict(job)
     view["days_since"] = days_since
     view["due_ratio"] = round(days_since / interval, 3)
-    view["status"] = "due" if days_since >= interval else "ok"
+    view["ready"] = last_done is None or days_since >= interval
+    if not view["ready"]:
+        view["returns_on"] = (last_done + timedelta(days=interval)).isoformat()
     return view
 
 
@@ -89,8 +93,11 @@ def get_cleaning_jobs():
     """Return all jobs with computed due info, most-overdue first."""
     data = _load_cleaning()
     jobs = [_job_view(j) for j in data["jobs"]]
-    # Most-overdue first; among ties, never-done jobs outrank recently-done ones
-    jobs.sort(key=lambda j: (j["due_ratio"], 0 if j["last_done"] else 1), reverse=True)
+    # Active (ready) jobs first, most-overdue at the top; among ties,
+    # never-done jobs outrank previously-done ones. Resting jobs follow,
+    # which the same ratio ordering puts soonest-to-return first.
+    jobs.sort(key=lambda j: (0 if j["ready"] else 1, -j["due_ratio"],
+                             0 if j["last_done"] is None else 1))
     return jsonify(jobs)
 
 
@@ -103,7 +110,7 @@ def create_cleaning_job():
     if not title:
         return jsonify({"error": "Title required"}), 400
     try:
-        interval = int(body.get("interval_days", DEFAULT_INTERVALS["frequent"]))
+        interval = int(body.get("interval_days", DEFAULT_INTERVAL_DAYS))
     except (ValueError, TypeError):
         return jsonify({"error": "interval_days must be a number"}), 400
     if interval < 1:

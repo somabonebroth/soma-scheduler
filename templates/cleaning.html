@@ -68,12 +68,12 @@
     <div class="header-right"><button class="header-btn" onclick="window.location='/'">&#8962; Dashboard</button></div>
 </div>
 <div class="main">
-    <p class="intro">Extra time at the end of a shift? Grab a job from the top of the list, do it, and sign off with your name — it rotates to the back automatically. Busy day? Skip it, no worries — it just stays in line.</p>
+    <p class="intro">Extra time at the end of a shift? Grab a job from the top of the list, do it, and sign off with your name — it leaves the list and comes back 1, 3 or 6 months later. Busy day? Skip it, no worries — it just stays in line.</p>
 
     <div class="section-label">Up next</div>
     <div class="job-list" id="upnext-list"></div>
 
-    <div class="section-label" id="rest-label" style="display:none;">Rest of the rotation</div>
+    <div class="section-label" id="rest-label" style="display:none;">Recently done — back in line later</div>
     <div class="job-list" id="rest-list"></div>
 
     <div class="section-label">Recent sign-offs</div>
@@ -123,10 +123,9 @@
     <div class="cl-field">
       <label>How often (roughly)</label>
       <select id="job-interval">
-        <option value="14">Every ~2 weeks</option>
-        <option value="30">Every ~month</option>
-        <option value="90">Every ~3 months</option>
-        <option value="180">Every ~6 months</option>
+        <option value="30">Monthly — back 1 month after completion</option>
+        <option value="90">Quarterly — back 3 months after completion</option>
+        <option value="180">Semi-annual — back 6 months after completion</option>
       </select>
     </div>
     <div class="cl-field">
@@ -143,7 +142,6 @@
 
 <script>
 // New JS — let/const per the forward-only policy.
-const UPNEXT_COUNT = 4;
 let jobs = [];
 let signoffJobId = null;
 let editJobId = null;
@@ -151,10 +149,9 @@ let editJobId = null;
 function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function freqLabel(days){
-    if (days <= 14) return 'Every ~2 weeks';
-    if (days <= 30) return 'Every ~month';
-    if (days <= 90) return 'Every ~3 months';
-    if (days <= 180) return 'Every ~6 months';
+    if (days <= 30) return 'Monthly';
+    if (days <= 90) return 'Quarterly';
+    if (days <= 180) return 'Semi-annual';
     return 'Every ~' + days + ' days';
 }
 
@@ -166,12 +163,13 @@ function lastDoneLabel(j){
     return 'Done ' + j.days_since + ' days ago' + who;
 }
 
-function jobRowHtml(j, upnext){
+function jobRowHtml(j){
     let meta = '<span class="freq-badge">' + freqLabel(j.interval_days) + '</span>';
-    if (j.status === 'due') meta += '<span class="due-badge">Due</span>';
+    if (j.ready && j.last_done && j.due_ratio >= 1) meta += '<span class="due-badge">Due</span>';
     meta += '<span>' + lastDoneLabel(j) + '</span>';
+    if (!j.ready && j.returns_on) meta += '<span>Back in line ' + esc(j.returns_on) + '</span>';
     let notes = j.notes ? '<div class="job-notes">' + esc(j.notes) + '</div>' : '';
-    return '<div class="job-row' + (upnext ? ' upnext' : '') + '">'
+    return '<div class="job-row' + (j.ready ? ' upnext' : '') + '">'
         + '<div class="job-info"><div class="job-title">' + esc(j.title) + '</div>'
         + '<div class="job-meta">' + meta + '</div>' + notes + '</div>'
         + '<button class="done-btn" onclick="openSignoff(\'' + j.id + '\')">&#10003; Done</button>'
@@ -189,10 +187,13 @@ async function loadJobs(){
         rest.innerHTML = '';
         restLabel.style.display = 'none';
     } else {
-        up.innerHTML = jobs.slice(0, UPNEXT_COUNT).map(j => jobRowHtml(j, true)).join('');
-        const restJobs = jobs.slice(UPNEXT_COUNT);
-        rest.innerHTML = restJobs.map(j => jobRowHtml(j, false)).join('');
-        restLabel.style.display = restJobs.length ? '' : 'none';
+        const active = jobs.filter(j => j.ready);
+        const resting = jobs.filter(j => !j.ready);
+        up.innerHTML = active.length
+            ? active.map(jobRowHtml).join('')
+            : '<div class="empty-state">All caught up — nothing due right now. &#127881;</div>';
+        rest.innerHTML = resting.map(jobRowHtml).join('');
+        restLabel.style.display = resting.length ? '' : 'none';
     }
     renderManage();
 }
@@ -280,7 +281,9 @@ function openJobModal(jid){
     const j = jid ? jobs.find(x => x.id === jid) : null;
     document.getElementById('job-modal-title').textContent = j ? 'Edit Job' : 'Add Job';
     document.getElementById('job-title').value = j ? j.title : '';
-    document.getElementById('job-interval').value = j ? String(j.interval_days) : '14';
+    const intervalSel = document.getElementById('job-interval');
+    intervalSel.value = j ? String(j.interval_days) : '30';
+    if (!intervalSel.value) intervalSel.value = '30';
     document.getElementById('job-notes').value = j ? (j.notes || '') : '';
     document.getElementById('job-err').style.display = 'none';
     document.getElementById('job-modal').classList.add('open');
