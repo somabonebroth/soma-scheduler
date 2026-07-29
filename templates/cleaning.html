@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- PWA tags (managed) -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Soma">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/logo-180.png">
+<link rel="apple-touch-icon" sizes="192x192" href="/static/logo-192.png">
+<link rel="apple-touch-icon" sizes="512x512" href="/static/logo-512.png">
+<!-- /PWA tags -->
+<title>Soma - End-of-Shift Cleaning</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+/* Page layout only — colours/components come from the shared sheet */
+.intro { font-size: 13px; color: var(--text-light); margin: 4px 0 18px; line-height: 1.5; }
+.section-label { font-size: 11px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 1px; margin: 22px 0 8px; border-left: 3px solid var(--accent); padding-left: 8px; }
+.job-list { display: flex; flex-direction: column; gap: 8px; }
+.job-row { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; }
+.job-row.upnext { border-color: var(--accent); box-shadow: 0 1px 6px rgba(74,103,65,0.12); }
+.job-info { flex: 1; min-width: 0; }
+.job-title { font-size: 14px; font-weight: 600; color: var(--dark); }
+.job-meta { font-size: 11.5px; color: var(--text-light); margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.freq-badge { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); color: var(--text-light); white-space: nowrap; }
+.due-badge { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark, var(--amber-text)); white-space: nowrap; }
+.job-notes { font-size: 12px; color: var(--text-light); margin-top: 3px; font-style: italic; }
+.done-btn { flex-shrink: 0; background: var(--action-green); color: var(--white); border: none; border-radius: 8px; padding: 10px 16px; font-size: 13px; font-weight: 700; cursor: pointer; }
+.done-btn:hover { opacity: 0.9; }
+.empty-state { text-align: center; padding: 40px 16px; color: var(--text-light); font-size: 14px; background: var(--card-bg); border: 1px dashed var(--border); border-radius: 10px; }
+/* Recent sign-offs */
+.comp-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; background: var(--card-bg); }
+.comp-list { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.comp-row:last-child { border-bottom: none; }
+.comp-when { color: var(--text-light); font-size: 11.5px; white-space: nowrap; }
+.comp-undo { margin-left: auto; background: none; border: 1px solid var(--border); color: var(--text-light); border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
+.comp-undo:hover { border-color: var(--action-red); color: var(--action-red); }
+/* Manage section */
+.manage-job-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.manage-job-row:last-child { border-bottom: none; }
+.manage-actions button { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px; font-size: 11px; cursor: pointer; color: var(--text); margin-left: 4px; }
+.manage-actions .del:hover { border-color: var(--action-red); color: var(--action-red); }
+/* Modal */
+.cl-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; align-items: center; justify-content: center; }
+.cl-modal-overlay.open { display: flex; }
+.cl-modal { background: var(--white); border-radius: 14px; width: 100%; max-width: 400px; margin: 16px; padding: 26px 22px; position: relative; }
+.cl-modal h2 { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+.cl-modal .sub { font-size: 13px; color: var(--text-light); margin: 0 0 16px; }
+.cl-field { margin-bottom: 13px; }
+.cl-field label { font-size: 11px; font-weight: 600; color: var(--text-light); text-transform: uppercase; letter-spacing: .3px; display: block; margin-bottom: 5px; }
+.cl-field input, .cl-field select, .cl-field textarea { width: 100%; box-sizing: border-box; padding: 11px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 15px; background: var(--white); font-family: inherit; }
+.cl-err { font-size: 13px; color: var(--action-red); display: none; margin-bottom: 8px; }
+.cl-actions { display: flex; gap: 10px; margin-top: 6px; }
+.cl-actions button { flex: 1; padding: 12px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.cl-cancel { background: var(--white); border: 1px solid var(--border); color: var(--text); }
+.cl-primary { background: var(--action-green); border: none; color: var(--white); }
+</style>
+</head>
+<body>
+<div class="header">
+    <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+    <div class="header-text"><h1>SOMA BONE BROTH</h1><p>End-of-Shift Cleaning</p></div>
+    <div class="header-right"><button class="header-btn" onclick="window.location='/'">&#8962; Dashboard</button></div>
+</div>
+<div class="main">
+    <p class="intro">Extra time at the end of a shift? Grab a job from the top of the list, do it, and sign off with your name — it rotates to the back automatically. Busy day? Skip it, no worries — it just stays in line.</p>
+
+    <div class="section-label">Up next</div>
+    <div class="job-list" id="upnext-list"></div>
+
+    <div class="section-label" id="rest-label" style="display:none;">Rest of the rotation</div>
+    <div class="job-list" id="rest-list"></div>
+
+    <div class="section-label">Recent sign-offs</div>
+    <div id="comp-list"></div>
+
+    <details style="margin-top:26px;">
+        <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:1px;padding:8px 0;">&#9881; Manage job list</summary>
+        <div style="margin-top:8px;">
+            <button class="done-btn" style="background:var(--accent);" onclick="openJobModal()">+ Add Job</button>
+            <div id="manage-list" style="margin-top:10px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--card-bg);"></div>
+        </div>
+    </details>
+</div>
+
+<!-- Sign-off modal -->
+<div class="cl-modal-overlay" id="signoff-modal">
+  <div class="cl-modal">
+    <button onclick="closeSignoff()" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-light);">&times;</button>
+    <h2 id="signoff-title">Sign off</h2>
+    <p class="sub">Nice work. Put your name on it — the job rotates to the back of the line.</p>
+    <div class="cl-field">
+      <label>Your name</label>
+      <input type="text" id="signoff-staff" placeholder="e.g. Sam" autocomplete="off">
+    </div>
+    <div class="cl-field">
+      <label>Note (optional)</label>
+      <input type="text" id="signoff-notes" placeholder="Anything worth mentioning" autocomplete="off">
+    </div>
+    <div class="cl-err" id="signoff-err"></div>
+    <div class="cl-actions">
+      <button class="cl-cancel" onclick="closeSignoff()">Cancel</button>
+      <button class="cl-primary" id="signoff-submit" onclick="submitSignoff()">&#10003; Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit job modal -->
+<div class="cl-modal-overlay" id="job-modal">
+  <div class="cl-modal">
+    <button onclick="closeJobModal()" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-light);">&times;</button>
+    <h2 id="job-modal-title">Add Job</h2>
+    <p class="sub">A ~1 hour micro job for the end-of-shift rotation.</p>
+    <div class="cl-field">
+      <label>Job</label>
+      <input type="text" id="job-title" placeholder="e.g. Degrease hood filters" autocomplete="off">
+    </div>
+    <div class="cl-field">
+      <label>How often (roughly)</label>
+      <select id="job-interval">
+        <option value="14">Every ~2 weeks</option>
+        <option value="30">Every ~month</option>
+        <option value="90">Every ~3 months</option>
+        <option value="180">Every ~6 months</option>
+      </select>
+    </div>
+    <div class="cl-field">
+      <label>Notes (optional)</label>
+      <input type="text" id="job-notes" placeholder="Where supplies are, what to watch for" autocomplete="off">
+    </div>
+    <div class="cl-err" id="job-err"></div>
+    <div class="cl-actions">
+      <button class="cl-cancel" onclick="closeJobModal()">Cancel</button>
+      <button class="cl-primary" id="job-submit" onclick="submitJob()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// New JS — let/const per the forward-only policy.
+const UPNEXT_COUNT = 4;
+let jobs = [];
+let signoffJobId = null;
+let editJobId = null;
+
+function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function freqLabel(days){
+    if (days <= 14) return 'Every ~2 weeks';
+    if (days <= 30) return 'Every ~month';
+    if (days <= 90) return 'Every ~3 months';
+    if (days <= 180) return 'Every ~6 months';
+    return 'Every ~' + days + ' days';
+}
+
+function lastDoneLabel(j){
+    if (!j.last_done) return 'Never done yet';
+    const who = j.last_done_by ? ' by ' + esc(j.last_done_by) : '';
+    if (j.days_since === 0) return 'Done today' + who;
+    if (j.days_since === 1) return 'Done yesterday' + who;
+    return 'Done ' + j.days_since + ' days ago' + who;
+}
+
+function jobRowHtml(j, upnext){
+    let meta = '<span class="freq-badge">' + freqLabel(j.interval_days) + '</span>';
+    if (j.status === 'due') meta += '<span class="due-badge">Due</span>';
+    meta += '<span>' + lastDoneLabel(j) + '</span>';
+    let notes = j.notes ? '<div class="job-notes">' + esc(j.notes) + '</div>' : '';
+    return '<div class="job-row' + (upnext ? ' upnext' : '') + '">'
+        + '<div class="job-info"><div class="job-title">' + esc(j.title) + '</div>'
+        + '<div class="job-meta">' + meta + '</div>' + notes + '</div>'
+        + '<button class="done-btn" onclick="openSignoff(\'' + j.id + '\')">&#10003; Done</button>'
+        + '</div>';
+}
+
+async function loadJobs(){
+    const res = await fetch('/api/cleaning/jobs');
+    jobs = await res.json();
+    const up = document.getElementById('upnext-list');
+    const rest = document.getElementById('rest-list');
+    const restLabel = document.getElementById('rest-label');
+    if (jobs.length === 0) {
+        up.innerHTML = '<div class="empty-state">No cleaning jobs yet. Open <strong>Manage job list</strong> below to build the rotation.</div>';
+        rest.innerHTML = '';
+        restLabel.style.display = 'none';
+    } else {
+        up.innerHTML = jobs.slice(0, UPNEXT_COUNT).map(j => jobRowHtml(j, true)).join('');
+        const restJobs = jobs.slice(UPNEXT_COUNT);
+        rest.innerHTML = restJobs.map(j => jobRowHtml(j, false)).join('');
+        restLabel.style.display = restJobs.length ? '' : 'none';
+    }
+    renderManage();
+}
+
+async function loadCompletions(){
+    const res = await fetch('/api/cleaning/completions?limit=15');
+    const comps = await res.json();
+    const el = document.getElementById('comp-list');
+    if (comps.length === 0) {
+        el.innerHTML = '<div class="empty-state">No sign-offs yet.</div>';
+        return;
+    }
+    el.innerHTML = '<div class="comp-list">' + comps.map(c =>
+        '<div class="comp-row"><span>&#10003;</span>'
+        + '<div><strong>' + esc(c.job_title) + '</strong> — ' + esc(c.staff)
+        + (c.notes ? '<div style="font-size:11.5px;color:var(--text-light);font-style:italic;">' + esc(c.notes) + '</div>' : '')
+        + '</div>'
+        + '<span class="comp-when" style="margin-left:auto;">' + esc(c.date) + '</span>'
+        + '<button class="comp-undo" title="Undo this sign-off" onclick="undoCompletion(\'' + c.id + '\')">undo</button>'
+        + '</div>'
+    ).join('') + '</div>';
+}
+
+function renderManage(){
+    const el = document.getElementById('manage-list');
+    if (jobs.length === 0) { el.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-light);">No jobs yet.</div>'; return; }
+    const sorted = jobs.slice().sort((a, b) => a.title.localeCompare(b.title));
+    el.innerHTML = sorted.map(j =>
+        '<div class="manage-job-row"><div style="flex:1;min-width:0;"><strong>' + esc(j.title) + '</strong>'
+        + ' <span class="freq-badge">' + freqLabel(j.interval_days) + '</span></div>'
+        + '<div class="manage-actions">'
+        + '<button onclick="openJobModal(\'' + j.id + '\')">Edit</button>'
+        + '<button class="del" onclick="deleteJob(\'' + j.id + '\')">Delete</button>'
+        + '</div></div>'
+    ).join('');
+}
+
+// ── Sign-off ──
+function openSignoff(jid){
+    signoffJobId = jid;
+    const j = jobs.find(x => x.id === jid);
+    document.getElementById('signoff-title').textContent = 'Sign off: ' + (j ? j.title : '');
+    document.getElementById('signoff-err').style.display = 'none';
+    document.getElementById('signoff-notes').value = '';
+    const staffInput = document.getElementById('signoff-staff');
+    try { staffInput.value = localStorage.getItem('soma_cleaning_name') || ''; } catch(e) { staffInput.value = ''; }
+    document.getElementById('signoff-modal').classList.add('open');
+    setTimeout(() => staffInput.focus(), 50);
+}
+function closeSignoff(){ document.getElementById('signoff-modal').classList.remove('open'); }
+
+async function submitSignoff(){
+    const staff = document.getElementById('signoff-staff').value.trim();
+    const err = document.getElementById('signoff-err');
+    if (!staff) { err.textContent = 'Please enter your name.'; err.style.display = 'block'; return; }
+    const btn = document.getElementById('signoff-submit');
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/cleaning/jobs/' + signoffJobId + '/complete', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({staff: staff, notes: document.getElementById('signoff-notes').value.trim()})
+        });
+        const d = await res.json();
+        if (!res.ok) { err.textContent = d.error || 'Failed to save.'; err.style.display = 'block'; return; }
+        try { localStorage.setItem('soma_cleaning_name', staff); } catch(e) {}
+        closeSignoff();
+        await Promise.all([loadJobs(), loadCompletions()]);
+    } catch(e) {
+        err.textContent = 'Error — try again.'; err.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function undoCompletion(cid){
+    if (!confirm('Undo this sign-off? The job moves back up the line.')) return;
+    await fetch('/api/cleaning/completions/' + cid, {method: 'DELETE'});
+    await Promise.all([loadJobs(), loadCompletions()]);
+}
+
+// ── Manage jobs ──
+function openJobModal(jid){
+    editJobId = jid || null;
+    const j = jid ? jobs.find(x => x.id === jid) : null;
+    document.getElementById('job-modal-title').textContent = j ? 'Edit Job' : 'Add Job';
+    document.getElementById('job-title').value = j ? j.title : '';
+    document.getElementById('job-interval').value = j ? String(j.interval_days) : '14';
+    document.getElementById('job-notes').value = j ? (j.notes || '') : '';
+    document.getElementById('job-err').style.display = 'none';
+    document.getElementById('job-modal').classList.add('open');
+    setTimeout(() => document.getElementById('job-title').focus(), 50);
+}
+function closeJobModal(){ document.getElementById('job-modal').classList.remove('open'); }
+
+async function submitJob(){
+    const title = document.getElementById('job-title').value.trim();
+    const err = document.getElementById('job-err');
+    if (!title) { err.textContent = 'Please enter a job name.'; err.style.display = 'block'; return; }
+    const payload = {
+        title: title,
+        interval_days: parseInt(document.getElementById('job-interval').value, 10),
+        notes: document.getElementById('job-notes').value.trim()
+    };
+    const url = editJobId ? '/api/cleaning/jobs/' + editJobId : '/api/cleaning/jobs';
+    const method = editJobId ? 'PATCH' : 'POST';
+    try {
+        const res = await fetch(url, {method: method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+        const d = await res.json();
+        if (!res.ok) { err.textContent = d.error || 'Failed to save.'; err.style.display = 'block'; return; }
+        closeJobModal();
+        await loadJobs();
+    } catch(e) {
+        err.textContent = 'Error — try again.'; err.style.display = 'block';
+    }
+}
+
+async function deleteJob(jid){
+    const j = jobs.find(x => x.id === jid);
+    if (!confirm('Remove "' + (j ? j.title : 'this job') + '" from the rotation? Past sign-offs are kept.')) return;
+    await fetch('/api/cleaning/jobs/' + jid, {method: 'DELETE'});
+    await loadJobs();
+}
+
+// Close modals on backdrop click / Escape
+document.getElementById('signoff-modal').addEventListener('click', function(e){ if (e.target === this) closeSignoff(); });
+document.getElementById('job-modal').addEventListener('click', function(e){ if (e.target === this) closeJobModal(); });
+document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') { closeSignoff(); closeJobModal(); }
+    if (e.key === 'Enter' && document.getElementById('signoff-modal').classList.contains('open')) submitSignoff();
+});
+
+loadJobs();
+loadCompletions();
+</script>
+</body>
+</html>

@@ -36,6 +36,7 @@ from raw_materials import raw_materials_bp
 from audit_tools import audit_tools_bp
 from production import production_bp
 from ledger import ledger_bp
+from cleaning import cleaning_bp
 import shopify_importer
 import clover_importer
 
@@ -93,6 +94,7 @@ app.register_blueprint(raw_materials_bp)
 app.register_blueprint(audit_tools_bp)
 app.register_blueprint(production_bp)
 app.register_blueprint(ledger_bp)
+app.register_blueprint(cleaning_bp)
 
 # Session lifetime — 4 hours. After this the user must log in again.
 from datetime import timedelta as _timedelta
