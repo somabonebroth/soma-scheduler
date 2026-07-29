@@ -611,11 +611,9 @@ def ripe_packing_slip(order_id):
         from flask import abort
         abort(404)
     from datetime import datetime as _dt
-    from app import _load_company_info
     return render_template(
         "ripe_packing_slip.html",
         order=data,
-        company=_load_company_info(),
         today=_dt.now().strftime("%B %d, %Y"),
     )
 
