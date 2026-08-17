@@ -22,7 +22,7 @@ from zoneinfo import ZoneInfo
 from functools import wraps
 import urllib.request, urllib.error
 
-from flask import Blueprint, render_template, request, jsonify, session
+from flask import Blueprint, render_template, request, jsonify, session, Response
 
 logger = logging.getLogger(__name__)
 ripe_orders_bp = Blueprint("ripe_orders", __name__)
@@ -70,6 +70,38 @@ def _ripe_request(method, path, body=None):
     except Exception as e:
         logger.exception("Ripe API %s %s failed", method, url)
         return 503, {"error": str(e)}
+
+
+def _ripe_push_with_retry(path, body, attempts=3):
+    """PATCH the Ripe portal, retrying transient failures.
+
+    Approve is a two-phase commit with no rollback: stock is deducted and sale
+    records written BEFORE this push. If it fails, inventory has moved while the
+    order still reads pending on Ripe — so a blip on the wire shouldn't be enough
+    to strand it.
+
+    Only transport-level failures and 5xx are retried. A 4xx is a decision the
+    portal made (already approved, bad state) and repeating it won't help.
+
+    Retrying the whole approve is safe regardless: create_ripe_sale_records is
+    idempotency-guarded on the order id, so a second attempt re-pushes the status
+    without deducting stock twice.
+    """
+    import time as _time
+    last = (503, {"error": "not attempted"})
+    for attempt in range(attempts):
+        if attempt:
+            _time.sleep(1.5 * attempt)
+        status, resp = _ripe_request("PATCH", path, body)
+        if status == 200:
+            if attempt:
+                logger.info("Ripe push %s succeeded on attempt %d", path, attempt + 1)
+            return status, resp
+        last = (status, resp)
+        if status < 500:
+            return last          # the portal decided; don't hammer it
+        logger.warning("Ripe push %s attempt %d/%d returned %s", path, attempt + 1, attempts, status)
+    return last
 
 
 def _load(path, default):
@@ -159,6 +191,14 @@ def create_ripe_sale_records(order, delivery_date, payment_key):
                 f"order needs {units} units, only {available} available"
             )
     if insufficient:
+        # Wording differs by path. On wholesale the usual cause is a competing
+        # approval; on a retail parcel the order is already paid and the packer
+        # is standing at the bench, so the useful next step is cancelling it.
+        if order.get("order_mode") == "retail":
+            return False, (
+                "Not enough stock to fill this parcel. " + "; ".join(insufficient)
+                + ". Cancel the order and add a credit to Ripe's account."
+            )
         return False, (
             "Insufficient SS stock to approve — another order may have been "
             "approved since this one was submitted. " + "; ".join(insufficient)
@@ -336,6 +376,10 @@ def ripe_orders_page():
     """Render the Ripe orders page: awaiting-payment orders plus settled orders grouped by month."""
     status, data = _ripe_request("GET", "/api/internal/orders")
     orders = data if isinstance(data, list) else []
+    # Retail direct-ship parcels live on /ripe-retail. They share the "pending"
+    # status with unapproved wholesale orders, so without this filter they'd
+    # show up here as wholesale orders awaiting approval.
+    orders = [o for o in orders if o.get("order_mode") != "retail"]
     orders.sort(key=lambda o: o.get("created_at", ""), reverse=True)
     awaiting_orders = [o for o in orders if _is_awaiting_payment(o)]
     settled_orders  = [o for o in orders if not _is_awaiting_payment(o)]
@@ -343,21 +387,60 @@ def ripe_orders_page():
     pending_count = sum(1 for o in orders if o.get("status") == "pending")
     configured = _configured()
     error = None if status == 200 else (data.get("error") if isinstance(data, dict) else "Unknown error")
+
+    # Monthly pick-and-pack service fee. Non-fatal: a portal that predates the
+    # endpoint, or is briefly unreachable, just renders the page without it.
+    fee_status, fee_data = _ripe_request("GET", "/api/internal/service-fees")
+    if fee_status == 200 and isinstance(fee_data, dict):
+        service_fees = fee_data.get("fees") or []
+        service_fee_outstanding = fee_data.get("outstanding") or 0
+    else:
+        service_fees, service_fee_outstanding = [], 0
+
     return render_template("ripe_orders.html",
         awaiting_orders=awaiting_orders, settled_months=settled_months,
-        pending_count=pending_count, configured=configured, error=error)
+        pending_count=pending_count, configured=configured, error=error,
+        service_fees=service_fees, service_fee_outstanding=service_fee_outstanding)
+
+
+@ripe_orders_bp.route("/api/ripe-orders/service-fees/<fee_id>", methods=["PATCH"])
+@_soma_login_required
+def ripe_service_fee_action(fee_id):
+    """Confirm an e-transfer against Ripe's monthly service fee.
+
+    Soma is the only party that can see the money land, so Soma marks it
+    received — same division of labour as the wholesale e-transfer flow. The
+    Ripe portal owns the record and enforces idempotency; this just proxies.
+    """
+    body = request.get_json() or {}
+    if (body.get("action") or "").strip() != "confirm-etransfer":
+        return jsonify({"error": "Unsupported action"}), 400
+
+    status, data = _ripe_request("PATCH", f"/api/internal/service-fees/{fee_id}", {
+        "action": "confirm-etransfer",
+        "reference": (body.get("reference") or "").strip(),
+        "confirmed_by": session.get("user") or "soma",
+    })
+    if status != 200:
+        msg = data.get("error") if isinstance(data, dict) else "Unknown error"
+        return jsonify({"error": msg}), status
+    return jsonify({"ok": True, "fee": data.get("fee")})
 
 
 @ripe_orders_bp.route("/api/ripe-orders/pending-count")
 @_soma_login_required
 def ripe_pending_count():
     """Return counts for the dashboard badges: new (pending) and in-progress
-    (approved but not yet fulfilled) Ripe orders. Both 0 when unconfigured."""
+    (approved but not yet fulfilled) Ripe orders. Both 0 when unconfigured.
+
+    Wholesale only — retail parcels are also "pending" and have their own badge.
+    """
     if not _configured():
         return jsonify({"count": 0, "in_progress": 0, "configured": False})
     status, data = _ripe_request("GET", "/api/internal/orders")
     if status != 200 or not isinstance(data, list):
         return jsonify({"count": 0, "in_progress": 0, "configured": True})
+    data = [o for o in data if o.get("order_mode") != "retail"]
     count = sum(1 for o in data if o.get("status") == "pending")
     in_progress = sum(1 for o in data
                       if o.get("status") in ("approved", "approved-for-production"))
@@ -385,7 +468,6 @@ def ripe_order_action(order_id):
         from app import _load_company_info
         from datetime import datetime as _dt, timedelta as _td
         _company  = _load_company_info()
-        _ss_hard_min     = int(_company.get("ss_small_order_threshold") or 20)
         _fzbb_small      = int(_company.get("fzbb_small_lead_days")  or 3)
         _fzbb_large      = int(_company.get("fzbb_large_lead_days")  or 7)
         _fzbb_thresh     = int(_company.get("fzbb_large_threshold")  or 8)
@@ -396,19 +478,12 @@ def ripe_order_action(order_id):
             _order_obj = next((o for o in _order_data if o["id"] == order_id), None)
             if _order_obj:
                 _items      = _order_obj.get("items", [])
-                _ss_cases   = sum(i.get("cases",0) for i in _items if (i.get("format","") or "").upper().startswith("SS"))
                 _fzbb_cases = sum(i.get("cases",0) for i in _items if (i.get("format","") or "").upper().startswith(("FZ","BB")))
-                _delivery   = _order_obj.get("delivery_key","")
                 _req_date   = _order_obj.get("requested_date","")
 
-                # Hard-minimum check: reject anything below the absolute SS threshold.
-                # Between the hard min and the fee-free threshold, Ripe applies a
-                # flat small-order fee; Soma allows the order through.
-                if _delivery != "pickup" and _ss_cases < _ss_hard_min:
-                    return jsonify({
-                        "error": f"Cannot approve: delivery orders require at least {_ss_hard_min} SS cases (order has {_ss_cases})."
-                    }), 400
-
+                # SS case minimums were removed 2026-08 — an order of any size is
+                # approvable on any destination. FZ/BB lead times below are
+                # unchanged. See RETAIL_CONTRACT.md.
                 if _fzbb_cases > 0 and _req_date:
                     # Lead time only applies when FZ/BB stock cannot cover the
                     # order. If every FZ/BB line is fully in stock, the order
@@ -484,13 +559,15 @@ def ripe_order_action(order_id):
             return jsonify({"error": err or "Could not create sale records"}), 500
 
         # Push approve to Ripe (fires Stripe invoice for Net14 there)
-        ripe_status, ripe_resp = _ripe_request(
-            "PATCH", f"/api/internal/orders/{order_id}",
+        ripe_status, ripe_resp = _ripe_push_with_retry(
+            f"/api/internal/orders/{order_id}",
             {"action": "approve", "fulfillment_date": delivery_date},
         )
         if ripe_status != 200:
             return jsonify({
-                "warning": "Sale records created but Ripe status update failed",
+                "warning": "Sale records created and stock deducted, but the Ripe "
+                           "portal did not update. Approve again once it is "
+                           "reachable — stock will not be deducted twice.",
                 "ripe_error": ripe_resp.get("error") if isinstance(ripe_resp, dict) else str(ripe_resp),
             }), 502
 
@@ -529,56 +606,216 @@ def ripe_order_action(order_id):
     return jsonify({"error": f"Unknown action: {action}"}), 400
 
 
-@ripe_orders_bp.route("/api/internal/ripe-retail-auto-approve/<order_id>", methods=["POST"])
-def ripe_retail_auto_approve(order_id):
-    """Called by Ripe's Stripe Checkout webhook after a retail-pickup order is paid.
+# ─── RETAIL DIRECT SHIP ──────────────────────────────────────────────────────
+# Paid parcels waiting to be packed. Soma touches each order exactly once:
+# Approve & Print records the sale, deducts stock and produces both documents.
+# Do NOT add an intermediate "packed, awaiting pickup" state — it would double
+# the interaction cost of the highest-volume path in the system.
+# See RETAIL_CONTRACT.md.
 
-    Authed via X-Internal-Key. Skips the Soma-admin business-rule checks (SS
-    minimum / FZ-BB lead time) because retail pickup is exempt from wholesale
-    rules. Writes sale records, pushes status=approved back to Ripe.
+
+def _fetch_ripe_orders():
+    status, data = _ripe_request("GET", "/api/internal/orders")
+    return (data if status == 200 and isinstance(data, list) else []), status
+
+
+def _is_retail_to_pack(o):
+    """Paid retail order Soma hasn't dealt with yet."""
+    return (o.get("order_mode") == "retail"
+            and o.get("payment_status") == "paid"
+            and o.get("status") == "pending")
+
+
+def _group_retail_by_batch(orders):
+    """Group parcels by the checkout session that paid for them.
+
+    That shared session id IS the batch — Ripe settles N orders with one payment
+    and stamps the same id across them, so there is no batch record to join to.
     """
-    import hmac as _hmac
-    if not INTERNAL_API_KEY:
-        return jsonify({"error": "Internal API not configured"}), 503
-    if not _hmac.compare_digest(request.headers.get("X-Internal-Key", "").encode(),
-                                INTERNAL_API_KEY.encode()):
-        return jsonify({"error": "Unauthorized"}), 401
+    batches = {}
+    for o in orders:
+        key = o.get("stripe_checkout_session_id") or "unbatched"
+        batches.setdefault(key, []).append(o)
+    out = []
+    for key, group in batches.items():
+        group.sort(key=lambda x: x.get("order_number") or "")
+        out.append({
+            "session_id": key,
+            "orders": group,
+            "count": len(group),
+            "units": sum(int(x.get("total_units") or 0) for x in group),
+            "paid_at": min((x.get("paid_at") or "") for x in group),
+        })
+    out.sort(key=lambda b: b["paid_at"])
+    return out
 
-    get_status, order_data = _ripe_request("GET", "/api/internal/orders")
-    if get_status != 200 or not isinstance(order_data, list):
-        return jsonify({"error": "Could not fetch orders from Ripe portal"}), 502
-    order = next((o for o in order_data if o["id"] == order_id), None)
+
+@ripe_orders_bp.route("/ripe-retail")
+@_soma_login_required
+def ripe_retail_page():
+    """Pack queue for retail direct-ship parcels, grouped by batch."""
+    orders, status = _fetch_ripe_orders()
+    to_pack = [o for o in orders if _is_retail_to_pack(o)]
+    done = [o for o in orders
+            if o.get("order_mode") == "retail" and o.get("status") in ("fulfilled", "declined")]
+    done.sort(key=lambda o: o.get("created_at", ""), reverse=True)
+    return render_template(
+        "ripe_retail.html",
+        batches=_group_retail_by_batch(to_pack),
+        pack_count=len(to_pack),
+        recent=done[:40],
+        configured=_configured(),
+        error=None if status == 200 else "Could not reach the Ripe portal.",
+    )
+
+
+@ripe_orders_bp.route("/api/ripe-retail/pack-count")
+@_soma_login_required
+def ripe_retail_pack_count():
+    """Dashboard badge: paid parcels waiting to be packed."""
+    if not _configured():
+        return jsonify({"count": 0, "configured": False})
+    orders, status = _fetch_ripe_orders()
+    if status != 200:
+        return jsonify({"count": 0, "configured": True})
+    return jsonify({"count": sum(1 for o in orders if _is_retail_to_pack(o)), "configured": True})
+
+
+@ripe_orders_bp.route("/ripe-retail/<order_id>/packing-slip")
+@_soma_login_required
+def ripe_retail_packing_slip(order_id):
+    """Customer-facing packing slip. Goes in the box, so it carries NO pricing."""
+    orders, _ = _fetch_ripe_orders()
+    order = next((o for o in orders if o["id"] == order_id), None)
+    if not order:
+        return "Order not found", 404
+    from app import _load_company_info
+    return render_template("ripe_retail_packing_slip.html",
+                           order=order, company=_load_company_info())
+
+
+@ripe_orders_bp.route("/ripe-retail/<order_id>/label")
+@_soma_login_required
+def ripe_retail_label(order_id):
+    """Proxy the shipping label PDF from the Ripe portal.
+
+    Soma's browser can't fetch it directly — the portal's own attachment route
+    is session-gated and Soma holds only the internal key, so this streams it
+    through using the key-gated internal endpoint.
+    """
+    if not _configured():
+        return "Ripe portal not configured", 503
+    url = f"{RIPE_PORTAL_URL}/api/internal/orders/{order_id}/attachment"
+    req = urllib.request.Request(url, headers={"X-Internal-Key": INTERNAL_API_KEY})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = resp.read()
+    except urllib.error.HTTPError as e:
+        return ("No shipping label is attached to this order." if e.code == 404
+                else f"Could not fetch the label ({e.code})."), e.code
+    except Exception:
+        logger.exception("Could not proxy label for %s", order_id)
+        return "Could not reach the Ripe portal.", 502
+    return Response(body, mimetype="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{order_id}-label.pdf"'})
+
+
+def _approve_one_retail_order(order):
+    """Record the sale for one parcel and mark it fulfilled on Ripe.
+
+    Returns (ok, error). The sale is dated TODAY — the moment Soma packs it —
+    not any date carried on the order. Direct-ship orders carry no requested
+    date at all.
+
+    Soma touches the order once, so approve and fulfil collapse: this pushes
+    straight to fulfilled rather than leaving an approved state nothing exits.
+    """
+    order_id = order["id"]
+    today = datetime.now(ZoneInfo("America/Toronto")).date().isoformat()
+
+    ok, err = create_ripe_sale_records(order, today, "stripe_checkout")
+    if not ok:
+        return False, err or "Could not create sale records"
+
+    status, resp = _ripe_push_with_retry(f"/api/internal/orders/{order_id}",
+                                         {"action": "fulfill", "fulfillment_date": today})
+    if status != 200:
+        msg = resp.get("error") if isinstance(resp, dict) else str(resp)
+        # Stock has already moved. Say so plainly rather than implying nothing
+        # happened, and point at the safe recovery: approving again re-pushes
+        # the status without deducting twice.
+        return False, (f"Sale recorded and stock deducted, but the Ripe portal did not "
+                       f"update: {msg}. Approve again once it is reachable — stock will "
+                       f"not be deducted twice.")
+    return True, None
+
+
+@ripe_orders_bp.route("/api/ripe-retail/<order_id>", methods=["PATCH"])
+@_soma_login_required
+def ripe_retail_action(order_id):
+    """approve — record the sale, deduct stock, mark fulfilled.
+    cancel  — no money moves; Soma issues a credit by hand in Company Settings.
+    """
+    body = request.get_json() or {}
+    action = (body.get("action") or "").strip()
+
+    orders, status = _fetch_ripe_orders()
+    if status != 200:
+        return jsonify({"error": "Could not reach the Ripe portal."}), 502
+    order = next((o for o in orders if o["id"] == order_id), None)
     if not order:
         return jsonify({"error": "Order not found"}), 404
+    if not _is_retail_to_pack(order):
+        return jsonify({"error": "This order is not waiting to be packed."}), 409
 
-    if order.get("order_mode") != "retail":
-        return jsonify({"error": "Order is not a retail pickup order"}), 400
-    if order.get("payment_status") != "paid":
-        return jsonify({"error": "Order is not paid yet"}), 409
-    if order.get("status") == "approved":
-        return jsonify({"ok": True, "already_approved": True}), 200
-    if order.get("status") != "pending":
-        return jsonify({"error": f"Order is {order.get('status')} — cannot auto-approve"}), 409
+    if action == "approve":
+        ok, err = _approve_one_retail_order(order)
+        if not ok:
+            return jsonify({"error": err}), 502
+        return jsonify({"ok": True})
 
-    pickup_date = (order.get("requested_date") or "").strip()
-    if not pickup_date:
-        return jsonify({"error": "Order has no pickup date set"}), 400
+    if action == "cancel":
+        # Deliberately no refund and no void: the payment stays captured with
+        # Soma, and a credit is added to Ripe's account by hand. Nothing is
+        # reversed in inventory either, because nothing was recorded yet.
+        st, resp = _ripe_request("PATCH", f"/api/internal/orders/{order_id}",
+                                 {"action": "decline",
+                                  "reason": (body.get("reason") or "Cancelled by Soma").strip()})
+        if st != 200:
+            msg = resp.get("error") if isinstance(resp, dict) else str(resp)
+            return jsonify({"error": msg}), st
+        return jsonify({"ok": True, "credit_due": order.get("total")})
 
-    ok, err = create_ripe_sale_records(order, pickup_date, "stripe_checkout")
-    if not ok:
-        return jsonify({"error": err or "Could not create sale records"}), 500
+    return jsonify({"error": f"Unknown action: {action}"}), 400
 
-    ripe_status, ripe_resp = _ripe_request(
-        "PATCH", f"/api/internal/orders/{order_id}",
-        {"action": "approve", "fulfillment_date": pickup_date},
-    )
-    if ripe_status != 200:
-        return jsonify({
-            "warning": "Sale records created but Ripe status update failed",
-            "ripe_error": ripe_resp.get("error") if isinstance(ripe_resp, dict) else str(ripe_resp),
-        }), 502
 
-    return jsonify({"ok": True})
+@ripe_orders_bp.route("/api/ripe-retail/batch/<session_id>/approve", methods=["POST"])
+@_soma_login_required
+def ripe_retail_batch_approve(session_id):
+    """Approve every parcel in one batch, per-order underneath.
+
+    Deliberately NOT all-or-nothing: each order is recorded independently so one
+    short-stock SKU can't block the rest. Failures stay in the queue for Soma to
+    cancel, and the caller gets a per-order breakdown.
+    """
+    orders, status = _fetch_ripe_orders()
+    if status != 200:
+        return jsonify({"error": "Could not reach the Ripe portal."}), 502
+
+    batch = [o for o in orders
+             if _is_retail_to_pack(o) and (o.get("stripe_checkout_session_id") or "unbatched") == session_id]
+    if not batch:
+        return jsonify({"error": "No unpacked orders in this batch."}), 404
+
+    approved, failed = [], []
+    for o in sorted(batch, key=lambda x: x.get("order_number") or ""):
+        ok, err = _approve_one_retail_order(o)
+        (approved if ok else failed).append(
+            {"id": o["id"], "order_number": o.get("order_number"), "error": err})
+
+    logger.info("Retail batch %s: %d approved, %d failed", session_id, len(approved), len(failed))
+    return jsonify({"ok": True, "approved": approved, "failed": failed,
+                    "approved_count": len(approved), "failed_count": len(failed)})
 
 
 @ripe_orders_bp.route("/ripe-products")

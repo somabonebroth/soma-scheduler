@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Packing Slip · {{ order.order_number or order.id }}</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+main { max-width:800px !important; padding:32px !important; }
+body { background:#f0eee8; }
+.ps-ctrl { margin-bottom:16px; display:flex; gap:8px; flex-wrap:wrap; }
+.ps-head { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid var(--dark); padding-bottom:16px; margin-bottom:24px; }
+.ps-meta { text-align:right; font-size:13px; }
+.ps-meta .lbl { color:var(--text-light); font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+.ps-meta .val { font-weight:600; font-size:15px; }
+.ps-info { display:grid; grid-template-columns:1fr 1fr; gap:20px; padding:16px; background:#faf9f6; border-radius:8px; margin-bottom:24px; }
+.ps-info .lbl { font-size:11px; color:var(--text-light); text-transform:uppercase; letter-spacing:.04em; margin-bottom:3px; }
+.ps-info .val { font-size:14px; line-height:1.5; }
+table.ps-tbl { width:100%; border-collapse:collapse; margin-bottom:24px; }
+table.ps-tbl th { text-align:left; padding:10px 8px; border-bottom:2px solid var(--dark); font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-light); }
+table.ps-tbl td { padding:12px 8px; border-bottom:1px solid #e5e3dd; font-size:14px; vertical-align:top; }
+table.ps-tbl th.r, table.ps-tbl td.r { text-align:right; }
+.totals td { border-bottom:none; border-top:2px solid var(--dark); padding-top:13px; font-weight:600; }
+.thanks { margin-top:28px; padding-top:18px; border-top:1px solid #e5e3dd; text-align:center; font-size:13px; color:var(--text-light); line-height:1.6; }
+@media print { @page{size:letter;margin:.5in;} body{background:var(--white);} main{box-shadow:none!important;padding:0!important;} .ps-ctrl,.topbar,.nav,.flash{display:none!important;} }
+</style>
+</head>
+<body class="inv-page">
+{% include 'header_partial.html' ignore missing %}
+<main>
+
+<div class="ps-ctrl">
+  <button onclick="window.print()" class="btn btn-primary">🖨 Print packing slip</button>
+  <a href="/ripe-retail/{{ order.id }}/label" target="_blank" class="btn btn-outline">Open shipping label ↗</a>
+  <a href="/ripe-retail" class="btn btn-outline">← Back to pack queue</a>
+</div>
+
+<div class="ps-head">
+  <div>
+    <div style="font-weight:700;font-size:15px;">Ripe Nutrition Co.</div>
+    <div style="font-size:12px;color:var(--text-light);line-height:1.5;">
+      44 Charles St W., Toronto, ON, M4Y 1R7<br>
+      info@ripe-nutrition.com
+    </div>
+    <div style="color:var(--text-light);font-size:13px;margin-top:8px;text-transform:uppercase;letter-spacing:.05em;">Packing Slip</div>
+  </div>
+  <div class="ps-meta">
+    <div class="lbl">Order #</div>
+    <div class="val" style="font-family:ui-monospace,monospace;">{{ order.order_number }}</div>
+    <div class="lbl" style="margin-top:8px;">Reference</div>
+    <div class="val" style="font-family:ui-monospace,monospace;font-size:13px;">{{ order.id }}</div>
+  </div>
+</div>
+
+<div class="ps-info">
+  <div>
+    <div class="lbl">Prepared for</div>
+    <div class="val"><strong>{{ order.customer_name }}</strong></div>
+  </div>
+  <div>
+    <div class="lbl">Order placed</div>
+    <div class="val">{{ order.created_at[:10] }}</div>
+  </div>
+</div>
+
+{% if order.notes %}
+<div style="background:#faf0dc;border:1px solid #e6d2a8;border-radius:8px;padding:12px 14px;margin-bottom:20px;font-size:13px;">
+  <strong>Notes:</strong> {{ order.notes }}
+</div>
+{% endif %}
+
+{# No pricing anywhere on this document — it goes in the box, to Ripe's customer. #}
+<table class="ps-tbl">
+  <thead>
+    <tr><th style="width:60%;">Product</th><th>SKU</th><th class="r">Jars</th></tr>
+  </thead>
+  <tbody>
+    {% set ns = namespace(total=0) %}
+    {% for li in order['items'] %}
+    {% set ns.total = ns.total + li.units %}
+    <tr>
+      <td>
+        <strong>{{ li.name }}</strong><br>
+        <span style="font-size:12px;color:var(--text-light);">{{ li.format }}</span>
+      </td>
+      <td style="font-family:ui-monospace,monospace;font-size:11px;color:var(--text-light);">{{ li.sku }}</td>
+      <td class="r">{{ li.units }}</td>
+    </tr>
+    {% endfor %}
+    <tr class="totals">
+      <td colspan="2">Total jars</td>
+      <td class="r">{{ ns.total }}</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="thanks">
+  Thank you for your order.<br>
+  Questions? <strong>info@ripe-nutrition.com</strong>
+</div>
+
+</main>
+</body>
+</html>
