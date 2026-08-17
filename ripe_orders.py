@@ -343,9 +343,44 @@ def ripe_orders_page():
     pending_count = sum(1 for o in orders if o.get("status") == "pending")
     configured = _configured()
     error = None if status == 200 else (data.get("error") if isinstance(data, dict) else "Unknown error")
+
+    # Monthly pick-and-pack service fee. Non-fatal: a portal that predates the
+    # endpoint, or is briefly unreachable, just renders the page without it.
+    fee_status, fee_data = _ripe_request("GET", "/api/internal/service-fees")
+    if fee_status == 200 and isinstance(fee_data, dict):
+        service_fees = fee_data.get("fees") or []
+        service_fee_outstanding = fee_data.get("outstanding") or 0
+    else:
+        service_fees, service_fee_outstanding = [], 0
+
     return render_template("ripe_orders.html",
         awaiting_orders=awaiting_orders, settled_months=settled_months,
-        pending_count=pending_count, configured=configured, error=error)
+        pending_count=pending_count, configured=configured, error=error,
+        service_fees=service_fees, service_fee_outstanding=service_fee_outstanding)
+
+
+@ripe_orders_bp.route("/api/ripe-orders/service-fees/<fee_id>", methods=["PATCH"])
+@_soma_login_required
+def ripe_service_fee_action(fee_id):
+    """Confirm an e-transfer against Ripe's monthly service fee.
+
+    Soma is the only party that can see the money land, so Soma marks it
+    received — same division of labour as the wholesale e-transfer flow. The
+    Ripe portal owns the record and enforces idempotency; this just proxies.
+    """
+    body = request.get_json() or {}
+    if (body.get("action") or "").strip() != "confirm-etransfer":
+        return jsonify({"error": "Unsupported action"}), 400
+
+    status, data = _ripe_request("PATCH", f"/api/internal/service-fees/{fee_id}", {
+        "action": "confirm-etransfer",
+        "reference": (body.get("reference") or "").strip(),
+        "confirmed_by": session.get("user") or "soma",
+    })
+    if status != 200:
+        msg = data.get("error") if isinstance(data, dict) else "Unknown error"
+        return jsonify({"error": msg}), status
+    return jsonify({"ok": True, "fee": data.get("fee")})
 
 
 @ripe_orders_bp.route("/api/ripe-orders/pending-count")

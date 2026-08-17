@@ -199,6 +199,45 @@
     </tr>
   {% endmacro %}
 
+  {# Monthly pick-and-pack service fee — e-transfer, confirmed by Soma #}
+  {% if service_fees %}
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:14px;">
+  <table class="orders-table">
+    <thead>
+      <tr><th>Period</th><th>Description</th><th>Amount</th><th>Status</th><th>Paid</th><th></th></tr>
+    </thead>
+    <tbody>
+      <tr class="section-header">
+        <td colspan="6">Service fee
+          {% if service_fee_outstanding > 0 %}
+          <span class="count">${{ "%.2f"|format(service_fee_outstanding) }} outstanding</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% for f in service_fees %}
+      <tr>
+        <td style="font-weight:600;">{{ f.period_label }}</td>
+        <td style="color:var(--text-light);">{{ f.description }}</td>
+        <td style="font-variant-numeric:tabular-nums;">${{ "%.2f"|format(f.amount) }}</td>
+        <td>
+          {% if f.status == 'paid' %}<span class="tag tag-fulfilled">paid</span>
+          {% else %}<span class="tag tag-pending">awaiting e-transfer</span>{% endif %}
+        </td>
+        <td style="font-size:12px;color:var(--text-light);">{{ f.paid_at[:10] if f.paid_at else '—' }}</td>
+        <td style="text-align:right;">
+          {% if f.status != 'paid' %}
+          <button class="btn btn-sm" onclick="confirmServiceFee('{{ f.id }}', '{{ f.period_label }}')">
+            Confirm e-transfer
+          </button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+
   {% if awaiting_orders or settled_months %}
 
   {# Awaiting payment — pinned at the top, always expanded #}
@@ -363,6 +402,20 @@ async function submitApprove() {
     errEl.style.display = 'block';
     btn.disabled = false; btn.textContent = 'Confirm Approval';
   }
+}
+
+async function confirmServiceFee(feeId, periodLabel) {
+  if (!confirm('Confirm the e-transfer for ' + periodLabel + ' has been received?')) return;
+  var reference = prompt('E-transfer reference (optional):');
+  if (reference === null) return;
+  var body = {action: 'confirm-etransfer'};
+  if (reference.trim()) body.reference = reference.trim();
+  var resp = await fetch('/api/ripe-orders/service-fees/' + encodeURIComponent(feeId), {
+    method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+  });
+  var data = await resp.json();
+  if (resp.ok) { showToast(periodLabel + ' service fee marked paid', true); setTimeout(() => location.reload(), 800); }
+  else showToast(data.error || 'Failed to confirm', false);
 }
 
 async function doDecline(orderId, e) {
