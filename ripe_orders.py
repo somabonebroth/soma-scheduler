@@ -420,7 +420,6 @@ def ripe_order_action(order_id):
         from app import _load_company_info
         from datetime import datetime as _dt, timedelta as _td
         _company  = _load_company_info()
-        _ss_hard_min     = int(_company.get("ss_small_order_threshold") or 20)
         _fzbb_small      = int(_company.get("fzbb_small_lead_days")  or 3)
         _fzbb_large      = int(_company.get("fzbb_large_lead_days")  or 7)
         _fzbb_thresh     = int(_company.get("fzbb_large_threshold")  or 8)
@@ -431,19 +430,12 @@ def ripe_order_action(order_id):
             _order_obj = next((o for o in _order_data if o["id"] == order_id), None)
             if _order_obj:
                 _items      = _order_obj.get("items", [])
-                _ss_cases   = sum(i.get("cases",0) for i in _items if (i.get("format","") or "").upper().startswith("SS"))
                 _fzbb_cases = sum(i.get("cases",0) for i in _items if (i.get("format","") or "").upper().startswith(("FZ","BB")))
-                _delivery   = _order_obj.get("delivery_key","")
                 _req_date   = _order_obj.get("requested_date","")
 
-                # Hard-minimum check: reject anything below the absolute SS threshold.
-                # Between the hard min and the fee-free threshold, Ripe applies a
-                # flat small-order fee; Soma allows the order through.
-                if _delivery != "pickup" and _ss_cases < _ss_hard_min:
-                    return jsonify({
-                        "error": f"Cannot approve: delivery orders require at least {_ss_hard_min} SS cases (order has {_ss_cases})."
-                    }), 400
-
+                # SS case minimums were removed 2026-08 — an order of any size is
+                # approvable on any destination. FZ/BB lead times below are
+                # unchanged. See RETAIL_CONTRACT.md.
                 if _fzbb_cases > 0 and _req_date:
                     # Lead time only applies when FZ/BB stock cannot cover the
                     # order. If every FZ/BB line is fully in stock, the order
