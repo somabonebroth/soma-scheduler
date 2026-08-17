@@ -72,7 +72,10 @@ production.py       — Flask Blueprint (771 lines, extracted 2026-06-03): the F
                       Local verbatim copies of login_required + require_valid_week +
                       require_valid_day (decorators apply at import time → can't be
                       app.-qualified; they call app.validate_week_id/day_idx at request time).
-ripe_orders.py      — Flask Blueprint (591 lines) handling Ripe order workflow within Soma
+ripe_orders.py      — Flask Blueprint handling Ripe order workflow within Soma
+                      (wholesale approve/decline/fulfill + ripe_retail_auto_approve for
+                      Stripe-Checkout-paid retail pickup orders + monthly service-fee
+                      e-transfer confirmation, proxied to the Ripe portal)
 retail_orders.py    — Flask Blueprint (added 2026-07-02): SBBC Wholesale Portal order
                       ingestion, mirroring ripe_orders.py (which shares a live contract
                       with Ripe and stays untouched). /retail-orders admin page +
@@ -456,6 +459,52 @@ Render is connected to `github.com/somabonebroth/soma-scheduler` and auto-deploy
 ---
 
 ## Pending architectural work
+
+### Coco Market direct ship — PLANNED (2026-08-17)
+
+> **The authoritative spec is `RETAIL_CONTRACT.md`** at this repo's root, kept
+> byte-identical with the copy in the Ripe portal — diff the two to detect drift. Read it
+> before touching anything retail. The summary below is orientation only.
+
+Ripe's retail fulfillment for Coco Market moves to Soma. Ripe previously took bulk
+delivery at Coco Market and picked/packed retail orders themselves; Soma now packs
+each retail order at the factory and hands the parcel to Ripe's third-party carrier
+(Trexity / Canpar / Canada Post).
+
+**What Soma does:** pack to the order, affix the label Ripe supplies, hand to carrier.
+**What Soma does NOT do:** choose a carrier, buy a label, price shipping, or track
+delivery. Ripe owns all of that through its own shipper portal.
+
+Settled decisions (do not relitigate without checking the Ripe side):
+
+- **Manual entry, not a Shopify feed.** Ripe keys each order into the Ripe portal,
+  picking products from Soma's catalogue. That picker is the SKU validation boundary —
+  it's what stops Ripe's storefront SKU conventions reaching Soma's inventory. An
+  automated importer later must feed the same boundary, not bypass it.
+- **Labels are always PDFs**, uploaded by Ripe at order-entry time, one per order.
+  Ripe's portal generates its own pack sheet, so no Shopify packing slip transits.
+- **Auto-approve on payment**, reusing `ripe_retail_auto_approve` — orders reach Soma
+  already approved, with sale records written and FG deducted.
+- **Soma interacts exactly once**: a single packed/fulfilled action. Resist adding a
+  "packed, awaiting pickup" intermediate state — it would double the interaction cost
+  of what becomes the highest-volume path in the system.
+- **No case minimums** for any mode. The `ss_small_order_threshold` gate in
+  `ripe_order_action`'s approve branch gets deleted, along with Ripe's
+  `MIN_SS_CASES_DELIVERY` — they currently disagree (20 vs 40) for what reads like the
+  same rule, which is exactly the drift this contract is supposed to prevent.
+- Likely modelled as `fulfillment_method: "pickup" | "ship"` on the existing
+  `order_mode: "retail"`, not a third mode — that keeps every paid-up-front,
+  no-wholesale-rules, auto-approve path working untouched.
+
+**Soma-side work:** a pack queue showing item list and shipping label side by side with
+Ripe's order number visible on both. That pairing is the only defence against a
+mislabelled parcel — because the destination address exists only on Ripe's label, Soma's
+data model never holds it, and a label attached to the wrong order cannot be detected.
+
+Note that `retail_orders.py` (SBBC) is the closer structural template than the wholesale
+path in `ripe_orders.py`: pre-paid orders, retail units carrying `sku_key` directly, no
+wholesale business rules. The one divergence is auto-approve — SBBC reviews by hand,
+this does not.
 
 ### Blueprint split — COMPLETE (2026-06-03)
 
