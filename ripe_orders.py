@@ -72,6 +72,38 @@ def _ripe_request(method, path, body=None):
         return 503, {"error": str(e)}
 
 
+def _ripe_push_with_retry(path, body, attempts=3):
+    """PATCH the Ripe portal, retrying transient failures.
+
+    Approve is a two-phase commit with no rollback: stock is deducted and sale
+    records written BEFORE this push. If it fails, inventory has moved while the
+    order still reads pending on Ripe — so a blip on the wire shouldn't be enough
+    to strand it.
+
+    Only transport-level failures and 5xx are retried. A 4xx is a decision the
+    portal made (already approved, bad state) and repeating it won't help.
+
+    Retrying the whole approve is safe regardless: create_ripe_sale_records is
+    idempotency-guarded on the order id, so a second attempt re-pushes the status
+    without deducting stock twice.
+    """
+    import time as _time
+    last = (503, {"error": "not attempted"})
+    for attempt in range(attempts):
+        if attempt:
+            _time.sleep(1.5 * attempt)
+        status, resp = _ripe_request("PATCH", path, body)
+        if status == 200:
+            if attempt:
+                logger.info("Ripe push %s succeeded on attempt %d", path, attempt + 1)
+            return status, resp
+        last = (status, resp)
+        if status < 500:
+            return last          # the portal decided; don't hammer it
+        logger.warning("Ripe push %s attempt %d/%d returned %s", path, attempt + 1, attempts, status)
+    return last
+
+
 def _load(path, default):
     """Read a JSON file, returning default (or [] when default is None) if missing."""
     if path and os.path.exists(path):
@@ -527,13 +559,15 @@ def ripe_order_action(order_id):
             return jsonify({"error": err or "Could not create sale records"}), 500
 
         # Push approve to Ripe (fires Stripe invoice for Net14 there)
-        ripe_status, ripe_resp = _ripe_request(
-            "PATCH", f"/api/internal/orders/{order_id}",
+        ripe_status, ripe_resp = _ripe_push_with_retry(
+            f"/api/internal/orders/{order_id}",
             {"action": "approve", "fulfillment_date": delivery_date},
         )
         if ripe_status != 200:
             return jsonify({
-                "warning": "Sale records created but Ripe status update failed",
+                "warning": "Sale records created and stock deducted, but the Ripe "
+                           "portal did not update. Approve again once it is "
+                           "reachable — stock will not be deducted twice.",
                 "ripe_error": ripe_resp.get("error") if isinstance(ripe_resp, dict) else str(ripe_resp),
             }), 502
 
@@ -703,14 +737,16 @@ def _approve_one_retail_order(order):
     if not ok:
         return False, err or "Could not create sale records"
 
-    status, resp = _ripe_request("PATCH", f"/api/internal/orders/{order_id}",
-                                 {"action": "fulfill", "fulfillment_date": today})
+    status, resp = _ripe_push_with_retry(f"/api/internal/orders/{order_id}",
+                                         {"action": "fulfill", "fulfillment_date": today})
     if status != 200:
         msg = resp.get("error") if isinstance(resp, dict) else str(resp)
-        # Stock has already moved at this point. Say so plainly rather than
-        # implying nothing happened — see carried debt item on the two-phase
-        # commit, which phase 05 addresses.
-        return False, f"Sale recorded and stock deducted, but the Ripe portal did not update: {msg}"
+        # Stock has already moved. Say so plainly rather than implying nothing
+        # happened, and point at the safe recovery: approving again re-pushes
+        # the status without deducting twice.
+        return False, (f"Sale recorded and stock deducted, but the Ripe portal did not "
+                       f"update: {msg}. Approve again once it is reachable — stock will "
+                       f"not be deducted twice.")
     return True, None
 
 
