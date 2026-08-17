@@ -87,6 +87,17 @@
                     <div class="sublabel">Manage incoming wholesale orders</div>
                 </div>
             </a>
+            <a href="/ripe-retail" class="dash-btn" id="ripe-retail-btn"
+               style="flex-direction:row;justify-content:flex-start;gap:16px;padding:20px 24px;position:relative;">
+                <span class="icon" style="font-size:24px;flex-shrink:0;">&#128230;</span>
+                <div style="text-align:left;">
+                    <div class="label" style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+                        Retail Parcels
+                        <span id="ripe-retail-badge" title="Paid parcels waiting to be packed" style="display:none;background:var(--action-red);color:var(--white);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
+                    </div>
+                    <div class="sublabel">Pack &amp; label Ripe's direct-ship orders</div>
+                </div>
+            </a>
             <a href="/retail-orders" class="dash-btn" id="retail-orders-btn"
                style="flex-direction:row;justify-content:flex-start;gap:16px;padding:20px 24px;position:relative;">
                 <span class="icon" style="font-size:24px;flex-shrink:0;">&#128666;</span>
@@ -265,6 +276,20 @@ document.addEventListener('keydown', function(e) {
     if (d.in_progress > 0) {
       const prog = document.getElementById('ripe-badge-progress');
       if (prog) { prog.textContent = d.in_progress; prog.style.display = 'inline-block'; }
+    }
+  } catch(e) {}
+})();
+
+// Retail Parcels badge — paid parcels waiting to be packed
+(async function loadRipeRetailBadge() {
+  try {
+    const r = await fetch('/api/ripe-retail/pack-count');
+    const d = await r.json();
+    if (d.count > 0) {
+      const badge = document.getElementById('ripe-retail-badge');
+      const btn = document.getElementById('ripe-retail-btn');
+      if (badge) { badge.textContent = d.count; badge.style.display = 'inline-block'; }
+      if (btn) { btn.classList.add('has-pending'); }
     }
   } catch(e) {}
 })();
