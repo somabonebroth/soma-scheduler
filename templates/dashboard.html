@@ -57,31 +57,21 @@
 #prod-record-btn.needs-signoff { animation: prod-pulse 2s ease infinite; }
 /* ── Management list: reduced-weight rows, each showing its sub-sections ── */
 .mgmt-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
-/* Morning brief — yesterday, read before anything else */
-.brief-sign { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--border); }
-.brief-sign input { flex: 1; min-width: 110px; padding: 8px 11px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-family: inherit; background: var(--white); }
-.brief-sign button { background: var(--action-green); color: var(--white); border: none; border-radius: 8px; padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; }
-.brief-signed { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--action-green); font-weight: 600; }
-.brief-signed button { margin-left: auto; background: none; border: 1px solid var(--border); color: var(--text-light); border-radius: 6px; padding: 3px 9px; font-size: 11px; cursor: pointer; }
-.brief-catchup { margin-top: 10px; font-size: 12.5px; }
-.brief-catchup button { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark, var(--amber-text)); border-radius: 8px; padding: 6px 11px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
-.brief { background: var(--card-bg); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; }
-.brief-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-.brief-title { font-size: 13px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 1px; }
-.brief-date { font-size: 12px; color: var(--text-light); }
-.brief-nav { margin-left: auto; display: flex; gap: 6px; }
-.brief-nav button { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px; font-size: 12px; cursor: pointer; color: var(--text-light); }
-.brief-ok { background: var(--action-green-bg); border: 1px solid var(--action-green); color: var(--action-green); border-radius: 8px; padding: 10px 12px; font-size: 13px; font-weight: 600; }
-.brief-action { display: flex; align-items: flex-start; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
-.brief-action:last-child { border-bottom: none; }
-.brief-tag { font-size: 9.5px; font-weight: 700; padding: 2px 7px; border-radius: 8px; white-space: nowrap; flex-shrink: 0; margin-top: 1px; }
-.brief-tag.high { background: var(--action-red-bg, var(--amber-bg)); border: 1px solid var(--action-red); color: var(--action-red); }
-.brief-tag.medium { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark, var(--amber-text)); }
-.brief-stats { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--text-light); }
-.brief-stats b { color: var(--dark); font-weight: 700; }
-.brief-notes { margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--border); }
-.brief-note { font-size: 12.5px; color: var(--text); padding: 4px 0; }
-.brief-note .src { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--text-light); margin-right: 6px; }
+/* Daily Review — full-width entry point, highlighted until the day is reviewed */
+.review-btn { display: flex; align-items: center; gap: 14px; width: 100%; box-sizing: border-box; text-decoration: none; background: var(--card-bg); border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 18px; transition: background .12s, border-color .12s; }
+.review-btn:hover { background: var(--bg); }
+.review-icon { font-size: 22px; line-height: 1; flex-shrink: 0; }
+.review-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.review-title { font-size: 15px; font-weight: 700; color: var(--dark); letter-spacing: .3px; }
+.review-sub { font-size: 12.5px; color: var(--text-light); }
+.review-cta { margin-left: auto; font-size: 11px; font-weight: 700; padding: 5px 11px; border-radius: 8px; white-space: nowrap; background: var(--bg); border: 1px solid var(--border); color: var(--text-light); }
+/* Needs attention — the highlight clears once the day is reviewed. */
+.review-btn.attn { border-left-color: var(--amber-border); background: var(--amber-bg); }
+.review-btn.attn:hover { background: var(--amber-bg); border-color: var(--amber-border); }
+.review-btn.attn .review-sub { color: var(--amber-text-dark, var(--amber-text)); }
+.review-btn.attn .review-cta { background: var(--amber-text-dark, var(--amber-text)); border-color: var(--amber-text-dark, var(--amber-text)); color: var(--white); }
+.review-btn.done { border-left-color: var(--action-green); }
+.review-btn.done .review-cta { background: var(--action-green-bg); border-color: var(--action-green); color: var(--action-green); }
 .mgmt-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
 .mgmt-row:hover { border-color: var(--accent); }
 .mgmt-title { font-size: 13px; font-weight: 700; color: var(--dark); text-decoration: none; min-width: 200px; display: flex; align-items: center; gap: 8px; }
@@ -109,7 +99,14 @@
 <div class="main">
 {% if role == 'manager' %}
     <div class="dashboard-grid">
-        <div class="brief" id="brief">Loading yesterday&rsquo;s brief&hellip;</div>
+        <a href="/daily-review" class="review-btn" id="review-btn">
+            <span class="review-icon">&#128203;</span>
+            <span class="review-text">
+                <span class="review-title">Daily Review</span>
+                <span class="review-sub" id="review-sub">Loading&hellip;</span>
+            </span>
+            <span class="review-cta" id="review-cta"></span>
+        </a>
         <div class="section-label">Schedule</div>
         <div class="dash-row">
             <a href="/create-schedule" class="dash-btn highlight"><span class="icon">+</span><span class="label">Create New Schedule</span><span class="sublabel">Plan the week's production</span></a>
@@ -240,140 +237,53 @@ document.addEventListener('DOMContentLoaded',loadDayLabels);
 </script>
 {% if role == 'manager' %}
 <script>
-// ── Morning brief: yesterday, read before anything else ──────────────────
+// ── Daily Review button — state only; the page itself owns the detail ────
 // New JS — let/const per the forward-only policy.
-let briefOffset = 1;   // days back from today; 1 = yesterday
-
-function briefEsc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-
-function briefDateStr(offset){
-    const d = new Date();
-    d.setDate(d.getDate() - offset);
-    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-}
-
-async function loadBrief(){
-    const el = document.getElementById('brief');
-    if (!el) return;
-    let b;
+async function loadReviewButton(){
+    const btn = document.getElementById('review-btn');
+    if (!btn) return;
+    const sub = document.getElementById('review-sub');
+    const cta = document.getElementById('review-cta');
+    let b, pending = [];
     try {
-        const res = await fetch('/api/daily-brief?date=' + briefDateStr(briefOffset));
-        if (!res.ok) throw new Error('brief unavailable');
-        b = await res.json();
+        const [briefRes, pendRes] = await Promise.all([
+            fetch('/api/daily-brief'),
+            fetch('/api/daily-signoffs/pending'),
+        ]);
+        if (!briefRes.ok) throw new Error('unavailable');
+        b = await briefRes.json();
+        if (pendRes.ok) pending = (await pendRes.json()).pending || [];
     } catch (e) {
-        el.innerHTML = '<div class="brief-head"><span class="brief-title">Yesterday</span></div>'
-            + '<div class="brief-date">Brief unavailable right now.</div>';
+        sub.textContent = 'Yesterday — open to review';
         return;
     }
 
-    const nav = '<div class="brief-nav">'
-        + '<button onclick="stepBrief(1)" title="Earlier day">&#8592;</button>'
-        + (briefOffset > 1 ? '<button onclick="stepBrief(-1)" title="Later day">&#8594;</button>' : '')
-        + '</div>';
-    let html = '<div class="brief-head"><span class="brief-title">'
-        + (briefOffset === 1 ? 'Yesterday' : 'Day brief') + '</span>'
-        + '<span class="brief-date">' + briefEsc(b.label) + '</span>' + nav + '</div>';
+    btn.classList.remove('attn', 'done');
+    const older = pending.filter(iso => iso !== b.date);
+    let bits = [b.label];
+    if (b.production && b.production.total_jars) bits.push(b.production.total_jars + ' jars made');
+    if (b.transactions && b.transactions.sales.units) bits.push(b.transactions.sales.units + ' sold');
+    sub.textContent = bits.join('  ·  ');
 
-    if (b.all_clear) {
-        html += '<div class="brief-ok">&#10003; Nothing needs your attention.</div>';
+    if (b.signoff && !older.length) {
+        // Reviewed and nothing outstanding — stop shouting.
+        btn.classList.add('done');
+        cta.textContent = '✓ Reviewed';
+    } else if (b.signoff && older.length) {
+        btn.classList.add('attn');
+        cta.textContent = older.length + ' earlier day' + (older.length > 1 ? 's' : '');
+    } else if (!b.needs_review) {
+        cta.textContent = 'Open';
     } else {
-        html += b.actions.map(a =>
-            '<div class="brief-action"><span class="brief-tag ' + a.level + '">'
-            + briefEsc(a.area) + '</span><span>' + briefEsc(a.text) + '</span></div>').join('');
+        btn.classList.add('attn');
+        cta.textContent = b.actions.length
+            ? b.actions.length + (b.actions.length === 1 ? ' issue' : ' issues')
+            : 'Review';
     }
-
-    const p = b.production;
-    const made = Object.keys(p.produced || {}).map(k => briefEsc(k) + ' <b>' + p.produced[k] + '</b>');
-    const cl = (b.cleaning && b.cleaning.closing) || {};
-    const stats = [];
-    stats.push('Produced: ' + (made.length ? made.join(', ') : '<b>nothing recorded</b>'));
-    stats.push('Sales: <b>' + b.sales.units + '</b> units across <b>' + b.sales.count + '</b> records');
-    if (b.receiving.length) stats.push('Received: <b>' + b.receiving.length + '</b> lot(s)');
-    // Only report closing when there IS a record — an untouched day would
-    // otherwise read as 0/10 missed rather than simply quiet.
-    if (cl.staff || cl.done_count) stats.push('Closing: <b>' + cl.done_count + '/' + cl.total + '</b>'
-        + (cl.staff ? ' (' + briefEsc(cl.staff) + ')' : ''));
-    if (b.cleaning && b.cleaning.jobs_done && b.cleaning.jobs_done.length)
-        stats.push('Cleaning jobs: <b>' + b.cleaning.jobs_done.length + '</b>');
-    html += '<div class="brief-stats">' + stats.map(s => '<span>' + s + '</span>').join('') + '</div>';
-
-    if (b.notes.length) {
-        html += '<div class="brief-notes">' + b.notes.map(n =>
-            '<div class="brief-note"><span class="src">' + briefEsc(n.source) + '</span>'
-            + briefEsc(n.text) + '</div>').join('') + '</div>';
-    }
-
-    // Daily review replaced the weekly HOO sign-off (2026-08-18).
-    if (b.signoff) {
-        const when = (b.signoff.signed_at || '').substring(0, 16).replace('T', ' ');
-        html += '<div class="brief-signed">&#10003; Reviewed by ' + briefEsc(b.signoff.name)
-            + ' &middot; ' + briefEsc(when)
-            + (b.signoff.notes ? ' &middot; ' + briefEsc(b.signoff.notes) : '')
-            + '<button onclick="unsignBrief()">Undo</button></div>';
-    } else if (b.needs_review) {
-        html += '<div class="brief-sign">'
-            + '<input type="text" id="brief-name" placeholder="Your name" autocomplete="off">'
-            + '<input type="text" id="brief-note" placeholder="Notes (optional)" autocomplete="off">'
-            + '<button onclick="signBrief()">&#10003; Mark reviewed</button></div>';
-    }
-    el.innerHTML = html;
-    loadCatchup();
 }
+loadReviewButton();
 
-function stepBrief(delta){
-    briefOffset = Math.max(1, briefOffset + delta);
-    loadBrief();
-}
-
-function briefOffsetFor(iso){
-    const then = new Date(iso + 'T00:00:00');
-    const now = new Date(); now.setHours(0, 0, 0, 0);
-    return Math.max(1, Math.round((now - then) / 86400000));
-}
-
-async function signBrief(){
-    const name = document.getElementById('brief-name').value.trim();
-    if (!name) { document.getElementById('brief-name').focus(); return; }
-    const res = await fetch('/api/daily-signoff/' + briefDateStr(briefOffset), {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({name: name, notes: document.getElementById('brief-note').value.trim()}),
-    });
-    if (res.ok) { loadBrief(); loadProdBadge(); }
-}
-
-async function unsignBrief(){
-    const res = await fetch('/api/daily-signoff/' + briefDateStr(briefOffset), {method: 'DELETE'});
-    if (res.ok) { loadBrief(); loadProdBadge(); }
-}
-
-// A missed morning should surface, not quietly age out.
-async function loadCatchup(){
-    let d;
-    try {
-        const res = await fetch('/api/daily-signoffs/pending');
-        if (!res.ok) return;
-        d = await res.json();
-    } catch (e) { return; }
-    const older = (d.pending || []).filter(iso => briefOffsetFor(iso) !== briefOffset);
-    if (!older.length) return;
-    const el = document.getElementById('brief');
-    if (!el) return;
-    const div = document.createElement('div');
-    div.className = 'brief-catchup';
-    div.innerHTML = '<button onclick="jumpToBrief(\'' + older[0] + '\')">'
-        + older.length + ' other day' + (older.length > 1 ? 's' : '')
-        + ' still unreviewed &mdash; oldest: ' + older[0] + '</button>';
-    el.appendChild(div);
-}
-
-function jumpToBrief(iso){
-    briefOffset = briefOffsetFor(iso);
-    loadBrief();
-}
-
-loadBrief();
-
-// Production Record — pending sign-off badge
+// Production Record — pending sign-off badge// Production Record — pending sign-off badge
 async function loadProdBadge() {
   try {
     // Daily review replaced the weekly sign-off — the badge counts days the

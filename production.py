@@ -589,12 +589,16 @@ def summarize_day(week_id, day_idx, sched=None, ccp_titles=None):
     checks = cl.get("checks", {}) or {}
     sec_checks = {k: v for k, v in checks.items() if str(k).startswith("section-")}
     ccp_issues = []
+    ccp_sections = []
     if scheduled and not sec_checks:
         ccp_issues.append("no CCP sections confirmed")
     for key in sorted(sec_checks, key=_ccp_sort_key):
-        if not sec_checks[key]:
-            num = key.split("-", 1)[1]
-            ccp_issues.append((num + " " + ccp_titles.get(key, "")).strip())
+        num = key.split("-", 1)[1]
+        title = ccp_titles.get(key, "")
+        confirmed = bool(sec_checks[key])
+        ccp_sections.append({"num": num, "title": title, "confirmed": confirmed})
+        if not confirmed:
+            ccp_issues.append((num + " " + title).strip())
 
     # Per-vessel finish notes had NO reader anywhere before the daily brief —
     # written on the tablet after every batch and never surfaced again.
@@ -614,6 +618,9 @@ def summarize_day(week_id, day_idx, sched=None, ccp_titles=None):
         "finish_notes": finish_notes,
         "kitchen_signoff": (cl.get("signoff_kitchen") or "").strip(),
         "ccp_issues": ccp_issues,
+        "ccp_sections": ccp_sections,
+        "ccp_confirmed": sum(1 for s in ccp_sections if s["confirmed"]),
+        "ccp_total": len(ccp_sections),
         "has_ccp_flags": len(ccp_issues) > 0,
     }
 

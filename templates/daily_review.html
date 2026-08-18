@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- PWA tags (managed) -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Soma">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/logo-180.png">
+<link rel="apple-touch-icon" sizes="192x192" href="/static/logo-192.png">
+<link rel="apple-touch-icon" sizes="512x512" href="/static/logo-512.png">
+<!-- /PWA tags -->
+<title>Soma - Daily Review</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+/* Page layout only — colours/components come from the shared sheet */
+.dr-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.dr-date { font-size: 17px; font-weight: 700; color: var(--dark); }
+.dr-nav { margin-left: auto; display: flex; gap: 6px; }
+.dr-nav button { background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer; color: var(--text); }
+.dr-nav button:disabled { opacity: .4; cursor: default; }
+
+.dr-banner { border-radius: 10px; padding: 12px 15px; font-size: 13.5px; font-weight: 600; margin-bottom: 18px; }
+.dr-banner.ok { background: var(--action-green-bg); border: 1px solid var(--action-green); color: var(--action-green); }
+.dr-banner.attn { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark, var(--amber-text)); }
+
+.dr-section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 16px; overflow: hidden; }
+.dr-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 13px 16px; border-bottom: 1px solid var(--border); background: var(--bg); }
+.dr-num { font-size: 11px; font-weight: 700; color: var(--white); background: var(--accent); border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.dr-title { font-size: 13.5px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: .8px; }
+.dr-sub { font-size: 12px; color: var(--text-light); margin-left: auto; }
+.dr-body { padding: 14px 16px; }
+
+.dr-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.dr-table th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-light); font-weight: 700; padding: 0 10px 7px 0; border-bottom: 1px solid var(--border); }
+.dr-table td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+.dr-table tr:last-child td { border-bottom: none; }
+.dr-table td.num, .dr-table th.num { text-align: right; padding-right: 0; white-space: nowrap; }
+.dr-scroll { overflow-x: auto; }
+.dr-lot { font-size: 11px; color: var(--text-light); }
+.dr-tag { font-size: 9.5px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: var(--green-tint, var(--action-green-bg)); color: var(--action-green); border: 1px solid var(--action-green); white-space: nowrap; }
+.dr-totals { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--border); font-size: 13px; color: var(--text-light); }
+.dr-totals b { color: var(--dark); }
+.dr-empty { font-size: 13px; color: var(--text-light); font-style: italic; }
+
+.dr-sublabel { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-light); margin: 16px 0 7px; }
+.dr-sublabel:first-child { margin-top: 0; }
+
+.dr-issue { display: flex; align-items: flex-start; gap: 9px; padding: 7px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
+.dr-issue:last-child { border-bottom: none; }
+.dr-lvl { font-size: 9.5px; font-weight: 700; padding: 2px 7px; border-radius: 8px; white-space: nowrap; flex-shrink: 0; margin-top: 1px; }
+.dr-lvl.high { background: var(--action-red-bg); border: 1px solid var(--action-red); color: var(--action-red); }
+.dr-lvl.medium { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark, var(--amber-text)); }
+.dr-note { font-size: 13px; padding: 5px 0; }
+.dr-note .src { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--text-light); margin-right: 7px; }
+
+.dr-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.dr-chip { font-size: 11.5px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--white); color: var(--text-light); }
+.dr-chip.yes { border-color: var(--action-green); color: var(--action-green); background: var(--action-green-bg); }
+.dr-chip.no { border-color: var(--action-red); color: var(--action-red); background: var(--action-red-bg); }
+
+.dr-sign { background: var(--card-bg); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px; padding: 15px 16px; }
+.dr-sign-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.dr-sign-row input { flex: 1; min-width: 130px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; background: var(--white); }
+.dr-sign-row button { background: var(--action-green); color: var(--white); border: none; border-radius: 8px; padding: 11px 20px; font-size: 14px; font-weight: 700; cursor: pointer; }
+.dr-signed { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13.5px; color: var(--action-green); font-weight: 600; }
+.dr-signed button { margin-left: auto; background: none; border: 1px solid var(--border); color: var(--text-light); border-radius: 6px; padding: 4px 10px; font-size: 11.5px; cursor: pointer; }
+.dr-catchup { margin-top: 14px; font-size: 13px; }
+.dr-catchup button { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark, var(--amber-text)); border-radius: 8px; padding: 8px 13px; font-size: 13px; font-weight: 600; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="header">
+    <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+    <div class="header-text"><h1>Daily Review</h1><p>What happened, and what needs you</p></div>
+    <div class="header-right"><button class="header-btn" onclick="window.location='/'">&#8962; Dashboard</button></div>
+</div>
+<div class="main">
+    <div id="dr-content">Loading&hellip;</div>
+</div>
+
+<script>
+// New JS — let/const per the forward-only policy.
+let offset = 1;                 // days back from today; 1 = yesterday
+let brief = null;
+
+function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function dateStr(off){
+    const d = new Date();
+    d.setDate(d.getDate() - off);
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function offsetFor(iso){
+    const then = new Date(iso + 'T00:00:00');
+    const now = new Date(); now.setHours(0,0,0,0);
+    return Math.max(1, Math.round((now - then) / 86400000));
+}
+
+function issuesHtml(list){
+    if (!list.length) return '';
+    return '<div class="dr-sublabel">Needs attention</div>' + list.map(i =>
+        '<div class="dr-issue"><span class="dr-lvl ' + i.level + '">'
+        + (i.level === 'high' ? 'Issue' : 'Check') + '</span><span>' + esc(i.text) + '</span></div>').join('');
+}
+
+function notesHtml(list){
+    if (!list.length) return '';
+    return '<div class="dr-sublabel">Notes from the floor</div>' + list.map(n =>
+        '<div class="dr-note"><span class="src">' + esc(n.source) + '</span>' + esc(n.text) + '</div>').join('');
+}
+
+function productionHtml(p){
+    let body = '';
+    if (!p.rows.length) {
+        body += '<div class="dr-empty">No production recorded for this day.</div>';
+    } else {
+        const showBatch = p.rows.some(r => r.batched_on && r.batched_on !== brief.date);
+        body += '<div class="dr-scroll"><table class="dr-table"><tr>'
+            + '<th>Product</th><th>Vessel</th><th>Lot</th>'
+            + (showBatch ? '<th>Batched</th>' : '')
+            + '<th class="num">Jars</th></tr>'
+            + p.rows.map(r =>
+                '<tr><td>' + esc(r.item)
+                + (r.certification ? ' <span class="dr-tag">' + esc(r.certification) + '</span>' : '')
+                + '</td><td>' + esc(r.vessel || '—') + '</td>'
+                + '<td class="dr-lot">' + esc(r.lot || '—') + '</td>'
+                + (showBatch ? '<td class="dr-lot">' + esc(r.batched_on || '—') + '</td>' : '')
+                + '<td class="num"><b>' + r.quantity + '</b></td></tr>').join('')
+            + '</table></div>';
+        body += '<div class="dr-totals"><span>Total jars: <b>' + p.total_jars + '</b></span>'
+            + p.totals.map(t => '<span>' + esc(t[0]) + ': <b>' + t[1] + '</b></span>').join('') + '</div>';
+        if (p.source === 'checklist') {
+            body += '<div class="dr-totals"><span>Counts taken from the day&rsquo;s checklist — this day predates the production-run records.</span></div>';
+        }
+    }
+    if (p.kitchen_signoff) {
+        body += '<div class="dr-totals"><span>Kitchen sign-off: <b>' + esc(p.kitchen_signoff) + '</b></span></div>';
+    }
+    body += notesHtml(p.notes) + issuesHtml(p.issues);
+    return section(1, 'What was made', p.total_jars ? p.total_jars + ' jars' : '', body);
+}
+
+function transactionsHtml(t){
+    let body = '<div class="dr-sublabel">Sold</div>';
+    if (!t.sales.rows.length) {
+        body += '<div class="dr-empty">No sales recorded for this day.</div>';
+    } else {
+        body += '<div class="dr-scroll"><table class="dr-table"><tr>'
+            + '<th>Buyer</th><th>Product</th><th>Lot(s)</th><th class="num">Units</th></tr>'
+            + t.sales.rows.map(r =>
+                '<tr><td>' + esc(r.buyer) + (r.channel ? ' <span class="dr-lot">(' + esc(r.channel) + ')</span>' : '')
+                + '</td><td>' + esc(r.item) + '</td>'
+                + '<td class="dr-lot">' + esc(r.lots.join(', ') || '—') + '</td>'
+                + '<td class="num"><b>' + r.quantity + '</b></td></tr>').join('')
+            + '</table></div>'
+            + '<div class="dr-totals"><span>Total: <b>' + t.sales.units + '</b> units across <b>'
+            + t.sales.count + '</b> record' + (t.sales.count === 1 ? '' : 's') + '</span>'
+            + t.sales.by_buyer.map(b => '<span>' + esc(b[0]) + ': <b>' + b[1] + '</b></span>').join('') + '</div>';
+    }
+
+    body += '<div class="dr-sublabel">Received</div>';
+    if (!t.receiving.rows.length) {
+        body += '<div class="dr-empty">No deliveries logged for this day.</div>';
+    } else {
+        body += '<div class="dr-scroll"><table class="dr-table"><tr>'
+            + '<th>Item</th><th>Supplier</th><th>Lot</th><th class="num">Qty</th></tr>'
+            + t.receiving.rows.map(r =>
+                '<tr><td>' + esc(r.item) + '</td><td>' + esc(r.supplier || '—') + '</td>'
+                + '<td class="dr-lot">' + esc(r.supplier_lot || '—')
+                + (r.no_supplier_lot ? ' &#9888;' : '') + '</td>'
+                + '<td class="num"><b>' + esc(r.quantity) + '</b> ' + esc(r.unit) + '</td></tr>').join('')
+            + '</table></div>';
+    }
+    body += notesHtml(t.notes) + issuesHtml(t.issues);
+    const sub = t.sales.units + ' sold · ' + t.receiving.count + ' delivered';
+    return section(2, 'What was sold and received', sub, body);
+}
+
+function checklistsHtml(c){
+    let body = '<div class="dr-sublabel">Production checklist (CCP)</div>';
+    if (!c.ccp.completed) {
+        body += '<div class="dr-empty">No production checklist completed for this day.</div>';
+    } else if (!c.ccp.sections.length) {
+        body += '<div class="dr-empty">Checklist completed, but no CCP sections were confirmed.</div>';
+    } else {
+        body += '<div class="dr-chips">' + c.ccp.sections.map(s =>
+            '<span class="dr-chip ' + (s.confirmed ? 'yes' : 'no') + '">'
+            + (s.confirmed ? '&#10003; ' : '&#10007; ') + esc(s.num + ' ' + s.title) + '</span>').join('') + '</div>'
+            + '<div class="dr-totals"><span>Confirmed: <b>' + c.ccp.confirmed + '/' + c.ccp.total + '</b></span>'
+            + (c.ccp.kitchen_signoff ? '<span>Signed: <b>' + esc(c.ccp.kitchen_signoff) + '</b></span>' : '')
+            + '</div>';
+    }
+
+    body += '<div class="dr-sublabel">Closing checklist</div>';
+    const cl = c.closing || {};
+    if (!cl.total) {
+        body += '<div class="dr-empty">No closing checklist set up.</div>';
+    } else if (!cl.signed) {
+        body += '<div class="dr-empty">Not signed off for this day.</div>';
+    } else {
+        body += '<div class="dr-totals"><span>Signed by <b>' + esc(cl.staff) + '</b></span>'
+            + '<span>Done: <b>' + cl.done_count + '/' + cl.total + '</b></span></div>';
+        if ((cl.missed || []).length) {
+            body += '<div class="dr-chips" style="margin-top:8px;">' + cl.missed.map(m =>
+                '<span class="dr-chip no">&#10007; ' + esc(m) + '</span>').join('') + '</div>';
+        }
+    }
+
+    body += '<div class="dr-sublabel">Cleaning &amp; upkeep rotation</div>';
+    const jobs = (c.rotation && c.rotation.jobs_done) || [];
+    if (!jobs.length) {
+        body += '<div class="dr-empty">No rotating job done this day.</div>';
+    } else {
+        body += '<div class="dr-scroll"><table class="dr-table"><tr><th>Job</th><th>By</th></tr>'
+            + jobs.map(j => '<tr><td>' + esc(j.title) + '</td><td>' + esc(j.staff) + '</td></tr>').join('')
+            + '</table></div>';
+    }
+    if (c.rotation && c.rotation.overdue) {
+        body += '<div class="dr-totals"><span><b>' + c.rotation.overdue + '</b> rotating job'
+            + (c.rotation.overdue === 1 ? '' : 's') + ' currently overdue</span></div>';
+    }
+
+    body += notesHtml(c.notes) + issuesHtml(c.issues);
+    const done = (c.ccp.completed ? 1 : 0) + (cl.signed ? 1 : 0);
+    return section(3, 'Completed checklists', done + ' of 2 signed', body);
+}
+
+function section(num, title, sub, body){
+    return '<div class="dr-section"><div class="dr-head">'
+        + '<span class="dr-num">' + num + '</span><span class="dr-title">' + esc(title) + '</span>'
+        + (sub ? '<span class="dr-sub">' + esc(sub) + '</span>' : '')
+        + '</div><div class="dr-body">' + body + '</div></div>';
+}
+
+function signHtml(b){
+    let inner;
+    if (b.signoff) {
+        const when = (b.signoff.signed_at || '').substring(0, 16).replace('T', ' ');
+        inner = '<div class="dr-signed">&#10003; Reviewed by ' + esc(b.signoff.name) + ' &middot; ' + esc(when)
+            + (b.signoff.notes ? ' &middot; ' + esc(b.signoff.notes) : '')
+            + '<button onclick="unsign()">Undo</button></div>';
+    } else if (!b.needs_review) {
+        inner = '<div class="dr-empty">Quiet day — nothing to review.</div>';
+    } else {
+        inner = '<div style="font-size:13px;color:var(--text-light);">'
+            + 'Once you&rsquo;ve read this and actioned anything above, mark it reviewed.</div>'
+            + '<div class="dr-sign-row">'
+            + '<input type="text" id="sign-name" placeholder="Your name" autocomplete="off">'
+            + '<input type="text" id="sign-note" placeholder="Notes (optional)" autocomplete="off">'
+            + '<button onclick="sign()">&#10003; Mark reviewed</button></div>';
+    }
+    return '<div class="dr-sign">' + inner + '</div><div id="catchup"></div>';
+}
+
+async function load(){
+    const el = document.getElementById('dr-content');
+    try {
+        const res = await fetch('/api/daily-brief?date=' + dateStr(offset));
+        if (!res.ok) throw new Error('unavailable');
+        brief = await res.json();
+    } catch (e) {
+        el.innerHTML = '<div class="dr-empty">Daily review unavailable right now.</div>';
+        return;
+    }
+    const b = brief;
+    const high = b.actions.filter(a => a.level === 'high').length;
+    const banner = b.all_clear
+        ? '<div class="dr-banner ok">&#10003; Nothing needs your attention.</div>'
+        : '<div class="dr-banner attn">' + b.actions.length + ' thing'
+          + (b.actions.length === 1 ? '' : 's') + ' need your attention'
+          + (high ? ' — ' + high + ' important' : '') + '.</div>';
+
+    el.innerHTML = '<div class="dr-bar"><span class="dr-date">' + esc(b.label) + '</span>'
+        + '<div class="dr-nav"><button onclick="step(1)">&#8592; Earlier</button>'
+        + '<button onclick="step(-1)"' + (offset <= 1 ? ' disabled' : '') + '>Later &#8594;</button></div></div>'
+        + banner
+        + productionHtml(b.production)
+        + transactionsHtml(b.transactions)
+        + checklistsHtml(b.checklists)
+        + signHtml(b);
+    loadCatchup();
+}
+
+function step(delta){
+    offset = Math.max(1, offset + delta);
+    load();
+}
+
+function jumpTo(iso){
+    offset = offsetFor(iso);
+    load();
+}
+
+async function sign(){
+    const name = document.getElementById('sign-name').value.trim();
+    if (!name) { document.getElementById('sign-name').focus(); return; }
+    const res = await fetch('/api/daily-signoff/' + dateStr(offset), {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name, notes: document.getElementById('sign-note').value.trim()}),
+    });
+    if (res.ok) load();
+}
+
+async function unsign(){
+    const res = await fetch('/api/daily-signoff/' + dateStr(offset), {method: 'DELETE'});
+    if (res.ok) load();
+}
+
+// A missed day should surface, not quietly age out.
+async function loadCatchup(){
+    let d;
+    try {
+        const res = await fetch('/api/daily-signoffs/pending');
+        if (!res.ok) return;
+        d = await res.json();
+    } catch (e) { return; }
+    const older = (d.pending || []).filter(iso => offsetFor(iso) !== offset);
+    const el = document.getElementById('catchup');
+    if (!el || !older.length) return;
+    el.className = 'dr-catchup';
+    el.innerHTML = '<button onclick="jumpTo(\'' + older[0] + '\')">'
+        + older.length + ' other day' + (older.length > 1 ? 's' : '')
+        + ' still unreviewed — oldest: ' + older[0] + '</button>';
+}
+
+load();
+</script>
+</body>
+</html>
