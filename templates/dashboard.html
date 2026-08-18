@@ -57,6 +57,24 @@
 #prod-record-btn.needs-signoff { animation: prod-pulse 2s ease infinite; }
 /* ── Management list: reduced-weight rows, each showing its sub-sections ── */
 .mgmt-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+/* Morning brief — yesterday, read before anything else */
+.brief { background: var(--card-bg); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; }
+.brief-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.brief-title { font-size: 13px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 1px; }
+.brief-date { font-size: 12px; color: var(--text-light); }
+.brief-nav { margin-left: auto; display: flex; gap: 6px; }
+.brief-nav button { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px; font-size: 12px; cursor: pointer; color: var(--text-light); }
+.brief-ok { background: var(--action-green-bg); border: 1px solid var(--action-green); color: var(--action-green); border-radius: 8px; padding: 10px 12px; font-size: 13px; font-weight: 600; }
+.brief-action { display: flex; align-items: flex-start; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.brief-action:last-child { border-bottom: none; }
+.brief-tag { font-size: 9.5px; font-weight: 700; padding: 2px 7px; border-radius: 8px; white-space: nowrap; flex-shrink: 0; margin-top: 1px; }
+.brief-tag.high { background: var(--action-red-bg, var(--amber-bg)); border: 1px solid var(--action-red); color: var(--action-red); }
+.brief-tag.medium { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark, var(--amber-text)); }
+.brief-stats { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--text-light); }
+.brief-stats b { color: var(--dark); font-weight: 700; }
+.brief-notes { margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--border); }
+.brief-note { font-size: 12.5px; color: var(--text); padding: 4px 0; }
+.brief-note .src { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--text-light); margin-right: 6px; }
 .mgmt-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
 .mgmt-row:hover { border-color: var(--accent); }
 .mgmt-title { font-size: 13px; font-weight: 700; color: var(--dark); text-decoration: none; min-width: 200px; display: flex; align-items: center; gap: 8px; }
@@ -84,6 +102,7 @@
 <div class="main">
 {% if role == 'manager' %}
     <div class="dashboard-grid">
+        <div class="brief" id="brief">Loading yesterday&rsquo;s brief&hellip;</div>
         <div class="section-label">Schedule</div>
         <div class="dash-row">
             <a href="/create-schedule" class="dash-btn highlight"><span class="icon">+</span><span class="label">Create New Schedule</span><span class="sublabel">Plan the week's production</span></a>
@@ -214,6 +233,78 @@ document.addEventListener('DOMContentLoaded',loadDayLabels);
 </script>
 {% if role == 'manager' %}
 <script>
+// ── Morning brief: yesterday, read before anything else ──────────────────
+// New JS — let/const per the forward-only policy.
+let briefOffset = 1;   // days back from today; 1 = yesterday
+
+function briefEsc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function briefDateStr(offset){
+    const d = new Date();
+    d.setDate(d.getDate() - offset);
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+async function loadBrief(){
+    const el = document.getElementById('brief');
+    if (!el) return;
+    let b;
+    try {
+        const res = await fetch('/api/daily-brief?date=' + briefDateStr(briefOffset));
+        if (!res.ok) throw new Error('brief unavailable');
+        b = await res.json();
+    } catch (e) {
+        el.innerHTML = '<div class="brief-head"><span class="brief-title">Yesterday</span></div>'
+            + '<div class="brief-date">Brief unavailable right now.</div>';
+        return;
+    }
+
+    const nav = '<div class="brief-nav">'
+        + '<button onclick="stepBrief(1)" title="Earlier day">&#8592;</button>'
+        + (briefOffset > 1 ? '<button onclick="stepBrief(-1)" title="Later day">&#8594;</button>' : '')
+        + '</div>';
+    let html = '<div class="brief-head"><span class="brief-title">'
+        + (briefOffset === 1 ? 'Yesterday' : 'Day brief') + '</span>'
+        + '<span class="brief-date">' + briefEsc(b.label) + '</span>' + nav + '</div>';
+
+    if (b.all_clear) {
+        html += '<div class="brief-ok">&#10003; Nothing needs your attention.</div>';
+    } else {
+        html += b.actions.map(a =>
+            '<div class="brief-action"><span class="brief-tag ' + a.level + '">'
+            + briefEsc(a.area) + '</span><span>' + briefEsc(a.text) + '</span></div>').join('');
+    }
+
+    const p = b.production;
+    const made = Object.keys(p.produced || {}).map(k => briefEsc(k) + ' <b>' + p.produced[k] + '</b>');
+    const cl = (b.cleaning && b.cleaning.closing) || {};
+    const stats = [];
+    stats.push('Produced: ' + (made.length ? made.join(', ') : '<b>nothing recorded</b>'));
+    stats.push('Sales: <b>' + b.sales.units + '</b> units across <b>' + b.sales.count + '</b> records');
+    if (b.receiving.length) stats.push('Received: <b>' + b.receiving.length + '</b> lot(s)');
+    // Only report closing when there IS a record — an untouched day would
+    // otherwise read as 0/10 missed rather than simply quiet.
+    if (cl.staff || cl.done_count) stats.push('Closing: <b>' + cl.done_count + '/' + cl.total + '</b>'
+        + (cl.staff ? ' (' + briefEsc(cl.staff) + ')' : ''));
+    if (b.cleaning && b.cleaning.jobs_done && b.cleaning.jobs_done.length)
+        stats.push('Cleaning jobs: <b>' + b.cleaning.jobs_done.length + '</b>');
+    html += '<div class="brief-stats">' + stats.map(s => '<span>' + s + '</span>').join('') + '</div>';
+
+    if (b.notes.length) {
+        html += '<div class="brief-notes">' + b.notes.map(n =>
+            '<div class="brief-note"><span class="src">' + briefEsc(n.source) + '</span>'
+            + briefEsc(n.text) + '</div>').join('') + '</div>';
+    }
+    el.innerHTML = html;
+}
+
+function stepBrief(delta){
+    briefOffset = Math.max(1, briefOffset + delta);
+    loadBrief();
+}
+
+loadBrief();
+
 // Production Record — pending sign-off badge
 (async function loadProdBadge() {
   try {

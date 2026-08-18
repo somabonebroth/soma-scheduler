@@ -541,6 +541,83 @@ def _ccp_sort_key(check_key):
         return (1, 0, tail)
 
 
+def ccp_titles_map():
+    """{"section-<num>": TITLE} from the CCP master — the single source of truth
+    for what's on the daily checklist (see the CLAUDE.md invariant)."""
+    out = {}
+    for sec in (app.load_ccp_master() or []):
+        if isinstance(sec, dict) and sec.get("num") is not None:
+            out["section-" + str(sec["num"])] = (sec.get("title") or "").strip()
+    return out
+
+
+def summarize_day(week_id, day_idx, sched=None, ccp_titles=None):
+    """Summarise ONE production day, or None if that day has no completed checklist.
+
+    Shared by the weekly HOO review and the daily management brief so the two can
+    never disagree about what a day looks like — the same drift that let the PDF
+    and the tablet show different checklists.
+
+    Returns: day/day_idx/date, what was scheduled vs produced, the floor's day
+    note and per-vessel finish notes, the kitchen sign-off, and ccp_issues
+    (unconfirmed CCP sections, named from the master).
+    """
+    cl = app.load_checklist(week_id, day_idx)
+    if not cl or not cl.get("completed"):
+        return None
+
+    if sched is None:
+        schedule_data = app.load_schedule(week_id) or {}
+        sched = (schedule_data.get("schedule") or {}) if schedule_data else {}
+    if ccp_titles is None:
+        ccp_titles = ccp_titles_map()
+
+    day_info = sched.get(str(day_idx), {}) or {}
+    scheduled = {v: day_info.get(v, "").strip() for v in app.VESSELS if day_info.get(v, "").strip()}
+
+    produced = cl.get("produced", {}) or {}
+    day_prod = {}
+    for v, recipe in scheduled.items():
+        qty = int(produced.get(v) or 0)
+        if qty:
+            day_prod[recipe] = day_prod.get(recipe, 0) + qty
+
+    # CCP confirmations are stored under "checks" as {"section-<num>": bool},
+    # one tick per CCP master section, written by the tablet. This read used to
+    # look for a "sections" key that nothing has ever written, so CCP flags
+    # could not fire and "all clear" was only ever checking sign-offs and notes.
+    checks = cl.get("checks", {}) or {}
+    sec_checks = {k: v for k, v in checks.items() if str(k).startswith("section-")}
+    ccp_issues = []
+    if scheduled and not sec_checks:
+        ccp_issues.append("no CCP sections confirmed")
+    for key in sorted(sec_checks, key=_ccp_sort_key):
+        if not sec_checks[key]:
+            num = key.split("-", 1)[1]
+            ccp_issues.append((num + " " + ccp_titles.get(key, "")).strip())
+
+    # Per-vessel finish notes had NO reader anywhere before the daily brief —
+    # written on the tablet after every batch and never surfaced again.
+    finish_notes = []
+    for vessel, note in (cl.get("finish_notes") or {}).items():
+        note = (note or "").strip()
+        if note:
+            finish_notes.append({"vessel": vessel, "note": note})
+
+    return {
+        "day": app.DAYS[day_idx],
+        "day_idx": day_idx,
+        "date": app._run_start_date_str(week_id, day_idx),
+        "scheduled": list(scheduled.values()),
+        "produced": day_prod,
+        "notes": (cl.get("notes") or "").strip(),
+        "finish_notes": finish_notes,
+        "kitchen_signoff": (cl.get("signoff_kitchen") or "").strip(),
+        "ccp_issues": ccp_issues,
+        "has_ccp_flags": len(ccp_issues) > 0,
+    }
+
+
 @production_bp.route("/api/traceability/<week_id>/summary", methods=["GET"])
 @manager_required
 @require_valid_week
@@ -550,12 +627,7 @@ def get_week_summary(week_id):
     """
     schedule_data = app.load_schedule(week_id) or {}
     sched = (schedule_data.get("schedule") or {}) if schedule_data else {}
-    recipes_data = app.load_recipes()
-
-    ccp_titles = {}
-    for sec in (app.load_ccp_master() or []):
-        if isinstance(sec, dict) and sec.get("num") is not None:
-            ccp_titles["section-" + str(sec["num"])] = (sec.get("title") or "").strip()
+    ccp_titles = ccp_titles_map()
 
     days_summary = []
     total_produced = {}
@@ -564,60 +636,27 @@ def get_week_summary(week_id):
     missing_signoffs = []
 
     for d_idx in range(7):
-        cl = app.load_checklist(week_id, d_idx)
-        if not cl or not cl.get("completed"):
+        day = summarize_day(week_id, d_idx, sched, ccp_titles)
+        if day is None:
             continue
 
-        day_info = sched.get(str(d_idx), {}) or {}
-        day_name = app.DAYS[d_idx]
-
-        scheduled = {v: day_info.get(v, "").strip() for v in app.VESSELS if day_info.get(v, "").strip()}
-
-        produced = cl.get("produced", {}) or {}
-        bb_produced = cl.get("bb_produced", {}) or {}
-
-        day_prod = {}
-        for v, recipe in scheduled.items():
-            if recipe:
-                qty = int(produced.get(v) or 0)
-                if qty:
-                    day_prod[recipe] = day_prod.get(recipe, 0) + qty
-                    total_produced[recipe] = total_produced.get(recipe, 0) + qty
-
-        notes = (cl.get("notes") or "").strip()
-        if notes:
-            all_notes.append({"day": day_name, "note": notes})
-
-        # CCP confirmations are stored under "checks" as {"section-<num>": bool},
-        # one tick per CCP master section, written by the tablet. This read used
-        # to look for a "sections" key that nothing has ever written, so CCP
-        # flags could not fire and "all clear" was only ever checking sign-offs
-        # and notes. Keyed off the master so a renamed section reads correctly.
-        checks = cl.get("checks", {}) or {}
-        sec_checks = {k: v for k, v in checks.items() if str(k).startswith("section-")}
-        day_ccp_issues = []
-        if scheduled and not sec_checks:
-            day_ccp_issues.append("no CCP sections confirmed")
-        for key in sorted(sec_checks, key=_ccp_sort_key):
-            if not sec_checks[key]:
-                num = key.split("-", 1)[1]
-                day_ccp_issues.append((num + " " + ccp_titles.get(key, "")).strip())
-        if day_ccp_issues:
-            ccp_flags.append({"day": day_name, "issues": day_ccp_issues})
-
-        # Check kitchen staff sign-off (the only required sign-off in current workflow)
-        kitchen = (cl.get("signoff_kitchen") or "").strip()
-        if scheduled and not kitchen:
-            missing_signoffs.append(day_name)
+        for recipe, qty in day["produced"].items():
+            total_produced[recipe] = total_produced.get(recipe, 0) + qty
+        if day["notes"]:
+            all_notes.append({"day": day["day"], "note": day["notes"]})
+        if day["ccp_issues"]:
+            ccp_flags.append({"day": day["day"], "issues": day["ccp_issues"]})
+        if day["scheduled"] and not day["kitchen_signoff"]:
+            missing_signoffs.append(day["day"])
 
         days_summary.append({
-            "day":           day_name,
-            "day_idx":       d_idx,
-            "scheduled":     list(scheduled.values()),
-            "produced":      day_prod,
-            "notes":         notes,
-            "kitchen_signoff": kitchen,
-            "has_ccp_flags": len(day_ccp_issues) > 0,
+            "day":           day["day"],
+            "day_idx":       day["day_idx"],
+            "scheduled":     day["scheduled"],
+            "produced":      day["produced"],
+            "notes":         day["notes"],
+            "kitchen_signoff": day["kitchen_signoff"],
+            "has_ccp_flags": day["has_ccp_flags"],
         })
 
     flags = []

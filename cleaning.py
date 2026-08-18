@@ -279,6 +279,46 @@ def delete_cleaning_completion(cid):
     return jsonify({"ok": True})
 
 
+def day_summary(on):
+    """What happened on the cleaning side on one date, for the daily brief.
+
+    Returns the closing gate's state (signed / complete / which items were
+    missed), the rotation sign-offs recorded that day, and how many rotating
+    jobs are currently overdue. `on` is a date object.
+    """
+    data = _load_cleaning()
+    iso = on.isoformat()
+
+    rec = next((r for r in data["closing_records"] if r.get("date") == iso), None)
+    if rec is None:
+        closing = {"signed": False, "complete": False, "staff": "", "notes": "",
+                   "missed": [], "done_count": 0, "total": len(data["closing_items"])}
+    else:
+        items = rec.get("items") or []
+        missed = [i["label"] for i in items if not i.get("done")]
+        closing = {
+            "signed": bool(rec.get("staff")),
+            "complete": bool(rec.get("complete")),
+            "staff": rec.get("staff", ""),
+            "notes": rec.get("notes", ""),
+            "missed": missed,
+            "done_count": len(items) - len(missed),
+            "total": len(items),
+        }
+
+    jobs_done = [{"title": c.get("job_title", ""), "staff": c.get("staff", ""),
+                  "notes": c.get("notes", "")}
+                 for c in data["completions"] if c.get("date") == iso]
+
+    overdue = 0
+    for job in data["jobs"]:
+        view = _job_view(job)
+        if view["ready"] and view.get("last_done") and view["due_ratio"] >= 1:
+            overdue += 1
+
+    return {"closing": closing, "jobs_done": jobs_done, "jobs_overdue": overdue}
+
+
 # ── Closing checklist (the daily gate) ────────────────────────────────────────
 
 def _closing_record_view(rec, items):
