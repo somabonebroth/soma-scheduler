@@ -760,10 +760,10 @@ body.inv-page .modal-actions {
 </div>
 <div class="main">
     <div class="tab-bar">
-        <button class="tab-btn active" onclick="showTab('raw')">Raw Materials</button>
-        <button class="tab-btn" onclick="showTab('runs')">Production Runs</button>
-        <button class="tab-btn" onclick="showTab('fg')">Finished Goods</button>
-        <button class="tab-btn" onclick="showTab('records')">Records</button>
+        <button class="tab-btn active" data-tab="raw" onclick="showTab('raw')">Raw Materials</button>
+        <button class="tab-btn" data-tab="runs" onclick="showTab('runs')">Production Runs</button>
+        <button class="tab-btn" data-tab="fg" onclick="showTab('fg')">Finished Goods</button>
+        <button class="tab-btn" data-tab="records" onclick="showTab('records')">Records</button>
 
     </div>
 
@@ -1464,11 +1464,15 @@ function mobilePrompt(message, opts){
 }
 
 function showTab(tab){
-    document.querySelectorAll('.tab-btn').forEach(function(b,i){b.classList.remove('active');});
+    var pane=document.getElementById('tab-'+tab);
+    if(!pane) return;   // unknown tab name (e.g. stale ?tab= link) — leave the page as-is
+    document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});
     document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active');});
-    document.getElementById('tab-'+tab).classList.add('active');
-    var tabs=['raw','runs','fg','records'];
-    var btnIdx=tabs.indexOf(tab); if(btnIdx>=0) document.querySelectorAll('.tab-btn')[btnIdx].classList.add('active');
+    pane.classList.add('active');
+    var btn=document.querySelector('.tab-btn[data-tab="'+tab+'"]');
+    if(btn) btn.classList.add('active');
+    // Keep the URL in step so a refresh / bookmark / deep link lands on this tab
+    try{ history.replaceState(null,'','?tab='+encodeURIComponent(tab)); }catch(e){}
     if(tab==='raw')loadRawMaterials();
     if(tab==='runs')loadRuns();
     if(tab==='fg')loadFinishedGoods();
@@ -1478,37 +1482,10 @@ function showTab(tab){
 // ── Raw Materials ──
 var ingredientData=[];
 
+// Refreshes the ingredient catalog used by the Add Inventory / New Ingredient flows.
 async function loadIngredients(){
     var res=await fetch('/api/organic/ingredients');
     ingredientData=await res.json();
-    var sel=document.getElementById('rm-item');
-    sel.innerHTML='<option value="">-- Select ingredient --</option>';
-    ingredientData.forEach(function(item,idx){
-        var dispUnit=(item.unit==='per L'?'g/L':item.unit)||'';
-            sel.innerHTML+='<option value="'+idx+'">'+item.name+(dispUnit?' — '+dispUnit:'')+'</option>';
-    });
-}
-
-function onIngredientSelect(){
-    var sel=document.getElementById('rm-item');
-    var idx=parseInt(sel.value);
-    var unitEl=document.getElementById('rm-unit');
-    var info=document.getElementById('rm-info');
-    if(isNaN(idx)||!ingredientData[idx]){
-        unitEl.value='';info.textContent='';
-        return;
-    }
-    var item=ingredientData[idx];
-    unitEl.value=item.unit||'';
-    var note='';
-    if(item.unit==='per L'){
-        note='g/L — deducts '+(item.recipe_amount||'?')+'g × batch litres (halved for 115L)';
-    } else if(item.recipe_amount){
-        note='Deducts '+item.recipe_amount+' '+(item.unit||'')+' per batch (halved for 115L)';
-    } else {
-        note='Deducts recipe amount per batch (halved for 115L)';
-    }
-    info.textContent=note;
 }
 
 async function loadContacts(){
@@ -1729,28 +1706,8 @@ function attachRMClickDelegationOnce(){
             var key=decodeURIComponent(btn.getAttribute('data-rm-key'));
             expandedRMKey=(expandedRMKey===key)?null:key;
             loadRawMaterials();
-        } else if(action==='receive'){
-            prefillReceiveForm(btn.getAttribute('data-rm-name'), btn.getAttribute('data-rm-unit'));
         }
     });
-}
-
-// "+ Receive" pre-fills the existing top form for that ingredient and
-// scrolls back to it. User then fills in supplier / lot / qty and submits.
-function prefillReceiveForm(name, unit){
-    var sel=document.getElementById('rm-item');
-    // Find option by ingredient name + unit
-    for(var i=0;i<sel.options.length;i++){
-        var idx=parseInt(sel.options[i].value);
-        if(!isNaN(idx) && ingredientData[idx] && ingredientData[idx].name===name && (ingredientData[idx].unit||'')===unit){
-            sel.value=sel.options[i].value;
-            onIngredientSelect();
-            break;
-        }
-    }
-    // Focus the first empty field
-    var supplier=document.getElementById('rm-supplier');
-    if(supplier){supplier.scrollIntoView({behavior:'smooth',block:'center'}); supplier.focus();}
 }
 
 async function editRMRemaining(id,item,unit,current){
@@ -1901,33 +1858,6 @@ async function deleteInvoice(id){
     var data=await res.json();
     if(data.success){loadInvoices();}
     else{alert(data.error||'Failed to delete');}
-}
-
-async function addRawMaterial(){
-    var sel=document.getElementById('rm-item');
-    var idx=parseInt(sel.value);
-    var st=document.getElementById('rm-status');
-    if(isNaN(idx)||!ingredientData[idx]){st.className='status error';st.textContent='Select an item';return;}
-    var item=ingredientData[idx];
-    var supplier=document.getElementById('rm-supplier').value.trim();
-    var date=document.getElementById('rm-date').value;
-    var lot=document.getElementById('rm-lot').value.trim();
-    var qty=document.getElementById('rm-qty').value;
-    if(!qty||parseFloat(qty)<=0){st.className='status error';st.textContent='Enter a valid quantity';return;}
-    var body={item:item.name,supplier:supplier,date_received:date,supplier_lot:lot,quantity:qty,unit:item.unit||''};
-    var res=await fetch('/api/organic/raw-materials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    var data=await res.json();
-    if(data.success){
-        st.className='status success';
-        st.textContent='Added: '+qty+' '+(item.unit||'')+' of '+item.name;
-        document.getElementById('rm-lot').value='';
-        document.getElementById('rm-qty').value='';
-        loadRawMaterials();
-        loadContacts();
-    } else {
-        st.className='status error';
-        st.textContent=data.error||'Failed';
-    }
 }
 
 async function addCustomIngredient(){
@@ -5041,9 +4971,15 @@ document.addEventListener('DOMContentLoaded',function(){
     var saleDateEl=document.getElementById('sale-date-modal');
     if(saleDateEl) saleDateEl.value=today;
 
-    // Honor ?action=receive|sell from dashboard quick-action buttons
     var params = new URLSearchParams(window.location.search);
     var action = params.get('action');
+
+    // Honor ?tab=raw|runs|fg|records deep links (audit "Done" buttons, dashboard sub-links).
+    // Raw is already loading above; ?action=sell switches to fg itself below.
+    var tabParam = params.get('tab');
+    if(tabParam && tabParam !== 'raw' && !action) showTab(tabParam);
+
+    // Honor ?action=receive|sell from dashboard quick-action buttons
     if(action === 'receive'){
         setTimeout(async function(){
             await openAddInventoryModal();
