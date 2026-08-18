@@ -224,57 +224,35 @@ def generate_label_pdf(output, brand_name, recipe_format, lot, best_before):
 
 
 # -- Checklist sections (default) --
-CHECKLIST_SECTIONS = [
-    ("1", "RAW MATERIAL SELECTION", [
-        ("1.1", "Use fresh (walk-in fridge) or frozen bones only", False),
-        ("1.2", "Transfer bones to oven racks - roast immediately", False),
-    ]),
-    ("2", "EQUIPMENT CHECK", [
-        ("2.1", "Jars: sterilized, undamaged, cleaned same shift/day", False),
-        ("2.2", "Pressure canner: clean, operational, water to 1.5 inch depth, rack in place", False),
-        ("2.3", "New (undamaged) lids for every jar", False),
-    ]),
-    ("3", "FIRING / COOKING", [
-        ("3.1", "Wash vegetables under running potable water; inspect", False),
-        ("3.2", "Heat kettle to rolling boil; reduce to 96-98 C", False),
-        ("3.3", "Log temp 1hr after start - must be above 96 C", False),
-    ]),
-    ("4", "CANNING", [
-        ("4.1", "Log kettle temp prior to canning - above 96 C", False),
-        ("4.2", "Double-filter; transfer to pouring pot; hot-fill within 30 min", False),
-        ("4.3", "Fill jars to 1 inch headspace; verify fill level", False),
-        ("---", "CANNER - Kitchen Lead must supervise; do not leave kitchen", False),
-        ("4.4", "Vent canner 10 min to expel air", False),
-        ("4.5", "Bring to 10 psi; time only once pressure reached", False),
-        ("4.6", "Maintain pressure full time; restart if drops", False),
-        ("4.7", "Canner guidelines completed all active kettles", False),
-    ]),
-    ("5", "DEPRESSURIZING & JAR REMOVAL", [
-        ("5.1", "Turn off heat; leave on burner until depressurized", False),
-        ("5.2", "Open counterweight once depressurized; wait 10 min", False),
-        ("5.3", "Open lid away from body (steam burn risk)", False),
-        ("5.4", "Remove jars gripping body or lid rim", False),
-        ("5.5", "Do not retighten lids or tilt during cooling", False),
-    ]),
-    ("6", "COOLING & SEAL VERIFICATION (NEXT DAY)", [
-        ("6.1", "Cool undisturbed at room temp 12-24 hours", False),
-        ("6.2", "Test each seal: press lid center - no flex", False),
-        ("6.3", "Dispose unsealed jars immediately - no refrigeration", False),
-    ]),
-    ("7", "FINISHING & LABELLING", [
-        ("7.1", "Wash and dry jars if necessary", False),
-        ("7.2", "Label machine: date and LOT# match schedule", False),
-        ("7.3", "Label cases of 12: product, expiry, LOT", False),
-    ]),
-    ("8", "INVENTORY & STORAGE", [
-        ("8.1", "Add to Finished Goods Inventory with LOT", False),
-        ("8.2", "Store labelled, away from heat/sunlight", False),
-        ("8.3", "Best before within 1 year - confirm label", False),
-    ]),
-]
+def _sections_from_master(master):
+    """Normalise the CCP master document into the checklist's draw shape.
+
+    ccp_master.json is the SINGLE source of truth for what's on the daily
+    checklist — the production tablet renders its section ticks from the same
+    document. This module used to carry its own hardcoded copy, which drifted
+    (5 master sections vs 8 printed), so the signed PDF did not match what the
+    kitchen actually confirmed. Never reintroduce a local copy.
+
+    In:  [{"num": "1", "title": "...", "items": ["text", ...]}]
+    Out: [("1", "TITLE", [("1.1", "text"), ...])]
+    """
+    out = []
+    for sec in (master or []):
+        if not isinstance(sec, dict):
+            continue
+        num = str(sec.get("num") or "").strip()
+        title = (sec.get("title") or "").strip()
+        items = []
+        for idx, text in enumerate(sec.get("items") or []):
+            text = str(text).strip()
+            if text:
+                items.append((num + "." + str(idx + 1), text))
+        if num or title or items:
+            out.append((num, title, items))
+    return out
 
 
-def _draw_checklist_content(c, w, h, date, active_vessels, logo_path=None, filled_data=None):
+def _draw_checklist_content(c, w, h, date, active_vessels, logo_path=None, filled_data=None, sections=None):
     """Draw the checklist body content on the canvas."""
     day_name = date.strftime("%A").upper()
     lot = date.strftime("%d%m%y")
@@ -313,7 +291,7 @@ def _draw_checklist_content(c, w, h, date, active_vessels, logo_path=None, fille
     row_h = 14
     sec_h = 20
 
-    for sec_num, sec_title, items in CHECKLIST_SECTIONS:
+    for sec_num, sec_title, items in _sections_from_master(sections):
         needed = sec_h + len(items) * row_h + 6
         if y - needed < 70:
             c.showPage()
@@ -342,16 +320,7 @@ def _draw_checklist_content(c, w, h, date, active_vessels, logo_path=None, fille
 
         y = y - sec_h
 
-        for idx, (num, text, _) in enumerate(items):
-            if num == "---":
-                c.setFillColor(WARNING_BG)
-                c.rect(left_margin, y - row_h, table_w + check_w, row_h, fill=1, stroke=0)
-                c.setFillColor(black)
-                c.setFont(FONT_BOLD, 6.5)
-                c.drawString(left_margin + 6, y - 10, text)
-                y = y - row_h
-                continue
-
+        for idx, (num, text) in enumerate(items):
             bg = ROW_ALT if idx % 2 == 0 else white
             c.setFillColor(bg)
             c.rect(left_margin, y - row_h, table_w + check_w, row_h, fill=1, stroke=0)
@@ -417,16 +386,16 @@ def _draw_checklist_content(c, w, h, date, active_vessels, logo_path=None, fille
     c.drawRightString(w - 40, 25, "Soma Bone Broth - Retain for audit records")
 
 
-def draw_checklist_pages(c, w, h, date, active_vessels, logo_path=None):
+def draw_checklist_pages(c, w, h, date, active_vessels, logo_path=None, sections=None):
     """Render the checklist across one or more pages."""
-    _draw_checklist_content(c, w, h, date, active_vessels, logo_path, filled_data=None)
+    _draw_checklist_content(c, w, h, date, active_vessels, logo_path, filled_data=None, sections=sections)
 
 
-def generate_filled_checklist_pdf(output_path, date, active_vessels, filled_data, logo_path=None):
+def generate_filled_checklist_pdf(output_path, date, active_vessels, filled_data, logo_path=None, sections=None):
     """Generate a completed daily checklist PDF."""
     w, h = letter
     c = canvas.Canvas(output_path, pagesize=letter)
-    _draw_checklist_content(c, w, h, date, active_vessels, logo_path, filled_data)
+    _draw_checklist_content(c, w, h, date, active_vessels, logo_path, filled_data, sections=sections)
     c.save()
 
 
@@ -592,7 +561,7 @@ def generate_all_recipes_pdf(output, ordered_recipes, logo_path=None):
     c.save()
 
 
-def generate_daily_package_pdf(output_path, date, vessel_assignments, recipes, logo_path=None):
+def generate_daily_package_pdf(output_path, date, vessel_assignments, recipes, logo_path=None, sections=None):
     """Generate the daily production package PDF."""
     w, h = letter
     c = canvas.Canvas(output_path, pagesize=letter)
@@ -618,5 +587,5 @@ def generate_daily_package_pdf(output_path, date, vessel_assignments, recipes, l
                 y = h - 68
             card_bottom = draw_recipe_card(c, margin, y, card_w, v["recipe"], rd, v["vessel"])
             y = card_bottom - gap
-    draw_checklist_pages(c, w, h, date, active, logo_path)
+    draw_checklist_pages(c, w, h, date, active, logo_path, sections=sections)
     c.save()

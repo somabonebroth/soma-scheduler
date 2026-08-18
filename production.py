@@ -494,7 +494,8 @@ def complete_checklist(week_id, day_idx):
     os.makedirs(week_pdf_dir, exist_ok=True)
     filename = app.DAYS[day_idx] + "_Completed_Checklist.pdf"
     pdf_path = os.path.join(week_pdf_dir, filename)
-    generate_filled_checklist_pdf(pdf_path, date, active_vessels, data, logo_path)
+    generate_filled_checklist_pdf(pdf_path, date, active_vessels, data, logo_path,
+                                  sections=app.load_ccp_master())
 
     warnings = []
     try:
@@ -531,6 +532,15 @@ def traceability_page():
     return render_template("traceability.html")
 
 
+def _ccp_sort_key(check_key):
+    """Order 'section-<num>' keys numerically, non-numeric ones last."""
+    tail = check_key.split("-", 1)[1] if "-" in check_key else check_key
+    try:
+        return (0, int(tail), "")
+    except ValueError:
+        return (1, 0, tail)
+
+
 @production_bp.route("/api/traceability/<week_id>/summary", methods=["GET"])
 @manager_required
 @require_valid_week
@@ -541,6 +551,11 @@ def get_week_summary(week_id):
     schedule_data = app.load_schedule(week_id) or {}
     sched = (schedule_data.get("schedule") or {}) if schedule_data else {}
     recipes_data = app.load_recipes()
+
+    ccp_titles = {}
+    for sec in (app.load_ccp_master() or []):
+        if isinstance(sec, dict) and sec.get("num") is not None:
+            ccp_titles["section-" + str(sec["num"])] = (sec.get("title") or "").strip()
 
     days_summary = []
     total_produced = {}
@@ -573,13 +588,20 @@ def get_week_summary(week_id):
         if notes:
             all_notes.append({"day": day_name, "note": notes})
 
-        sections = cl.get("sections", {}) or {}
+        # CCP confirmations are stored under "checks" as {"section-<num>": bool},
+        # one tick per CCP master section, written by the tablet. This read used
+        # to look for a "sections" key that nothing has ever written, so CCP
+        # flags could not fire and "all clear" was only ever checking sign-offs
+        # and notes. Keyed off the master so a renamed section reads correctly.
+        checks = cl.get("checks", {}) or {}
+        sec_checks = {k: v for k, v in checks.items() if str(k).startswith("section-")}
         day_ccp_issues = []
-        for sec_key, sec_data in sections.items():
-            if isinstance(sec_data, dict):
-                for item_key, item_val in sec_data.items():
-                    if item_val is False or item_val == "no" or item_val == "No":
-                        day_ccp_issues.append(f"{sec_key}: {item_key}")
+        if scheduled and not sec_checks:
+            day_ccp_issues.append("no CCP sections confirmed")
+        for key in sorted(sec_checks, key=_ccp_sort_key):
+            if not sec_checks[key]:
+                num = key.split("-", 1)[1]
+                day_ccp_issues.append((num + " " + ccp_titles.get(key, "")).strip())
         if day_ccp_issues:
             ccp_flags.append({"day": day_name, "issues": day_ccp_issues})
 
