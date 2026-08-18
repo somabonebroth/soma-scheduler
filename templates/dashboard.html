@@ -40,15 +40,34 @@
   50%      { box-shadow: 0 0 0 8px rgba(176,141,0,0); }
 }
 #prod-record-btn.needs-signoff { animation: prod-pulse 2s ease infinite; }
+/* ── Management list: reduced-weight rows, each showing its sub-sections ── */
+.mgmt-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.mgmt-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+.mgmt-row:hover { border-color: var(--accent); }
+.mgmt-title { font-size: 13px; font-weight: 700; color: var(--dark); text-decoration: none; min-width: 200px; display: flex; align-items: center; gap: 8px; }
+.mgmt-title:hover { color: var(--accent); }
+.mgmt-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.mgmt-links a, .mgmt-links button { font-size: 12px; font-weight: 500; color: var(--text); text-decoration: none; background: var(--bg); border: 1px solid var(--border); border-radius: 14px; padding: 4px 11px; cursor: pointer; font-family: inherit; line-height: 1.4; }
+.mgmt-links a:hover, .mgmt-links button:hover { border-color: var(--accent); color: var(--accent); }
+.mgmt-links .soon { opacity: 0.45; cursor: default; pointer-events: none; }
+.mgmt-badge { background: var(--amber-text); color: var(--white); border-radius: 10px; padding: 1px 8px; font-size: 11px; font-weight: 800; line-height: 18px; display: none; }
+@media (max-width: 640px) { .mgmt-title { min-width: 0; width: 100%; } }
+/* ── Production (tablet) view: bigger tap targets, no chrome ── */
+.prod-grid .dash-btn { padding: 34px 20px; }
+.prod-grid .dash-btn .icon { font-size: 34px; }
+.prod-grid .dash-btn .label { font-size: 16px; }
+.dash-btn.placeholder { opacity: 0.45; cursor: default; border-style: dashed; }
+.dash-btn.placeholder:hover { transform: none; box-shadow: none; border-color: var(--border); }
 </style>
 </head>
 <body>
 <div class="header">
     <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-    <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Production Dashboard</p></div>
+    <div class="header-text"><h1>SOMA BONE BROTH</h1><p>{{ 'Management Dashboard' if role == 'manager' else 'Production' }}</p></div>
     <div class="header-right"><button class="header-btn" onclick="doLogout()">Log Out</button></div>
 </div>
 <div class="main">
+{% if role == 'manager' %}
     <div class="dashboard-grid">
         <div class="section-label">Schedule</div>
         <div class="dash-row">
@@ -56,10 +75,6 @@
             <a href="/weekly-schedule" class="dash-btn"><span class="icon">&#128197;</span><span class="label">Weekly Schedule</span><span class="sublabel">View current week</span></a>
             <div class="dash-btn highlight" onclick="goToDay(0)" style="cursor:pointer;"><span class="icon">&#9654;</span><span class="label">Today's Production</span><span class="sublabel" id="today-label">Loading...</span></div>
         </div>
-        <a href="/cleaning" class="dash-btn" style="flex-direction:row;justify-content:center;align-items:baseline;gap:10px;padding:11px 16px;">
-            <span class="label">End-of-Shift Cleaning</span>
-            <span class="sublabel">Rotating micro-jobs — pick &amp; sign off</span>
-        </a>
         <div class="section-label">Quick Actions</div>
         <div class="dash-row">
             <div class="dash-btn" onclick="openReceiveModal()" style="background:var(--action-green);border-color:var(--action-green);cursor:pointer;">
@@ -96,140 +111,95 @@
                 </div>
             </a>
         </div>
-        <div class="section-label">Analytics</div>
-        <div class="dash-row">
-            <a href="/analytics?tab=sales" class="dash-btn">
-                <span class="icon">&#128176;</span>
-                <span class="label">Sales Analytics</span>
-                <span class="sublabel">Sales by buyer, revenue &amp; cases</span>
-            </a>
-            <a href="/analytics?tab=production" class="dash-btn">
-                <span class="icon">&#128200;</span>
-                <span class="label">Production Analytics</span>
-                <span class="sublabel">Output by week, month &amp; year</span>
-            </a>
-        </div>
-        <details id="resources-section" style="margin-top:4px;">
-          <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;margin-bottom:4px;" onclick="handleResourcesClick(event)">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:1px;">Administration</span>
-              <span id="res-lock" style="font-size:12px;color:var(--text-light);">🔒</span>
+        <div class="section-label">Management</div>
+        <div class="mgmt-list">
+            <div class="mgmt-row">
+                <a class="mgmt-title" href="/analytics?tab=sales">&#128200; Analytics</a>
+                <div class="mgmt-links"><a href="/analytics?tab=sales">Sales Data</a><a href="/analytics?tab=production">Production Data</a></div>
             </div>
-            <div style="display:flex;align-items:center;gap:6px;">
-              <span style="font-size:11px;color:var(--text-light);">Recipes, checklists, inventory & more</span>
-              <span id="res-caret" style="font-size:12px;color:var(--text-light);font-weight:600;">▶</span>
+            <div class="mgmt-row" id="prod-record-btn">
+                <a class="mgmt-title" href="/traceability">&#128451; Production Record <span class="mgmt-badge" id="prod-badge" title="Completed weeks awaiting HOO sign-off"></span></a>
+                <div class="mgmt-links"><a href="/traceability">Weekly records &amp; sign-off</a></div>
             </div>
-          </summary>
-        <!-- Top row: Organic Certification | Production Record | Manage Inventory | Sales & Receiving Record | Buyers & Suppliers -->
+            <div class="mgmt-row">
+                <a class="mgmt-title" href="/organic">&#128230; Inventory</a>
+                <div class="mgmt-links"><a href="/organic?tab=raw">Raw Materials</a><a href="/organic?tab=runs">Production Runs</a><a href="/organic?tab=fg">Finished Goods</a><a href="/audits">Stock Counts</a></div>
+            </div>
+            <div class="mgmt-row">
+                <a class="mgmt-title" href="/sales-receiving">&#128203; Sales &amp; Receiving Record</a>
+                <div class="mgmt-links"><a href="/sales-receiving#sales">Sales</a><a href="/sales-receiving#receiving">Receiving</a><a href="/sales-receiving#trace">Search &amp; Trace</a></div>
+            </div>
+            <div class="mgmt-row">
+                <a class="mgmt-title" href="/organic-certification">&#127807; Organic Certification</a>
+                <div class="mgmt-links"><a href="/organic-certification">Overview</a><a href="/admin/reconcile-raw">Reconcile Raw</a><a href="/mass-balance">Mass Balance</a><a href="/admin/fg-reconcile">FG Reconcile</a><a href="/audits">Stock Counts</a><a href="/certifications">Certificates &amp; Documents</a></div>
+            </div>
+            <div class="mgmt-row">
+                <a class="mgmt-title" href="/contacts">&#128101; Buyers &amp; Suppliers</a>
+                <div class="mgmt-links"><a href="/contacts?tab=suppliers">Suppliers</a><a href="/contacts?tab=buyers">Buyers</a><a href="/contacts?tab=catalogue">SKU Catalogue</a></div>
+            </div>
+            <div class="mgmt-row">
+                <a class="mgmt-title" href="/recipes">&#128209; Recipe Cards</a>
+                <div class="mgmt-links"><a href="/recipes">View &amp; edit recipes</a></div>
+            </div>
+            <div class="mgmt-row">
+                <a class="mgmt-title" href="/cleaning">&#129529; Cleaning Records</a>
+                <div class="mgmt-links"><a href="/cleaning">Cleaning &amp; Upkeep (do today's jobs)</a><a class="soon" href="#" title="Coming soon">Cleaning history</a><a class="soon" href="#" title="Coming soon">Opening / Closing checklists</a></div>
+            </div>
+            <div class="mgmt-row">
+                <a class="mgmt-title" href="/company-settings">&#9881; Settings &amp; Other</a>
+                <div class="mgmt-links"><a href="/company-settings">Company Settings</a><a href="/company-settings">Ripe buffer &amp; credits</a><a href="/ccp-master">CCP Master</a><button type="button" onclick="downloadBackup()">Data Backup</button><a href="/admin/shopify-import">Shopify Import</a><a href="/admin/clover-import">Clover Import</a><a href="/ripe-sku-audit">Ripe SKU Audit</a><a href="/ripe-analytics">Ripe Analytics</a></div>
+            </div>
+        </div>
+    </div>
+{% else %}
+    <div class="dashboard-grid prod-grid">
+        <div class="section-label">Today</div>
         <div class="dash-row">
-            <a href="/organic-certification" class="dash-btn"><span class="icon">&#127807;</span><span class="label">Organic Certification</span><span class="sublabel">Reconciliation, audits &amp; documents</span></a>
-            <a href="/traceability" class="dash-btn" id="prod-record-btn" style="position:relative;"><span class="icon">&#128451;</span><span class="label" style="display:flex;align-items:center;gap:8px;">Production Record<span id="prod-badge" style="display:none;background:var(--amber-text);color:var(--white);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span></span><span class="sublabel">Review and sign off weekly records</span></a>
-            <a href="/organic" class="dash-btn"><span class="icon">&#128230;</span><span class="label">Manage Inventory</span><span class="sublabel">Raw materials, production runs &amp; finished goods</span></a>
-            <a href="/sales-receiving" class="dash-btn"><span class="icon">&#128203;</span><span class="label">Sales &amp; Receiving Record</span><span class="sublabel">All sales &amp; deliveries, search &amp; trace</span></a>
-            <a href="/contacts" class="dash-btn"><span class="icon">&#128101;</span><span class="label">Buyers &amp; Suppliers</span><span class="sublabel">Manage suppliers and buyers</span></a>
+            <div class="dash-btn highlight" onclick="goToDay(0)" style="cursor:pointer;"><span class="icon">&#9654;</span><span class="label">Today's Schedule</span><span class="sublabel" id="today-label">Loading...</span></div>
+            <a href="/weekly-schedule" class="dash-btn"><span class="icon">&#128197;</span><span class="label">Weekly Schedule</span><span class="sublabel">This week, last week, next week</span></a>
         </div>
-        <!-- Bottom row: Recipe Cards | Company Settings | CCP Checklist | Data Backup -->
-        <div class="dash-row" style="margin-top:6px;">
-            <a href="/recipes" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Recipe Cards</span><span class="sublabel">View and manage recipes</span></a>
-            <a href="/company-settings" class="dash-btn"><span class="icon">&#9881;</span><span class="label">Company Settings</span><span class="sublabel">Info, address, Ripe buffer</span></a>
-            <a href="/ccp-master" class="dash-btn"><span class="icon">&#9989;</span><span class="label">CCP Checklist</span><span class="sublabel">Master reference</span></a>
-            <div class="dash-btn" onclick="downloadBackup()" style="cursor:pointer;"><span class="icon">&#128190;</span><span class="label">Data Backup</span><span class="sublabel">Download a zip of all data</span></div>
+        <div class="section-label">Checklists</div>
+        <div class="dash-row">
+            <div class="dash-btn placeholder" title="Coming soon"><span class="icon">&#9728;</span><span class="label">Opening Checklist</span><span class="sublabel">Coming soon</span></div>
+            <div class="dash-btn placeholder" title="Coming soon"><span class="icon">&#127769;</span><span class="label">Closing Checklist</span><span class="sublabel">Coming soon</span></div>
+            <a href="/cleaning" class="dash-btn"><span class="icon">&#129529;</span><span class="label">Cleaning &amp; Upkeep</span><span class="sublabel">Rotating jobs — pick &amp; sign off</span></a>
         </div>
-        </details>
+        <div class="section-label">Reference</div>
+        <div class="dash-row">
+            <a href="/recipes" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Recipe Cards</span><span class="sublabel">Read-only</span></a>
+        </div>
     </div>
+{% endif %}
 </div>
-
-<!-- Manager password modal -->
-<div class="dash-modal-overlay" id="mgr-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;" >
-  <div style="background:var(--white);border-radius:14px;width:100%;max-width:360px;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,.2);margin:16px;">
-    <div style="font-size:17px;font-weight:700;margin-bottom:6px;">🔒 Manager Access</div>
-    <div style="font-size:13px;color:var(--text-light);margin-bottom:18px;">Enter the manager password to access Administration.</div>
-    <input type="password" id="mgr-pw" placeholder="Manager password" style="width:100%;box-sizing:border-box;padding:12px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;outline:none;margin-bottom:10px;">
-    <div id="mgr-msg" style="font-size:12px;min-height:16px;margin-bottom:10px;"></div>
-    <div style="display:flex;gap:10px;">
-      <button onclick="document.getElementById('mgr-modal').style.display='none'" style="flex:1;padding:12px;border:1.5px solid var(--border);border-radius:8px;background:var(--white);cursor:pointer;font-size:14px;font-weight:600;">Cancel</button>
-      <button id="mgr-submit" onclick="submitManagerPw()" style="flex:1;padding:12px;border:none;border-radius:8px;background:var(--accent);color:var(--white);cursor:pointer;font-size:14px;font-weight:600;">Unlock</button>
-    </div>
-  </div>
-</div>
-
 <script>
 var DAYNAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 async function doLogout(){await fetch('/api/logout',{method:'POST'});window.location.href='/login';}
-
-// Resources section — manager password lock
-// Persist unlock state in sessionStorage so navigating away and back
-// doesn't re-lock. Clears automatically when the browser tab is closed.
-var _resUnlocked = (function(){
-    try { return sessionStorage.getItem('soma_mgmt_unlocked') === '1'; } catch(e){ return false; }
-})();
-// If already unlocked, show the open lock immediately
-if(_resUnlocked){
-    var _lockEl = document.getElementById('res-lock');
-    if(_lockEl) _lockEl.textContent = '🔓';
-    // Re-open automatically since it was open before navigation
-    document.addEventListener('DOMContentLoaded', function(){
-        var _sec = document.getElementById('resources-section');
-        if(_sec) { _sec.open = true; _sec.setAttribute('open',''); }
-        var _car = document.getElementById('res-caret');
-        if(_car) _car.textContent = '▼';
-    });
-}
-
-function handleResourcesClick(ev) {
-    var section = document.getElementById('resources-section');
-    if (_resUnlocked) {
-        // Already unlocked — let default toggle proceed, just update caret
-        setTimeout(function(){
-            var c = document.getElementById('res-caret');
-            if(c) c.textContent = section.open ? '▼' : '▶';
-        }, 0);
-        return;
-    }
-    // Locked — prevent toggle and show password prompt
-    ev.preventDefault();
-    var _mo=document.getElementById('mgr-modal'); _mo.style.display='flex';
-    setTimeout(function(){ var i=document.getElementById('mgr-pw'); if(i){i.value='';i.focus();} }, 50);
-}
-
-async function submitManagerPw() {
-    var pw = document.getElementById('mgr-pw').value;
-    var msg = document.getElementById('mgr-msg');
-    var btn = document.getElementById('mgr-submit');
-    btn.disabled = true; btn.textContent = 'Checking…';
-    try {
-        var res = await fetch('/api/verify-manager', {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({password: pw})
-        });
-        var data = await res.json();
-        if (data.ok) {
-            _resUnlocked = true;
-            try { sessionStorage.setItem('soma_mgmt_unlocked', '1'); } catch(e){}
-            document.getElementById('mgr-modal').style.display='none';
-            var lock = document.getElementById('res-lock');
-            if(lock) lock.textContent = '🔓';
-            // Open the section and keep it open
-            var section = document.getElementById('resources-section');
-            if(section) { section.open = true; section.setAttribute('open',''); }
-            var c = document.getElementById('res-caret');
-            if(c) c.textContent = '▼';
+function getWeekId(date){var d=new Date(date);var day=d.getDay();var diff=day===0?-6:1-day;d.setDate(d.getDate()+diff);return d.toISOString().split('T')[0];}
+function getDayIdx(date){var day=date.getDay();return day===0?6:day-1;}
+async function goToDay(offset){var target=new Date();target.setDate(target.getDate()+offset);var weekId=getWeekId(target);var dayIdx=getDayIdx(target);var res=await fetch('/api/schedule/'+weekId);var data=await res.json();if(!data.schedule){alert('No schedule created for this week.');return;}var dayData=data.schedule[String(dayIdx)]||{};var hasP=Object.values(dayData).some(function(v){return v;});if(!hasP){alert('No production scheduled for '+DAYNAMES[target.getDay()]+'.');return;}window.location.href='/daily-production/'+weekId+'/'+dayIdx;}
+async function loadDayLabels(){
+    var target=new Date();
+    var weekId=getWeekId(target);
+    var dayIdx=getDayIdx(target);
+    var dayName=DAYNAMES[target.getDay()];
+    var el=document.getElementById('today-label');
+    if(!el) return;
+    try{
+        var res=await fetch('/api/schedule/'+weekId);
+        var data=await res.json();
+        if(data.schedule){
+            var dd=data.schedule[String(dayIdx)]||{};
+            var r=Object.values(dd).filter(function(v){return v;});
+            el.textContent=dayName+' — '+(r.length>0?r.length+' kettle'+(r.length===1?'':'s'):'No production');
         } else {
-            msg.textContent = 'Incorrect password.';
-            msg.style.color = 'var(--action-red)';
+            el.textContent=dayName+' — No schedule';
         }
-    } catch(e) {
-        msg.textContent = 'Error — try again.';
-    }
-    btn.disabled = false; btn.textContent = 'Unlock';
+    } catch(e){ el.textContent=dayName; }
 }
-
-document.addEventListener('keydown', function(e) {
-    if(e.key === 'Escape') document.getElementById('mgr-modal').style.display='none';
-    if(e.key === 'Enter' && document.getElementById('mgr-modal').style.display==='flex') submitManagerPw();
-});
-
+document.addEventListener('DOMContentLoaded',loadDayLabels);
+</script>
+{% if role == 'manager' %}
+<script>
 // Production Record — pending sign-off badge
 (async function loadProdBadge() {
   try {
@@ -297,29 +267,6 @@ document.addEventListener('keydown', function(e) {
     }
   } catch(e) {}
 })();
-function getWeekId(date){var d=new Date(date);var day=d.getDay();var diff=day===0?-6:1-day;d.setDate(d.getDate()+diff);return d.toISOString().split('T')[0];}
-function getDayIdx(date){var day=date.getDay();return day===0?6:day-1;}
-async function goToDay(offset){var target=new Date();target.setDate(target.getDate()+offset);var weekId=getWeekId(target);var dayIdx=getDayIdx(target);var res=await fetch('/api/schedule/'+weekId);var data=await res.json();if(!data.schedule){alert('No schedule created for this week.');return;}var dayData=data.schedule[String(dayIdx)]||{};var hasP=Object.values(dayData).some(function(v){return v;});if(!hasP){alert('No production scheduled for '+DAYNAMES[target.getDay()]+'.');return;}window.location.href='/daily-production/'+weekId+'/'+dayIdx;}
-async function loadDayLabels(){
-    var target=new Date();
-    var weekId=getWeekId(target);
-    var dayIdx=getDayIdx(target);
-    var dayName=DAYNAMES[target.getDay()];
-    var el=document.getElementById('today-label');
-    if(!el) return;
-    try{
-        var res=await fetch('/api/schedule/'+weekId);
-        var data=await res.json();
-        if(data.schedule){
-            var dd=data.schedule[String(dayIdx)]||{};
-            var r=Object.values(dd).filter(function(v){return v;});
-            el.textContent=dayName+' — '+(r.length>0?r.length+' kettle'+(r.length===1?'':'s'):'No production');
-        } else {
-            el.textContent=dayName+' — No schedule';
-        }
-    } catch(e){ el.textContent=dayName; }
-}
-document.addEventListener('DOMContentLoaded',loadDayLabels);
 
 // ── Dashboard Record Sale modal ──
 async function openDashSaleModal(){
@@ -393,7 +340,6 @@ function dashSaleNext(){
 }
 
 </script>
-
 <style>
 .dash-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center;}
 .dash-modal-overlay.open{display:flex;}
@@ -559,5 +505,6 @@ document.getElementById('dash-sale-modal').addEventListener('click', function(e)
   if(e.target === this) closeDashSaleModal();
 });
 </script>
+{% endif %}
 </body>
 </html>

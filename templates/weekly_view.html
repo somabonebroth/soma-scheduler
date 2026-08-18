@@ -67,7 +67,7 @@
             <span class="week-label" id="week-label">Loading...</span>
             <button class="week-nav-btn" onclick="nextWeek()" title="Next week">&rarr;</button>
         </div>
-        <a id="edit-btn" href="#" class="btn btn-outline">Edit Schedule</a>
+        {% if session.get('role', 'manager') == 'manager' %}<a id="edit-btn" href="#" class="btn btn-outline">Edit Schedule</a>{% endif %}
     </div>
     <div id="notes-area"></div>
     <div id="schedule-content"></div>
@@ -144,7 +144,7 @@ async function loadWeek(weekId) {
 
     subtitle.textContent = 'Week of ' + weekId;
     label.textContent = formatWeekLabel(weekId);
-    editBtn.href = '/create-schedule?week=' + weekId;
+    if (editBtn) editBtn.href = '/create-schedule?week=' + weekId;   // absent for the production role
 
     try {
         var res = await fetch('/api/schedule/' + weekId);
@@ -152,7 +152,7 @@ async function loadWeek(weekId) {
 
         if (!data.schedule) {
             notesArea.innerHTML = '';
-            container.innerHTML = '<div class="no-schedule"><h2>No schedule for this week</h2><p>Use the arrows to browse other weeks, or create a new schedule.</p><a href="/create-schedule?week=' + weekId + '" class="btn btn-primary" style="margin-top:16px;display:inline-block;padding:12px 24px;text-decoration:none;">Create Schedule for This Week</a></div>';
+            container.innerHTML = '<div class="no-schedule"><h2>No schedule for this week</h2><p>Use the arrows to browse other weeks' + (editBtn ? ', or create a new schedule.</p><a href="/create-schedule?week=' + weekId + '" class="btn btn-primary" style="margin-top:16px;display:inline-block;padding:12px 24px;text-decoration:none;">Create Schedule for This Week</a>' : '.</p>') + '</div>';
             return;
         }
 

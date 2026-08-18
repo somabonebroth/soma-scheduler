@@ -70,6 +70,26 @@ def login_required(f):
     return decorated
 
 
+def manager_required(f):
+    """Local copy of app.py's manager_required (verbatim) — recipe WRITE routes
+    are manager-only (2026-08-18 two-role split): the production tablet gets a
+    read-only recipe view, and the rename cascade in update_recipe rewrites
+    FG/sales/runs/schedules, so hiding buttons is not enough. Sessions from
+    before roles existed count as manager (see app.current_role)."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("authenticated"):
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Not authenticated"}), 401
+            return redirect(url_for("login_page"))
+        if (session.get("role") or "manager") != "manager":
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Manager access required"}), 403
+            return redirect("/")
+        return f(*args, **kwargs)
+    return decorated
+
+
 @recipes_bp.route("/recipes")
 @login_required
 def recipes_page():
@@ -90,7 +110,7 @@ def get_recipes():
 
 
 @recipes_bp.route("/api/recipes", methods=["POST"])
-@login_required
+@manager_required
 def add_recipe():
     """POST /api/recipes - create a recipe from the JSON body."""
     data = request.json or {}
@@ -164,7 +184,7 @@ def recipe_pdf_all():
 
 
 @recipes_bp.route("/api/recipes/<path:name>", methods=["PUT"])
-@login_required
+@manager_required
 def update_recipe(name):
     """Update an existing recipe. If the body's 'name' differs from the URL
     name, this is treated as a rename.
@@ -318,7 +338,7 @@ def update_recipe(name):
 
 
 @recipes_bp.route("/api/recipes/<path:name>", methods=["DELETE"])
-@login_required
+@manager_required
 def delete_recipe(name):
     """DELETE /api/recipes/<name> - remove a recipe."""
     recipes = app.load_recipes()
@@ -386,7 +406,7 @@ def _schedules_using_recipe(recipe_name):
 
 
 @recipes_bp.route("/api/recipes/<path:name>/duplicate", methods=["POST"])
-@login_required
+@manager_required
 def duplicate_recipe(name):
     """Duplicate a recipe with a new name. Body: {new_name}.
     Copies all data including ingredients/yield/brand/format. If the source
@@ -434,7 +454,7 @@ def duplicate_recipe(name):
 
 
 @recipes_bp.route("/api/recipes/<path:name>/archive", methods=["POST"])
-@login_required
+@manager_required
 def archive_recipe(name):
     """Mark a recipe as archived. It stays in storage so old schedules and
     tracker entries still resolve, but it's hidden from the new-schedule
@@ -450,7 +470,7 @@ def archive_recipe(name):
 
 
 @recipes_bp.route("/api/recipes/<path:name>/unarchive", methods=["POST"])
-@login_required
+@manager_required
 def unarchive_recipe(name):
     """Restore an archived recipe to active."""
     recipes = app.load_recipes()
@@ -462,7 +482,7 @@ def unarchive_recipe(name):
 
 
 @recipes_bp.route("/api/recipes/migrate-all", methods=["POST"])
-@login_required
+@manager_required
 def migrate_all_recipes():
     """Force-persist structured-ingredient migration to disk for all recipes.
     Performs smart pack conversion using organic/tracking_modes.json, then
@@ -523,7 +543,7 @@ def migrate_all_recipes():
 
 
 @recipes_bp.route("/api/recipes/<path:name>/photo", methods=["POST"])
-@login_required
+@manager_required
 def upload_recipe_photo(name):
     """POST a photo for a recipe; stored under PHOTOS_DIR."""
     if "photo" not in request.files:
@@ -599,7 +619,7 @@ def get_recipes_grouped():
 
 
 @recipes_bp.route("/api/recipes/order", methods=["POST"])
-@login_required
+@manager_required
 def update_recipe_order():
     """POST /api/recipes/order - persist the recipe display order."""
     data = request.json or {}
@@ -608,7 +628,7 @@ def update_recipe_order():
 
 
 @recipes_bp.route("/api/recipes/upload", methods=["POST"])
-@login_required
+@manager_required
 def upload_recipe():
     """POST /api/recipes/upload - create a recipe from an uploaded PDF or JSON text."""
     if request.files and "file" in request.files:
@@ -653,7 +673,7 @@ def upload_recipe():
 
 
 @recipes_bp.route("/api/recipes/upload-json", methods=["POST"])
-@login_required
+@manager_required
 def upload_recipe_json():
     """POST /api/recipes/upload-json - create a recipe from a JSON body (manual add)."""
     data = request.json or {}

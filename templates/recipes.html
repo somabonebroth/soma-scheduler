@@ -80,6 +80,7 @@
   </div>
 </div>
 <div class="main">
+    {% if session.get('role', 'manager') == 'manager' %}
     <div class="migrate-banner" id="migrate-banner"><span id="migrate-msg"></span><button onclick="runMigration()">Migrate &amp; Save</button></div>
     <div class="card">
         <h2>Add Recipe</h2>
@@ -91,6 +92,7 @@
         <div class="upload-zone" id="upload-zone"><p>Upload recipe card PDF</p><input type="file" id="recipe-upload" accept=".pdf"></div>
         <div id="upload-status" class="status" style="margin-top:12px;"></div>
     </div>
+    {% endif %}
     <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
             <h2 style="margin:0;">All Recipes (<span id="recipe-count">0</span>)</h2>
@@ -159,9 +161,12 @@ function mobileConfirm(message, opts){
 }
 </script>
 <script>
+// Production tablet gets a read-only view (2026-08-18 two-role split); the
+// recipe WRITE endpoints are manager-only server-side as well.
+var READ_ONLY = {{ 'false' if session.get('role', 'manager') == 'manager' else 'true' }};
 var recipes={};var editingName='';var isAdding=false;var currentFilter='all';var brandOrder=[];var recipeOrder={};var viewingName='';
 function closeModal(id){document.getElementById(id).classList.remove('active');}
-document.addEventListener('DOMContentLoaded',async function(){recipes=await(await fetch('/api/recipes')).json();await loadOrder();renderList();checkMigration();});
+document.addEventListener('DOMContentLoaded',async function(){recipes=await(await fetch('/api/recipes')).json();await loadOrder();renderList();if(!READ_ONLY)checkMigration();});
 async function loadOrder(){try{var res=await fetch('/api/recipes/grouped');var g=await res.json();brandOrder=Object.keys(g);recipeOrder={};Object.keys(g).forEach(function(b){recipeOrder[b]=g[b].map(function(r){return r.name;});});}catch(e){}}
 function setFilter(f,btn){currentFilter=f;document.querySelectorAll('.filter-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');renderList();}
 
@@ -181,7 +186,7 @@ function renderList(){
 
     function renderBrandGroup(brand,items,archived){
         var brandSafe=brand.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-        var html='<div class="brand-group" data-brand="'+brandSafe+'"><div class="brand-header"'+(archived?'':' draggable="true"')+' data-brand-drag="'+brandSafe+'"><span class="brand-label">'+brand+'</span></div>';
+        var html='<div class="brand-group" data-brand="'+brandSafe+'"><div class="brand-header"'+((archived||READ_ONLY)?'':' draggable="true"')+' data-brand-drag="'+brandSafe+'"><span class="brand-label">'+brand+'</span></div>';
         items.forEach(function(name){
             var r=recipes[name];var nameSafe=name.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
             var certVal=(r.certification||'').trim();
@@ -195,11 +200,13 @@ function renderList(){
                 cert='<span class="cert-badge" style="font-size:10px;background:'+bg+';color:'+fg+';padding:2px 6px;border-radius:8px;font-weight:600;margin-left:6px;">'+certVal+'</span>';
             }
             var archBadge=archived?'<span style="font-size:10px;background:#999;color:#fff;padding:2px 6px;border-radius:8px;margin-left:6px;">Archived</span>':'';
-            html+='<div class="recipe-list-item"'+(archived?' style="opacity:0.7;"':' draggable="true"')+' data-recipe-name="'+nameSafe+'" data-recipe-brand="'+brandSafe+'">';
-            html+='<div class="recipe-info"><div class="recipe-name">'+(archived?'':'<span class="drag-handle">&#9776;</span>')+name+cert+archBadge+'</div><div class="recipe-meta">'+(r.format||'')+' | Target: '+(r.yield||'--')+' units</div></div>';
+            html+='<div class="recipe-list-item"'+((archived||READ_ONLY)?(archived?' style="opacity:0.7;"':''):' draggable="true"')+' data-recipe-name="'+nameSafe+'" data-recipe-brand="'+brandSafe+'">';
+            html+='<div class="recipe-info"><div class="recipe-name">'+((archived||READ_ONLY)?'':'<span class="drag-handle">&#9776;</span>')+name+cert+archBadge+'</div><div class="recipe-meta">'+(r.format||'')+' | Target: '+(r.yield||'--')+' units</div></div>';
             var btns='<button class="btn-sm" data-action="view" data-name="'+nameSafe+'">View</button>';
             btns+='<button class="btn-sm" data-action="download" data-name="'+nameSafe+'" title="Download PDF">⤓</button>';
-            if(!archived){
+            if(READ_ONLY){
+                // view + download only
+            } else if(!archived){
                 btns+='<button class="btn-sm" data-action="edit" data-name="'+nameSafe+'">Edit</button>';
                 btns+='<button class="btn-sm" data-action="duplicate" data-name="'+nameSafe+'">Duplicate</button>';
                 btns+='<button class="btn-sm" data-action="archive" data-name="'+nameSafe+'">Archive</button>';
@@ -353,7 +360,7 @@ function viewRecipe(name){
         }
     });
     document.getElementById('view-body').innerHTML=html;
-    document.getElementById('photo-area').style.display='block';
+    document.getElementById('photo-area').style.display=READ_ONLY?'none':'block';
     document.getElementById('view-modal').classList.add('active');
 }
 
@@ -659,11 +666,13 @@ async function downloadAllRecipes(btn){
 }
 
 var uz=document.getElementById('upload-zone');var ui=document.getElementById('recipe-upload');
+if(uz&&ui){   // absent for the read-only (production) role
 uz.addEventListener('click',function(){ui.click();});
 uz.addEventListener('dragover',function(e){e.preventDefault();uz.classList.add('dragover');});
 uz.addEventListener('dragleave',function(){uz.classList.remove('dragover');});
 uz.addEventListener('drop',function(e){e.preventDefault();uz.classList.remove('dragover');if(e.dataTransfer.files.length)doUpload(e.dataTransfer.files[0]);});
 ui.addEventListener('change',function(){if(ui.files.length)doUpload(ui.files[0]);});
+}
 async function doUpload(file){
     var st=document.getElementById('upload-status');st.className='status loading';st.textContent='Parsing...';st.style.display='block';
     var fd=new FormData();fd.append('file',file);

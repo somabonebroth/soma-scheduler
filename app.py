@@ -166,6 +166,38 @@ def login_required(f):
     return decorated
 
 
+def current_role():
+    """Role of the current session: "manager" | "production" | None.
+
+    Sessions created before roles existed (authenticated, no role key) count
+    as manager so nothing changes for anyone on deploy; they pick up a real
+    role at their next login.
+    """
+    if not session.get("authenticated"):
+        return None
+    return session.get("role") or "manager"
+
+
+def manager_required(f):
+    """Decorator: require the manager role (403 JSON for APIs, redirect home for pages).
+
+    Layered on top of login_required semantics: unauthenticated -> 401/redirect
+    to login exactly as login_required; authenticated production -> 403.
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("authenticated"):
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Not authenticated"}), 401
+            return redirect(url_for("login_page"))
+        if current_role() != "manager":
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Manager access required"}), 403
+            return redirect(url_for("dashboard"))
+        return f(*args, **kwargs)
+    return decorated
+
+
 def validate_week_id(week_id):
     """Ensure week_id is a valid YYYY-MM-DD date string."""
     if not re.match(r'^\d{4}-\d{2}-\d{2}$', week_id):
@@ -848,13 +880,33 @@ def login_page():
 
 @app.route("/api/login", methods=["POST"])
 def login():
-    """Handle login form submission and set the session."""
+    """Handle login form submission and set the session + role.
+
+    Two roles, one login form (2026-08-18):
+      MANAGER_PASSWORD -> "manager"    (the HOO's desktop: everything)
+      APP_PASSWORD     -> "production" (kitchen tablet: schedule, cleaning,
+                                        read-only recipes)
+    If MANAGER_PASSWORD is not configured, APP_PASSWORD grants manager so the
+    split is simply "off" rather than locking everyone out of management.
+    """
+    import hmac as _hmac
     data = request.json or {}
-    if data.get("password") == APP_PASSWORD:
+    submitted = (data.get("password") or "")
+
+    def _match(expected):
+        return bool(expected) and _hmac.compare_digest(submitted.encode(), expected.encode())
+
+    role = None
+    if _match(MANAGER_PASSWORD):
+        role = "manager"
+    elif _match(APP_PASSWORD):
+        role = "manager" if not MANAGER_PASSWORD else "production"
+    if role:
         session.permanent = True   # enables PERMANENT_SESSION_LIFETIME
         session["authenticated"] = True
+        session["role"] = role
         session["logged_in_at"] = datetime.now().isoformat()
-        return jsonify({"success": True})
+        return jsonify({"success": True, "role": role})
     return jsonify({"error": "Invalid password"}), 401
 
 
@@ -878,8 +930,8 @@ def manifest():
 @app.route("/")
 @login_required
 def dashboard():
-    """Render the dashboard."""
-    return render_template("dashboard.html")
+    """Render the dashboard for the session's role (production tablet vs manager desktop)."""
+    return render_template("dashboard.html", role=current_role())
 
 
 @app.route("/contacts")
@@ -894,21 +946,6 @@ def contacts_page():
 def company_settings_page():
     """Render the company settings page."""
     return render_template("company_settings.html")
-
-
-@app.route("/api/verify-manager", methods=["POST"])
-@login_required
-def verify_manager():
-    """Verify manager password for unlocking the Resources section.
-    Returns {ok: true} if correct, {ok: false} if wrong or not set.
-    """
-    if not MANAGER_PASSWORD:
-        return jsonify({"ok": False, "reason": "MANAGER_PASSWORD not configured"})
-    data = request.get_json() or {}
-    submitted = (data.get("password") or "").strip()
-    import hmac as _hmac
-    ok = bool(submitted) and _hmac.compare_digest(submitted.encode(), MANAGER_PASSWORD.encode())
-    return jsonify({"ok": ok})
 
 
 @app.route("/api/admin/backup", methods=["POST"])
