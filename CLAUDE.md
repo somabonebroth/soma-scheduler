@@ -162,6 +162,23 @@ Both use `_FILE_LOCKS` (threading.Lock per path) added in the latest session.
 
 **Product photos → portals:** `/api/internal/catalogue` includes each SKU's recipe `photo` filename (from recipes.json, uploaded via the Recipes page); portals fetch the bytes from the key-gated `GET /api/internal/photo/<filename>` and proxy them to their buyers (added 2026-07-02 for the SBBC portal storefront).
 
+**Daily CCP checklist — `ccp_master.json` is the SINGLE source of truth (fixed 2026-08-18).**
+The production tablet renders its section ticks from the CCP master (manager-editable at
+`/ccp-master`), and since this fix BOTH PDF paths do too — `generate_filled_checklist_pdf`
+(completed record) and `generate_daily_package_pdf` → `draw_checklist_pages` (the blank
+checklist inside the daily package) take a `sections=` argument, and the two callers
+(`production.complete_checklist`, `app.generate_pdfs`) pass `load_ccp_master()`.
+`pdf_engine.CHECKLIST_SECTIONS` — a hardcoded second copy that had drifted to 8 sections
+against the master's 5, so every completed PDF printed three sections the tablet cannot
+tick and mislabelled section 5 — was DELETED. **Never reintroduce a local copy of the
+checklist in `pdf_engine`.** Consequence (deliberate): editing the CCP master changes the
+signed PDF, so new sections (e.g. a closing checklist) need no deploy. The `"---"` callout
+row is gone — the master has no way to express it.
+Confirmations are stored per SECTION, not per item: the tablet writes
+`checklist["checks"]["section-<num>"] = bool`. `get_week_summary` reads exactly that (it
+used to read a `sections` key nothing writes, so **CCP flags could never fire** and the
+HOO's "all clear" was only checking sign-offs and notes).
+
 **FIFO deduction:** `_run_scheduled_deductions()` runs at startup — auto-deducts Ripe sale records from FG inventory when `deduction_date <= today`.
 
 **Sales channels:** Sale records optionally have a `channel` field (`'shopify'`, `'clover'`, or absent for legacy/manual). Channel-imported sales also carry `week_id`, `source_order_ids` (list of upstream Shopify/Clover order IDs for traceability), and a deterministic `order_id` of the form `ORD-{CHANNEL}-{week_id}` so multi-SKU imports group as one transaction in Soma's UI (matching the existing `add_sale_order` order_id grouping).
