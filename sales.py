@@ -23,7 +23,7 @@ only three app.py names are referenced.
 module's directory, which is the same repo root as app.py — so the logo path is
 unchanged.
 
-Defines its own login_required (verbatim copy) so it has no import-time
+Defines its own manager_required (verbatim copy) so it has no import-time
 dependency on app.py.
 """
 import os
@@ -47,15 +47,21 @@ import app
 sales_bp = Blueprint("sales", __name__)
 
 
-def login_required(f):
-    """Local copy of app.py's decorator (verbatim) — keeps the blueprint
-    free of an import-time dependency on app.py. Behaviour is identical."""
+def manager_required(f):
+    """Local copy of app.py's manager_required (verbatim) — every route in this
+    blueprint is a management task on the HOO's desktop, not the production
+    tablet (2026-08-18 two-role split). Sessions from before roles existed count
+    as manager (see app.current_role)."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get("authenticated"):
             if request.is_json or request.path.startswith("/api/"):
                 return jsonify({"error": "Not authenticated"}), 401
             return redirect(url_for("login_page"))
+        if (session.get("role") or "manager") != "manager":
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Manager access required"}), 403
+            return redirect("/")
         return f(*args, **kwargs)
     return decorated
 
@@ -190,7 +196,7 @@ def _restore_sale_lots(fg, sale):
 
 
 @sales_bp.route("/sales-receiving")
-@login_required
+@manager_required
 def sales_receiving_page():
     """Render the Sales & Receiving Record page (sales, receiving, search & trace).
 
@@ -201,7 +207,7 @@ def sales_receiving_page():
 
 
 @sales_bp.route("/api/organic/sales", methods=["GET"])
-@login_required
+@manager_required
 def get_organic_sales():
     """Return sales records. Optional query param ?certification=X filters
     to that tier. Sale records carry the certification of the SKU sold,
@@ -215,7 +221,7 @@ def get_organic_sales():
 
 
 @sales_bp.route("/api/organic/sales", methods=["POST"])
-@login_required
+@manager_required
 def add_organic_sale():
     """Record a sale. Two body shapes accepted:
 
@@ -326,7 +332,7 @@ def add_organic_sale():
 
 
 @sales_bp.route("/api/organic/sales/order", methods=["POST"])
-@login_required
+@manager_required
 def add_sale_order():
     """Record a complete sale order — multiple SKUs in one transaction.
 
@@ -466,7 +472,7 @@ def add_sale_order():
 
 
 @sales_bp.route("/api/organic/sales/<sale_id>", methods=["PATCH"])
-@login_required
+@manager_required
 def edit_organic_sale(sale_id):
     """Edit a completed sale record. Supports updating:
       - sale_date
@@ -537,7 +543,7 @@ def edit_organic_sale(sale_id):
 
 
 @sales_bp.route("/api/organic/sales/<sale_id>", methods=["DELETE"])
-@login_required
+@manager_required
 def delete_organic_sale(sale_id):
     """Restore quantity back to the FG entries the sale drew from.
     Handles both new (lots[] array) and legacy (single fg_id) sale shapes."""
@@ -556,7 +562,7 @@ def delete_organic_sale(sale_id):
 
 
 @sales_bp.route("/api/organic/sales/<sale_id>/packing-slip", methods=["GET"])
-@login_required
+@manager_required
 def get_packing_slip(sale_id):
     """GET .../packing-slip - render a packing-slip PDF for a sale/order."""
     sales = _load_json(app.ORGANIC_SALES_PATH, [])
@@ -740,7 +746,7 @@ def get_packing_slip(sale_id):
 
 
 @sales_bp.route("/api/organic/sales/<sale_id>/qbo-csv", methods=["GET"])
-@login_required
+@manager_required
 def get_qbo_csv(sale_id):
     """GET .../qbo-csv - export a sale as a QuickBooks-importable CSV."""
     sales = _load_json(app.ORGANIC_SALES_PATH, [])

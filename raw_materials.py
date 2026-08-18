@@ -22,7 +22,7 @@ consumption / _eligible_lots_for_date. The only audit-protective hook here is
 delete_raw_material's 409 guard, which uses _runs_using_raw_material (already in
 helpers.py). The consumption-chain and reconcile/trace tools are untouched.
 
-Defines its own login_required (verbatim copy) so it has no import-time
+Defines its own manager_required (verbatim copy) so it has no import-time
 dependency on app.py.
 """
 import os
@@ -50,21 +50,27 @@ import app
 raw_materials_bp = Blueprint("raw_materials", __name__)
 
 
-def login_required(f):
-    """Local copy of app.py's decorator (verbatim) — keeps the blueprint
-    free of an import-time dependency on app.py. Behaviour is identical."""
+def manager_required(f):
+    """Local copy of app.py's manager_required (verbatim) — every route in this
+    blueprint is a management task on the HOO's desktop, not the production
+    tablet (2026-08-18 two-role split). Sessions from before roles existed count
+    as manager (see app.current_role)."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get("authenticated"):
             if request.is_json or request.path.startswith("/api/"):
                 return jsonify({"error": "Not authenticated"}), 401
             return redirect(url_for("login_page"))
+        if (session.get("role") or "manager") != "manager":
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Manager access required"}), 403
+            return redirect("/")
         return f(*args, **kwargs)
     return decorated
 
 
 @raw_materials_bp.route("/api/organic/ingredients", methods=["GET"])
-@login_required
+@manager_required
 def organic_ingredients():
     """Return unique (name, unit) pairs pulled from organic-certified recipes.
 
@@ -133,14 +139,14 @@ def organic_ingredients():
 
 
 @raw_materials_bp.route("/api/organic/raw-materials/sections", methods=["GET"])
-@login_required
+@manager_required
 def get_rm_sections():
     """Return the section list + per-ingredient assignments."""
     return jsonify(_load_rm_sections())
 
 
 @raw_materials_bp.route("/api/organic/raw-materials/sections", methods=["PUT"])
-@login_required
+@manager_required
 def update_rm_sections():
     """Replace the entire section list. Body: {sections: [{id, name, order}]}.
 
@@ -182,7 +188,7 @@ def update_rm_sections():
 
 
 @raw_materials_bp.route("/api/organic/raw-materials/assignments", methods=["PUT"])
-@login_required
+@manager_required
 def update_rm_assignments():
     """Update ingredient-to-section assignments. Body: {assignments: {...}}.
 
@@ -215,7 +221,7 @@ def update_rm_assignments():
 
 
 @raw_materials_bp.route("/api/organic/raw-materials/grouped", methods=["GET"])
-@login_required
+@manager_required
 def get_raw_materials_grouped():
     """Catalog-aware raw materials view.
 
@@ -345,7 +351,7 @@ def get_raw_materials_grouped():
 
 
 @raw_materials_bp.route("/api/organic/raw-materials/by-ingredient/<path:item>/<unit>", methods=["GET"])
-@login_required
+@manager_required
 def get_raw_material_lots(item, unit):
     """Return all LOT entries for a specific ingredient name + unit.
     Sorted oldest-first (FIFO order). Used when expanding a row in the
@@ -360,7 +366,7 @@ def get_raw_material_lots(item, unit):
 
 
 @raw_materials_bp.route("/api/organic/ingredients", methods=["POST"])
-@login_required
+@manager_required
 def add_organic_ingredient():
     """Add a custom ingredient. Body: {name, unit}."""
     data = request.json or {}
@@ -381,14 +387,14 @@ def add_organic_ingredient():
 
 
 @raw_materials_bp.route("/api/organic/raw-materials", methods=["GET"])
-@login_required
+@manager_required
 def get_raw_materials():
     """GET /api/organic/raw-materials - return all raw-material lots."""
     return jsonify(_load_json(app.ORGANIC_RAW_PATH, []))
 
 
 @raw_materials_bp.route("/api/organic/raw-materials", methods=["POST"])
-@login_required
+@manager_required
 def add_raw_material():
     """Add a raw material lot. JSON body:
       {item, unit, quantity, supplier, date_received, supplier_lot, baseline (optional)}
@@ -443,7 +449,7 @@ def add_raw_material():
 
 
 @raw_materials_bp.route("/api/organic/raw-materials/bulk", methods=["POST"])
-@login_required
+@manager_required
 def add_raw_materials_bulk():
     """Bulk-create raw material LOT entries in a single request. JSON body:
       {
@@ -592,7 +598,7 @@ def add_raw_materials_bulk():
 
 
 @raw_materials_bp.route("/api/organic/raw-materials/adjust", methods=["POST"])
-@login_required
+@manager_required
 def adjust_raw_materials():
     """Apply manual inventory corrections (spillage/spoilage/theft/audit count)
     to raw materials. JSON body:
@@ -710,7 +716,7 @@ def adjust_raw_materials():
 
 
 @raw_materials_bp.route("/api/organic/raw-materials/<entry_id>", methods=["PUT"])
-@login_required
+@manager_required
 def update_raw_material(entry_id):
     """Manually adjust the remaining quantity of a raw material entry.
     Body: {remaining}. Use for stock counts / corrections.
@@ -735,7 +741,7 @@ def update_raw_material(entry_id):
 
 
 @raw_materials_bp.route("/api/organic/raw-materials/<entry_id>/usage", methods=["GET"])
-@login_required
+@manager_required
 def get_raw_material_usage(entry_id):
     """Return list of completed runs that deducted from this entry. Frontend
     uses this to warn the user before deletion."""
@@ -743,7 +749,7 @@ def get_raw_material_usage(entry_id):
 
 
 @raw_materials_bp.route("/api/organic/raw-materials/<entry_id>", methods=["DELETE"])
-@login_required
+@manager_required
 def delete_raw_material(entry_id):
     """Delete a raw-material lot — but never one that a completed production run
     consumed. A completed batch points back to its lots by id; hard-deleting a
@@ -765,7 +771,7 @@ def delete_raw_material(entry_id):
 
 
 @raw_materials_bp.route("/api/organic/invoices", methods=["POST"])
-@login_required
+@manager_required
 def upload_invoice():
     """Create a new invoice record. Multipart form:
       supplier (str), invoice_date (YYYY-MM-DD), lots[] (repeated or comma-sep),
@@ -808,7 +814,7 @@ def upload_invoice():
 
 
 @raw_materials_bp.route("/api/organic/invoices", methods=["GET"])
-@login_required
+@manager_required
 def list_invoices():
     """Return all invoices, newest invoice_date first (ties broken by uploaded_at)."""
     lot_filter = (request.args.get("lot") or "").strip()
@@ -823,7 +829,7 @@ def list_invoices():
 
 
 @raw_materials_bp.route("/api/organic/invoices/<inv_id>/file", methods=["GET"])
-@login_required
+@manager_required
 def serve_invoice(inv_id):
     """Serve the invoice file inline (not forced download)."""
     invoices = _load_json(app.INVOICES_INDEX_PATH, [])
@@ -842,7 +848,7 @@ def serve_invoice(inv_id):
 
 
 @raw_materials_bp.route("/api/organic/invoices/<inv_id>", methods=["DELETE"])
-@login_required
+@manager_required
 def delete_invoice(inv_id):
     """DELETE /api/organic/invoices/<inv_id> - remove an invoice record and its stored file."""
     invoices = _load_json(app.INVOICES_INDEX_PATH, [])
@@ -856,7 +862,7 @@ def delete_invoice(inv_id):
 
 
 @raw_materials_bp.route("/api/organic/raw-materials/receipt-photo/<entry_id>", methods=["POST"])
-@login_required
+@manager_required
 def upload_rm_receipt_photo(entry_id):
     """POST a receipt photo for a raw-material delivery (anchored to the entry id)."""
     file = request.files.get("photo")
@@ -878,7 +884,7 @@ def upload_rm_receipt_photo(entry_id):
 
 
 @raw_materials_bp.route("/api/organic/raw-materials/receipt-photos", methods=["GET"])
-@login_required
+@manager_required
 def list_rm_receipt_photos():
     """Return the set of raw-material entry ids that have a stored receipt photo.
     The Receiving list uses this to show an invoice link on the right
@@ -895,7 +901,7 @@ def list_rm_receipt_photos():
 
 
 @raw_materials_bp.route("/api/organic/raw-materials/receipt-photo/<entry_id>", methods=["GET"])
-@login_required
+@manager_required
 def get_rm_receipt_photo(entry_id):
     """GET the stored receipt photo for a raw-material entry."""
     for fn in os.listdir(app.RM_RECEIPT_PHOTOS_DIR):
@@ -905,7 +911,7 @@ def get_rm_receipt_photo(entry_id):
 
 
 @raw_materials_bp.route("/api/organic/raw-materials/receipt-photo/<entry_id>", methods=["DELETE"])
-@login_required
+@manager_required
 def delete_rm_receipt_photo(entry_id):
     """DELETE the stored receipt photo for a raw-material entry."""
     for fn in os.listdir(app.RM_RECEIPT_PHOTOS_DIR):

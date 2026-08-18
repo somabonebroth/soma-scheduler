@@ -20,7 +20,7 @@ These routes are read-only reporting EXCEPT reconcile-raw/run POST=apply, which
 delegates entirely to app._rebuild_raw_material_consumption — the write logic is
 unchanged and stays in app.py.
 
-Defines its own login_required (verbatim copy) so it has no import-time
+Defines its own manager_required (verbatim copy) so it has no import-time
 dependency on app.py.
 """
 from datetime import datetime
@@ -35,28 +35,34 @@ import app
 audit_tools_bp = Blueprint("audit_tools", __name__)
 
 
-def login_required(f):
-    """Local copy of app.py's decorator (verbatim) — keeps the blueprint
-    free of an import-time dependency on app.py. Behaviour is identical."""
+def manager_required(f):
+    """Local copy of app.py's manager_required (verbatim) — every route in this
+    blueprint is a management task on the HOO's desktop, not the production
+    tablet (2026-08-18 two-role split). Sessions from before roles existed count
+    as manager (see app.current_role)."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get("authenticated"):
             if request.is_json or request.path.startswith("/api/"):
                 return jsonify({"error": "Not authenticated"}), 401
             return redirect(url_for("login_page"))
+        if (session.get("role") or "manager") != "manager":
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Manager access required"}), 403
+            return redirect("/")
         return f(*args, **kwargs)
     return decorated
 
 
 @audit_tools_bp.route("/admin/reconcile-raw")
-@login_required
+@manager_required
 def reconcile_raw_page():
     """Render the raw-material reconciliation tool page."""
     return render_template("reconcile_raw.html")
 
 
 @audit_tools_bp.route("/admin/reconcile-raw/run", methods=["GET", "POST"])
-@login_required
+@manager_required
 def reconcile_raw_run():
     """GET = preview (no writes). POST = apply (writes recomputed materials + runs).
     Preview returns a per-lot before/after diff, the resulting shortfalls, and any
@@ -107,7 +113,7 @@ def reconcile_raw_run():
 
 
 @audit_tools_bp.route("/api/organic/trace", methods=["GET"])
-@login_required
+@manager_required
 def organic_trace():
     """GET /api/organic/trace - one-step traceability by raw lot or FG lot."""
     search_type = request.args.get("type", "")  # "raw_lot" or "fg_lot"
@@ -216,7 +222,7 @@ def organic_trace():
 
 
 @audit_tools_bp.route("/api/organic/stock-exceptions", methods=["GET"])
-@login_required
+@manager_required
 def organic_stock_exceptions():
     """Completed batches recorded as produced with LESS raw material on file than
     the recipe required — the INSUFFICIENT_STOCK markers written during deduction.
@@ -249,7 +255,7 @@ def organic_stock_exceptions():
 
 
 @audit_tools_bp.route("/api/organic/mass-balance", methods=["GET"])
-@login_required
+@manager_required
 def organic_mass_balance():
     """GET /api/organic/mass-balance - opening+received-consumed vs current (raw + FG)."""
     to = (request.args.get("to") or "").strip() or datetime.now().strftime("%Y-%m-%d")
@@ -259,7 +265,7 @@ def organic_mass_balance():
 
 
 @audit_tools_bp.route("/mass-balance")
-@login_required
+@manager_required
 def mass_balance_page():
     """Render the mass-balance report page."""
     return render_template("mass_balance.html")

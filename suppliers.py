@@ -4,7 +4,7 @@ First blueprint of the app.py split (CLAUDE.md "Pending architectural work").
 Pure code-move: identical routes, URLs, and auth behaviour.
 
 Follows the ripe_orders.py convention — a self-contained blueprint that defines
-its own login_required (so it never imports app.py at module load, avoiding a
+its own manager_required (so it never imports app.py at module load, avoiding a
 circular import) and pulls its IO + path foundation from helpers.py.
 """
 import os
@@ -20,15 +20,21 @@ suppliers_bp = Blueprint("suppliers", __name__)
 SUPPLIERS_PATH = os.path.join(INVENTORY_DIR, "suppliers.json")
 
 
-def login_required(f):
-    """Local copy of app.py's decorator (verbatim) — keeps the blueprint
-    free of an import-time dependency on app.py. Behaviour is identical."""
+def manager_required(f):
+    """Local copy of app.py's manager_required (verbatim) — every route in this
+    blueprint is a management task on the HOO's desktop, not the production
+    tablet (2026-08-18 two-role split). Sessions from before roles existed count
+    as manager (see app.current_role)."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get("authenticated"):
             if request.is_json or request.path.startswith("/api/"):
                 return jsonify({"error": "Not authenticated"}), 401
             return redirect(url_for("login_page"))
+        if (session.get("role") or "manager") != "manager":
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Manager access required"}), 403
+            return redirect("/")
         return f(*args, **kwargs)
     return decorated
 
@@ -44,14 +50,14 @@ def _save_suppliers(data):
 
 
 @suppliers_bp.route("/api/suppliers", methods=["GET"])
-@login_required
+@manager_required
 def get_suppliers():
     """GET /api/suppliers - return all suppliers."""
     return jsonify(_load_suppliers())
 
 
 @suppliers_bp.route("/api/suppliers", methods=["POST"])
-@login_required
+@manager_required
 def create_supplier():
     """POST /api/suppliers - create a supplier from the JSON body."""
     data = request.get_json(force=True) or {}
@@ -75,7 +81,7 @@ def create_supplier():
 
 
 @suppliers_bp.route("/api/suppliers/<sid>", methods=["PUT"])
-@login_required
+@manager_required
 def update_supplier(sid):
     """PUT /api/suppliers/<id> - update an existing supplier."""
     data = request.get_json(force=True) or {}
@@ -100,7 +106,7 @@ def update_supplier(sid):
 
 
 @suppliers_bp.route("/api/suppliers/<sid>", methods=["DELETE"])
-@login_required
+@manager_required
 def delete_supplier(sid):
     """DELETE /api/suppliers/<id> - remove a supplier."""
     suppliers = _load_suppliers()
@@ -110,7 +116,7 @@ def delete_supplier(sid):
 
 
 @suppliers_bp.route("/api/suppliers/<sid>/ingredients", methods=["PUT"])
-@login_required
+@manager_required
 def update_supplier_ingredients(sid):
     """PUT /api/suppliers/<id>/ingredients - replace a supplier's ingredient list."""
     data = request.get_json(force=True) or {}

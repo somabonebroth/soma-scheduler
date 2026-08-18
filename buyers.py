@@ -12,7 +12,7 @@ for the blueprint<->app circular case: the bare `import app` binds the
 partially-initialised module at load and resolves attributes only when a
 request actually runs, by which point app.py has finished importing).
 
-Defines its own login_required (verbatim copy) so it has no import-time
+Defines its own manager_required (verbatim copy) so it has no import-time
 dependency on app.py.
 """
 from functools import wraps
@@ -25,28 +25,34 @@ import app
 buyers_bp = Blueprint("buyers", __name__)
 
 
-def login_required(f):
-    """Local copy of app.py's decorator (verbatim) — keeps the blueprint
-    free of an import-time dependency on app.py. Behaviour is identical."""
+def manager_required(f):
+    """Local copy of app.py's manager_required (verbatim) — every route in this
+    blueprint is a management task on the HOO's desktop, not the production
+    tablet (2026-08-18 two-role split). Sessions from before roles existed count
+    as manager (see app.current_role)."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get("authenticated"):
             if request.is_json or request.path.startswith("/api/"):
                 return jsonify({"error": "Not authenticated"}), 401
             return redirect(url_for("login_page"))
+        if (session.get("role") or "manager") != "manager":
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Manager access required"}), 403
+            return redirect("/")
         return f(*args, **kwargs)
     return decorated
 
 
 @buyers_bp.route("/api/buyers", methods=["GET"])
-@login_required
+@manager_required
 def get_buyers():
     """GET /api/buyers - return all buyer accounts."""
     return jsonify(app._load_buyers())
 
 
 @buyers_bp.route("/api/buyers/sku-catalog", methods=["GET"])
-@login_required
+@manager_required
 def get_buyer_sku_catalog():
     """GET /api/buyers/sku-catalog - master SKU catalogue grouped by brand."""
     catalog = app._all_sku_catalog()
@@ -60,7 +66,7 @@ def get_buyer_sku_catalog():
 
 
 @buyers_bp.route("/api/buyers", methods=["POST"])
-@login_required
+@manager_required
 def create_buyer():
     """POST /api/buyers - create a buyer (optionally with assigned SKUs/pricing)."""
     data = request.get_json(force=True) or {}
@@ -112,7 +118,7 @@ def create_buyer():
 
 
 @buyers_bp.route("/api/buyers/<bid>", methods=["PUT"])
-@login_required
+@manager_required
 def update_buyer(bid):
     """PUT /api/buyers/<bid> - update a buyer's profile, SKUs, and locations."""
     data = request.get_json(force=True) or {}
@@ -171,7 +177,7 @@ def update_buyer(bid):
 
 
 @buyers_bp.route("/api/buyers/<bid>/skus/<path:sku_key>/pricing", methods=["PATCH"])
-@login_required
+@manager_required
 def update_buyer_sku_pricing(bid, sku_key):
     """Update pricing for a single SKU on a buyer.
     Body: { price, cogs, margin_pct, buyer_sku, active }
@@ -218,7 +224,7 @@ def update_buyer_sku_pricing(bid, sku_key):
 
 
 @buyers_bp.route("/api/buyers/<bid>", methods=["DELETE"])
-@login_required
+@manager_required
 def delete_buyer(bid):
     """DELETE /api/buyers/<bid> - remove a buyer."""
     app._save_buyers([b for b in app._load_buyers() if b["id"] != bid])

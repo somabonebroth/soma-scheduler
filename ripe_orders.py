@@ -22,7 +22,7 @@ from zoneinfo import ZoneInfo
 from functools import wraps
 import urllib.request, urllib.error
 
-from flask import Blueprint, render_template, request, jsonify, session, Response
+from flask import Blueprint, render_template, request, jsonify, session, redirect, Response
 
 logger = logging.getLogger(__name__)
 ripe_orders_bp = Blueprint("ripe_orders", __name__)
@@ -322,12 +322,19 @@ def create_ripe_sale_records(order, delivery_date, payment_key):
     return True, None
 
 
-def _soma_login_required(f):
-    """Decorator: require an authenticated Soma session (401 JSON otherwise)."""
+def _soma_manager_required(f):
+    """Decorator: require an authenticated Soma session with the manager role.
+    Buyer-portal order handling is the HOO's desk, not the production tablet
+    (2026-08-18 two-role split). Sessions from before roles existed count as
+    manager (see app.current_role)."""
     @wraps(f)
     def wrapper(*args, **kwargs):
         if not session.get("authenticated"):
             return jsonify({"error": "Not authenticated"}), 401
+        if (session.get("role") or "manager") != "manager":
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Manager access required"}), 403
+            return redirect("/")
         return f(*args, **kwargs)
     return wrapper
 
@@ -371,7 +378,7 @@ def _group_orders_by_month(orders):
 
 
 @ripe_orders_bp.route("/ripe-orders")
-@_soma_login_required
+@_soma_manager_required
 def ripe_orders_page():
     """Render the Ripe orders page: awaiting-payment orders plus settled orders grouped by month."""
     status, data = _ripe_request("GET", "/api/internal/orders")
@@ -404,7 +411,7 @@ def ripe_orders_page():
 
 
 @ripe_orders_bp.route("/api/ripe-orders/service-fees/<fee_id>", methods=["PATCH"])
-@_soma_login_required
+@_soma_manager_required
 def ripe_service_fee_action(fee_id):
     """Confirm an e-transfer against Ripe's monthly service fee.
 
@@ -428,7 +435,7 @@ def ripe_service_fee_action(fee_id):
 
 
 @ripe_orders_bp.route("/api/ripe-orders/pending-count")
-@_soma_login_required
+@_soma_manager_required
 def ripe_pending_count():
     """Return counts for the dashboard badges: new (pending) and in-progress
     (approved but not yet fulfilled) Ripe orders. Both 0 when unconfigured.
@@ -448,7 +455,7 @@ def ripe_pending_count():
 
 
 @ripe_orders_bp.route("/api/ripe-orders/<order_id>", methods=["PATCH"])
-@_soma_login_required
+@_soma_manager_required
 def ripe_order_action(order_id):
     """
     approve  — requires delivery_date in body. Creates sale records, then
@@ -651,7 +658,7 @@ def _group_retail_by_batch(orders):
 
 
 @ripe_orders_bp.route("/ripe-retail")
-@_soma_login_required
+@_soma_manager_required
 def ripe_retail_page():
     """Pack queue for retail direct-ship parcels, grouped by batch."""
     orders, status = _fetch_ripe_orders()
@@ -670,7 +677,7 @@ def ripe_retail_page():
 
 
 @ripe_orders_bp.route("/api/ripe-retail/pack-count")
-@_soma_login_required
+@_soma_manager_required
 def ripe_retail_pack_count():
     """Dashboard badge: paid parcels waiting to be packed."""
     if not _configured():
@@ -682,7 +689,7 @@ def ripe_retail_pack_count():
 
 
 @ripe_orders_bp.route("/ripe-retail/<order_id>/packing-slip")
-@_soma_login_required
+@_soma_manager_required
 def ripe_retail_packing_slip(order_id):
     """Customer-facing packing slip. Goes in the box, so it carries NO pricing."""
     orders, _ = _fetch_ripe_orders()
@@ -695,7 +702,7 @@ def ripe_retail_packing_slip(order_id):
 
 
 @ripe_orders_bp.route("/ripe-retail/<order_id>/label")
-@_soma_login_required
+@_soma_manager_required
 def ripe_retail_label(order_id):
     """Proxy the shipping label PDF from the Ripe portal.
 
@@ -751,7 +758,7 @@ def _approve_one_retail_order(order):
 
 
 @ripe_orders_bp.route("/api/ripe-retail/<order_id>", methods=["PATCH"])
-@_soma_login_required
+@_soma_manager_required
 def ripe_retail_action(order_id):
     """approve — record the sale, deduct stock, mark fulfilled.
     cancel  — no money moves; Soma issues a credit by hand in Company Settings.
@@ -790,7 +797,7 @@ def ripe_retail_action(order_id):
 
 
 @ripe_orders_bp.route("/api/ripe-retail/batch/<session_id>/approve", methods=["POST"])
-@_soma_login_required
+@_soma_manager_required
 def ripe_retail_batch_approve(session_id):
     """Approve every parcel in one batch, per-order underneath.
 
@@ -819,7 +826,7 @@ def ripe_retail_batch_approve(session_id):
 
 
 @ripe_orders_bp.route("/ripe-products")
-@_soma_login_required
+@_soma_manager_required
 def ripe_products_page():
     """Products & pricing are now managed via the Buyer edit page.
     Redirect to the Buyers & Suppliers page with a hint.
@@ -830,7 +837,7 @@ def ripe_products_page():
 
 
 @ripe_orders_bp.route("/ripe-analytics")
-@_soma_login_required
+@_soma_manager_required
 def ripe_analytics_page():
     """Sales analytics — calls Ripe internal API."""
     status, data = _ripe_request("GET", "/api/internal/analytics")
@@ -840,7 +847,7 @@ def ripe_analytics_page():
 
 
 @ripe_orders_bp.route("/ripe-orders/<order_id>/packing-slip")
-@_soma_login_required
+@_soma_manager_required
 def ripe_packing_slip(order_id):
     """Fetch order detail from Ripe and render packing slip in Soma."""
     status, data = _ripe_request("GET", f"/api/internal/order-detail/{order_id}")
@@ -856,7 +863,7 @@ def ripe_packing_slip(order_id):
 
 
 @ripe_orders_bp.route("/ripe-orders/export.csv")
-@_soma_login_required
+@_soma_manager_required
 def ripe_export_csv():
     """Export all Ripe orders as CSV."""
     import io, csv
@@ -879,7 +886,7 @@ def ripe_export_csv():
 
 
 @ripe_orders_bp.route("/ripe-sku-audit")
-@_soma_login_required
+@_soma_manager_required
 def ripe_sku_audit_page():
     """Run the cross-reference audit and render results."""
     from flask import current_app

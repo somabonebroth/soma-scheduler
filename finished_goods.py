@@ -18,7 +18,7 @@ helpers, same as suppliers.py.
 This blueprint touches NO raw-material consumption-chain code (no deduction,
 reconcile, or trace helpers) — those audit-critical paths are untouched.
 
-Defines its own login_required (verbatim copy) so it has no import-time
+Defines its own manager_required (verbatim copy) so it has no import-time
 dependency on app.py.
 """
 from datetime import datetime
@@ -40,28 +40,34 @@ import app
 finished_goods_bp = Blueprint("finished_goods", __name__)
 
 
-def login_required(f):
-    """Local copy of app.py's decorator (verbatim) — keeps the blueprint
-    free of an import-time dependency on app.py. Behaviour is identical."""
+def manager_required(f):
+    """Local copy of app.py's manager_required (verbatim) — every route in this
+    blueprint is a management task on the HOO's desktop, not the production
+    tablet (2026-08-18 two-role split). Sessions from before roles existed count
+    as manager (see app.current_role)."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get("authenticated"):
             if request.is_json or request.path.startswith("/api/"):
                 return jsonify({"error": "Not authenticated"}), 401
             return redirect(url_for("login_page"))
+        if (session.get("role") or "manager") != "manager":
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Manager access required"}), 403
+            return redirect("/")
         return f(*args, **kwargs)
     return decorated
 
 
 @finished_goods_bp.route("/api/organic/finished-goods", methods=["GET"])
-@login_required
+@manager_required
 def get_finished_goods():
     """Returns raw per-kettle FG entries. Used by traceability/legacy callers."""
     return jsonify(_load_json(app.ORGANIC_FG_PATH, []))
 
 
 @finished_goods_bp.route("/api/organic/finished-goods/<fg_id>", methods=["PUT"])
-@login_required
+@manager_required
 def update_finished_good(fg_id):
     """Manually adjust the remaining quantity on a finished goods entry.
     Body: {remaining}. Use for inventory corrections (loss, breakage, recount).
@@ -86,7 +92,7 @@ def update_finished_good(fg_id):
 
 
 @finished_goods_bp.route("/api/organic/finished-goods/<fg_id>", methods=["DELETE"])
-@login_required
+@manager_required
 def delete_finished_good(fg_id):
     """Delete a finished goods entry. Sales already made against this entry
     keep their records (they stand as historical sales) but no inventory
@@ -100,7 +106,7 @@ def delete_finished_good(fg_id):
 
 
 @finished_goods_bp.route("/api/organic/finished-goods/lot-adjust", methods=["POST"])
-@login_required
+@manager_required
 def adjust_lot_remaining():
     """Set the total remaining quantity for a LOT within a SKU. Body:
     {sku_key, lot, new_remaining}. The delta from current is distributed across
@@ -165,7 +171,7 @@ def adjust_lot_remaining():
 
 
 @finished_goods_bp.route("/api/organic/finished-goods/baseline", methods=["POST"])
-@login_required
+@manager_required
 def add_baseline_finished_good():
     """Add a baseline (day-zero migration) FG entry. JSON body:
       {recipe, quantity, lot (optional, defaults to BL-DDMMYY)}
@@ -214,7 +220,7 @@ def add_baseline_finished_good():
 
 
 @finished_goods_bp.route("/api/organic/finished-goods/baseline-bulk", methods=["POST"])
-@login_required
+@manager_required
 def add_baseline_finished_goods_bulk():
     """Bulk-create baseline FG entries in a single request. JSON body:
       {entries: [{recipe, quantity, notes (optional)}, ...]}
@@ -301,7 +307,7 @@ def add_baseline_finished_goods_bulk():
 
 
 @finished_goods_bp.route("/api/organic/finished-goods/manual-add", methods=["POST"])
-@login_required
+@manager_required
 def manual_add_finished_good():
     """Add inventory to a SKU outside of production. Body:
       {recipe, quantity, lot (optional), reason, notes (optional)}
@@ -367,7 +373,7 @@ def manual_add_finished_good():
 
 
 @finished_goods_bp.route("/api/organic/finished-goods/manual-subtract", methods=["POST"])
-@login_required
+@manager_required
 def manual_subtract_finished_good():
     """Drain inventory from a SKU via FIFO across its LOTs. Body:
       {recipe, quantity, reason, notes (optional)}
@@ -460,7 +466,7 @@ def manual_subtract_finished_good():
 
 
 @finished_goods_bp.route("/api/organic/finished-goods/grouped", methods=["GET"])
-@login_required
+@manager_required
 def get_finished_goods_grouped():
     """GET /api/organic/finished-goods/grouped - FG grouped by SKU, joined to the catalog."""
     fg = _load_json(app.ORGANIC_FG_PATH, [])
@@ -479,7 +485,7 @@ def get_finished_goods_grouped():
 
 
 @finished_goods_bp.route("/api/organic/finished-goods/sku/<path:sku_key>", methods=["GET"])
-@login_required
+@manager_required
 def get_finished_goods_sku_detail(sku_key):
     """Return LOT-level FIFO detail for a single SKU.
     Each LOT row aggregates same-LOT entries from multiple kettles."""
@@ -509,21 +515,21 @@ def get_finished_goods_sku_detail(sku_key):
 # ── Inventory: sku-meta (PAR levels) + inventory page shells ─────────────────
 
 @finished_goods_bp.route("/organic-certification")
-@login_required
+@manager_required
 def organic_certification_page():
     """Hub linking the organic-certification tools (reconcile, audits, docs)."""
     return render_template("organic_certification.html")
 
 
 @finished_goods_bp.route("/organic")
-@login_required
+@manager_required
 def organic_page():
     """Render the Manage Inventory page (Raw Materials / Runs / Finished Goods / Records tabs)."""
     return render_template("organic.html")
 
 
 @finished_goods_bp.route("/api/sku-meta/<path:sku_key>", methods=["PATCH"])
-@login_required
+@manager_required
 def update_sku_meta(sku_key):
     """Update PAR level for a SKU.
     Body: { par: int|null }
@@ -550,7 +556,7 @@ def update_sku_meta(sku_key):
 
 
 @finished_goods_bp.route("/api/sku-meta", methods=["GET"])
-@login_required
+@manager_required
 def get_all_sku_meta():
     """Return all SKU meta — used by create_schedule page to check PAR warnings."""
     fg = _load_json(app.ORGANIC_FG_PATH, [])

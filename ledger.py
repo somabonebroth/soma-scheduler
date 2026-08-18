@@ -17,7 +17,7 @@ event ledger's projection function and the scope-finder for the planned zero-day
 reset.
 
 PURELY READ-ONLY: it loads JSON and never writes. Follows the established blueprint
-pattern (verbatim local login_required; foundation IO + sku helpers from helpers;
+pattern (verbatim local manager_required; foundation IO + sku helpers from helpers;
 app.-qualified shared path constants via `import app`).
 """
 import os
@@ -35,15 +35,21 @@ import app
 ledger_bp = Blueprint("ledger", __name__)
 
 
-def login_required(f):
-    """Local copy of app.py's decorator (verbatim) — keeps the blueprint free of
-    an import-time dependency on app.py. Behaviour is identical."""
+def manager_required(f):
+    """Local copy of app.py's manager_required (verbatim) — every route in this
+    blueprint is a management task on the HOO's desktop, not the production
+    tablet (2026-08-18 two-role split). Sessions from before roles existed count
+    as manager (see app.current_role)."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get("authenticated"):
             if request.is_json or request.path.startswith("/api/"):
                 return jsonify({"error": "Not authenticated"}), 401
             return redirect(url_for("login_page"))
+        if (session.get("role") or "manager") != "manager":
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Manager access required"}), 403
+            return redirect("/")
         return f(*args, **kwargs)
     return decorated
 
@@ -739,14 +745,14 @@ def restore_reset_archive(stamp):
 
 
 @ledger_bp.route("/admin/fg-reset/archives", methods=["GET"])
-@login_required
+@manager_required
 def fg_reset_archives_api():
     """List restorable pre-reset snapshots."""
     return jsonify({"archives": list_reset_archives()})
 
 
 @ledger_bp.route("/admin/fg-reset/restore", methods=["POST"])
-@login_required
+@manager_required
 def fg_reset_restore_api():
     """Restore finished goods from an archive snapshot (undo a reset). Gated."""
     data = request.json or {}
@@ -762,21 +768,21 @@ def fg_reset_restore_api():
 
 
 @ledger_bp.route("/admin/fg-reconcile")
-@login_required
+@manager_required
 def fg_reconcile_page():
     """Render the read-only finished-goods reconciliation / drift-detector page."""
     return render_template("fg_reconcile.html")
 
 
 @ledger_bp.route("/api/organic/fg-reconcile", methods=["GET"])
-@login_required
+@manager_required
 def fg_reconcile_api():
     """Read-only per-fg_id reconciliation of expected vs actual FG stock."""
     return jsonify(compute_fg_reconciliation())
 
 
 @ledger_bp.route("/api/organic/ledger/verify", methods=["GET"])
-@login_required
+@manager_required
 def ledger_verify_api():
     """Read-only self-check that the append-only event projection reproduces the
     reconciliation (and reports projected-vs-actual drift)."""
@@ -784,14 +790,14 @@ def ledger_verify_api():
 
 
 @ledger_bp.route("/admin/fg-reset")
-@login_required
+@manager_required
 def fg_reset_page():
     """Render the zero-day reset tool page (preview-then-apply)."""
     return render_template("fg_reset.html")
 
 
 @ledger_bp.route("/admin/fg-reset/preview", methods=["POST"])
-@login_required
+@manager_required
 def fg_reset_preview_api():
     """Read-only preview of a SKU-level zero-day reset for the submitted counts."""
     data = request.json or {}
@@ -799,7 +805,7 @@ def fg_reset_preview_api():
 
 
 @ledger_bp.route("/admin/fg-reset/apply", methods=["POST"])
-@login_required
+@manager_required
 def fg_reset_apply_api():
     """Apply the zero-day reset. Gated behind an explicit confirmation token."""
     data = request.json or {}

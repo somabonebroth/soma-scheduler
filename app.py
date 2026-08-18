@@ -935,21 +935,21 @@ def dashboard():
 
 
 @app.route("/contacts")
-@login_required
+@manager_required
 def contacts_page():
     """Render the contacts page."""
     return render_template("contacts.html")
 
 
 @app.route("/company-settings")
-@login_required
+@manager_required
 def company_settings_page():
     """Render the company settings page."""
     return render_template("company_settings.html")
 
 
 @app.route("/api/admin/backup", methods=["POST"])
-@login_required
+@manager_required
 def admin_backup():
     """Return a zip of the entire DATA_DIR as a download.
     Requires manager password in JSON body: {"password": "..."}.
@@ -980,14 +980,14 @@ def admin_backup():
 
 
 @app.route("/certifications")
-@login_required
+@manager_required
 def certifications_page():
     """Organic & compliance document storage page."""
     return render_template("certifications.html")
 
 
 @app.route("/api/certifications", methods=["GET"])
-@login_required
+@manager_required
 def list_certifications():
     """GET - list uploaded certification documents."""
     cert_dir = os.path.join(DATA_DIR, "certifications")
@@ -998,7 +998,7 @@ def list_certifications():
 
 
 @app.route("/api/certifications/upload", methods=["POST"])
-@login_required
+@manager_required
 def upload_certification():
     """POST - upload a certification document."""
     import werkzeug.utils
@@ -1029,7 +1029,7 @@ def upload_certification():
 
 
 @app.route("/api/certifications/<file_id>", methods=["DELETE"])
-@login_required
+@manager_required
 def delete_certification(file_id):
     """DELETE - remove a certification document."""
     cert_dir = os.path.join(DATA_DIR, "certifications")
@@ -1048,7 +1048,7 @@ def delete_certification(file_id):
 
 
 @app.route("/api/certifications/<file_id>/download")
-@login_required
+@manager_required
 def download_certification(file_id):
     """GET - download a certification document."""
     from flask import send_file
@@ -1066,7 +1066,7 @@ def download_certification(file_id):
 
 
 @app.route("/analytics")
-@login_required
+@manager_required
 def analytics_page():
     """Combined Production & Sales Analytics page.
     Tabs: Production Tracker + Sales by Buyer.
@@ -1077,7 +1077,7 @@ def analytics_page():
 
 
 @app.route("/analytics/buyer/<path:buyer_name>")
-@login_required
+@manager_required
 def buyer_analytics_page(buyer_name):
     """Dedicated analytics page for a single buyer."""
     buyers = _load_buyers()
@@ -1089,7 +1089,7 @@ def buyer_analytics_page(buyer_name):
 
 
 @app.route("/api/analytics/buyer/<path:buyer_name>")
-@login_required
+@manager_required
 def api_buyer_analytics(buyer_name):
     """Full analytics for one buyer: totals, by-month, by-sku, recent orders."""
     from datetime import datetime as _dt, timedelta as _td
@@ -1299,7 +1299,7 @@ def api_buyer_analytics(buyer_name):
 
 
 @app.route("/api/analytics/backfill-sale-prices", methods=["POST"])
-@login_required
+@manager_required
 def backfill_sale_prices():
     """One-time backfill: add unit_price and line_total to historical sale
     records that were created before pricing was stored on sale records.
@@ -1348,7 +1348,7 @@ def backfill_sale_prices():
 
 
 @app.route("/api/analytics/sales-by-buyer", methods=["GET"])
-@login_required
+@manager_required
 def api_sales_by_buyer():
     """Aggregate sales.json by buyer, date range, and SKU."""
     sales = _load_json(ORGANIC_SALES_PATH, [])
@@ -1428,7 +1428,7 @@ def api_sales_by_buyer():
 
 
 @app.route("/buyers/<bid>/edit")
-@login_required
+@manager_required
 def buyer_edit_page(bid):
     """Render the buyer edit page."""
     buyers = _load_buyers()
@@ -1471,7 +1471,7 @@ def buyer_edit_page(bid):
 
 
 @app.route("/ccp-master")
-@login_required
+@manager_required
 def ccp_master_page():
     """Render the master CCP page."""
     return render_template("master_ccp.html")
@@ -1497,7 +1497,7 @@ def serve_photo(filename):
 
 # ── Generate PDFs ──────────────────────────────────────────────────────
 @app.route("/api/generate", methods=["POST"])
-@login_required
+@manager_required
 def generate_pdfs():
     """POST - generate the weekly schedule + daily package PDFs."""
     data = request.json or {}
@@ -1553,7 +1553,7 @@ def generate_pdfs():
 
 
 @app.route("/api/pdf/<week_id>/<filename>", methods=["GET"])
-@login_required
+@manager_required
 @require_valid_week
 def download_pdf(week_id, filename):
     """GET - download a previously generated PDF."""
@@ -1562,7 +1562,7 @@ def download_pdf(week_id, filename):
 
 
 @app.route("/api/pdfs/<week_id>", methods=["GET"])
-@login_required
+@manager_required
 @require_valid_week
 def list_pdfs(week_id):
     """GET - list generated PDFs for a week."""
@@ -1574,7 +1574,7 @@ def list_pdfs(week_id):
 
 
 @app.route("/api/pdfs/<week_id>/download-all", methods=["GET"])
-@login_required
+@manager_required
 @require_valid_week
 def download_all_pdfs(week_id):
     """GET - download all of a week's PDFs as a zip."""
@@ -1704,7 +1704,7 @@ def get_ccp_master():
 
 
 @app.route("/api/ccp-master", methods=["POST"])
-@login_required
+@manager_required
 def update_ccp_master():
     """POST - update the master CCP document."""
     data = request.json or {}
@@ -2208,7 +2208,7 @@ _cleanup_legacy_invoices()
 
 
 @app.route("/api/organic/contacts", methods=["GET"])
-@login_required
+@manager_required
 def get_organic_contacts():
     """GET /api/organic/contacts - return saved organic supplier/buyer contacts."""
     return jsonify(_load_json(ORGANIC_CONTACTS_PATH, {}))
@@ -2713,7 +2713,7 @@ def _save_audits(data):
 
 
 @app.route("/audit/<kind>")
-@login_required
+@manager_required
 def audit_page(kind):
     """Render the audit page for 'rm' or 'fg'."""
     if kind not in ("rm", "fg"):
@@ -2722,7 +2722,7 @@ def audit_page(kind):
 
 
 @app.route("/audits")
-@login_required
+@manager_required
 def audits_history():
     """Read-only history of completed audits, newest first.
 
@@ -2747,7 +2747,7 @@ def audits_history():
 
 
 @app.route("/api/audit/start", methods=["POST"])
-@login_required
+@manager_required
 def start_audit():
     """Start a new audit. Both kinds are now stateless — the audit doc is
     returned to the client and only persisted when /complete is called.
@@ -2960,7 +2960,7 @@ def _build_fg_audit_items(brand):
 
 
 @app.route("/api/audit/active/<kind>", methods=["GET"])
-@login_required
+@manager_required
 def get_active_audit(kind):
     """Both audit kinds are stateless — no resume — so this always
     returns null. Endpoint retained for back-compat with stale clients."""
@@ -2968,7 +2968,7 @@ def get_active_audit(kind):
 
 
 @app.route("/api/audit/<audit_id>/complete", methods=["POST"])
-@login_required
+@manager_required
 def complete_audit(audit_id):
     """Complete an audit — apply all counted adjustments to inventory.
 
@@ -3268,7 +3268,7 @@ def _apply_fg_audit(audit):
 
 
 @app.route("/api/audit/categories/<kind>", methods=["GET"])
-@login_required
+@manager_required
 def audit_categories(kind):
     """Return available categories for category selection screen."""
     if kind == "rm":
@@ -3610,7 +3610,7 @@ def internal_fg_stock():
 # ── Company Info ──────────────────────────────────────────────────────────────
 
 @app.route("/api/company-info", methods=["GET"])
-@login_required
+@manager_required
 def get_company_info():
     """GET /api/company-info - return company info / order rules."""
     info = _load_company_info()
@@ -3622,7 +3622,7 @@ def get_company_info():
 
 
 @app.route("/api/company-info", methods=["PATCH"])
-@login_required
+@manager_required
 def update_company_info():
     """POST /api/company-info - update company info / order rules."""
     data = request.get_json() or {}
@@ -4286,7 +4286,7 @@ _seed_sku_meta_defaults()
 
 
 @app.route("/api/ripe-orders/run-deductions", methods=["POST"])
-@login_required
+@manager_required
 def api_run_deductions():
     """Manually trigger scheduled deductions (also runs on startup)."""
     _run_scheduled_deductions()
@@ -4294,7 +4294,7 @@ def api_run_deductions():
 
 
 @app.route("/api/ripe-orders/settle-sale/<sale_id>", methods=["POST"])
-@login_required
+@manager_required
 def api_settle_ripe_sale(sale_id):
     """Mark a specific pending-payment Ripe sale as settled."""
     sales = _load_json(ORGANIC_SALES_PATH, [])
@@ -4334,7 +4334,7 @@ def api_settle_by_order(order_id):
 # Reads orders from Shopify for a given week, returns aggregated SKU
 # preview. Writes nothing. The 'commit' endpoint will follow in deploy 2.
 @app.route("/admin/shopify-debug")
-@login_required
+@manager_required
 def shopify_debug():
     """Diagnostic endpoint: exchanges configured client credentials for an
     access token, then hits Shopify's /shop.json. Reports each step's result
@@ -4347,7 +4347,7 @@ def shopify_debug():
 
 
 @app.route("/admin/shopify-import")
-@login_required
+@manager_required
 def shopify_import_ui():
     """Tiny control page for triggering preview + commit from the browser.
     Avoids needing curl to POST. Renders inline HTML, no template file.
@@ -4639,7 +4639,7 @@ def _shopify_commit_for_week(week_id):
 
 
 @app.route("/admin/shopify-commit", methods=["POST"])
-@login_required
+@manager_required
 def shopify_commit():
     """Commit Shopify orders for a given week as Soma sale records.
 
@@ -4694,7 +4694,7 @@ def shopify_internal_import_last_week():
 
 
 @app.route("/admin/shopify-preview")
-@login_required
+@manager_required
 def shopify_preview():
     """Preview what would be imported from Shopify for a given week.
 
@@ -4737,7 +4737,7 @@ def shopify_preview():
 # attributes sales to buyer "SOMA (Clover)" with channel "clover".
 
 @app.route("/admin/clover-debug")
-@login_required
+@manager_required
 def clover_debug():
     """Diagnostic endpoint: hits Clover's /merchants/{mId} endpoint with the
     configured token and reports what came back. Use to isolate auth /
@@ -4750,7 +4750,7 @@ def clover_debug():
 
 
 @app.route("/admin/clover-preview")
-@login_required
+@manager_required
 def clover_preview():
     """Preview what would be imported from Clover for a given week."""
     week_id = (request.args.get("week") or "").strip()
@@ -4963,7 +4963,7 @@ def _clover_commit_for_week(week_id):
 
 
 @app.route("/admin/clover-commit", methods=["POST"])
-@login_required
+@manager_required
 def clover_commit():
     """Commit Clover orders for a given week as Soma sale records.
     Thin wrapper around _clover_commit_for_week. Login-required for human
@@ -5004,7 +5004,7 @@ def clover_internal_import_last_week():
 
 
 @app.route("/admin/clover-import")
-@login_required
+@manager_required
 def clover_import_ui():
     """Tiny control page for triggering Clover preview + commit from the
     browser — same shape as /admin/shopify-import.

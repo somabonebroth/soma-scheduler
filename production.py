@@ -50,6 +50,25 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
+def manager_required(f):
+    """Local copy of app.py's manager_required (verbatim). The production tablet
+    keeps the weekly schedule, daily production and checklists; scheduling,
+    the tracker and the completed-production record are manager-only
+    (2026-08-18 two-role split). Sessions from before roles existed count as
+    manager (see app.current_role)."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("authenticated"):
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Not authenticated"}), 401
+            return redirect(url_for("login_page"))
+        if (session.get("role") or "manager") != "manager":
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Manager access required"}), 403
+            return redirect("/")
+        return f(*args, **kwargs)
+    return decorated
+
 
 def require_valid_week(f):
     """Local copy of app.py's decorator. Validation logic is unchanged; the
@@ -78,7 +97,7 @@ def require_valid_day(f):
 
 
 @production_bp.route("/create-schedule")
-@login_required
+@manager_required
 def create_schedule_page():
     """Render the create-schedule page."""
     return render_template("create_schedule.html")
@@ -103,14 +122,14 @@ def get_schedule(week_id):
 
 
 @production_bp.route("/api/schedules", methods=["GET"])
-@login_required
+@manager_required
 def get_schedules():
     """GET /api/schedules - list all saved schedules."""
     return jsonify(app.list_schedules())
 
 
 @production_bp.route("/api/schedule/<week_id>", methods=["DELETE"])
-@login_required
+@manager_required
 @require_valid_week
 def delete_schedule(week_id):
     """DELETE /api/schedule/<week_id> - delete a week's schedule and its uncompleted organic runs."""
@@ -132,7 +151,7 @@ def delete_schedule(week_id):
 
 
 @production_bp.route("/production-tracker")
-@login_required
+@manager_required
 def production_tracker_page():
     """Render the production tracker page.
     ?embed=1 hides the page header (used when embedded in the Analytics iframe,
@@ -142,7 +161,7 @@ def production_tracker_page():
 
 
 @production_bp.route("/api/production-tracker/<week_id>", methods=["GET"])
-@login_required
+@manager_required
 @require_valid_week
 def get_production_tracker(week_id):
     """Return per-day bucketed totals for a week. Each day contains per-bucket
@@ -168,7 +187,7 @@ def get_production_tracker(week_id):
 
 
 @production_bp.route("/api/production-tracker/<week_id>/other-details", methods=["GET"])
-@login_required
+@manager_required
 @require_valid_week
 def get_tracker_other_details(week_id):
     """Diagnostic: return every production entry in this week that classified
@@ -220,7 +239,7 @@ def get_tracker_other_details(week_id):
 
 
 @production_bp.route("/api/production-tracker/month/<year_month>", methods=["GET"])
-@login_required
+@manager_required
 def get_production_tracker_month(year_month):
     """Return weekly totals for a given month (format: YYYY-MM)."""
     if not re.match(r'^\d{4}-\d{2}$', year_month):
@@ -252,7 +271,7 @@ def get_production_tracker_month(year_month):
 
 
 @production_bp.route("/api/production-tracker/year/<int:year>", methods=["GET"])
-@login_required
+@manager_required
 def get_production_tracker_year(year):
     """Return monthly totals for a given year."""
     if year < 2020 or year > 2099:
@@ -506,14 +525,14 @@ def checklist_status(week_id):
 # ── Production: traceability / completed records ─────────────────────────────
 
 @production_bp.route("/traceability")
-@login_required
+@manager_required
 def traceability_page():
     """Render the Completed Production page."""
     return render_template("traceability.html")
 
 
 @production_bp.route("/api/traceability/<week_id>/summary", methods=["GET"])
-@login_required
+@manager_required
 @require_valid_week
 def get_week_summary(week_id):
     """Return a structured summary of a week's production for the HOO review modal.
@@ -598,7 +617,7 @@ def get_week_summary(week_id):
 
 
 @production_bp.route("/api/traceability", methods=["GET"])
-@login_required
+@manager_required
 def get_traceability():
     """GET /api/traceability - completed weekly production records."""
     weeks = app.list_schedules()
@@ -654,7 +673,7 @@ def get_traceability():
 
 
 @production_bp.route("/api/traceability/<week_id>/<int:day_idx>", methods=["DELETE"])
-@login_required
+@manager_required
 @require_valid_week
 @require_valid_day
 def delete_traceability_record(week_id, day_idx):
@@ -754,7 +773,7 @@ def delete_traceability_record(week_id, day_idx):
 
 
 @production_bp.route("/api/weekly-signoff/<week_id>", methods=["POST"])
-@login_required
+@manager_required
 @require_valid_week
 def sign_off_week(week_id):
     """Head of Operations confirms a week's production records.
@@ -788,7 +807,7 @@ def sign_off_week(week_id):
 
 
 @production_bp.route("/api/weekly-signoff/<week_id>", methods=["DELETE"])
-@login_required
+@manager_required
 @require_valid_week
 def unsign_week(week_id):
     """Reverse a weekly sign-off (HOO can undo)."""
@@ -802,7 +821,7 @@ def unsign_week(week_id):
 # ── Production: organic production-runs read ─────────────────────────────────
 
 @production_bp.route("/api/organic/production-runs", methods=["GET"])
-@login_required
+@manager_required
 def get_organic_runs():
     """GET /api/organic/production-runs - return all organic production runs."""
     return jsonify(_load_json(ORGANIC_RUNS_PATH, []))

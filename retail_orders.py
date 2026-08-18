@@ -30,7 +30,7 @@ from zoneinfo import ZoneInfo
 from functools import wraps
 import urllib.request, urllib.error
 
-from flask import Blueprint, render_template, request, jsonify, session
+from flask import Blueprint, render_template, request, jsonify, session, redirect
 
 from helpers import _sku_key, _load_company_info
 
@@ -227,12 +227,19 @@ def create_retail_sale_records(order, ship_date):
     return True, None
 
 
-def _soma_login_required(f):
-    """Decorator: require an authenticated Soma session (401 JSON otherwise)."""
+def _soma_manager_required(f):
+    """Decorator: require an authenticated Soma session with the manager role.
+    Buyer-portal order handling is the HOO's desk, not the production tablet
+    (2026-08-18 two-role split). Sessions from before roles existed count as
+    manager (see app.current_role)."""
     @wraps(f)
     def wrapper(*args, **kwargs):
         if not session.get("authenticated"):
             return jsonify({"error": "Not authenticated"}), 401
+        if (session.get("role") or "manager") != "manager":
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Manager access required"}), 403
+            return redirect("/")
         return f(*args, **kwargs)
     return wrapper
 
@@ -266,7 +273,7 @@ def _group_orders_by_month(orders):
 
 
 @retail_orders_bp.route("/retail-orders")
-@_soma_login_required
+@_soma_manager_required
 def retail_orders_page():
     """Render the SBBC orders page: pending orders pinned, settled grouped by month."""
     status, data = _retail_request("GET", "/api/internal/orders")
@@ -283,7 +290,7 @@ def retail_orders_page():
 
 
 @retail_orders_bp.route("/api/retail-orders/pending-count")
-@_soma_login_required
+@_soma_manager_required
 def retail_pending_count():
     """Return counts for the dashboard badges: new (pending) and in-progress
     (approved but not yet delivered) SBBC orders. Both 0 when unconfigured."""
@@ -298,7 +305,7 @@ def retail_pending_count():
 
 
 @retail_orders_bp.route("/retail-orders/<order_id>/packing-slip")
-@_soma_login_required
+@_soma_manager_required
 def retail_packing_slip(order_id):
     """Fetch order detail from the SBBC portal and render a packing slip.
 
@@ -321,7 +328,7 @@ def retail_packing_slip(order_id):
 
 
 @retail_orders_bp.route("/api/retail-orders/<order_id>", methods=["PATCH"])
-@_soma_login_required
+@_soma_manager_required
 def retail_order_action(order_id):
     """
     approve — requires ship_date in body. Deducts FG + writes sale records,
