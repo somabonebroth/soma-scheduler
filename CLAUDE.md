@@ -162,6 +162,27 @@ Both use `_FILE_LOCKS` (threading.Lock per path) added in the latest session.
 
 **Product photos → portals:** `/api/internal/catalogue` includes each SKU's recipe `photo` filename (from recipes.json, uploaded via the Recipes page); portals fetch the bytes from the key-gated `GET /api/internal/photo/<filename>` and proxy them to their buyers (added 2026-07-02 for the SBBC portal storefront).
 
+**Daily records: two documents, deliberately separate (2026-08-18).** The daily production
+checklist is the CCP/HACCP record (`ccp_master.json`, see below). The **closing checklist**
+is housekeeping and lives in `cleaning.py` — NOT in the CCP master. Merging them would
+dilute a controlled document and would make a forgotten mop raise a CCP alarm now that CCP
+flags actually fire. `cleaning.py` therefore holds two contracts, documented in its module
+docstring: the closing **gate** (fixed items, all required, per-item ticks, one signature,
+one record per date, works on non-production days) and the rotating **backlog** (skipping
+explicitly fine). Closing records SNAPSHOT the labels signed against; item ids survive
+edits. Data lives in `cleaning_jobs.json` as `closing_items` + `closing_records`.
+
+**Morning brief (`daily_brief.py`, 2026-08-18).** `GET /api/daily-brief?date=` (manager-only,
+default yesterday) + a card at the top of the manager dashboard. Built because an audit found
+the system captures well and reports late — day notes reached the HOO up to a week later and
+per-vessel `finish_notes` had **no reader anywhere**. It creates NO artifacts: everything is
+re-read from existing records. Per-domain summaries stay with their domain
+(`production.summarize_day`, `cleaning.day_summary`) and the brief only joins them.
+**`summarize_day` was extracted from `get_week_summary`, which now calls it** — the weekly
+review and the daily brief must never drift in how they read a day. A missing closing
+sign-off is only flagged on a day the kitchen is known to have run (completed production or
+a cleaning sign-off), so quiet days stay quiet.
+
 **Daily CCP checklist — `ccp_master.json` is the SINGLE source of truth (fixed 2026-08-18).**
 The production tablet renders its section ticks from the CCP master (manager-editable at
 `/ccp-master`), and since this fix BOTH PDF paths do too — `generate_filled_checklist_pdf`
