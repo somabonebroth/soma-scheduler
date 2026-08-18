@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Soma">
-<meta name="theme-color" content="var(--black)">
+<meta name="theme-color" content="#1a1a2e">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
 <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
@@ -14,67 +14,115 @@
 <title>Soma – Retail Parcels</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
-.batch-card { margin-bottom: 16px; padding: 0; overflow: hidden; }
-.batch-head {
-  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  padding: 14px 18px; background: var(--bg); border-bottom: 1px solid var(--border);
+.info-msg{background:var(--action-blue-bg);border:1px solid #90caf9;border-radius:var(--r-md);padding:14px;font-size:13px;color:var(--info-dark);margin-bottom:16px;}
+.err-msg{background:var(--action-red-bg);border:1px solid #ef9a9a;border-radius:var(--r-md);padding:14px;font-size:13px;color:var(--action-red);margin-bottom:16px;}
+
+.queue-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+.queue-head h2{margin:0;font-size:18px;}
+.queue-count{font-size:13px;color:var(--text-light);}
+.queue-head .refresh{margin-left:auto;}
+
+.batch-card{margin-bottom:16px;padding:0;overflow:hidden;}
+.batch-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 18px;background:var(--bg);border-bottom:1px solid var(--border);}
+.batch-title{font-weight:700;font-size:14px;}
+.batch-sub{font-size:12px;color:var(--text-light);margin-top:2px;}
+.batch-actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;}
+
+.table-scroll{overflow-x:auto;}
+.parcels{width:100%;border-collapse:collapse;font-size:13px;}
+.parcels th{text-align:left;padding:8px 18px;font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);}
+.parcels td{padding:12px 18px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.parcels tr:last-child td{border-bottom:none;}
+.parcels .r{text-align:right;}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--text-light);white-space:nowrap;}
+
+/* The order number is the ONLY thing pairing a parcel to its label — the
+   destination address lives on Ripe's label and never in Soma's data. Print it
+   loud so a mismatch is obvious on the bench. */
+.order-no{font-weight:700;font-size:15px;letter-spacing:.02em;}
+.items-inline{font-size:12px;color:var(--text-light);line-height:1.5;}
+.jars{font-weight:700;font-size:14px;white-space:nowrap;}
+.parcels td:first-child{white-space:nowrap;}
+.parcels td:last-child{width:1%;white-space:nowrap;}
+/* Two deliberate rows — read the documents, then commit — instead of four
+   buttons wrapping wherever the column happens to run out. */
+.row-actions{display:flex;flex-direction:column;gap:6px;align-items:flex-end;}
+.row-actions .grp{display:flex;gap:6px;}
+
+/* Local sizing only. NOT .btn-sm — that class carries its own white background
+   in style.css and is declared after .btn-primary, so it would flatten every
+   button on the page to the same pill. */
+.btn-mini{padding:6px 12px;font-size:12px;border-radius:var(--r-sm);white-space:nowrap;}
+.btn-cancel{background:var(--white);border-color:#ef9a9a;color:var(--action-red);}
+.btn-cancel:hover{background:var(--action-red-bg);border-color:var(--action-red);}
+
+.tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;white-space:nowrap;}
+.tag-fulfilled{background:var(--success);color:var(--success-text);}
+.tag-declined{background:var(--error);color:#721c24;}
+
+.empty{text-align:center;color:var(--text-light);padding:44px 20px;}
+.empty .big{font-size:32px;display:block;margin-bottom:10px;}
+
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--dark);color:var(--white);padding:12px 20px;border-radius:var(--r-md);font-size:13px;z-index:999;display:none;max-width:90vw;box-shadow:0 4px 16px rgba(0,0,0,.25);}
+#toast.err{background:var(--action-red);}
+
+/* Bench devices are small. Stack each parcel into its own block rather than
+   letting a 5-column table scroll sideways mid-pack. */
+@media (max-width:700px){
+  /* Dashboard is the escape hatch — never let it be the thing that scrolls
+     off the right edge. The cross-link to Ripe Orders yields first. */
+  .header{padding:10px 14px;gap:10px;}
+  .header-right{gap:6px;}
+  .header-right .xlink{display:none;}
+  .header-text h1{font-size:15px;}
+  .parcels thead{display:none;}
+  .parcels,.parcels tbody,.parcels tr,.parcels td{display:block;width:100%;}
+  .parcels tr{border-bottom:1px solid var(--border);padding:12px 14px;}
+  .parcels tr:last-child{border-bottom:none;}
+  .parcels td{border:none;padding:3px 0;}
+  .parcels td.r{text-align:left;}
+  .parcels td:last-child{width:auto;white-space:normal;}
+  .parcels td[data-label]::before{content:attr(data-label);display:block;font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px;}
+  .row-actions{align-items:flex-start;margin-top:10px;}
+  .row-actions .grp{flex-wrap:wrap;}
+  .batch-actions{margin-left:0;width:100%;}
+  .batch-actions .btn{width:100%;}
 }
-.batch-title { font-weight: 700; font-size: 14px; }
-.batch-sub { font-size: 12px; color: var(--text-light); }
-.batch-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
-
-.parcels { width: 100%; border-collapse: collapse; font-size: 13px; }
-.parcels th {
-  text-align: left; padding: 8px 18px; font-size: 10px; font-weight: 600;
-  color: var(--text-light); text-transform: uppercase; letter-spacing: .06em;
-  border-bottom: 1px solid var(--border);
-}
-.parcels td { padding: 12px 18px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-.parcels tr:last-child td { border-bottom: none; }
-.parcels .r { text-align: right; }
-.mono { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--text-light); }
-
-.items-inline { font-size: 12px; color: var(--text-light); line-height: 1.5; }
-.btn-sm { padding: 5px 11px; font-size: 12px; }
-.row-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
-
-.tag { display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:600; white-space:nowrap; }
-.tag-fulfilled { background: var(--success); color: var(--success-text); }
-.tag-declined  { background: var(--error); color: #721c24; }
-
-#toast {
-  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-  background: var(--dark); color: #fff; padding: 12px 20px; border-radius: 8px;
-  font-size: 13px; z-index: 999; display: none; max-width: 90vw;
-}
-#toast.err { background: #8a1c1c; }
 </style>
 </head>
 <body>
-{% include 'header_partial.html' ignore missing %}
-<div class="topbar">
+<div class="header">
+  <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
   <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Retail Parcels</p></div>
+  <div class="header-right" style="align-items:center;">
+    <div class="nav-arrows">
+      <button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button>
+      <button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button>
+    </div>
+    <a href="/ripe-orders" class="header-btn xlink">Ripe Orders</a>
+    <a href="/" class="header-btn">&#8962; Dashboard</a>
+  </div>
 </div>
 
-<main>
+<div class="main">
+
   {% if not configured %}
-  <div class="card" style="background:var(--amber-bg);border:1px solid var(--amber-border);">
-    The Ripe portal isn't configured. Set <code>RIPE_PORTAL_URL</code> and <code>INTERNAL_API_KEY</code>.
-  </div>
+  <div class="info-msg"><strong>Ripe portal not connected.</strong> Set <code>RIPE_PORTAL_URL</code> and <code>INTERNAL_API_KEY</code> in Render env vars.</div>
   {% elif error %}
-  <div class="card" style="background:var(--amber-bg);border:1px solid var(--amber-border);">{{ error }}</div>
+  <div class="err-msg"><strong>Could not reach the Ripe portal:</strong> {{ error }}</div>
   {% endif %}
 
-  <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
-    <h2 style="margin:0;">To pack</h2>
-    <span style="font-size:13px;color:var(--text-light);">
-      {{ pack_count }} parcel{{ '' if pack_count == 1 else 's' }} waiting
-    </span>
+  <div class="queue-head">
+    <h2>To pack</h2>
+    <span class="queue-count">{{ pack_count }} parcel{{ '' if pack_count == 1 else 's' }} waiting</span>
+    <button class="btn btn-outline btn-mini refresh" onclick="location.reload();">&#8635; Refresh</button>
   </div>
 
   {% if not batches %}
-  <div class="card" style="text-align:center;color:var(--text-light);padding:40px;">
-    Nothing to pack. Paid retail parcels from Ripe land here.
+  <div class="card empty">
+    <span class="big">&#128230;</span>
+    Nothing to pack right now.<br>
+    Paid retail parcels from Ripe land here automatically.
   </div>
   {% endif %}
 
@@ -82,17 +130,27 @@
   <div class="card batch-card">
     <div class="batch-head">
       <div>
-        <div class="batch-title">Batch — {{ b.count }} parcel{{ '' if b.count == 1 else 's' }}, {{ b.units }} jars</div>
-        <div class="batch-sub">Paid {{ b.paid_at[:10] if b.paid_at else '—' }} · <span class="mono">{{ b.session_id[:24] }}</span></div>
+        <div class="batch-title">
+          {{ b.count }} parcel{{ '' if b.count == 1 else 's' }} &middot; {{ b.units }} jar{{ '' if b.units == 1 else 's' }}
+        </div>
+        <div class="batch-sub">
+          Paid {{ b.paid_at[:10] if b.paid_at else '—' }}
+          {% if b.session_id and b.session_id != 'unbatched' %}
+          &middot; <span class="mono" title="Stripe checkout session — one payment covers the whole batch">{{ b.session_id[:18] }}…</span>
+          {% else %}
+          &middot; <span class="mono">no batch payment</span>
+          {% endif %}
+        </div>
       </div>
       <div class="batch-actions">
-        <button class="btn btn-primary btn-sm"
-                onclick="approveBatch('{{ b.session_id }}', {{ b.count }})">
+        <button class="btn btn-success btn-mini"
+                onclick="approveBatch(this, '{{ b.session_id }}', {{ b.count }})">
           Approve &amp; Print all ({{ b.count }})
         </button>
       </div>
     </div>
 
+    <div class="table-scroll">
     <table class="parcels">
       <thead>
         <tr>
@@ -103,63 +161,78 @@
       <tbody>
         {% for o in b.orders %}
         <tr id="row-{{ o.id }}">
-          <td>
-            <div style="font-weight:600;">{{ o.order_number }}</div>
+          <td data-label="Order #">
+            <div class="order-no">{{ o.order_number }}</div>
             <div class="mono">{{ o.id }}</div>
           </td>
-          <td>{{ o.customer_name }}</td>
-          <td class="items-inline">
-            {% for li in o['items'] %}{{ li.units }}× {{ li.name }}{% if not loop.last %}<br>{% endif %}{% endfor %}
+          <td data-label="Customer">{{ o.customer_name }}</td>
+          <td class="items-inline" data-label="Contents">
+            {% for li in o['items'] %}{{ li.units }}&times; {{ li.name }}{% if not loop.last %}<br>{% endif %}{% endfor %}
           </td>
-          <td class="r">{{ o.total_units }}</td>
+          <td class="r jars" data-label="Jars">{{ o.total_units }}</td>
           <td>
             <div class="row-actions">
-              <a class="btn btn-outline btn-sm" href="/ripe-retail/{{ o.id }}/packing-slip" target="_blank">Slip</a>
-              <a class="btn btn-outline btn-sm" href="/ripe-retail/{{ o.id }}/label" target="_blank">Label</a>
-              <button class="btn btn-primary btn-sm"
-                      onclick="approveOne('{{ o.id }}', '{{ o.order_number }}')">Approve &amp; Print</button>
-              <button class="btn btn-outline btn-sm" style="color:var(--error);"
-                      onclick="cancelOne('{{ o.id }}', '{{ o.order_number }}')">Cancel</button>
+              <div class="grp">
+                <a class="btn btn-outline btn-mini" href="/ripe-retail/{{ o.id }}/packing-slip" target="_blank">Slip</a>
+                <a class="btn btn-outline btn-mini" href="/ripe-retail/{{ o.id }}/label" target="_blank">Label</a>
+              </div>
+              <div class="grp">
+                <button class="btn btn-success btn-mini"
+                        onclick="approveOne(this, '{{ o.id }}', '{{ o.order_number }}')">Approve &amp; Print</button>
+                <button class="btn btn-outline btn-mini btn-cancel"
+                        onclick="cancelOne(this, '{{ o.id }}', '{{ o.order_number }}')">Cancel</button>
+              </div>
             </div>
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
   {% endfor %}
 
   {% if recent %}
-  <h2 style="margin:28px 0 12px;">Recently handled</h2>
+  <h2 style="margin:28px 0 12px;font-size:18px;">Recently handled</h2>
   <div class="card" style="padding:0;overflow:hidden;">
+    <div class="table-scroll">
     <table class="parcels">
       <thead>
-        <tr><th>Order #</th><th>Customer</th><th class="r">Jars</th><th>Status</th><th>Date</th></tr>
+        <tr><th>Order #</th><th>Customer</th><th class="r">Jars</th><th>Status</th><th>Date</th><th class="r">Reprint</th></tr>
       </thead>
       <tbody>
         {% for o in recent %}
         <tr>
-          <td><div style="font-weight:600;">{{ o.order_number }}</div><div class="mono">{{ o.id }}</div></td>
-          <td>{{ o.customer_name }}</td>
-          <td class="r">{{ o.total_units }}</td>
-          <td>
+          <td data-label="Order #"><div class="order-no">{{ o.order_number }}</div><div class="mono">{{ o.id }}</div></td>
+          <td data-label="Customer">{{ o.customer_name }}</td>
+          <td class="r jars" data-label="Jars">{{ o.total_units }}</td>
+          <td data-label="Status">
             {% if o.status == 'fulfilled' %}<span class="tag tag-fulfilled">packed &amp; shipped</span>
             {% else %}<span class="tag tag-declined">cancelled</span>{% endif %}
           </td>
-          <td style="font-size:12px;color:var(--text-light);">{{ (o.fulfillment_date or o.declined_at or '')[:10] or '—' }}</td>
+          <td data-label="Date" style="font-size:12px;color:var(--text-light);">{{ (o.fulfillment_date or o.declined_at or '')[:10] or '—' }}</td>
+          <td>
+            <div class="row-actions">
+              <div class="grp">
+                <a class="btn btn-outline btn-mini" href="/ripe-retail/{{ o.id }}/packing-slip" target="_blank">Slip</a>
+                <a class="btn btn-outline btn-mini" href="/ripe-retail/{{ o.id }}/label" target="_blank">Label</a>
+              </div>
+            </div>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
   {% endif %}
-</main>
+</div>
 
 <div id="toast"></div>
 
 <script>
 function showToast(msg, ok) {
-  var t = document.getElementById('toast');
+  const t = document.getElementById('toast');
   t.textContent = msg;
   t.className = ok ? '' : 'err';
   t.style.display = 'block';
@@ -174,52 +247,89 @@ function openDocs(orderId) {
   window.open('/ripe-retail/' + orderId + '/label', '_blank');
 }
 
-async function approveOne(orderId, orderNumber) {
-  var res = await fetch('/api/ripe-retail/' + encodeURIComponent(orderId), {
-    method: 'PATCH', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({action: 'approve'})
-  });
-  var data = await res.json();
-  if (res.ok) {
-    openDocs(orderId);
-    showToast(orderNumber + ' recorded — printing slip and label', true);
-    setTimeout(function () { location.reload(); }, 1500);
-  } else {
-    showToast(data.error || 'Could not approve ' + orderNumber, false);
+// Approving is irreversible (stock moves, Ripe is told) — don't let a double
+// click fire it twice while the request is in flight.
+function lockRow(btn) {
+  if (!btn) return function () {};
+  const row = btn.closest('tr') || btn.closest('.batch-card');
+  const btns = row ? row.querySelectorAll('button') : [btn];
+  btns.forEach(function (b) { b.disabled = true; });
+  const label = btn.textContent;
+  btn.textContent = 'Working…';
+  return function () {
+    btns.forEach(function (b) { b.disabled = false; });
+    btn.textContent = label;
+  };
+}
+
+async function approveOne(btn, orderId, orderNumber) {
+  const unlock = lockRow(btn);
+  try {
+    const res = await fetch('/api/ripe-retail/' + encodeURIComponent(orderId), {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({action: 'approve'})
+    });
+    const data = await res.json();
+    if (res.ok) {
+      openDocs(orderId);
+      showToast(orderNumber + ' recorded — printing slip and label', true);
+      setTimeout(function () { location.reload(); }, 1500);
+    } else {
+      unlock();
+      showToast(data.error || 'Could not approve ' + orderNumber, false);
+    }
+  } catch (e) {
+    unlock();
+    showToast('Network error approving ' + orderNumber, false);
   }
 }
 
-async function cancelOne(orderId, orderNumber) {
+async function cancelOne(btn, orderId, orderNumber) {
   if (!confirm('Cancel ' + orderNumber + '?\n\nNo refund is issued — the payment stays with Soma. '
              + 'You will need to add a matching credit to Ripe\'s account in Company Settings.')) return;
-  var reason = prompt('Reason (optional):');
+  const reason = prompt('Reason (optional):');
   if (reason === null) return;
-  var res = await fetch('/api/ripe-retail/' + encodeURIComponent(orderId), {
-    method: 'PATCH', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({action: 'cancel', reason: reason})
-  });
-  var data = await res.json();
-  if (res.ok) {
-    var amt = data.credit_due != null ? '$' + Number(data.credit_due).toFixed(2) : 'the order total';
-    showToast(orderNumber + ' cancelled — add a credit of ' + amt + ' in Company Settings', true);
-    setTimeout(function () { location.reload(); }, 3500);
-  } else {
-    showToast(data.error || 'Could not cancel ' + orderNumber, false);
+  const unlock = lockRow(btn);
+  try {
+    const res = await fetch('/api/ripe-retail/' + encodeURIComponent(orderId), {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({action: 'cancel', reason: reason})
+    });
+    const data = await res.json();
+    if (res.ok) {
+      const amt = data.credit_due != null ? '$' + Number(data.credit_due).toFixed(2) : 'the order total';
+      showToast(orderNumber + ' cancelled — add a credit of ' + amt + ' in Company Settings', true);
+      setTimeout(function () { location.reload(); }, 3500);
+    } else {
+      unlock();
+      showToast(data.error || 'Could not cancel ' + orderNumber, false);
+    }
+  } catch (e) {
+    unlock();
+    showToast('Network error cancelling ' + orderNumber, false);
   }
 }
 
-async function approveBatch(sessionId, count) {
+async function approveBatch(btn, sessionId, count) {
   if (!confirm('Approve and print all ' + count + ' parcels in this batch?')) return;
+  const unlock = lockRow(btn);
   showToast('Recording ' + count + ' parcels…', true);
-  var res = await fetch('/api/ripe-retail/batch/' + encodeURIComponent(sessionId) + '/approve',
-                        {method: 'POST'});
-  var data = await res.json();
-  if (!res.ok) { showToast(data.error || 'Batch approval failed', false); return; }
+  let res, data;
+  try {
+    res = await fetch('/api/ripe-retail/batch/' + encodeURIComponent(sessionId) + '/approve',
+                      {method: 'POST'});
+    data = await res.json();
+  } catch (e) {
+    unlock();
+    showToast('Network error — batch not approved', false);
+    return;
+  }
+  if (!res.ok) { unlock(); showToast(data.error || 'Batch approval failed', false); return; }
 
   (data.approved || []).forEach(function (o) { openDocs(o.id); });
 
   if (data.failed_count) {
-    var names = (data.failed || []).map(function (f) { return f.order_number; }).join(', ');
+    const names = (data.failed || []).map(function (f) { return f.order_number; }).join(', ');
     showToast(data.approved_count + ' approved, ' + data.failed_count
               + ' could not be filled (' + names + ') — still in the queue to cancel', false);
     setTimeout(function () { location.reload(); }, 8000);
@@ -228,6 +338,20 @@ async function approveBatch(sessionId, count) {
     setTimeout(function () { location.reload(); }, 2500);
   }
 }
+
+// Header back/forward — same behaviour as the other order pages.
+(function () {
+  const back = document.getElementById('nav-back');
+  const fwd  = document.getElementById('nav-fwd');
+  if (back) {
+    back.disabled = (window.history.length <= 1);
+    back.onclick = function () { window.history.back(); };
+  }
+  if (fwd) fwd.onclick = function () { window.history.forward(); };
+  window.addEventListener('popstate', function () {
+    if (back) back.disabled = (window.history.length <= 1);
+  });
+})();
 </script>
 </body>
 </html>
