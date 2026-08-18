@@ -183,6 +183,20 @@ review and the daily brief must never drift in how they read a day. A missing cl
 sign-off is only flagged on a day the kitchen is known to have run (completed production or
 a cleaning sign-off), so quiet days stay quiet.
 
+**Review is DAILY, not weekly (changed 2026-08-18).** The HOO signs each day off on the
+morning brief: `POST/DELETE /api/daily-signoff/<date>` → `daily_signoffs.json` keyed by
+date, snapshotting `open_actions` at signing time. Signing is deliberately NOT gated on the
+day being clean. Only days the kitchen RAN are reviewable (`daily_brief._kitchen_ran`:
+completed production or a cleaning sign-off), so quiet days need no review.
+`GET /api/daily-signoffs/pending` lists unreviewed days oldest-first and drives both the
+brief's catch-up line and the dashboard's Production Record badge.
+**The weekly sign-off is RETIRED, not deleted** — `sign_off_week`/`unsign_week` are gone so
+nothing writes a new one, but `_load_weekly_signoffs` still reads and pre-cutover weeks
+render their historical confirmation. **Watch out:** the weekly sign-off silently gated the
+Delete button on day records; the daily sign-off inherited that lock at finer grain
+(`get_traceability` returns each day's `signoff`; Delete hides on a reviewed DAY). If
+review ever changes shape again, re-check that lock.
+
 **Daily CCP checklist — `ccp_master.json` is the SINGLE source of truth (fixed 2026-08-18).**
 The production tablet renders its section ticks from the CCP master (manager-editable at
 `/ccp-master`), and since this fix BOTH PDF paths do too — `generate_filled_checklist_pdf`
