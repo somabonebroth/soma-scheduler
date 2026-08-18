@@ -33,6 +33,22 @@
 .done-btn { flex-shrink: 0; background: var(--action-green); color: var(--white); border: none; border-radius: 8px; padding: 10px 16px; font-size: 13px; font-weight: 700; cursor: pointer; }
 .done-btn:hover { opacity: 0.9; }
 .empty-state { text-align: center; padding: 40px 16px; color: var(--text-light); font-size: 14px; background: var(--card-bg); border: 1px dashed var(--border); border-radius: 10px; }
+/* Closing gate — visually distinct from the skip-freely rotation */
+.closing-card { background: var(--card-bg); border: 1px solid var(--border); border-left: 3px solid var(--action-green); border-radius: 10px; padding: 14px 16px; }
+.closing-status { font-size: 11.5px; color: var(--text-light); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.closing-pill { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 8px; background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark, var(--amber-text)); }
+.closing-pill.done { background: var(--action-green-bg); border-color: var(--action-green); color: var(--action-green); }
+.closing-item { display: flex; align-items: flex-start; gap: 10px; padding: 9px 2px; border-bottom: 1px solid var(--border); font-size: 13.5px; cursor: pointer; }
+.closing-item:last-of-type { border-bottom: none; }
+.closing-item input { width: 20px; height: 20px; flex-shrink: 0; margin-top: 1px; accent-color: var(--action-green); }
+.closing-item.ticked span { color: var(--text-light); text-decoration: line-through; }
+.closing-sign { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.closing-sign input { flex: 1; min-width: 120px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; background: var(--white); }
+.closing-err { font-size: 12.5px; color: var(--action-red); margin-top: 8px; display: none; }
+.ci-edit-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.ci-edit-row input { flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; }
+.ci-edit-row button { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 12px; cursor: pointer; color: var(--text-light); }
+.ci-edit-row button:hover { border-color: var(--action-red); color: var(--action-red); }
 /* Recent sign-offs */
 .comp-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; background: var(--card-bg); }
 .comp-list { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
@@ -68,9 +84,23 @@
     <div class="header-right"><button class="header-btn" onclick="window.location='/'">&#8962; Dashboard</button></div>
 </div>
 <div class="main">
+    <div class="section-label">Tonight&rsquo;s closing &mdash; all required</div>
+    <div class="closing-card" id="closing-card">Loading&hellip;</div>
+{% if role == 'manager' %}
+    <details style="margin-top:10px;">
+        <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:1px;padding:8px 0;">&#9881; Manage closing list</summary>
+        <div style="margin-top:8px;">
+            <div id="ci-editor"></div>
+            <button class="done-btn" style="background:var(--accent);margin-top:6px;" onclick="addClosingItem()">+ Add item</button>
+            <button class="done-btn" style="margin-top:6px;" onclick="saveClosingItems()">&#10003; Save list</button>
+            <div class="closing-err" id="ci-err"></div>
+        </div>
+    </details>
+{% endif %}
+
+    <div class="section-label" style="margin-top:26px;">Rotating jobs &mdash; pick one if you have time</div>
     <p class="intro">Extra time at the end of a shift? Grab a job from the top of the list, do it, and sign off with your name — it leaves the list and comes back 1, 3 or 6 months later. Busy day? Skip it, no worries — it just stays in line.</p>
 
-    <div class="section-label">Up next</div>
     <div class="job-list" id="upnext-list"></div>
 
     <div class="section-label" id="rest-label" style="display:none;">Recently done — back in line later</div>
@@ -174,6 +204,113 @@ function jobRowHtml(j){
         + '<div class="job-meta">' + meta + '</div>' + notes + '</div>'
         + '<button class="done-btn" onclick="openSignoff(\'' + j.id + '\')">&#10003; Done</button>'
         + '</div>';
+}
+
+// ── Closing gate ─────────────────────────────────────────────────────────
+let closingItems = [];
+let closingRec = null;
+const ticked = {};
+
+async function loadClosing(){
+    const res = await fetch('/api/cleaning/closing');
+    closingRec = await res.json();
+    closingItems = closingRec.items || [];
+    closingItems.forEach(i => { ticked[i.id] = !!i.done; });
+    renderClosing();
+    if (document.getElementById('ci-editor')) renderClosingEditor();
+}
+
+function renderClosing(){
+    const card = document.getElementById('closing-card');
+    if (!closingItems.length) {
+        card.innerHTML = '<div class="empty-state" style="border:none;padding:16px;">No closing items set up yet.</div>';
+        return;
+    }
+    const doneCount = closingItems.filter(i => ticked[i.id]).length;
+    const all = doneCount === closingItems.length;
+    let status = '<span class="closing-pill' + (all ? ' done' : '') + '">'
+        + (all ? 'All done' : doneCount + ' of ' + closingItems.length) + '</span>';
+    if (closingRec.staff) {
+        status += '<span>Signed by ' + esc(closingRec.staff)
+            + (closingRec.ts ? ' at ' + esc(closingRec.ts.slice(11, 16)) : '') + '</span>';
+    } else {
+        status += '<span>Not signed off yet</span>';
+    }
+    const rows = closingItems.map(i =>
+        '<label class="closing-item' + (ticked[i.id] ? ' ticked' : '') + '">'
+        + '<input type="checkbox" ' + (ticked[i.id] ? 'checked' : '')
+        + ' onchange="toggleClosing(\'' + i.id + '\', this.checked)">'
+        + '<span>' + esc(i.label) + '</span></label>').join('');
+    card.innerHTML = '<div class="closing-status">' + status + '</div>' + rows
+        + '<div class="closing-sign">'
+        + '<input type="text" id="closing-staff" placeholder="Your name" autocomplete="off" value="'
+        + esc(closingRec.staff || '') + '">'
+        + '<input type="text" id="closing-notes" placeholder="Anything worth mentioning (optional)" autocomplete="off" value="'
+        + esc(closingRec.notes || '') + '">'
+        + '<button class="done-btn" onclick="signClosing()">&#10003; '
+        + (closingRec.staff ? 'Update' : 'Sign off closing') + '</button></div>'
+        + '<div class="closing-err" id="closing-err"></div>';
+}
+
+function toggleClosing(id, on){
+    ticked[id] = on;
+    renderClosing();
+}
+
+async function signClosing(){
+    const staff = document.getElementById('closing-staff').value.trim();
+    const err = document.getElementById('closing-err');
+    if (!staff) { err.textContent = 'Put your name on it first.'; err.style.display = 'block'; return; }
+    const res = await fetch('/api/cleaning/closing', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({staff: staff, notes: document.getElementById('closing-notes').value.trim(), done: ticked}),
+    });
+    if (!res.ok) {
+        const d = await res.json().catch(() => ({error: 'Save failed'}));
+        err.textContent = d.error || 'Save failed'; err.style.display = 'block';
+        return;
+    }
+    await loadClosing();
+}
+
+// Manager-only: edit what's on the list. Ids are preserved so history lines up.
+function renderClosingEditor(){
+    document.getElementById('ci-editor').innerHTML = closingItems.map((i, idx) =>
+        '<div class="ci-edit-row" data-id="' + esc(i.id) + '">'
+        + '<input type="text" value="' + esc(i.label) + '">'
+        + '<button onclick="removeClosingItem(' + idx + ')" title="Remove">&times;</button></div>').join('');
+}
+
+function collectEditor(){
+    return Array.from(document.querySelectorAll('#ci-editor .ci-edit-row')).map(row => ({
+        id: row.getAttribute('data-id') || '',
+        label: row.querySelector('input').value.trim(),
+    })).filter(i => i.label);
+}
+
+function addClosingItem(){
+    closingItems = collectEditor().concat([{id: '', label: ''}]);
+    renderClosingEditor();
+}
+
+function removeClosingItem(idx){
+    closingItems = collectEditor().filter((_, i) => i !== idx);
+    renderClosingEditor();
+}
+
+async function saveClosingItems(){
+    const err = document.getElementById('ci-err');
+    const res = await fetch('/api/cleaning/closing/items', {
+        method: 'PUT', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(collectEditor()),
+    });
+    if (!res.ok) {
+        const d = await res.json().catch(() => ({error: 'Save failed'}));
+        err.textContent = d.error || 'Save failed'; err.style.display = 'block';
+        return;
+    }
+    err.style.display = 'none';
+    await loadClosing();
 }
 
 async function loadJobs(){
@@ -328,6 +465,7 @@ document.addEventListener('keydown', function(e){
     if (e.key === 'Enter' && document.getElementById('signoff-modal').classList.contains('open')) submitSignoff();
 });
 
+loadClosing();
 loadJobs();
 loadCompletions();
 </script>
