@@ -486,9 +486,26 @@ manager; pre-role sessions count as manager via `current_role()`); `manager_requ
 decorator (app.py, verbatim local copy in recipes.py) on all recipe write routes;
 `/api/verify-manager` + the dashboard curtain deleted; `dashboard.html` renders per role
 (`role=` from `current_role()`); recipes.html `READ_ONLY` for production; weekly_view hides
-Edit/Create for production; cleaning page retitled "Cleaning & Upkeep". **Still open:**
-`@manager_required` on the management *page* routes (deliberately deferred until the split
-has settled), daily checklists + cleaning records (separate session), `base.html`
+Edit/Create for production; cleaning page retitled "Cleaning & Upkeep".
+**Phase 4 — DONE 2026-08-18:** the role boundary is now enforced server-side on EVERY
+management route, not just recipe writes. Whole blueprints became manager-only (their local
+`login_required` copy was renamed to `manager_required`): `raw_materials`, `finished_goods`,
+`sales`, `audit_tools`, `ledger`, `suppliers`, `buyers`. `production.py` gained a second local
+copy alongside `login_required` — scheduling (create/list/delete), the production tracker and
+the completed-production record (incl. weekly sign-off + `delete_traceability_record`) are
+manager; the tablet keeps `/weekly-schedule`, `GET /api/schedule/<week>`, daily production +
+checklists (the consumption chain). `ripe_orders.py`/`retail_orders.py` swapped
+`_soma_login_required` → `_soma_manager_required` on all 19 buyer-portal routes (needed a
+`redirect` import). In `app.py`, 39 routes flipped (contacts, company settings, CCP write,
+certifications, analytics, audits, backup, schedule PDFs, Shopify/Clover import). **The
+production role's whole reachable surface is now exactly its dashboard:** `/`,
+`/weekly-schedule`, `/daily-production/*` + checklist APIs, `/cleaning` + its APIs,
+`/recipes` + recipe GETs/PDFs, plus `/api/photos`, `/api/label`, `GET /api/ccp-master`.
+Method: AST-located decorator lines flipped in place (never text-replace); gate = 192-route
+map byte-identical + a two-role test-client smoke (locked pages 302→`/`, locked APIs 403,
+production routes 200, manager blocked nowhere). Completed Production is manager-only by
+Jeremy's decision — the floor has no link to it and sign-off is the HOO's.
+**Still open:** daily checklists + cleaning records (separate design session), `base.html`
 consolidation (deferred). Details in the memory note `project_ux_simplification`.
 
 ### Coco Market direct ship — PLANNED (2026-08-17)
