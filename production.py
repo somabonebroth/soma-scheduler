@@ -300,15 +300,6 @@ def daily_production_page(week_id, day_idx):
     return render_template("daily_production.html", week_id=week_id, day_idx=day_idx)
 
 
-@production_bp.route("/checklist/<week_id>/<int:day_idx>")
-@login_required
-@require_valid_week
-@require_valid_day
-def checklist_page(week_id, day_idx):
-    """Render the daily checklist page for a week/day."""
-    return render_template("checklist.html", week_id=week_id, day_idx=day_idx)
-
-
 @production_bp.route("/api/daily-production/<week_id>/<int:day_idx>", methods=["GET"])
 @login_required
 @require_valid_week
