@@ -200,7 +200,7 @@ This is the audit-critical chain: supplier lot → production run → finished g
 
 **Receipt photos:** one per delivery, stored as `<entry_id>.<ext>` in `rm_receipt_photos/`, anchored to the first entry of a bulk save. `GET /api/organic/raw-materials/receipt-photos` lists which entry ids have one; the Receiving list shows a "📎 Invoice" button per delivery.
 
-**Two pages, confusingly named:** "Manage Inventory" = `templates/organic.html` (4 tabs: Raw Materials / Production Runs / Finished Goods / Records; tabs are deep-linkable via `?tab=raw|runs|fg|records` and `showTab()` keeps the URL in step — added 2026-08-18; buttons carry `data-tab`, highlight is by name not position). The dead Suppliers/Buyers/Settings panes and the legacy top-form JS were deleted 2026-08-18 (5908 → 5084 lines). "Completed Production" = `templates/traceability.html` (the page formerly called Traceability; week records, HOO sign-off, stock exceptions, per-vessel certs). Two more standalone tool pages: `mass_balance.html` and `reconcile_raw.html` (both link the shared `static/style.css`).
+**Two pages, confusingly named:** "Manage Inventory" = `templates/organic.html` (3 tabs since 2026-08-18: Raw Materials / Production Runs / Finished Goods; deep-linkable via `?tab=raw|runs|fg`, `showTab()` keeps the URL in step, buttons carry `data-tab`, highlight is by name not position; `?tab=records` redirects to `/sales-receiving`). The former Records tab (Search & Trace / Receiving / Sales) is now its own page, "Sales & Receiving Record" = `templates/sales_receiving.html` at `/sales-receiving` (route in `sales.py`). The dead Suppliers/Buyers/Settings panes and legacy top-form JS were deleted the same day (organic.html 5908 → 4502 lines). "Completed Production" = `templates/traceability.html` (the page formerly called Traceability; week records, HOO sign-off, stock exceptions, per-vessel certs). Two more standalone tool pages: `mass_balance.html` and `reconcile_raw.html` (both link the shared `static/style.css`).
 
 ---
 
@@ -476,8 +476,10 @@ Shopify/Clover import, Ripe tools — home for every orphan]). The current manag
 is client-side only and gets deleted; recipe write routes become truly manager-only.
 
 Sequence: **Phase 1 invisible cleanups — DONE 2026-08-18** (dead organic.html panes;
-`?tab=` deep links; dead `/checklist` route + `ripe_products.html`). Phase 2: extract
-Sales & Receiving Record page. Phase 3: role in session + two dashboards + recipes
+`?tab=` deep links; dead `/checklist` route + `ripe_products.html`). **Phase 2 — DONE
+2026-08-18:** `/sales-receiving` (`templates/sales_receiving.html`, route in `sales.py`)
+holds the former Records tab (Search & Trace / Receiving / Sales); organic.html is now 3
+tabs (Raw / Runs / FG, 4,502 lines) and `?tab=records` redirects to the new page. Phase 3: role in session + two dashboards + recipes
 read-only. Then cleaning rename. Daily checklists + cleaning records = separate
 session. `base.html` consolidation deliberately deferred. Details in the memory note
 `project_ux_simplification`.
