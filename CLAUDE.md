@@ -172,8 +172,18 @@ one record per date, works on non-production days) and the rotating **backlog** 
 explicitly fine). Closing records SNAPSHOT the labels signed against; item ids survive
 edits. Data lives in `cleaning_jobs.json` as `closing_items` + `closing_records`.
 
-**Morning brief (`daily_brief.py`, 2026-08-18).** `GET /api/daily-brief?date=` (manager-only,
-default yesterday) + a card at the top of the manager dashboard. Built because an audit found
+**Daily Review (`daily_brief.py` + `templates/daily_review.html`, 2026-08-18).** A full page
+at `/daily-review` (manager-only) behind a full-width dashboard button, fed by
+`GET /api/daily-brief?date=` (default yesterday). THREE sections: (1) what was made —
+per-product rows with vessel/LOT#/cert/jars + totals; (2) what was sold and received —
+sales by buyer with lots/channel, deliveries with supplier/lot; (3) completed checklists —
+CCP sections as ✓/✗ with the confirmed count, the closing gate (who signed, what was
+missed), and which rotating job was done. Each section carries its own notes + issues.
+**Section 1 reads FINISHED GOODS, not the checklist `produced` map** — jar counts entered on
+day N complete runs STARTED on day N-1, so `produced` against the same day's schedule can
+name the wrong recipe; FG rows were written by the run itself. Falls back to checklist
+numbers for pre-runs days (`source` says which). The dashboard button is highlighted until
+the day is reviewed AND no earlier day is outstanding. Built because an audit found
 the system captures well and reports late — day notes reached the HOO up to a week later and
 per-vessel `finish_notes` had **no reader anywhere**. It creates NO artifacts: everything is
 re-read from existing records. Per-domain summaries stay with their domain
