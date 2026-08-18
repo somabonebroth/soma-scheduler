@@ -479,10 +479,17 @@ Sequence: **Phase 1 invisible cleanups — DONE 2026-08-18** (dead organic.html 
 `?tab=` deep links; dead `/checklist` route + `ripe_products.html`). **Phase 2 — DONE
 2026-08-18:** `/sales-receiving` (`templates/sales_receiving.html`, route in `sales.py`)
 holds the former Records tab (Search & Trace / Receiving / Sales); organic.html is now 3
-tabs (Raw / Runs / FG, 4,502 lines) and `?tab=records` redirects to the new page. Phase 3: role in session + two dashboards + recipes
-read-only. Then cleaning rename. Daily checklists + cleaning records = separate
-session. `base.html` consolidation deliberately deferred. Details in the memory note
-`project_ux_simplification`.
+tabs (Raw / Runs / FG, 4,502 lines) and `?tab=records` redirects to the new page.
+**Phase 3 — DONE 2026-08-18:** `session["role"]` set at login (`MANAGER_PASSWORD` →
+`manager`, `APP_PASSWORD` → `production`; unset `MANAGER_PASSWORD` → `APP_PASSWORD` grants
+manager; pre-role sessions count as manager via `current_role()`); `manager_required`
+decorator (app.py, verbatim local copy in recipes.py) on all recipe write routes;
+`/api/verify-manager` + the dashboard curtain deleted; `dashboard.html` renders per role
+(`role=` from `current_role()`); recipes.html `READ_ONLY` for production; weekly_view hides
+Edit/Create for production; cleaning page retitled "Cleaning & Upkeep". **Still open:**
+`@manager_required` on the management *page* routes (deliberately deferred until the split
+has settled), daily checklists + cleaning records (separate session), `base.html`
+consolidation (deferred). Details in the memory note `project_ux_simplification`.
 
 ### Coco Market direct ship — PLANNED (2026-08-17)
 
