@@ -34,7 +34,22 @@
     70%  { box-shadow: 0 0 0 10px rgba(21,101,192,0); }
     100% { box-shadow: 0 0 0 0 rgba(21,101,192,0); }
 }
-#ripe-orders-btn.has-pending { animation: ripe-pulse 1.8s ease infinite; }
+.portal-tile.has-pending { animation: ripe-pulse 1.8s ease infinite; }
+/* ── Buyer portal tiles: heavier weight, soft tint + left accent, live counts ── */
+.portal-tile { align-items: stretch; text-align: left; padding: 18px 20px 16px; gap: 10px; border-left-width: 5px; }
+.portal-tile .label { font-size: 16px; }
+.portal-tile .portal-stats { display: flex; flex-direction: column; gap: 5px; }
+.portal-stat { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--text-light); }
+.portal-stat .n { min-width: 26px; text-align: center; font-weight: 800; font-size: 12px; line-height: 20px; border-radius: 10px; padding: 0 8px; background: var(--row-alt, #eee); color: var(--text-light); }
+.portal-stat.hot .n { background: var(--action-red); color: var(--white); }
+.portal-stat.warm .n { background: var(--amber-text); color: var(--white); }
+.portal-tile.tint-blue  { background: var(--action-blue-bg);  border-left-color: var(--info); }
+.portal-tile.tint-amber { background: var(--amber-bg);        border-left-color: var(--amber-text); }
+.portal-tile.tint-green { background: var(--action-green-bg); border-left-color: var(--action-green); }
+.portal-tile:hover { border-color: var(--border); }
+.portal-tile.tint-blue:hover  { border-left-color: var(--info); }
+.portal-tile.tint-amber:hover { border-left-color: var(--amber-text); }
+.portal-tile.tint-green:hover { border-left-color: var(--action-green); }
 @keyframes prod-pulse {
   0%,100% { box-shadow: 0 0 0 0 rgba(176,141,0,.35); }
   50%      { box-shadow: 0 0 0 8px rgba(176,141,0,0); }
@@ -90,24 +105,24 @@
         </div>
         <div class="section-label">Buyer Portals</div>
         <div class="dash-row">
-            <a href="/ripe-orders" class="dash-btn" id="ripe-orders-btn" style="position:relative;">
-                <div class="label" style="display:flex;align-items:center;gap:8px;">
-                    Ripe Wholesale
-                    <span id="ripe-badge" title="New orders awaiting approval" style="display:none;background:var(--action-red);color:var(--white);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
-                    <span id="ripe-badge-progress" title="Approved orders awaiting fulfillment" style="display:none;background:var(--amber-text);color:var(--white);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
+            <a href="/ripe-orders" class="dash-btn portal-tile tint-blue" id="ripe-orders-btn">
+                <span class="label">Ripe Wholesale</span>
+                <div class="portal-stats">
+                    <div class="portal-stat" id="ripe-stat-new" title="New orders awaiting approval"><span>New</span><span class="n">–</span></div>
+                    <div class="portal-stat" id="ripe-stat-prog" title="Approved orders awaiting fulfillment"><span>In process</span><span class="n">–</span></div>
                 </div>
             </a>
-            <a href="/ripe-retail" class="dash-btn" id="ripe-retail-btn" style="position:relative;">
-                <div class="label" style="display:flex;align-items:center;gap:8px;">
-                    Ripe Retail
-                    <span id="ripe-retail-badge" title="Paid parcels waiting to be packed" style="display:none;background:var(--action-red);color:var(--white);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
+            <a href="/ripe-retail" class="dash-btn portal-tile tint-amber" id="ripe-retail-btn">
+                <span class="label">Ripe Retail</span>
+                <div class="portal-stats">
+                    <div class="portal-stat" id="ripe-retail-stat" title="Paid parcels waiting to be packed"><span>To pack</span><span class="n">–</span></div>
                 </div>
             </a>
-            <a href="/retail-orders" class="dash-btn" id="retail-orders-btn" style="position:relative;">
-                <div class="label" style="display:flex;align-items:center;gap:8px;">
-                    Soma Orders
-                    <span id="retail-badge" title="New orders awaiting approval" style="display:none;background:var(--action-red);color:var(--white);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
-                    <span id="retail-badge-progress" title="Approved orders awaiting delivery" style="display:none;background:var(--amber-text);color:var(--white);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:800;line-height:18px;"></span>
+            <a href="/retail-orders" class="dash-btn portal-tile tint-green" id="retail-orders-btn">
+                <span class="label">Soma Orders</span>
+                <div class="portal-stats">
+                    <div class="portal-stat" id="retail-stat-new" title="New orders awaiting approval"><span>New</span><span class="n">–</span></div>
+                    <div class="portal-stat" id="retail-stat-prog" title="Approved orders awaiting delivery"><span>In process</span><span class="n">–</span></div>
                 </div>
             </a>
         </div>
@@ -218,53 +233,35 @@ document.addEventListener('DOMContentLoaded',loadDayLabels);
   } catch(e) {}
 })();
 
-// Ripe Orders badges — red = new (pending), amber = approved awaiting fulfillment
-(async function loadRipeBadge() {
+// Buyer portal tiles — live counts. red = new (pending), amber = in process.
+function setPortalStat(id, n, tone){
+  const el = document.getElementById(id); if (!el) return;
+  const v = (typeof n === 'number') ? n : 0;
+  el.querySelector('.n').textContent = v;
+  el.classList.remove('hot','warm');
+  if (v > 0) el.classList.add(tone);
+}
+(async function loadRipeCounts() {
   try {
-    const r = await fetch('/api/ripe-orders/pending-count');
-    const d = await r.json();
-    if (d.count > 0) {
-      const badge = document.getElementById('ripe-badge');
-      const btn = document.getElementById('ripe-orders-btn');
-      if (badge) { badge.textContent = d.count; badge.style.display = 'inline-block'; }
-      if (btn) { btn.classList.add('has-pending'); }
-    }
-    if (d.in_progress > 0) {
-      const prog = document.getElementById('ripe-badge-progress');
-      if (prog) { prog.textContent = d.in_progress; prog.style.display = 'inline-block'; }
-    }
+    const d = await (await fetch('/api/ripe-orders/pending-count')).json();
+    setPortalStat('ripe-stat-new', d.count, 'hot');
+    setPortalStat('ripe-stat-prog', d.in_progress, 'warm');
+    if (d.count > 0) document.getElementById('ripe-orders-btn').classList.add('has-pending');
   } catch(e) {}
 })();
-
-// Retail Parcels badge — paid parcels waiting to be packed
-(async function loadRipeRetailBadge() {
+(async function loadRipeRetailCount() {
   try {
-    const r = await fetch('/api/ripe-retail/pack-count');
-    const d = await r.json();
-    if (d.count > 0) {
-      const badge = document.getElementById('ripe-retail-badge');
-      const btn = document.getElementById('ripe-retail-btn');
-      if (badge) { badge.textContent = d.count; badge.style.display = 'inline-block'; }
-      if (btn) { btn.classList.add('has-pending'); }
-    }
+    const d = await (await fetch('/api/ripe-retail/pack-count')).json();
+    setPortalStat('ripe-retail-stat', d.count, 'hot');
+    if (d.count > 0) document.getElementById('ripe-retail-btn').classList.add('has-pending');
   } catch(e) {}
 })();
-
-// SBBC Orders badges — red = new (pending), amber = approved awaiting delivery
-(async function loadRetailBadge() {
+(async function loadRetailCounts() {
   try {
-    const r = await fetch('/api/retail-orders/pending-count');
-    const d = await r.json();
-    if (d.count > 0) {
-      const badge = document.getElementById('retail-badge');
-      const btn = document.getElementById('retail-orders-btn');
-      if (badge) { badge.textContent = d.count; badge.style.display = 'inline-block'; }
-      if (btn) { btn.classList.add('has-pending'); }
-    }
-    if (d.in_progress > 0) {
-      const prog = document.getElementById('retail-badge-progress');
-      if (prog) { prog.textContent = d.in_progress; prog.style.display = 'inline-block'; }
-    }
+    const d = await (await fetch('/api/retail-orders/pending-count')).json();
+    setPortalStat('retail-stat-new', d.count, 'hot');
+    setPortalStat('retail-stat-prog', d.in_progress, 'warm');
+    if (d.count > 0) document.getElementById('retail-orders-btn').classList.add('has-pending');
   } catch(e) {}
 })();
 
