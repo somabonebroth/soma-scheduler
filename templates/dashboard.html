@@ -58,6 +58,13 @@
 /* ── Management list: reduced-weight rows, each showing its sub-sections ── */
 .mgmt-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
 /* Morning brief — yesterday, read before anything else */
+.brief-sign { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--border); }
+.brief-sign input { flex: 1; min-width: 110px; padding: 8px 11px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-family: inherit; background: var(--white); }
+.brief-sign button { background: var(--action-green); color: var(--white); border: none; border-radius: 8px; padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; }
+.brief-signed { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--action-green); font-weight: 600; }
+.brief-signed button { margin-left: auto; background: none; border: 1px solid var(--border); color: var(--text-light); border-radius: 6px; padding: 3px 9px; font-size: 11px; cursor: pointer; }
+.brief-catchup { margin-top: 10px; font-size: 12.5px; }
+.brief-catchup button { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark, var(--amber-text)); border-radius: 8px; padding: 6px 11px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .brief { background: var(--card-bg); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; }
 .brief-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
 .brief-title { font-size: 13px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 1px; }
@@ -295,7 +302,22 @@ async function loadBrief(){
             '<div class="brief-note"><span class="src">' + briefEsc(n.source) + '</span>'
             + briefEsc(n.text) + '</div>').join('') + '</div>';
     }
+
+    // Daily review replaced the weekly HOO sign-off (2026-08-18).
+    if (b.signoff) {
+        const when = (b.signoff.signed_at || '').substring(0, 16).replace('T', ' ');
+        html += '<div class="brief-signed">&#10003; Reviewed by ' + briefEsc(b.signoff.name)
+            + ' &middot; ' + briefEsc(when)
+            + (b.signoff.notes ? ' &middot; ' + briefEsc(b.signoff.notes) : '')
+            + '<button onclick="unsignBrief()">Undo</button></div>';
+    } else if (b.needs_review) {
+        html += '<div class="brief-sign">'
+            + '<input type="text" id="brief-name" placeholder="Your name" autocomplete="off">'
+            + '<input type="text" id="brief-note" placeholder="Notes (optional)" autocomplete="off">'
+            + '<button onclick="signBrief()">&#10003; Mark reviewed</button></div>';
+    }
     el.innerHTML = html;
+    loadCatchup();
 }
 
 function stepBrief(delta){
@@ -303,25 +325,78 @@ function stepBrief(delta){
     loadBrief();
 }
 
+function briefOffsetFor(iso){
+    const then = new Date(iso + 'T00:00:00');
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    return Math.max(1, Math.round((now - then) / 86400000));
+}
+
+async function signBrief(){
+    const name = document.getElementById('brief-name').value.trim();
+    if (!name) { document.getElementById('brief-name').focus(); return; }
+    const res = await fetch('/api/daily-signoff/' + briefDateStr(briefOffset), {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name, notes: document.getElementById('brief-note').value.trim()}),
+    });
+    if (res.ok) { loadBrief(); loadProdBadge(); }
+}
+
+async function unsignBrief(){
+    const res = await fetch('/api/daily-signoff/' + briefDateStr(briefOffset), {method: 'DELETE'});
+    if (res.ok) { loadBrief(); loadProdBadge(); }
+}
+
+// A missed morning should surface, not quietly age out.
+async function loadCatchup(){
+    let d;
+    try {
+        const res = await fetch('/api/daily-signoffs/pending');
+        if (!res.ok) return;
+        d = await res.json();
+    } catch (e) { return; }
+    const older = (d.pending || []).filter(iso => briefOffsetFor(iso) !== briefOffset);
+    if (!older.length) return;
+    const el = document.getElementById('brief');
+    if (!el) return;
+    const div = document.createElement('div');
+    div.className = 'brief-catchup';
+    div.innerHTML = '<button onclick="jumpToBrief(\'' + older[0] + '\')">'
+        + older.length + ' other day' + (older.length > 1 ? 's' : '')
+        + ' still unreviewed &mdash; oldest: ' + older[0] + '</button>';
+    el.appendChild(div);
+}
+
+function jumpToBrief(iso){
+    briefOffset = briefOffsetFor(iso);
+    loadBrief();
+}
+
 loadBrief();
 
 // Production Record — pending sign-off badge
-(async function loadProdBadge() {
+async function loadProdBadge() {
   try {
-    var r = await fetch('/api/traceability');
-    var weeks = await r.json();
-    // Find weeks that are all_complete but have no HOO sign-off
-    var needsSignoff = weeks.filter(function(w) {
-      return w.completion_state === 'all_complete' && !w.hoo_signoff;
-    });
+    // Daily review replaced the weekly sign-off — the badge counts days the
+    // kitchen ran that the HOO hasn't reviewed yet.
+    var r = await fetch('/api/daily-signoffs/pending');
+    var d = await r.json();
+    var needsSignoff = d.pending || [];
     if (needsSignoff.length > 0) {
       var badge = document.getElementById('prod-badge');
       var btn   = document.getElementById('prod-record-btn');
       if (badge) { badge.textContent = needsSignoff.length; badge.style.display = 'inline-block'; }
       if (btn)   btn.classList.add('needs-signoff');
+    } else {
+      // Signing the last outstanding day should clear the badge, not leave a
+      // stale count sitting directly under the brief that cleared it.
+      const badge = document.getElementById('prod-badge');
+      const btn   = document.getElementById('prod-record-btn');
+      if (badge) badge.style.display = 'none';
+      if (btn)   btn.classList.remove('needs-signoff');
     }
   } catch(e) {}
-})();
+}
+loadProdBadge();
 
 // Buyer portal tiles — live counts. red = new (pending), amber = in process.
 function setPortalStat(id, n, tone){

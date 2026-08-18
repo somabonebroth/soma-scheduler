@@ -682,7 +682,8 @@ def get_week_summary(week_id):
 def get_traceability():
     """GET /api/traceability - completed weekly production records."""
     weeks = app.list_schedules()
-    signoffs = app._load_weekly_signoffs()
+    signoffs = app._load_weekly_signoffs()          # history only — no longer written
+    day_signoffs = app._load_daily_signoffs()       # the live review record
     recipes = app.load_recipes()
     records = []
     for week_id in weeks:
@@ -713,7 +714,12 @@ def get_traceability():
                 week_record["days"].append({
                     "day_idx": d_idx,
                     "day_name": app.DAYS[d_idx],
+                    "date": app._run_start_date_str(week_id, d_idx),
                     "completed": True,
+                    # The HOO's daily review. This replaced the weekly sign-off,
+                    # and inherits its job of locking a reviewed day against
+                    # deletion (the Delete button used to hide on a signed WEEK).
+                    "signoff": day_signoffs.get(app._run_start_date_str(week_id, d_idx)),
                     "last_updated": cl.get("last_updated", ""),
                     # Kept for back-compat: a single value only when the whole day
                     # is one certification; blank when mixed (use certifications).
@@ -833,50 +839,8 @@ def delete_traceability_record(week_id, day_idx):
     })
 
 
-@production_bp.route("/api/weekly-signoff/<week_id>", methods=["POST"])
-@manager_required
-@require_valid_week
-def sign_off_week(week_id):
-    """Head of Operations confirms a week's production records.
-
-    Requires that all days that had a schedule entry have completed checklists.
-    Body: {name, notes (optional)}
-    """
-    data = request.json or {}
-    name = (data.get("name") or "").strip()
-    notes = (data.get("notes") or "").strip()
-    if not name:
-        return jsonify({"error": "Name required to sign off"}), 400
-
-    state, _, incomplete = app._week_completion_state(week_id)
-    if state == "none":
-        return jsonify({"error": "No production scheduled for this week"}), 400
-    if state == "partial":
-        labels = ", ".join(app.DAYS[di] for di in incomplete)
-        return jsonify({
-            "error": f"Cannot sign off — {len(incomplete)} scheduled day(s) still incomplete: {labels}"
-        }), 400
-
-    signoffs = app._load_weekly_signoffs()
-    signoffs[week_id] = {
-        "name": name,
-        "notes": notes,
-        "signed_at": datetime.now().isoformat(),
-    }
-    app._save_weekly_signoffs(signoffs)
-    return jsonify({"success": True, "signoff": signoffs[week_id]})
 
 
-@production_bp.route("/api/weekly-signoff/<week_id>", methods=["DELETE"])
-@manager_required
-@require_valid_week
-def unsign_week(week_id):
-    """Reverse a weekly sign-off (HOO can undo)."""
-    signoffs = app._load_weekly_signoffs()
-    if week_id in signoffs:
-        del signoffs[week_id]
-        app._save_weekly_signoffs(signoffs)
-    return jsonify({"success": True})
 
 
 # ── Production: organic production-runs read ─────────────────────────────────

@@ -150,6 +150,21 @@ def _stock_exceptions_section(on):
     return out
 
 
+def _kitchen_ran(prod, clean):
+    """Did the kitchen run that day? Completed production, or any cleaning
+    sign-off (closing or a rotation job).
+
+    This is what makes a day REVIEWABLE. A quiet day needs no HOO review and
+    raises no missing-closing flag — the system can't tell a quiet day from a
+    forgotten one, and flagging every weekend would bury the real flags.
+    """
+    if prod.get("completed"):
+        return True
+    if clean.get("jobs_done"):
+        return True
+    return bool((clean.get("closing") or {}).get("signed"))
+
+
 def _build_actions(prod, clean, exceptions, receiving):
     """The 'needs your attention' list — the whole point of the brief.
 
@@ -175,7 +190,7 @@ def _build_actions(prod, clean, exceptions, receiving):
     # Only chase a missing closing sign-off on a day we KNOW the kitchen ran.
     # The system can't tell a quiet day from a forgotten one, and flagging every
     # weekend and every pre-launch date would bury the flags that matter.
-    kitchen_ran = bool(prod.get("completed")) or bool(clean.get("jobs_done"))
+    kitchen_ran = _kitchen_ran(prod, clean)
     if not closing.get("signed"):
         if kitchen_ran:
             actions.append({"level": "medium", "area": "Closing",
@@ -220,10 +235,13 @@ def get_daily_brief():
         if j.get("notes"):
             notes.append({"source": j["title"], "text": j["notes"]})
 
+    signoffs = app._load_daily_signoffs()
     return jsonify({
         "date": on.isoformat(),
         "day_name": on.strftime("%A"),
         "label": on.strftime("%A %d %B"),
+        "signoff": signoffs.get(on.isoformat()),
+        "needs_review": _kitchen_ran(prod, clean),
         "production": prod,
         "cleaning": clean,
         "sales": sales,
@@ -233,3 +251,85 @@ def get_daily_brief():
         "actions": actions,
         "all_clear": not actions,
     })
+
+
+@daily_brief_bp.route("/api/daily-signoff/<on_date>", methods=["POST"])
+@manager_required
+def sign_off_day(on_date):
+    """HOO confirms they have read and actioned a day's brief. Body: {name, notes?}.
+
+    Deliberately NOT gated on the day being problem-free: the brief exists to be
+    read and acted on, and blocking the signature would just leave days unsigned
+    while the real work happened elsewhere. What was flagged at signing time is
+    snapshotted so the record shows what was reviewed.
+    """
+    on = _parse_date(on_date)
+    if on is None:
+        return jsonify({"error": "Invalid date"}), 400
+    body = request.get_json(force=True) or {}
+    name = (body.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Name required to sign off"}), 400
+
+    prod = _production_section(on)
+    try:
+        clean = cleaning.day_summary(on)
+    except Exception:
+        logger.warning("daily sign-off: cleaning summary failed", exc_info=True)
+        clean = {"closing": {}, "jobs_done": [], "jobs_overdue": 0}
+    actions = _build_actions(prod, clean, _stock_exceptions_section(on), _receiving_section(on))
+
+    signoffs = app._load_daily_signoffs()
+    signoffs[on.isoformat()] = {
+        "name": name,
+        "notes": (body.get("notes") or "").strip(),
+        "signed_at": datetime.now().isoformat(timespec="seconds"),
+        "open_actions": len(actions),
+    }
+    app._save_daily_signoffs(signoffs)
+    return jsonify({"success": True, "signoff": signoffs[on.isoformat()]})
+
+
+@daily_brief_bp.route("/api/daily-signoff/<on_date>", methods=["DELETE"])
+@manager_required
+def unsign_day(on_date):
+    """Reverse a daily review (mis-click); the HOO can re-sign at any time."""
+    on = _parse_date(on_date)
+    if on is None:
+        return jsonify({"error": "Invalid date"}), 400
+    signoffs = app._load_daily_signoffs()
+    if on.isoformat() in signoffs:
+        del signoffs[on.isoformat()]
+        app._save_daily_signoffs(signoffs)
+    return jsonify({"success": True})
+
+
+@daily_brief_bp.route("/api/daily-signoffs/pending", methods=["GET"])
+@manager_required
+def pending_reviews():
+    """Days the kitchen ran that have no HOO review yet, oldest first.
+
+    Looks back ?days= (default 14, max 60) and never past today. Drives the
+    catch-up line on the brief and the dashboard badge, so a missed morning
+    surfaces instead of quietly ageing out.
+    """
+    try:
+        window = max(1, min(60, int(request.args.get("days", 14))))
+    except ValueError:
+        window = 14
+    signoffs = app._load_daily_signoffs()
+    today = date.today()
+    pending = []
+    for back in range(1, window + 1):
+        on = today - timedelta(days=back)
+        if on.isoformat() in signoffs:
+            continue
+        prod = _production_section(on)
+        try:
+            clean = cleaning.day_summary(on)
+        except Exception:
+            clean = {"closing": {}, "jobs_done": [], "jobs_overdue": 0}
+        if _kitchen_ran(prod, clean):
+            pending.append(on.isoformat())
+    pending.sort()
+    return jsonify({"pending": pending, "count": len(pending), "days_scanned": window})

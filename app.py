@@ -1719,6 +1719,24 @@ def update_ccp_master():
 WEEKLY_SIGNOFFS_PATH = os.path.join(DATA_DIR, "weekly_signoffs.json")
 
 
+DAILY_SIGNOFFS_PATH = os.path.join(DATA_DIR, "daily_signoffs.json")
+
+
+def _load_daily_signoffs():
+    """Load the daily HOO review records, keyed by YYYY-MM-DD.
+
+    Daily review REPLACED the weekly sign-off on 2026-08-18 (see daily_brief.py).
+    The weekly records below are kept readable as history but are no longer
+    written to.
+    """
+    return _load_json(DAILY_SIGNOFFS_PATH, {})
+
+
+def _save_daily_signoffs(data):
+    """Persist the daily HOO review records."""
+    _save_json(DAILY_SIGNOFFS_PATH, data)
+
+
 def _load_weekly_signoffs():
     """Load the weekly HOO sign-off records."""
     return _load_json(WEEKLY_SIGNOFFS_PATH, {})
