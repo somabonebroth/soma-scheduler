@@ -200,7 +200,7 @@ This is the audit-critical chain: supplier lot → production run → finished g
 
 **Receipt photos:** one per delivery, stored as `<entry_id>.<ext>` in `rm_receipt_photos/`, anchored to the first entry of a bulk save. `GET /api/organic/raw-materials/receipt-photos` lists which entry ids have one; the Receiving list shows a "📎 Invoice" button per delivery.
 
-**Two pages, confusingly named:** "Manage Inventory" = `templates/organic.html` (4 tabs: Raw Materials / Production Runs / Finished Goods / Records). "Completed Production" = `templates/traceability.html` (the page formerly called Traceability; week records, HOO sign-off, stock exceptions, per-vessel certs). Two more standalone tool pages: `mass_balance.html` and `reconcile_raw.html` (both link the shared `static/style.css`).
+**Two pages, confusingly named:** "Manage Inventory" = `templates/organic.html` (4 tabs: Raw Materials / Production Runs / Finished Goods / Records; tabs are deep-linkable via `?tab=raw|runs|fg|records` and `showTab()` keeps the URL in step — added 2026-08-18; buttons carry `data-tab`, highlight is by name not position). The dead Suppliers/Buyers/Settings panes and the legacy top-form JS were deleted 2026-08-18 (5908 → 5084 lines). "Completed Production" = `templates/traceability.html` (the page formerly called Traceability; week records, HOO sign-off, stock exceptions, per-vessel certs). Two more standalone tool pages: `mass_balance.html` and `reconcile_raw.html` (both link the shared `static/style.css`).
 
 ---
 
@@ -459,6 +459,28 @@ Render is connected to `github.com/somabonebroth/soma-scheduler` and auto-deploy
 ---
 
 ## Pending architectural work
+
+### UX simplification / two-role split — IN PROGRESS (started 2026-08-18)
+
+Goal: two logins, two dashboards. `APP_PASSWORD` → production role (kitchen tablet:
+Today's Schedule, Weekly Schedule with prev/next, Cleaning & Upkeep [= /cleaning,
+renamed], Recipes READ-ONLY, + placeholder Opening/Closing checklists);
+`MANAGER_PASSWORD` → manager role (the HOO's desktop: today's full-weight Schedule /
+Quick Actions / Buyer Portals tiles, then reduced-weight expandable rows whose headers
+list their sub-sections — Analytics, Production Record, Inventory, **Sales & Receiving
+Record** (Records tab extracted from organic.html to its own page), Organic
+Certification, Buyers & Suppliers, Recipe Cards, Cleaning Records [placeholder],
+Settings & Other [company settings incl. Ripe buffer + credits, CCP master, backup,
+Shopify/Clover import, Ripe tools — home for every orphan]). The current manager gate
+(`/api/verify-manager` + sessionStorage on the dashboard's Administration `<details>`)
+is client-side only and gets deleted; recipe write routes become truly manager-only.
+
+Sequence: **Phase 1 invisible cleanups — DONE 2026-08-18** (dead organic.html panes;
+`?tab=` deep links; dead `/checklist` route + `ripe_products.html`). Phase 2: extract
+Sales & Receiving Record page. Phase 3: role in session + two dashboards + recipes
+read-only. Then cleaning rename. Daily checklists + cleaning records = separate
+session. `base.html` consolidation deliberately deferred. Details in the memory note
+`project_ux_simplification`.
 
 ### Coco Market direct ship — PLANNED (2026-08-17)
 
