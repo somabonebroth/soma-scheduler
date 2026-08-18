@@ -31,7 +31,7 @@ import copy
 from datetime import datetime, timedelta
 from functools import wraps
 
-from flask import Blueprint, request, jsonify, session, redirect, url_for, send_file
+from flask import Blueprint, request, jsonify, session, redirect, url_for, send_file, render_template
 
 # Foundation layer (dependency-free) — imported directly, same as suppliers.py.
 from helpers import (
@@ -187,6 +187,17 @@ def _restore_sale_lots(fg, sale):
         target = next((f for f in fg if f.get("id") == sale["fg_id"]), None)
         if target:
             target["quantity_remaining"] = int(target.get("quantity_remaining") or 0) + int(sale.get("quantity") or 0)
+
+
+@sales_bp.route("/sales-receiving")
+@login_required
+def sales_receiving_page():
+    """Render the Sales & Receiving Record page (sales, receiving, search & trace).
+
+    Extracted from the Records tab of Manage Inventory (organic.html) on
+    2026-08-18; /organic?tab=records redirects here.
+    """
+    return render_template("sales_receiving.html")
 
 
 @sales_bp.route("/api/organic/sales", methods=["GET"])
