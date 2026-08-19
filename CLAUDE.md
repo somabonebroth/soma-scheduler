@@ -974,6 +974,17 @@ All stem from JSON files lacking cross-file/optimistic-concurrency guarantees:
 - Login uses `==` not `hmac.compare_digest` (`app.py` ~L845); `SESSION_COOKIE_SECURE` not
   set. Both small.
 
+**🟧 A lossy channel import is SILENT — open, deliberately deferred (found 2026-08-19).**
+`_shopify_commit_for_week` / `_clover_commit_for_week` return `{"ok": True}` with **HTTP 200**
+even when `error_count > 0` — a SKU skipped for insufficient FG never becomes a sale, and the
+only trace is `errors[]` in a response body nobody reads on a cron run. `skipped_no_sku` is not
+even looked at by the commit. An unparseable SKU does fail loudly (400), but the two Render Cron
+Jobs are configured in the dashboard, not `render.yaml`, so whether a non-2xx surfaces depends on
+the command using `curl -f` — worth checking. Net effect: a week that lost half its SKUs looks
+exactly like a clean one. `/admin/channel-prices/reconcile` can now DETECT this, but detection
+you have to remember to run is not the same as being told. Fix = have the weekly cron announce
+`error_count > 0` or a non-empty `skipped_no_sku` somewhere Jeremy will see it.
+
 **⬜ Operational backlog (overlaps Track A, still open):** no tests, no CI, no staging branch,
 Python version unpinned (`render.yaml` says only `python`; deps are `==`-pinned but no lock
 for transitives), no written runbook. The **runbook** (one page: how to roll back, where
