@@ -56,6 +56,15 @@
 }
 #prod-record-btn.needs-signoff { animation: prod-pulse 2s ease infinite; }
 /* ── Management list: reduced-weight rows, each showing its sub-sections ── */
+/* Collapsed by default — the daily work is above it, and nine rows of links
+   read as the point of the page when they are only ever an occasional errand.
+   Anything inside that needs the manager TODAY (the unreviewed-days count)
+   is mirrored onto the summary, so collapsing can never hide a flag. */
+.mgmt-details > summary.mgmt-summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
+.mgmt-details > summary.mgmt-summary::-webkit-details-marker { display: none; }
+.mgmt-details > summary.mgmt-summary:hover { color: var(--accent); }
+.mgmt-caret { font-size: 13px; line-height: 1; color: var(--text-light); transition: transform .12s; }
+.mgmt-details[open] .mgmt-caret { transform: rotate(90deg); }
 .mgmt-list { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
 /* Daily Review — full-width entry point, highlighted until the day is reviewed */
 .review-btn { display: flex; align-items: center; gap: 14px; width: 100%; box-sizing: border-box; text-decoration: none; background: var(--card-bg); border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 18px; transition: background .12s, border-color .12s; }
@@ -151,7 +160,11 @@
                 </div>
             </a>
         </div>
-        <div class="section-label">Management</div>
+        <details class="mgmt-details">
+            <summary class="section-label mgmt-summary">Management
+                <span class="mgmt-caret" aria-hidden="true">&#9656;</span>
+                <span class="mgmt-badge" id="mgmt-open-badge" title="Days the kitchen ran that you have not reviewed yet"></span>
+            </summary>
         <div class="mgmt-list">
             <div class="mgmt-row">
                 <a class="mgmt-title" href="/analytics?tab=sales">Analytics</a>
@@ -190,6 +203,7 @@
                 <div class="mgmt-links"><a href="/company-settings">Company Settings</a><a href="/company-settings">Ripe buffer &amp; credits</a><a href="/ccp-master">CCP Master</a><button type="button" onclick="downloadBackup()">Data Backup</button><a href="/admin/shopify-import">Shopify Import</a><a href="/admin/clover-import">Clover Import</a><a href="/ripe-sku-audit">Ripe SKU Audit</a><a href="/ripe-analytics">Ripe Analytics</a></div>
             </div>
         </div>
+        </details>
     </div>
 {% else %}
     <div class="dashboard-grid prod-grid">
@@ -285,7 +299,7 @@ async function loadReviewButton(){
 }
 loadReviewButton();
 
-// Production Record — pending sign-off badge// Production Record — pending sign-off badge
+// Production Record — pending sign-off badge
 async function loadProdBadge() {
   try {
     // Daily review replaced the weekly sign-off — the badge counts days the
@@ -296,15 +310,20 @@ async function loadProdBadge() {
     if (needsSignoff.length > 0) {
       var badge = document.getElementById('prod-badge');
       var btn   = document.getElementById('prod-record-btn');
+      var open  = document.getElementById('mgmt-open-badge');
       if (badge) { badge.textContent = needsSignoff.length; badge.style.display = 'inline-block'; }
       if (btn)   btn.classList.add('needs-signoff');
+      // Management is collapsed by default, so surface the count on its header.
+      if (open) { open.textContent = needsSignoff.length; open.style.display = 'inline-block'; }
     } else {
       // Signing the last outstanding day should clear the badge, not leave a
       // stale count sitting directly under the brief that cleared it.
       const badge = document.getElementById('prod-badge');
       const btn   = document.getElementById('prod-record-btn');
+      const open  = document.getElementById('mgmt-open-badge');
       if (badge) badge.style.display = 'none';
       if (btn)   btn.classList.remove('needs-signoff');
+      if (open)  open.style.display = 'none';
     }
   } catch(e) {}
 }
