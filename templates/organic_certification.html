@@ -61,16 +61,25 @@
     <div class="dashboard-grid">
         <p class="oc-intro">Everything needed for the organic certification chain in one place. <strong>Getting ready for an audit?</strong> Work through steps 1–3 in order to get your inventory accurate and proven, then have your records and documents ready to show.</p>
         <div class="section-label">Before an audit — work through in order</div>
-        <p class="section-note">Each step builds on the one before it.</p>
+        <p class="section-note">Each step builds on the one before it. Steps 1 and 3 have a
+        raw-material side and a finished-goods side — do both. Finished goods are the certified
+        product that actually leaves the building, so an audit that only proves the raw side
+        proves half the chain.</p>
         <div class="dash-row">
             <a href="/admin/reconcile-raw" class="dash-btn"><span class="step">1</span><span class="icon">&#9851;</span><span class="label">Reconcile Raw Materials</span><span class="sublabel">Make the books accurate first — replay every completed production run so raw-material balances match what was actually used.</span></a>
-            <a href="/mass-balance" class="dash-btn"><span class="step">2</span><span class="icon">&#128202;</span><span class="label">Mass Balance</span><span class="sublabel">Check the numbers add up — Opening + Received &minus; Consumed should equal what's on the shelf. Investigate any gap.</span></a>
-            <a href="/audit/rm" class="dash-btn"><span class="step">3</span><span class="icon">&#128269;</span><span class="label">Audit Inventory</span><span class="sublabel">Confirm it for real — physically count raw materials and compare them to the books.</span></a>
+            <a href="/admin/fg-reconcile" class="dash-btn"><span class="step">1</span><span class="icon">&#9851;</span><span class="label">Reconcile Finished Goods</span><span class="sublabel">The same for the FG side — find where recorded stock has drifted from produced minus sold, and what explains each gap.</span></a>
+        </div>
+        <div class="dash-row" style="margin-top:12px;">
+            <a href="/mass-balance" class="dash-btn"><span class="step">2</span><span class="icon">&#128202;</span><span class="label">Mass Balance</span><span class="sublabel">Check the numbers add up, both sides at once — Opening + Received &minus; Consumed should equal what's on the shelf. Investigate any gap.</span></a>
+        </div>
+        <div class="dash-row" style="margin-top:12px;">
+            <a href="/audit/rm" class="dash-btn"><span class="step">3</span><span class="icon">&#128269;</span><span class="label">Count Raw Materials</span><span class="sublabel">Confirm it for real — physically count raw materials and compare them to the books.</span></a>
+            <a href="/audit/fg" class="dash-btn"><span class="step">3</span><span class="icon">&#128269;</span><span class="label">Count Finished Goods</span><span class="sublabel">Physically count finished goods and compare them to the books. This is the count that covers your certified product.</span></a>
         </div>
         <div class="section-label">Records &amp; documents — keep these ready</div>
         <p class="section-note">Reference material an auditor may ask to see at any time.</p>
         <div class="dash-row">
-            <a href="/audits" class="dash-btn"><span class="icon">&#128220;</span><span class="label">Audit History</span><span class="sublabel">Your past inventory counts, with dates.</span></a>
+            <a href="/audits" class="dash-btn"><span class="icon">&#128220;</span><span class="label">Stock Count History</span><span class="sublabel">Your past raw-material and finished-goods counts, with dates.</span></a>
             <a href="/certifications" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Documents</span><span class="sublabel">Organic certificates and compliance paperwork.</span></a>
         </div>
     </div>
