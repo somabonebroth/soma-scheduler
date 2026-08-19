@@ -1302,55 +1302,6 @@ def api_buyer_analytics(buyer_name):
     })
 
 
-@app.route("/api/analytics/backfill-sale-prices", methods=["POST"])
-@manager_required
-def backfill_sale_prices():
-    """One-time backfill: add unit_price and line_total to historical sale
-    records that were created before pricing was stored on sale records.
-    Looks up the current price from the buyer catalogue in buyers.json.
-    Returns a summary of how many records were updated.
-    """
-    sales   = _load_json(ORGANIC_SALES_PATH, [])
-    buyers  = _load_buyers()
-
-    price_map = {}
-    for b in buyers:
-        bname = (b.get("name") or "").strip().lower()
-        for sku in (b.get("skus") or []):
-            sk = sku.get("sku_key", "")
-            price = sku.get("price")
-            if sk and price is not None:
-                price_map[(bname, sk)] = round(float(price), 2)
-
-    updated = 0
-    no_price = 0
-    for sale in sales:
-        if sale.get("unit_price") is not None:
-            continue  # already has a price
-        buyer_key = (sale.get("buyer") or "").strip().lower()
-        sku_key   = sale.get("sku_key", "")
-        price = price_map.get((buyer_key, sku_key))
-        if price is None:
-            no_price += 1
-            continue
-        qty = int(sale.get("quantity") or 0)
-        sale["unit_price"] = price
-        sale["line_total"]  = round(price * qty, 2)
-        if "cases" not in sale:
-            sale["cases"] = qty // 12
-        updated += 1
-
-    if updated:
-        _save_json(ORGANIC_SALES_PATH, sales)
-
-    return jsonify({
-        "ok": True,
-        "updated": updated,
-        "skipped_no_price": no_price,
-        "message": f"Updated {updated} records. {no_price} records had no matching buyer price and were left unchanged.",
-    })
-
-
 @app.route("/api/analytics/sales-by-buyer", methods=["GET"])
 @manager_required
 def api_sales_by_buyer():

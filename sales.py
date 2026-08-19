@@ -3,8 +3,7 @@
 Fifth step of the app.py split (CLAUDE.md "Pending architectural work"). Scope:
 the 7 organic-sales CRUD/document routes (/api/organic/sales*). NOT in scope:
 channel imports (shopify/clover — deliberate near-dupes in app.py), sales
-analytics (api_sales_by_buyer, backfill_sale_prices — future analytics
-blueprint), api_settle_ripe_sale (Ripe), company-info, and the trace route —
+analytics (api_sales_by_buyer — future analytics blueprint), api_settle_ripe_sale (Ripe), company-info, and the trace route —
 those share the sales region physically but belong to other domains.
 
 Pattern (matches buyers/recipes): routes move, shared helpers STAY. The buyer
