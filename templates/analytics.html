@@ -3,16 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Production & Sales Analytics · Soma</title>
+<title>Sales by Buyer · Soma</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
 body.an-page { background:var(--bg); }
 .an-wrap { max-width:1040px; margin:0 auto; padding:24px 16px 60px; }
-.tab-bar { display:flex; gap:0; background:var(--white); border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:20px; }
-.tab-btn { flex:1; padding:13px 16px; font-size:13px; font-weight:600; border:none; background:none; cursor:pointer; color:var(--text-light); border-bottom:3px solid transparent; transition:all .15s; }
-.tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); background:#f9faf7; }
-.tab-pane { display:none; }
-.tab-pane.active { display:block; }
 .period-row { display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; align-items:center; }
 .period-label { font-size:14px; font-weight:600; color:var(--text); }
 .period-toggle { display:inline-flex; }
@@ -38,13 +33,12 @@ body.an-page { background:var(--bg); }
 .rev-bar-fill { height:4px; background:var(--accent); border-radius:2px; }
 .empty-state { text-align:center; padding:48px 24px; color:var(--text-light); font-size:14px; border:2px dashed var(--border); border-radius:12px; background:var(--white); }
 .loading { text-align:center; padding:32px; color:var(--text-light); }
-.tracker-frame { width:100%; height:80vh; border:none; border-radius:10px; background:var(--white); }
 </style>
 </head>
 <body class="an-page inv-page">
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-  <div class="header-text"><h1 id="an-title">Sales by Buyer</h1><p id="an-sub">Revenue by buyer</p></div>
+  <div class="header-text"><h1>Sales by Buyer</h1><p>Revenue by buyer</p></div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <div class="nav-arrows">
       <button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button>
@@ -55,13 +49,6 @@ body.an-page { background:var(--bg); }
 </div>
 
 <div class="an-wrap">
-  <div class="tab-bar">
-    <button class="tab-btn active" onclick="showTab('sales')">Sales by Buyer</button>
-    <button class="tab-btn" onclick="showTab('production')">Production Tracker</button>
-  </div>
-
-  <!-- Sales by Buyer -->
-  <div class="tab-pane active" id="tab-sales">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
       <div style="font-size:12px;color:var(--text-light);">Click any buyer for detailed analytics. Revenue requires prices set in buyer catalogue.</div>
       <button id="backfill-btn" onclick="runBackfill()" class="btn btn-sm" style="font-size:11px;">🔄 Backfill missing prices</button>
@@ -82,40 +69,10 @@ body.an-page { background:var(--bg); }
       </select>
     </div>
     <div id="sales-list"><div class="loading">Loading…</div></div>
-  </div>
-
-  <!-- Production Tracker -->
-  <div class="tab-pane" id="tab-production">
-    <iframe id="tracker-frame" src="" style="width:100%;height:80vh;border:none;border-radius:10px;background:var(--white);" title="Production Tracker"></iframe>
-  </div>
 </div>
 
 <script>
 var _period = 'all';
-
-var TAB_HEADERS = {
-  sales:      ['Sales by Buyer', 'Revenue by buyer'],
-  production: ['Production Tracker', 'Output overview'],
-};
-
-function showTab(id) {
-  document.querySelectorAll('.tab-btn').forEach(function(b,i){
-    b.classList.toggle('active', ['sales','production'][i] === id);
-  });
-  document.querySelectorAll('.tab-pane').forEach(function(p){ p.classList.remove('active'); });
-  document.getElementById('tab-'+id).classList.add('active');
-  // Retitle the single page header to the active tab, so each tab keeps a dark
-  // header above its numbers without a stacked duplicate.
-  var hdr = TAB_HEADERS[id];
-  if (hdr) {
-    document.getElementById('an-title').textContent = hdr[0];
-    document.getElementById('an-sub').textContent = hdr[1];
-  }
-  if (id === 'production') {
-    var frame = document.getElementById('tracker-frame');
-    if (frame && !frame.src.includes('production-tracker')) frame.src = '/production-tracker?embed=1';
-  }
-}
 
 function setPeriod(p, btn) {
   _period = p;
@@ -199,12 +156,6 @@ function e(s) {
   var fwd  = document.getElementById('nav-fwd');
   if(back) { back.disabled = window.history.length <= 1; back.onclick = function(){ window.history.back(); }; }
   if(fwd)  fwd.onclick = function(){ window.history.forward(); };
-})();
-
-// Deep-link: open the tab named in ?tab= (sales | production); defaults to sales.
-(function(){
-  var t = new URLSearchParams(window.location.search).get('tab');
-  if (t === 'production') showTab('production');
 })();
 
 loadSales();
