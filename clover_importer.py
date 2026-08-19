@@ -261,8 +261,9 @@ def aggregate_line_items(orders):
     `revenue` is gross line value in dollars (Clover stores `price` in cents),
     excluding tax and any discounts — Clover models discounts as separate
     order-level and line-level objects whose sign convention varies by
-    merchant, so they are deliberately not netted here. It exists for the
-    Daily Review's read-only report; the weekly commit ignores it.
+    merchant, so they are deliberately not netted here — so this figure reads
+    HIGH on discounted items. It feeds the Daily Review's read-only report AND
+    the weekly commit, which records it on each sale as line_total.
 
     Clover line items don't always have an explicit quantity field — on
     retail POS each scanned item is its own line item with implicit

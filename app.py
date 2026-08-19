@@ -4495,6 +4495,10 @@ def _shopify_commit_for_week(week_id):
         fmt = matched["format"]
         quantity = matched["quantity"]
         order_ids = matched["order_ids"]
+        # What the channel actually charged. Each importer's aggregate_line_items
+        # docstring states precisely what its figure nets (Shopify subtracts
+        # line-level discounts; Clover does not net its discount objects).
+        revenue = float(matched.get("revenue") or 0.0)
 
         # Idempotency: skip if already imported for this (channel, week, sku)
         already = next(
@@ -4572,6 +4576,11 @@ def _shopify_commit_for_week(week_id):
             "format": fmt,
             "certification": sale_cert,
             "quantity": quantity,
+            # line_total carries the channel's exact figure; unit_price is
+            # derived from it for display. Read the line from line_total, never
+            # by multiplying the rounded unit_price back out.
+            "unit_price": (round(revenue / quantity, 2) if quantity else 0.0),
+            "line_total": round(revenue, 2),
             "lots": sale_lots,
             "fg_lot": (sale_lots[0]["lot"] if len(sale_lots) == 1 else ""),
             "fg_id": (sale_lots[0]["fg_ids"][0]
@@ -4825,6 +4834,10 @@ def _clover_commit_for_week(week_id):
         fmt = matched["format"]
         quantity = matched["quantity"]
         order_ids = matched["order_ids"]
+        # What the channel actually charged. Each importer's aggregate_line_items
+        # docstring states precisely what its figure nets (Shopify subtracts
+        # line-level discounts; Clover does not net its discount objects).
+        revenue = float(matched.get("revenue") or 0.0)
 
         already = next(
             (s for s in sales
@@ -4898,6 +4911,11 @@ def _clover_commit_for_week(week_id):
             "format": fmt,
             "certification": sale_cert,
             "quantity": quantity,
+            # line_total carries the channel's exact figure; unit_price is
+            # derived from it for display. Read the line from line_total, never
+            # by multiplying the rounded unit_price back out.
+            "unit_price": (round(revenue / quantity, 2) if quantity else 0.0),
+            "line_total": round(revenue, 2),
             "lots": sale_lots,
             "fg_lot": (sale_lots[0]["lot"] if len(sale_lots) == 1 else ""),
             "fg_id": (sale_lots[0]["fg_ids"][0]

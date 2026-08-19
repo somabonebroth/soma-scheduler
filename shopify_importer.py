@@ -254,9 +254,10 @@ def aggregate_line_items(orders):
         skipped_no_sku: [{'order_id', 'title', 'variant_title', 'quantity'}]
 
     `revenue` is gross line value excluding tax and shipping: unit price x
-    quantity, less any line-level discount. It exists for the Daily Review's
-    read-only report; the weekly commit ignores it (Soma prices sales from the
-    buyer catalogue, not from the channel).
+    quantity, less any line-level discount. It feeds the Daily Review's
+    read-only report AND the weekly commit, which records it on each sale as
+    line_total — the channel is the only place these retail prices exist
+    (buyers.json has no catalogue for "SOMA (Shopify)").
 
     Line items with empty SKU (bundle parents, free gifts without SKU, etc.)
     are reported separately so they're visible in the preview but never
