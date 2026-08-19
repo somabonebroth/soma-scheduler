@@ -100,6 +100,18 @@ def week_range_ms(week_id):
     return int(monday.timestamp() * 1000), int(sunday_end.timestamp() * 1000)
 
 
+def day_range_ms(day_id):
+    """Given a date ('YYYY-MM-DD'), return (start_ms, end_ms) covering
+    00:00:00 -> 23:59:59 of that single day in America/Toronto, as Unix
+    epoch milliseconds. Day-scoped twin of week_range_ms.
+    """
+    day = datetime.strptime(day_id, "%Y-%m-%d")
+    if TIMEZONE is not None:
+        day = day.replace(tzinfo=TIMEZONE)
+    end = day + timedelta(hours=23, minutes=59, seconds=59)
+    return int(day.timestamp() * 1000), int(end.timestamp() * 1000)
+
+
 def _line_item_sku(li):
     """Extract a SKU string from a Clover line item, trying multiple
     locations because Clover's response shape varies by merchant config.
@@ -242,8 +254,15 @@ def aggregate_line_items(orders):
     """Walk every line item across all orders, sum quantities per SKU.
 
     Returns (by_sku, skipped_no_sku) — same shape as Shopify importer:
-        by_sku: {sku_string: {'quantity': int, 'order_ids': [str, ...]}}
+        by_sku: {sku_string: {'quantity': int, 'revenue': float,
+                              'order_ids': [str, ...]}}
         skipped_no_sku: [{'order_id', 'name', 'quantity'}]
+
+    `revenue` is gross line value in dollars (Clover stores `price` in cents),
+    excluding tax and any discounts — Clover models discounts as separate
+    order-level and line-level objects whose sign convention varies by
+    merchant, so they are deliberately not netted here. It exists for the
+    Daily Review's read-only report; the weekly commit ignores it.
 
     Clover line items don't always have an explicit quantity field — on
     retail POS each scanned item is its own line item with implicit
@@ -289,26 +308,24 @@ def aggregate_line_items(orders):
                     "quantity": qty,
                 })
                 continue
-            entry = by_sku.setdefault(sku, {"quantity": 0, "order_ids": []})
+            entry = by_sku.setdefault(sku, {"quantity": 0, "revenue": 0.0, "order_ids": []})
             entry["quantity"] += qty
+            try:
+                entry["revenue"] += (float(li.get("price") or 0) / 100.0) * qty
+            except (TypeError, ValueError):
+                pass
             if oid not in entry["order_ids"]:
                 entry["order_ids"].append(oid)
 
     return by_sku, skipped_no_sku
 
 
-def preview_week(week_id, recipes_data, token, merchant_id, api_base=None):
-    """Produce a structured preview of what would be imported for `week_id`.
+def _classify_skus(by_sku, recipes_data):
+    """Split aggregated SKUs into (matched, unparseable, skipped_other_brands).
 
-    Does NOT write to Soma data. Same return shape as
-    shopify_importer.preview_week so the commit logic in app.py can be
-    a thin wrapper that doesn't care which channel it came from.
+    Shared by preview_week and preview_day so the weekly commit and the Daily
+    Review can never disagree about what a SKU means.
     """
-    start_ms, end_ms = week_range_ms(week_id)
-    orders = fetch_orders(token, merchant_id, start_ms, end_ms, api_base=api_base)
-    by_sku, skipped = aggregate_line_items(orders)
-
-    # Set of legal Soma SKU keys for cross-reference.
     valid_keys = set()
     for recipe_name, recipe_meta in (recipes_data or {}).items():
         brand = (recipe_meta.get("brand") or "").strip()
@@ -328,6 +345,7 @@ def preview_week(week_id, recipes_data, token, merchant_id, api_base=None):
             skipped_other_brands.append({
                 "sku": sku,
                 "quantity": info["quantity"],
+                "revenue": round(info.get("revenue", 0.0), 2),
                 "order_ids": info["order_ids"],
             })
             continue
@@ -338,6 +356,7 @@ def preview_week(week_id, recipes_data, token, merchant_id, api_base=None):
             unparseable.append({
                 "sku": sku,
                 "quantity": info["quantity"],
+                "revenue": round(info.get("revenue", 0.0), 2),
                 "error": str(e),
             })
             continue
@@ -350,6 +369,7 @@ def preview_week(week_id, recipes_data, token, merchant_id, api_base=None):
             "format": fmt,
             "soma_key": soma_key,
             "quantity": info["quantity"],
+            "revenue": round(info.get("revenue", 0.0), 2),
             "exists_in_soma": soma_key in valid_keys,
             "order_ids": info["order_ids"],
         })
@@ -357,6 +377,32 @@ def preview_week(week_id, recipes_data, token, merchant_id, api_base=None):
     matched.sort(key=lambda x: x["sku"])
     unparseable.sort(key=lambda x: x["sku"])
     skipped_other_brands.sort(key=lambda x: x["sku"])
+    return matched, unparseable, skipped_other_brands
+
+
+def _count_line_items(orders):
+    """Total line items across orders, defensive about Clover's two shapes."""
+    total = 0
+    for o in orders:
+        f = o.get("lineItems")
+        if isinstance(f, dict):
+            total += len(f.get("elements", []) or [])
+        elif isinstance(f, list):
+            total += len(f)
+    return total
+
+
+def preview_week(week_id, recipes_data, token, merchant_id, api_base=None):
+    """Produce a structured preview of what would be imported for `week_id`.
+
+    Does NOT write to Soma data. Same return shape as
+    shopify_importer.preview_week so the commit logic in app.py can be
+    a thin wrapper that doesn't care which channel it came from.
+    """
+    start_ms, end_ms = week_range_ms(week_id)
+    orders = fetch_orders(token, merchant_id, start_ms, end_ms, api_base=api_base)
+    by_sku, skipped = aggregate_line_items(orders)
+    matched, unparseable, skipped_other_brands = _classify_skus(by_sku, recipes_data)
 
     # Toronto-local ISO range for human-friendly display in the response
     # (same shape as Shopify preview so the UI doesn't need to branch).
@@ -364,25 +410,42 @@ def preview_week(week_id, recipes_data, token, merchant_id, api_base=None):
     if TIMEZONE is not None:
         monday = monday.replace(tzinfo=TIMEZONE)
     sunday_end = monday + timedelta(days=6, hours=23, minutes=59, seconds=59)
-    range_start_iso = monday.isoformat()
-    range_end_iso = sunday_end.isoformat()
-
-    # Total line item count for visibility (defensive in case of weird shapes)
-    def _count_items(o):
-        f = o.get("lineItems")
-        if isinstance(f, dict):
-            return len(f.get("elements", []) or [])
-        if isinstance(f, list):
-            return len(f)
-        return 0
-    total_line_items = sum(_count_items(o) for o in orders)
 
     return {
         "week_id": week_id,
-        "range_start": range_start_iso,
-        "range_end": range_end_iso,
+        "range_start": monday.isoformat(),
+        "range_end": sunday_end.isoformat(),
         "order_count": len(orders),
-        "line_item_count": total_line_items,
+        "line_item_count": _count_line_items(orders),
+        "matched": matched,
+        "unparseable": unparseable,
+        "skipped_no_sku": skipped,
+        "skipped_other_brands": skipped_other_brands,
+    }
+
+
+def preview_day(day_id, recipes_data, token, merchant_id, api_base=None):
+    """One day's orders, same shape as preview_week plus `day_id`.
+
+    Read-only reporting for the Daily Review. There is deliberately no daily
+    commit: the weekly import remains the only path that writes sales and
+    deducts FG, so this can never double-count against it.
+    """
+    start_ms, end_ms = day_range_ms(day_id)
+    orders = fetch_orders(token, merchant_id, start_ms, end_ms, api_base=api_base)
+    by_sku, skipped = aggregate_line_items(orders)
+    matched, unparseable, skipped_other_brands = _classify_skus(by_sku, recipes_data)
+
+    day = datetime.strptime(day_id, "%Y-%m-%d")
+    if TIMEZONE is not None:
+        day = day.replace(tzinfo=TIMEZONE)
+
+    return {
+        "day_id": day_id,
+        "range_start": day.isoformat(),
+        "range_end": (day + timedelta(hours=23, minutes=59, seconds=59)).isoformat(),
+        "order_count": len(orders),
+        "line_item_count": _count_line_items(orders),
         "matched": matched,
         "unparseable": unparseable,
         "skipped_no_sku": skipped,

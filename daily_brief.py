@@ -21,6 +21,7 @@ top, `app.X(...)` resolved at request time; foundation IO from helpers.
 Manager-only throughout: this is the HOO's desk, not the production tablet.
 """
 import logging
+import os
 from functools import wraps
 from datetime import datetime, date, timedelta
 
@@ -125,6 +126,44 @@ def _kitchen_ran(prod, clean):
     return bool((clean.get("closing") or {}).get("signed"))
 
 
+def _ddmmyyyy(iso):
+    """YYYY-MM-DD -> DD/MM/YYYY (the format /api/label parses), or ''."""
+    d = _parse_date(iso)
+    return d.strftime("%d/%m/%Y") if d else ""
+
+
+def _lot_blocks(rows):
+    """The day's LOT#s, one block per distinct lot, for the labelling panel.
+
+    Read off the finished-goods rows rather than recomputed from the date, so
+    what the panel tells the floor to stamp is exactly what the inventory
+    record says those jars carry. Normally there is one lot; a day whose jars
+    came from batches started on different dates legitimately has more, and
+    each gets its own block rather than being collapsed to a single number.
+
+    `stamp` is the hot-stamp setup: the type is set face-down, so it reads
+    right-to-left with every character mirrored. Handing the floor the already
+    reversed sequence is the whole point — reversing it in your head over a hot
+    machine is where the mistakes come from.
+    """
+    blocks = {}
+    for r in rows:
+        lot = (r.get("lot") or "").strip()
+        if not lot:
+            continue
+        b = blocks.setdefault(lot, {
+            "lot": lot,
+            "stamp": list(reversed(list(lot))),
+            "batched_on": r.get("batched_on", ""),
+            "jars": 0,
+            "products": [],
+        })
+        b["jars"] += r.get("quantity", 0)
+        if r["item"] not in b["products"]:
+            b["products"].append(r["item"])
+    return sorted(blocks.values(), key=lambda b: -b["jars"])
+
+
 def _production_section(on):
     """SECTION 1 — what was made: jars completed that day, with totals.
 
@@ -158,6 +197,7 @@ def _production_section(on):
             batched_on = app._run_start_date_str(f.get("start_week_id"), f.get("start_day_idx")) or ""
         rows.append({
             "item": _sku_display(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")),
+            "brand": f.get("brand", ""),
             "recipe": f.get("recipe", ""),
             "format": f.get("format", ""),
             "certification": f.get("certification", ""),
@@ -165,6 +205,10 @@ def _production_section(on):
             "vessel": f.get("vessel", ""),
             "quantity": qty,
             "batched_on": batched_on,
+            # /api/label derives Best Before as production date + 365, the same
+            # arithmetic that produced this row's LOT#, so passing the batch
+            # (start) date keeps the printed label and the FG record identical.
+            "production_date": _ddmmyyyy(batched_on) or _ddmmyyyy(on.isoformat()),
         })
     rows.sort(key=lambda r: (-r["quantity"], r["item"]))
 
@@ -172,12 +216,15 @@ def _production_section(on):
     if not rows and day and day.get("produced"):
         source = "checklist"
         for recipe, qty in sorted(day["produced"].items(), key=lambda kv: -kv[1]):
-            rows.append({"item": recipe, "recipe": recipe, "format": "", "certification": "",
-                         "lot": "", "vessel": "", "quantity": qty, "batched_on": ""})
+            rows.append({"item": recipe, "brand": "", "recipe": recipe, "format": "",
+                         "certification": "", "lot": "", "vessel": "", "quantity": qty,
+                         "batched_on": "", "production_date": ""})
 
     totals = {}
     for r in rows:
         totals[r["item"]] = totals.get(r["item"], 0) + r["quantity"]
+
+    lots = _lot_blocks(rows)
 
     exceptions = _stock_exceptions_section(on)
     notes, issues = [], []
@@ -199,6 +246,7 @@ def _production_section(on):
         "day_idx": day_idx,
         "source": source,
         "rows": rows,
+        "lots": lots,
         "totals": sorted(totals.items(), key=lambda kv: -kv[1]),
         "total_jars": sum(r["quantity"] for r in rows),
         "scheduled": (day or {}).get("scheduled", []),
@@ -213,6 +261,72 @@ def _production_section(on):
         "ccp_total": (day or {}).get("ccp_total", 0),
         "finish_notes": (day or {}).get("finish_notes", []),
         "day_note": (day or {}).get("notes", ""),
+    }
+
+
+def _portal_orders(on):
+    """Portal orders whose stock left the building on that date.
+
+    Keyed on `deducted_at` (when FG actually moved), NOT `sale_date` — a Ripe
+    wholesale sale is dated by its DELIVERY date, which is usually in the
+    future, so a sale_date filter would miss the order the morning after it was
+    approved and then surface it again days later. This is the same reasoning
+    the mass balance uses for its FG "sold" column.
+
+    Ripe and SBBC orders both write one sale row per SKU, so the rows are
+    regrouped back into the order the buyer actually placed.
+    """
+    iso = on.isoformat()
+    orders = {}
+    for s in _load_json(app.ORGANIC_SALES_PATH, []):
+        oid = s.get("ripe_order_id") or s.get("retail_order_id")
+        if not oid:
+            continue
+        when = (s.get("deducted_at") or s.get("sale_date") or s.get("created_at") or "")[:10]
+        if when != iso:
+            continue
+        portal = "Ripe" if s.get("ripe_order_id") else "Wholesale Portal"
+        o = orders.setdefault(str(oid), {
+            "order_id": str(oid),
+            "portal": portal,
+            "buyer": (s.get("buyer") or "").strip() or portal,
+            "delivery_date": (s.get("sale_date") or "")[:10],
+            "delivery_label": s.get("delivery_label", ""),
+            "payment_pending": bool(s.get("payment_pending")),
+            "units": 0,
+            "revenue": 0.0,
+            "items": [],
+        })
+        try:
+            qty = int(s.get("quantity") or 0)
+        except (ValueError, TypeError):
+            qty = 0
+        o["units"] += qty
+        try:
+            o["revenue"] += float(s.get("line_total") or 0)
+        except (TypeError, ValueError):
+            pass
+        item = _sku_display(s.get("brand", ""), s.get("recipe", ""), s.get("format", "")) \
+            if s.get("recipe") else (s.get("sku_key") or "")
+        o["items"].append({"item": item, "quantity": qty,
+                           "certification": s.get("certification", "")})
+
+    rows = sorted(orders.values(), key=lambda o: (o["portal"], -o["units"]))
+    for o in rows:
+        o["revenue"] = round(o["revenue"], 2)
+    by_portal = {}
+    for o in rows:
+        p = by_portal.setdefault(o["portal"], {"portal": o["portal"], "orders": 0,
+                                               "units": 0, "revenue": 0.0})
+        p["orders"] += 1
+        p["units"] += o["units"]
+        p["revenue"] = round(p["revenue"] + o["revenue"], 2)
+    return {
+        "rows": rows,
+        "count": len(rows),
+        "units": sum(o["units"] for o in rows),
+        "revenue": round(sum(o["revenue"] for o in rows), 2),
+        "by_portal": sorted(by_portal.values(), key=lambda p: -p["units"]),
     }
 
 
@@ -247,6 +361,7 @@ def _transactions_section(on):
         by_buyer[r["buyer"]] = by_buyer.get(r["buyer"], 0) + r["quantity"]
 
     receiving_rows = _receiving_section(on)
+    portal = _portal_orders(on)
 
     issues = []
     for r in receiving_rows:
@@ -262,9 +377,96 @@ def _transactions_section(on):
             "by_buyer": sorted(by_buyer.items(), key=lambda kv: -kv[1]),
         },
         "receiving": {"rows": receiving_rows, "count": len(receiving_rows)},
+        "portal": portal,
         "notes": [],
         "issues": issues,
     }
+
+
+def _imported_channel_rows(on, channel):
+    """Channel sales ALREADY written into Soma's books that carry this date.
+
+    The weekly import stamps every row of a week with that week's Sunday, so
+    this is normally empty and, on a Sunday, holds the whole week's lump. The
+    panel says so rather than letting a manager read the live day figure and
+    the imported week figure as two views of the same thing.
+    """
+    iso = on.isoformat()
+    units = 0
+    rows = 0
+    for s in _load_json(app.ORGANIC_SALES_PATH, []):
+        if (s.get("channel") or "") != channel:
+            continue
+        if (s.get("sale_date") or "")[:10] != iso:
+            continue
+        rows += 1
+        try:
+            units += int(s.get("quantity") or 0)
+        except (ValueError, TypeError):
+            pass
+    return {"rows": rows, "units": units}
+
+
+def _channel_day(channel, on):
+    """One channel's orders for one date, read live from its API.
+
+    Read-only by design. The weekly cron import remains the only path that
+    writes sales rows and deducts finished goods, so nothing here can
+    double-count against it — this is a report, not an import. A channel that
+    is unconfigured, down, or slow degrades to a status line; it must never
+    take the morning review down with it.
+    """
+    out = {"channel": channel, "status": "ok", "message": "",
+           "orders": 0, "units": 0, "revenue": 0.0, "rows": [],
+           "unmapped": [], "unparseable": [], "other_brands": 0,
+           "imported": _imported_channel_rows(on, channel)}
+    day_id = on.isoformat()
+    try:
+        recipes = _load_json(app.RECIPES_PATH, {})
+        if channel == "shopify":
+            import shopify_importer
+            client_id = os.environ.get("SHOPIFY_CLIENT_ID", "").strip()
+            client_secret = os.environ.get("SHOPIFY_CLIENT_SECRET", "").strip()
+            store = os.environ.get("SHOPIFY_STORE", "").strip()
+            if not (client_id and client_secret and store):
+                out.update(status="unconfigured", message="Shopify is not configured on this server")
+                return out
+            preview = shopify_importer.preview_day(day_id, recipes, client_id, client_secret, store)
+        else:
+            import clover_importer
+            token = os.environ.get("CLOVER_API_TOKEN", "").strip()
+            merchant = os.environ.get("CLOVER_MERCHANT_ID", "").strip()
+            if not (token and merchant):
+                out.update(status="unconfigured", message="Clover is not configured on this server")
+                return out
+            preview = clover_importer.preview_day(
+                day_id, recipes, token, merchant,
+                api_base=os.environ.get("CLOVER_API_BASE", "").strip() or None)
+    except Exception as e:
+        logger.warning("daily brief: %s day read failed for %s", channel, day_id, exc_info=True)
+        out.update(status="error", message=str(e))
+        return out
+
+    rows = []
+    for m in preview["matched"]:
+        rows.append({
+            "item": _sku_display(m["brand"], m["recipe"], m["format"]),
+            "sku": m["sku"],
+            "quantity": m["quantity"],
+            "revenue": m.get("revenue", 0.0),
+            "exists_in_soma": m["exists_in_soma"],
+        })
+    rows.sort(key=lambda r: -r["quantity"])
+    out.update(
+        orders=preview["order_count"],
+        units=sum(r["quantity"] for r in rows),
+        revenue=round(sum(r["revenue"] for r in rows), 2),
+        rows=rows,
+        unmapped=[r["sku"] for r in rows if not r["exists_in_soma"]],
+        unparseable=[u["sku"] for u in preview["unparseable"]],
+        other_brands=sum(o["quantity"] for o in preview["skipped_other_brands"]),
+    )
+    return out
 
 
 def _checklists_section(on, prod):
@@ -357,6 +559,25 @@ def get_daily_brief():
     """
     on = _parse_date(request.args.get("date")) or (date.today() - timedelta(days=1))
     return jsonify(_build_brief(on))
+
+
+@daily_brief_bp.route("/api/daily-brief/channels", methods=["GET"])
+@manager_required
+def get_daily_channels():
+    """Yesterday's Shopify + Clover sales, read live from each channel's API.
+
+    Deliberately a SEPARATE endpoint from /api/daily-brief: these are the only
+    two outbound network calls on the page, and the review must render (and the
+    pending-review scan must run over 60 days) without waiting on them.
+    """
+    on = _parse_date(request.args.get("date")) or (date.today() - timedelta(days=1))
+    channels = [_channel_day("shopify", on), _channel_day("clover", on)]
+    return jsonify({
+        "date": on.isoformat(),
+        "channels": channels,
+        "units": sum(c["units"] for c in channels),
+        "revenue": round(sum(c["revenue"] for c in channels), 2),
+    })
 
 
 @daily_brief_bp.route("/daily-review")

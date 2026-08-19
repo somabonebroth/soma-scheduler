@@ -105,6 +105,19 @@ def week_range_iso(week_id):
     return monday.isoformat(), sunday_end.isoformat()
 
 
+def day_range_iso(day_id):
+    """Given a date ('YYYY-MM-DD'), return (start_iso, end_iso) covering
+    00:00:00 -> 23:59:59 of that single day in America/Toronto.
+
+    Same shape as week_range_iso — used by the Daily Review's read-only
+    next-morning read, which never writes and never commits.
+    """
+    day = datetime.strptime(day_id, "%Y-%m-%d")
+    if TIMEZONE is not None:
+        day = day.replace(tzinfo=TIMEZONE)
+    return day.isoformat(), (day + timedelta(hours=23, minutes=59, seconds=59)).isoformat()
+
+
 def get_access_token(client_id, client_secret, store):
     """Exchange client credentials for a short-lived Admin API access token
     via Shopify's OAuth 2.0 client_credentials grant.
@@ -236,8 +249,14 @@ def aggregate_line_items(orders):
     """Walk every line item across all orders, sum quantities per SKU.
 
     Returns (by_sku, skipped_no_sku) where:
-        by_sku: {sku_string: {'quantity': int, 'order_ids': [int, ...]}}
+        by_sku: {sku_string: {'quantity': int, 'revenue': float,
+                              'order_ids': [int, ...]}}
         skipped_no_sku: [{'order_id', 'title', 'variant_title', 'quantity'}]
+
+    `revenue` is gross line value excluding tax and shipping: unit price x
+    quantity, less any line-level discount. It exists for the Daily Review's
+    read-only report; the weekly commit ignores it (Soma prices sales from the
+    buyer catalogue, not from the channel).
 
     Line items with empty SKU (bundle parents, free gifts without SKU, etc.)
     are reported separately so they're visible in the preview but never
@@ -259,8 +278,13 @@ def aggregate_line_items(orders):
                     "quantity": qty,
                 })
                 continue
-            entry = by_sku.setdefault(sku, {"quantity": 0, "order_ids": []})
+            entry = by_sku.setdefault(sku, {"quantity": 0, "revenue": 0.0, "order_ids": []})
             entry["quantity"] += qty
+            try:
+                entry["revenue"] += float(item.get("price") or 0) * qty \
+                    - float(item.get("total_discount") or 0)
+            except (TypeError, ValueError):
+                pass
             if oid not in entry["order_ids"]:
                 entry["order_ids"].append(oid)
 
@@ -345,28 +369,12 @@ def debug_shop(client_id, client_secret, store):
         }
 
 
-def preview_week(week_id, recipes_data, client_id, client_secret, store):
-    """Produce a structured preview of what would be imported for `week_id`.
+def _classify_skus(by_sku, recipes_data):
+    """Split aggregated SKUs into (matched, unparseable, skipped_other_brands).
 
-    Does NOT write to Soma data. Returns a dict containing:
-        - week_id, range_start, range_end
-        - order_count, line_item_count
-        - matched: list of {sku, brand, recipe, format, soma_key, quantity,
-                            exists_in_soma, order_ids}
-        - unparseable: list of {sku, quantity, error}
-        - skipped_no_sku: list of line items with empty SKU
-
-    `exists_in_soma` flags whether the parsed SKU corresponds to an actual
-    recipe in Soma's recipes.json — caught now rather than at sale-write time.
+    Shared by preview_week and preview_day so the weekly commit and the Daily
+    Review can never disagree about what a SKU means.
     """
-    # Exchange client credentials for a short-lived access token, then use
-    # that token for every API call in this preview run.
-    access_token = get_access_token(client_id, client_secret, store)
-    start_iso, end_iso = week_range_iso(week_id)
-    orders = fetch_orders(access_token, store, start_iso, end_iso)
-    by_sku, skipped = aggregate_line_items(orders)
-
-    # Build the set of legal Soma SKU keys for cross-reference.
     valid_keys = set()
     for recipe_name, recipe_meta in (recipes_data or {}).items():
         brand = (recipe_meta.get("brand") or "").strip()
@@ -380,11 +388,12 @@ def preview_week(week_id, recipes_data, client_id, client_secret, store):
     for sku, info in by_sku.items():
         # Items that aren't ours (non-SOMA products) are tracked separately
         # so they're visible in the preview but don't block the commit.
-        # Only SOMA-prefixed SKUs that fail to parse count as "unparseable".
+        # Only SOMA-prefixed SKUs that fail to parse are "unparseable".
         if not sku.startswith(OUR_BRAND_PREFIX):
             skipped_other_brands.append({
                 "sku": sku,
                 "quantity": info["quantity"],
+                "revenue": round(info.get("revenue", 0.0), 2),
                 "order_ids": info["order_ids"],
             })
             continue
@@ -395,6 +404,7 @@ def preview_week(week_id, recipes_data, client_id, client_secret, store):
             unparseable.append({
                 "sku": sku,
                 "quantity": info["quantity"],
+                "revenue": round(info.get("revenue", 0.0), 2),
                 "error": str(e),
             })
             continue
@@ -407,6 +417,7 @@ def preview_week(week_id, recipes_data, client_id, client_secret, store):
             "format": fmt,
             "soma_key": soma_key,
             "quantity": info["quantity"],
+            "revenue": round(info.get("revenue", 0.0), 2),
             "exists_in_soma": soma_key in valid_keys,
             "order_ids": info["order_ids"],
         })
@@ -414,6 +425,30 @@ def preview_week(week_id, recipes_data, client_id, client_secret, store):
     matched.sort(key=lambda x: x["sku"])
     unparseable.sort(key=lambda x: x["sku"])
     skipped_other_brands.sort(key=lambda x: x["sku"])
+    return matched, unparseable, skipped_other_brands
+
+
+def preview_week(week_id, recipes_data, client_id, client_secret, store):
+    """Produce a structured preview of what would be imported for `week_id`.
+
+    Does NOT write to Soma data. Returns a dict containing:
+        - week_id, range_start, range_end
+        - order_count, line_item_count
+        - matched: list of {sku, brand, recipe, format, soma_key, quantity,
+                            revenue, exists_in_soma, order_ids}
+        - unparseable: list of {sku, quantity, error}
+        - skipped_no_sku: list of line items with empty SKU
+
+    `exists_in_soma` flags whether the parsed SKU corresponds to an actual
+    recipe in Soma's recipes.json — caught now rather than at sale-write time.
+    """
+    # Exchange client credentials for a short-lived access token, then use
+    # that token for every API call in this preview run.
+    access_token = get_access_token(client_id, client_secret, store)
+    start_iso, end_iso = week_range_iso(week_id)
+    orders = fetch_orders(access_token, store, start_iso, end_iso)
+    by_sku, skipped = aggregate_line_items(orders)
+    matched, unparseable, skipped_other_brands = _classify_skus(by_sku, recipes_data)
 
     total_line_items = sum(len(o.get("line_items", [])) for o in orders)
 
@@ -423,6 +458,32 @@ def preview_week(week_id, recipes_data, client_id, client_secret, store):
         "range_end": end_iso,
         "order_count": len(orders),
         "line_item_count": total_line_items,
+        "matched": matched,
+        "unparseable": unparseable,
+        "skipped_no_sku": skipped,
+        "skipped_other_brands": skipped_other_brands,
+    }
+
+
+def preview_day(day_id, recipes_data, client_id, client_secret, store):
+    """One day's orders, same shape as preview_week plus `day_id`.
+
+    Read-only reporting for the Daily Review. There is deliberately no daily
+    commit: the weekly import remains the only path that writes sales and
+    deducts FG, so this can never double-count against it.
+    """
+    access_token = get_access_token(client_id, client_secret, store)
+    start_iso, end_iso = day_range_iso(day_id)
+    orders = fetch_orders(access_token, store, start_iso, end_iso)
+    by_sku, skipped = aggregate_line_items(orders)
+    matched, unparseable, skipped_other_brands = _classify_skus(by_sku, recipes_data)
+
+    return {
+        "day_id": day_id,
+        "range_start": start_iso,
+        "range_end": end_iso,
+        "order_count": len(orders),
+        "line_item_count": sum(len(o.get("line_items", [])) for o in orders),
         "matched": matched,
         "unparseable": unparseable,
         "skipped_no_sku": skipped,
