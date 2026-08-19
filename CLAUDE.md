@@ -29,7 +29,7 @@ recipes.py          — Flask Blueprint (637 lines, extracted 2026-06-03): 17 re
                       routes + recipe-private _schedules_using_recipe, incl. the
                       update_recipe rename cascade. Shared recipe/buyer helpers stay
                       in app.py (reached via `import app`); foundation names imported
-                      from helpers. PHOTOS_DIR + serve_photo stay in app.py.
+                      from helpers. PHOTOS_DIR + serve_photo stay in app.py. **Rename-cascade constraint (audited 2026-08-19):** `update_recipe`'s cascade covers FG, sales, runs, sku_meta, buyers, schedule files, + the Ripe notify. It deliberately does NOT touch `inventory_events.json` or `adjustments.json`, which both store a `sku_key` — that is safe ONLY because every consumer joins on `fg_id`: `compute_fg_reconciliation` recomputes the key live from FG entries (which the cascade does update), and `project_fg`'s `by_sku` half is discarded by its only caller (`proj_fg, _ = project_fg(events)`). Those stored keys DO go stale on a rename. If anything ever starts joining on them, the cascade must grow to match. Checklists are unaffected — `produced` is keyed by VESSEL, and the recipe comes from the schedule, which is cascaded.
 sales.py            — Flask Blueprint (731 lines, extracted 2026-06-03): the 7
                       organic-sales routes (/api/organic/sales*: get/add/add-order/
                       edit/delete + packing-slip + qbo-csv). Buyer helpers + the
