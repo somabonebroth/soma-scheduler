@@ -817,6 +817,24 @@ def delete_traceability_record(week_id, day_idx):
     if not os.path.exists(path):
         return jsonify({"error": "Record not found"}), 404
 
+    # A reviewed day is a CLOSED record. traceability.html hides Delete once a
+    # day is signed off, but a hidden button is not a lock — enforce it here so
+    # the sign-off actually holds. Keys match get_traceability exactly (daily by
+    # run-start date, weekly by week_id) so the guard and the hidden button can
+    # never disagree.
+    day_date = app._run_start_date_str(week_id, day_idx)
+    if day_date and app._load_daily_signoffs().get(day_date):
+        return jsonify({
+            "error": f"{day_date} has been reviewed and signed off. Un-sign the "
+                     "day on the Management Report before deleting this record."
+        }), 409
+    if app._load_weekly_signoffs().get(week_id):
+        return jsonify({
+            "error": f"Week {week_id} carries a weekly sign-off (a historical "
+                     "record — weekly sign-off was retired 2026-08-18). That "
+                     "record is closed and cannot be deleted."
+        }), 409
+
     runs = _load_json(ORGANIC_RUNS_PATH, [])
     materials = _load_json(app.ORGANIC_RAW_PATH, [])
     fg = _load_json(app.ORGANIC_FG_PATH, [])

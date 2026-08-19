@@ -96,6 +96,23 @@
         </div>
         <div id="trace-results" style="margin-top:12px;"></div>
     </div>
+
+    <!-- Stock exceptions — historical audit list.
+         Deliberately NOT a banner: these are frozen INSUFFICIENT_STOCK markers
+         from past completed runs, not a live check, so they never clear on
+         their own. A banner on Completed Production read as a standing error
+         and was removed 2026-06-10; this is the same data presented as what it
+         is — a record you consult, collapsed until you open it. -->
+    <div class="card">
+        <h2>Stock Exceptions <span class="count-badge" id="se-count">—</span></h2>
+        <p class="card-desc">Completed batches recorded as produced with less raw material on file
+        than the recipe required. These are historical markers, not open problems — they do not
+        clear, and a non-zero count is not itself a fault. The day each one happened also raises
+        it on that day's Management Report.</p>
+        <button class="btn btn-outline" style="font-size:13px;" onclick="toggleStockExceptions()"
+                id="se-toggle">Show exceptions</button>
+        <div id="se-container" style="margin-top:12px;display:none;"></div>
+    </div>
 </div>
 <script>
 (function(){
@@ -108,6 +125,50 @@
     if(back) back.disabled = (window.history.length <= 1);
   });
 })();
+
+// ── Stock exceptions (historical audit list, loaded on demand) ──
+let _seLoaded = false;
+
+async function toggleStockExceptions() {
+  const box = document.getElementById('se-container');
+  const btn = document.getElementById('se-toggle');
+  const open = box.style.display !== 'none';
+  if (open) { box.style.display = 'none'; btn.textContent = 'Show exceptions'; return; }
+  box.style.display = 'block';
+  btn.textContent = 'Hide exceptions';
+  if (_seLoaded) return;
+  box.innerHTML = '<div class="empty-state">Loading…</div>';
+  try {
+    const rows = await (await fetch('/api/organic/stock-exceptions')).json();
+    _seLoaded = true;
+    if (!rows.length) {
+      box.innerHTML = '<div class="empty-state">No stock exceptions on record.</div>';
+      return;
+    }
+    box.innerHTML = '<div class="inv-table-wrap"><table class="inv-table"><thead><tr><th>Production date</th><th>Recipe</th>'
+      + '<th>Vessel</th><th>Batch LOT</th><th>Ingredient</th><th style="text-align:right;">Short by</th>'
+      + '</tr></thead><tbody>'
+      + rows.map(function (r) {
+          return '<tr><td>' + escHtml(r.production_date || '—') + '</td>'
+            + '<td>' + escHtml(r.recipe) + '</td>'
+            + '<td>' + escHtml(r.vessel) + '</td>'
+            + '<td>' + escHtml(r.batch_lot || '—') + '</td>'
+            + '<td>' + escHtml(r.ingredient) + '</td>'
+            + '<td style="text-align:right;">' + escHtml(r.shortfall) + ' ' + escHtml(r.unit) + '</td></tr>';
+        }).join('')
+      + '</tbody></table></div>';
+  } catch (e) {
+    box.innerHTML = '<div class="empty-state">Could not load: ' + escHtml(e.message) + '</div>';
+  }
+}
+
+async function loadStockExceptionCount() {
+  try {
+    const rows = await (await fetch('/api/organic/stock-exceptions')).json();
+    document.getElementById('se-count').textContent = rows.length;
+  } catch (e) { document.getElementById('se-count').textContent = '—'; }
+}
+loadStockExceptionCount();
 
 // ── Shared escaping (mirrored from organic.html) ──
 function escSku(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}

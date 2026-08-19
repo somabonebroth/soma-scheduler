@@ -289,13 +289,18 @@ date, snapshotting `open_actions` at signing time. Signing is deliberately NOT g
 day being clean. Only days the kitchen RAN are reviewable (`daily_brief._kitchen_ran`:
 completed production or a cleaning sign-off), so quiet days need no review.
 `GET /api/daily-signoffs/pending` lists unreviewed days oldest-first and drives both the
-brief's catch-up line and the dashboard's Production Record badge.
+brief's catch-up line and the dashboard's Completed Production badge.
 **The weekly sign-off is RETIRED, not deleted** — `sign_off_week`/`unsign_week` are gone so
 nothing writes a new one, but `_load_weekly_signoffs` still reads and pre-cutover weeks
 render their historical confirmation. **Watch out:** the weekly sign-off silently gated the
 Delete button on day records; the daily sign-off inherited that lock at finer grain
-(`get_traceability` returns each day's `signoff`; Delete hides on a reviewed DAY). If
-review ever changes shape again, re-check that lock.
+(`get_traceability` returns each day's `signoff`; Delete hides on a reviewed DAY). That was
+UI-ONLY until 2026-08-19 — `delete_traceability_record` had NO sign-off check, so a reviewed
+day could still be deleted, cascade and all, by calling the endpoint directly. It now refuses
+with 409 on either a daily sign-off (keyed by `app._run_start_date_str(week_id, day_idx)`) or
+a historical weekly one (keyed by `week_id`) — the SAME keys `get_traceability` uses, so the
+guard and the hidden button can never disagree. Un-sign the day on the Management Report to
+delete. If review ever changes shape again, re-check BOTH the button and the guard.
 
 **Daily CCP checklist — `ccp_master.json` is the SINGLE source of truth (fixed 2026-08-18).**
 The production tablet renders its section ticks from the CCP master (manager-editable at
@@ -348,8 +353,8 @@ This is the audit-critical chain: supplier lot → production run → finished g
 
 **Trace & audit endpoints (read-only):**
 - `GET /api/organic/trace?type=raw_lot|fg_lot&q=` — `raw_lot` resolves the lot string to raw-material entries and traces each by `raw_material_id` (grouped per physical lot, with a legacy string-match fallback).
-- `GET /api/organic/stock-exceptions` — completed batches made with insufficient raw material (the `INSUFFICIENT_STOCK` markers); shown in a "Stock exceptions" panel on Completed Production.
-- `GET /api/organic/mass-balance?from=&to=&organic_only=` + page `/mass-balance` (`_compute_mass_balance`): Opening+Received−Consumed=Expected vs current stock (raw), Opening+Produced−Sold=Expected vs current (FG). Discrepancy = adjustments/loss/breakage, exact when `to`=today. Client-side CSV export. Linked from both the Inventory and Completed Production headers.
+- `GET /api/organic/stock-exceptions` — completed batches made with insufficient raw material (the `INSUFFICIENT_STOCK` markers). The banner on Completed Production was REMOVED 2026-06-10 (commit `9d60cf3`): these are frozen historical markers, not a live check, so it never cleared and read as a standing error. The all-time list now lives in a collapsed "Stock Exceptions" card on **Organic Certification** (loaded on demand, framed as a record you consult — do NOT reinstate it as a banner). Per-DAY, the same markers surface as an issue on the Management Report via `daily_brief._stock_exceptions_section`.
+- `GET /api/organic/mass-balance?from=&to=&organic_only=` + page `/mass-balance` (`_compute_mass_balance`): Opening+Received−Consumed=Expected vs current stock (raw), Opening+Produced−Sold=Expected vs current (FG). Discrepancy = adjustments/loss/breakage, exact when `to`=today. Client-side CSV export. Linked from the Inventory and Organic Certification pages and the dashboard (NOT from Completed Production, despite an earlier note here).
 - `get_traceability` reports certification **per vessel** (`cert_by_vessel`, `certifications[]`) — a day can run mixed certs; never collapse to one label. The All/Organic/Non-Organic filter tabs were **removed** (2026-06-03): `get_traceability` never honored the `?filter=` param, and the per-vessel cert tags already convey cert status, so the tabs were dead UI. The route still harmlessly ignores a stray `?filter=`.
 
 **Receipt photos:** one per delivery, stored as `<entry_id>.<ext>` in `rm_receipt_photos/`, anchored to the first entry of a bulk save. `GET /api/organic/raw-materials/receipt-photos` lists which entry ids have one; the Receiving list shows a "📎 Invoice" button per delivery.
@@ -641,7 +646,7 @@ Today's Schedule, Weekly Schedule with prev/next, Cleaning & Upkeep [= /cleaning
 renamed], Recipes READ-ONLY, + placeholder Opening/Closing checklists);
 `MANAGER_PASSWORD` → manager role (the HOO's desktop: today's full-weight Schedule /
 Quick Actions / Buyer Portals tiles, then reduced-weight expandable rows whose headers
-list their sub-sections — Analytics, Production Record, Inventory, **Sales & Receiving
+list their sub-sections — Analytics, Completed Production, Inventory, **Sales & Receiving
 Record** (Records tab extracted from organic.html to its own page), Organic
 Certification, Buyers & Suppliers, Recipe Cards, Cleaning Records [placeholder],
 Settings & Other [company settings incl. Ripe buffer + credits, CCP master, backup,

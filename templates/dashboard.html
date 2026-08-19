@@ -297,8 +297,8 @@
                 <div class="mgmt-links"><a href="/analytics">Sales Data</a><a href="/production-tracker">Production Data</a></div>
             </div>
             <div class="mgmt-row" id="prod-record-btn">
-                <a class="mgmt-title" href="/traceability">Production Record <span class="mgmt-badge" id="prod-badge" title="Days the kitchen ran that you have not reviewed yet"></span></a>
-                <div class="mgmt-links"><a href="/traceability">Week records</a></div>
+                <a class="mgmt-title" href="/traceability">Completed Production <span class="mgmt-badge" id="prod-badge" title="Days the kitchen ran that you have not reviewed yet"></span></a>
+                <div class="mgmt-links"><a href="/daily-review">Review outstanding days</a></div>
             </div>
             <div class="mgmt-row">
                 <a class="mgmt-title" href="/organic">Inventory</a>
@@ -427,7 +427,7 @@ async function loadReviewButton(){
 }
 loadReviewButton();
 
-// Production Record — pending sign-off badge
+// Completed Production — pending review badge
 async function loadProdBadge() {
   try {
     // Daily review replaced the weekly sign-off — the badge counts days the
