@@ -580,6 +580,13 @@ Unification is essentially complete (the history below is kept as the method rec
 - **Token round-2 — DONE (hybrid).** Promoted 8 token-less literals at exact value (no-op): `--info-dark` #1565c0, `--info-border` #1976d2, `--warning-text` #856404, `--success-text` #155724, and a cool neutral grey ramp `--grey-dark` #666 / `--grey` #888 / `--grey-light` #ccc / `--grey-border` #ddd (distinct from the warm `--text`/`--border` family). Then converged only the two *imperceptible* near-dupes (own eyes-on deploy): `--action-blue` now aliases `var(--info)` (#0277bd→#0288d1); `#333`→`var(--text)`. **Deliberately left exact:** the amber (`#8a6900`/`#856404`) and orange (`#e67e22`/`#e65100`) merges — they touch audit-critical warning banners, so a visible shift there wasn't worth it. `#aaa` (1 use) left literal.
 - **Style unification is effectively complete.** Every non-standalone template references the shared sheet and uses tokens for all exact-value colours. What remains literal is intentional: JS logic/categorical palettes (chart buckets, packing-slip borders), the deliberately-unmerged amber/orange near-dupes above, and a long tail of true one-off hexes with no token. If a future page introduces a recurring new colour, add a token first (never redeclare `:root`).
 
+**Production dashboard tiles carry colour (2026-08-19).** The floor finds a tile by its
+colour before it reads the label: `.tile-green` = today's work (Today's / Weekly Schedule),
+`.tile-amber` = the End of Day flow (clipboard icon), `.tile-blue` = reference you only look
+things up in (Recipe Cards, CCP Checklist). All from the shared token palette — the one
+addition is `--info-light` (#90caf9), the Material-200 companion to `--green-light` /
+`--amber-border` so a tinted card can carry a soft border.
+
 **Dashboard greeting (2026-08-19).** `templates/dashboard.html` opens with one greeting
 bar above the tiles, shared by BOTH roles (one template renders both). Five slots by local
 hour — 04:00 "Good Morning Soma", 11:00 "Anyone hungry?", 13:00 "Good afternoon Soma",
@@ -658,7 +665,10 @@ checklists (the consumption chain). `ripe_orders.py`/`retail_orders.py` swapped
 certifications, analytics, audits, backup, schedule PDFs, Shopify/Clover import). **The
 production role's whole reachable surface is now exactly its dashboard:** `/`,
 `/weekly-schedule`, `/daily-production/*` + checklist APIs, `/cleaning` + its APIs,
-`/recipes` + recipe GETs/PDFs, plus `/api/photos`, `/api/label`, `GET /api/ccp-master`.
+`/recipes` + recipe GETs/PDFs, plus `/api/photos`, `/api/label`, `GET /api/ccp-master`,
+and (2026-08-19) the `/ccp-master` PAGE read-only — the route is `login_required` and
+passes `can_edit`, which hides the Edit/Save controls for the floor; `POST /api/ccp-master`
+stays `manager_required`, so the page is view-only in the template AND on the server.
 Method: AST-located decorator lines flipped in place (never text-replace); gate = 192-route
 map byte-identical + a two-role test-client smoke (locked pages 302→`/`, locked APIs 403,
 production routes 200, manager blocked nowhere). Completed Production is manager-only by

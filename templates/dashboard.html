@@ -108,12 +108,23 @@
 .mgmt-summary .mgmt-badge { margin-left: auto; }
 .mgmt-summary .mgmt-badge + .mgmt-summary-cta { margin-left: 0; }
 /* ── Production (tablet) view: bigger tap targets, no chrome ── */
-.prod-grid .dash-btn { padding: 34px 20px; }
+/* The floor finds a tile by its colour before it reads the label, so colour
+   carries the meaning: green = today's work, amber = the end-of-shift flow,
+   blue = reference you only ever look things up in. All from the shared
+   token palette — no new colours. */
+.prod-grid .dash-btn { padding: 34px 20px; border-left-width: 5px; }
 .prod-grid .dash-btn .icon { font-size: 34px; }
 .prod-grid .dash-btn .label { font-size: 16px; }
 .dash-btn.full { grid-column: 1 / -1; }
 .dash-btn.placeholder { opacity: 0.45; cursor: default; border-style: dashed; }
 .dash-btn.placeholder:hover { transform: none; box-shadow: none; border-color: var(--border); }
+.dash-btn.tile-green { background: var(--action-green-bg); border-color: var(--green-light); border-left-color: var(--action-green); }
+.dash-btn.tile-green:hover { border-color: var(--action-green); box-shadow: 0 2px 12px rgba(46,125,50,0.18); }
+.dash-btn.tile-amber { background: var(--amber-bg); border-color: var(--amber-border); border-left-color: var(--amber-text); }
+.dash-btn.tile-amber:hover { border-color: var(--amber-text); box-shadow: 0 2px 12px rgba(179,139,0,0.18); }
+.dash-btn.tile-amber .sublabel { color: var(--amber-text-dark); }
+.dash-btn.tile-blue { background: var(--action-blue-bg); border-color: var(--info-light); border-left-color: var(--info); }
+.dash-btn.tile-blue:hover { border-color: var(--info); box-shadow: 0 2px 12px rgba(2,136,209,0.18); }
 /* -- Greeting: the first thing the floor and the office both see. Sits above
    everything, rotating through the team's languages (English twice as often)
    with a live Toronto temperature beside it. -- */
@@ -349,16 +360,17 @@
     <div class="dashboard-grid prod-grid">
         <div class="section-label">Today</div>
         <div class="dash-row">
-            <div class="dash-btn highlight" onclick="goToDay(0)" style="cursor:pointer;"><span class="icon">&#9654;</span><span class="label">Today's Schedule</span><span class="sublabel" id="today-label">Loading...</span></div>
-            <a href="/weekly-schedule" class="dash-btn"><span class="icon">&#128197;</span><span class="label">Weekly Schedule</span><span class="sublabel">This week, last week, next week</span></a>
+            <div class="dash-btn tile-green" onclick="goToDay(0)" style="cursor:pointer;"><span class="icon">&#9654;</span><span class="label">Today's Schedule</span><span class="sublabel" id="today-label">Loading...</span></div>
+            <a href="/weekly-schedule" class="dash-btn tile-green"><span class="icon">&#128197;</span><span class="label">Weekly Schedule</span><span class="sublabel">This week, last week, next week</span></a>
         </div>
         <div class="section-label">End of day</div>
         <div class="dash-row">
-            <a href="/end-of-day" class="dash-btn full"><span class="icon">&#127769;</span><span class="label">Complete End of Day</span><span class="sublabel">Production sign-off, closing checklist &amp; a rotating job &mdash; one step at a time</span></a>
+            <a href="/end-of-day" class="dash-btn full tile-amber"><span class="icon">&#128203;</span><span class="label">Complete End of Day</span><span class="sublabel">Production sign-off, closing checklist &amp; a rotating job &mdash; one step at a time</span></a>
         </div>
         <div class="section-label">Reference</div>
         <div class="dash-row">
-            <a href="/recipes" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Recipe Cards</span><span class="sublabel">Read-only</span></a>
+            <a href="/recipes" class="dash-btn tile-blue"><span class="icon">&#128209;</span><span class="label">Recipe Cards</span><span class="sublabel">Read-only</span></a>
+            <a href="/ccp-master" class="dash-btn tile-blue"><span class="icon">&#129514;</span><span class="label">CCP Checklist</span><span class="sublabel">Master reference &mdash; read-only</span></a>
         </div>
     </div>
 {% endif %}

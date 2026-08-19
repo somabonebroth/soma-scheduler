@@ -40,6 +40,9 @@
     --amber-text: #b38b00;
     --amber-text-dark: #8a6900;
     --orange: #e65100;           /* strong alert / overdue accent */
+    /* Light companion to --info, matching --green-light / --amber-border
+       (all Material 200) so tinted cards can carry a soft border. */
+    --info-light: #90caf9;
     /* Green tints */
     --green-light: #a5d6a7;
     --green-tint: #f0f7f0;

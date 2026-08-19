@@ -59,13 +59,13 @@
     </div>
     <div class="top-bar">
         <div></div>
-        <button class="btn btn-outline" id="edit-toggle" onclick="toggleEdit()">Edit Checklist</button>
+        {% if can_edit %}<button class="btn btn-outline" id="edit-toggle" onclick="toggleEdit()">Edit Checklist</button>{% endif %}
     </div>
     <div id="ccp-container"></div>
-    <div id="save-bar" style="display:none;text-align:center;margin-top:16px;">
+    {% if can_edit %}<div id="save-bar" style="display:none;text-align:center;margin-top:16px;">
         <button class="btn btn-primary" onclick="saveCCP()">Save Changes</button>
         <button class="btn btn-outline" onclick="cancelEdit()">Cancel</button>
-    </div>
+    </div>{% endif %}
 </div>
 <script>
 let sections = [];

@@ -1475,10 +1475,10 @@ def buyer_edit_page(bid):
 
 
 @app.route("/ccp-master")
-@manager_required
+@login_required
 def ccp_master_page():
-    """Render the master CCP page."""
-    return render_template("master_ccp.html")
+    """Render the master CCP page (read-only for the production role)."""
+    return render_template("master_ccp.html", can_edit=current_role() == "manager")
 
 
 # ── Recipe API ─────────────────────────────────────────────────────────
