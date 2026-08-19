@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Channel Sale Prices · Soma</title>
+<title>Channel Sales · Soma</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
   .cp-wrap { max-width: 1040px; margin: 0 auto; padding: 24px 16px 60px; }
@@ -32,12 +32,31 @@
   .msg { font-size: 13px; margin-top: 10px; }
   .msg-err { color: var(--action-red); }
   .btn-sm { padding: 7px 14px; font-size: 12px; }
+  .anyweek { background: var(--white); border: 1px solid var(--border); border-radius: var(--r-md);
+             padding: 14px 16px; margin-bottom: 18px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .anyweek label { font-size: 12px; font-weight: 600; color: var(--text); }
+  .anyweek input, .anyweek select { padding: 7px 10px; border: 1px solid var(--border);
+             border-radius: var(--r-sm, 6px); font-size: 13px; }
+  .tot { display: flex; gap: 18px; flex-wrap: wrap; margin: 12px 0; }
+  .tot-box { background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-md);
+             padding: 10px 14px; min-width: 120px; }
+  .tot-l { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-light); }
+  .tot-n { font-size: 17px; font-weight: 700; color: var(--dark); font-variant-numeric: tabular-nums; }
+  .tot-gap .tot-n { color: var(--action-red); }
+  .tot-gap.zero .tot-n { color: var(--action-green); }
+  .st-ok { color: var(--action-green); }
+  .st-missing_in_soma { color: var(--action-red); }
+  .st-units_differ { color: var(--amber-text-dark); }
+  .st-extra_in_soma { color: var(--info-dark); }
+  .bucket { margin-top: 14px; border-top: 1px solid var(--grey-border); padding-top: 12px; }
+  .bucket h4 { font-size: 12px; margin: 0 0 4px; color: var(--dark); }
+  .bucket p { font-size: 12px; color: var(--text-light); margin: 0 0 8px; line-height: 1.5; }
 </style>
 </head>
 <body class="inv-page">
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-  <div class="header-text"><h1>Channel Sale Prices</h1><p>Re-read Shopify &amp; Clover revenue onto imported sales</p></div>
+  <div class="header-text"><h1>Channel Sales</h1><p>Reconcile Shopify &amp; Clover against what Soma recorded</p></div>
   <div class="header-right"><a href="/" class="header-btn">⌂ Dashboard</a></div>
 </div>
 
@@ -55,6 +74,16 @@
     Note Shopify only serves orders from roughly the last 60 days unless the app holds the
     <code>read_all_orders</code> scope, so older weeks may come back empty.
   </div>
+
+  <div class="anyweek">
+    <label for="aw-ch">Check any week:</label>
+    <select id="aw-ch"><option value="shopify">Shopify</option><option value="clover">Clover</option></select>
+    <input id="aw-wk" type="date" title="Any day in the target week — snapped to its Monday">
+    <button class="btn btn-secondary btn-sm" onclick="checkAnyWeek()">Reconcile</button>
+    <span style="font-size:11px;color:var(--text-light);">Use this for a week Soma has no sales for at all —
+      a failed import leaves no rows, so it won't appear below.</span>
+  </div>
+  <div id="anyout" style="margin-bottom:18px;"></div>
 
   <div id="weeks"><div style="padding:24px;color:var(--text-light);font-size:14px;">Loading…</div></div>
 </div>
@@ -92,6 +121,7 @@ async function loadWeeks() {
         + '<span class="chip ' + (done ? 'chip-done' : 'chip-todo') + '">'
         + w.priced + ' of ' + w.rows + ' priced</span></div>'
         + '</div><div>'
+        + '<button class="btn btn-secondary btn-sm" onclick="reconcile(\'' + w.channel + '\',\'' + w.week_id + '\',\'out-' + id + '\')">Reconcile</button> '
         + '<button class="btn btn-secondary btn-sm" onclick="run(\'' + w.channel + '\',\'' + w.week_id + '\',false)">Preview</button> '
         + '<button class="btn btn-primary btn-sm" onclick="run(\'' + w.channel + '\',\'' + w.week_id + '\',true)">Apply</button>'
         + '</div></div>'
@@ -133,6 +163,126 @@ async function run(channel, week, apply) {
       + d.changed_count + ' of ' + d.row_count + ' row(s) '
       + (d.applied ? 'updated.' : 'would change.') + '</div>';
     if (d.applied) loadWeeks();
+  } catch (e) {
+    out.innerHTML = '<div class="msg msg-err">' + esc(e.message) + '</div>';
+  }
+}
+
+
+const RSTATUS = {
+  ok: 'matches',
+  missing_in_soma: 'MISSING from Soma',
+  units_differ: 'units differ',
+  extra_in_soma: 'in Soma, not in channel',
+};
+
+function mondayOf(d) {
+  const t = new Date(d + 'T00:00:00');
+  if (isNaN(t)) return null;
+  const off = (t.getDay() + 6) % 7;          // Mon=0
+  t.setDate(t.getDate() - off);
+  return t.toISOString().slice(0, 10);
+}
+
+function checkAnyWeek() {
+  const ch = document.getElementById('aw-ch').value;
+  const raw = document.getElementById('aw-wk').value;
+  if (!raw) { alert('Pick a date first.'); return; }
+  const wk = mondayOf(raw);
+  if (!wk) { alert('Could not read that date.'); return; }
+  reconcile(ch, wk, 'anyout');
+}
+
+function bucket(title, note, b, cols) {
+  if (!b || !b.count) return '';
+  return '<div class="bucket"><h4>' + title + ' — ' + b.count + ' line(s), '
+    + b.units + ' units, ' + money(b.revenue) + '</h4><p>' + note + '</p>'
+    + '<table><thead><tr>' + cols.map(function (c) { return '<th>' + c[0] + '</th>'; }).join('')
+    + '</tr></thead><tbody>'
+    + b.items.map(function (it) {
+        return '<tr>' + cols.map(function (c) {
+          const v = it[c[1]];
+          return '<td' + (c[2] ? ' class="num"' : '') + '>'
+            + (c[2] === 'money' ? money(v) : esc(v == null ? '—' : v)) + '</td>';
+        }).join('') + '</tr>';
+      }).join('')
+    + '</tbody></table>'
+    + (b.count > b.items.length ? '<p>… ' + (b.count - b.items.length) + ' more not shown.</p>' : '')
+    + '</div>';
+}
+
+async function reconcile(channel, week, target) {
+  const out = document.getElementById(target);
+  out.style.display = 'block';
+  out.innerHTML = '<div class="msg">Reading ' + esc(channel) + ' for week of ' + esc(week) + '…</div>';
+  try {
+    const res = await fetch('/admin/channel-prices/reconcile?channel='
+      + encodeURIComponent(channel) + '&week=' + encodeURIComponent(week));
+    const d = await res.json();
+    if (!res.ok) {
+      out.innerHTML = '<div class="msg msg-err">' + esc(d.error || ('HTTP ' + res.status)) + '</div>';
+      return;
+    }
+    const t = d.totals;
+    const gapZero = t.unit_gap === 0 ? ' zero' : '';
+    let html = '<div class="wk" style="margin-top:10px;">'
+      + '<div class="wk-id"><span class="chip chip-' + d.channel + '">' + d.channel + '</span>'
+      + 'Week of ' + esc(d.week_id) + '</div>'
+      + '<div class="wk-meta">' + (d.order_count == null ? '?' : d.order_count) + ' orders, '
+      + (d.line_item_count == null ? '?' : d.line_item_count) + ' line items at the channel</div>'
+      + '<div class="tot">'
+      + '<div class="tot-box"><div class="tot-l">Channel units</div><div class="tot-n">' + t.channel_units + '</div></div>'
+      + '<div class="tot-box"><div class="tot-l">Soma units</div><div class="tot-n">' + t.soma_units + '</div></div>'
+      + '<div class="tot-box tot-gap' + gapZero + '"><div class="tot-l">Unit gap</div><div class="tot-n">' + t.unit_gap + '</div></div>'
+      + '<div class="tot-box"><div class="tot-l">Channel revenue</div><div class="tot-n">' + money(t.channel_revenue) + '</div></div>'
+      + '<div class="tot-box"><div class="tot-l">Soma revenue</div><div class="tot-n">'
+      + (t.soma_fully_priced ? money(t.soma_revenue) : 'unpriced') + '</div></div>'
+      + '</div>';
+
+    if (!t.soma_fully_priced) {
+      html += '<div class="msg">Some Soma rows for this week have no price yet, so no revenue gap is shown. '
+        + 'Run <strong>Preview</strong> then <strong>Apply</strong> below to fill them in, then reconcile again.</div>';
+    }
+
+    if (d.unparseable && d.unparseable.length) {
+      html += '<div class="bucket"><h4>Unparseable SKUs — ' + d.unparseable.length + '</h4>'
+        + '<p>A commit refuses the ENTIRE week when any SKU fails to parse, so if these were '
+        + 'present at import time nothing from this week was recorded.</p>'
+        + '<table><thead><tr><th>SKU</th></tr></thead><tbody>'
+        + d.unparseable.map(function (u) {
+            return '<tr><td>' + esc(typeof u === 'string' ? u : (u.sku || JSON.stringify(u))) + '</td></tr>';
+          }).join('')
+        + '</tbody></table></div>';
+    }
+
+    html += '<table style="margin-top:12px;"><thead><tr><th>Product</th>'
+      + '<th class="num">Channel units</th><th class="num">Soma units</th>'
+      + '<th class="num">Channel revenue</th><th class="num">Soma revenue</th><th>Status</th></tr></thead><tbody>'
+      + d.rows.map(function (r) {
+          return '<tr><td>' + esc(r.recipe) + '</td>'
+            + '<td class="num">' + (r.channel_units == null ? '—' : r.channel_units) + '</td>'
+            + '<td class="num">' + (r.soma_units == null ? '—' : r.soma_units) + '</td>'
+            + '<td class="num">' + money(r.channel_revenue) + '</td>'
+            + '<td class="num">' + money(r.soma_revenue) + '</td>'
+            + '<td class="st st-' + r.status + '">' + (RSTATUS[r.status] || r.status) + '</td></tr>';
+        }).join('')
+      + '</tbody></table>';
+
+    html += bucket('Line items with no SKU', 
+      'The channel sold these but gave the importer no SKU, so they were never imported. '
+      + 'On Shopify this is usually product sold before SKUs were filled into the variants '
+      + '(line_item.sku is snapshotted at order creation). On Clover most of these are '
+      + 'non-Soma retail items. Check the names.',
+      d.skipped_no_sku,
+      [['Item', 'label'], ['Units', 'quantity', true], ['Revenue', 'revenue', 'money']]);
+
+    html += bucket('Non-SOMA SKUs (excluded by design)',
+      'Skipped because the SKU does not start with SOMA-. Expected for Clover, which sells '
+      + 'other items alongside the jars. Listed so the channel total reconciles.',
+      d.skipped_other_brands,
+      [['SKU', 'sku'], ['Units', 'quantity', true], ['Revenue', 'revenue', 'money']]);
+
+    out.innerHTML = html + '</div>';
   } catch (e) {
     out.innerHTML = '<div class="msg msg-err">' + esc(e.message) + '</div>';
   }

@@ -303,10 +303,17 @@ def aggregate_line_items(orders):
                     qty = 1
 
             if not sku:
+                # Value it the same way as a matched line, so the reconcile can
+                # report how much revenue is invisible to the importer.
+                try:
+                    sk_rev = (float(li.get("price") or 0) / 100.0) * qty
+                except (TypeError, ValueError):
+                    sk_rev = 0.0
                 skipped_no_sku.append({
                     "order_id": oid,
                     "name": li.get("name", ""),
                     "quantity": qty,
+                    "revenue": round(sk_rev, 2),
                 })
                 continue
             entry = by_sku.setdefault(sku, {"quantity": 0, "revenue": 0.0, "order_ids": []})

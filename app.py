@@ -5158,6 +5158,170 @@ def _channel_price_repair(channel, week_id, do_apply=False):
     }, 200
 
 
+def _channel_full_preview(channel, week_id):
+    """Re-read one week from a channel and return the WHOLE preview document
+    (matched + every skip bucket), not just the matched SKUs.
+    Returns (preview_dict, error_str)."""
+    recipes = _load_json(RECIPES_PATH, {})
+    try:
+        if channel == "shopify":
+            cid = os.environ.get("SHOPIFY_CLIENT_ID", "").strip()
+            csec = os.environ.get("SHOPIFY_CLIENT_SECRET", "").strip()
+            store = os.environ.get("SHOPIFY_STORE", "").strip()
+            if not (cid and csec and store):
+                return None, "Shopify not configured in environment"
+            return shopify_importer.preview_week(week_id, recipes, cid, csec, store), None
+        token = os.environ.get("CLOVER_API_TOKEN", "").strip()
+        mid = os.environ.get("CLOVER_MERCHANT_ID", "").strip()
+        if not (token and mid):
+            return None, "Clover not configured in environment"
+        return clover_importer.preview_week(
+            week_id, recipes, token, mid, os.environ.get("CLOVER_API_BASE")), None
+    except Exception as e:
+        logger.exception("Channel reconcile: %s preview failed for %s", channel, week_id)
+        return None, str(e)
+
+
+def _channel_reconcile(channel, week_id):
+    """READ-ONLY two-way diff: what the channel sold that week vs what Soma
+    recorded. Returns (body, status). Writes nothing, ever.
+
+    The price-repair tool only walks Soma's existing rows, so it can only see
+    Soma-has/channel-doesn't. This sees BOTH directions — including the SKUs
+    the channel sold that never became a Soma sale at all, which is the failure
+    mode the importer's own skip paths create:
+      - a line item whose SKU was empty at order-creation (Shopify snapshots
+        line_item.sku, so orders predating your SKU fill-in carry none)
+      - a SKU skipped at commit for insufficient finished goods
+      - a week the commit refused outright because some SKU was unparseable
+      - non-SOMA-prefixed items, which are excluded by design
+    """
+    if channel not in _REPAIR_CHANNELS:
+        return {"error": f"Unknown channel '{channel}'"}, 400
+    if not validate_week_id(week_id):
+        return {"error": "Invalid 'week' parameter; expected YYYY-MM-DD"}, 400
+
+    preview, err = _channel_full_preview(channel, week_id)
+    if err:
+        return {"error": err, "channel": channel, "week_id": week_id}, 502
+
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    soma_rows = {}
+    for s in sales:
+        if s.get("channel") != channel or s.get("week_id") != week_id:
+            continue
+        k = s.get("sku_key") or ""
+        r = soma_rows.setdefault(k, {"units": 0, "revenue": 0.0, "priced": True})
+        r["units"] += int(s.get("quantity") or 0)
+        if s.get("line_total") is None:
+            r["priced"] = False
+        else:
+            r["revenue"] += float(s.get("line_total") or 0)
+
+    chan_rows = {}
+    for m in preview.get("matched", []):
+        k = m["soma_key"]
+        r = chan_rows.setdefault(k, {"units": 0, "revenue": 0.0, "recipe": m.get("recipe", ""),
+                                     "sku": m.get("sku", "")})
+        r["units"] += int(m.get("quantity") or 0)
+        r["revenue"] += float(m.get("revenue") or 0.0)
+
+    rows = []
+    for k in sorted(set(chan_rows) | set(soma_rows)):
+        ch = chan_rows.get(k)
+        so = soma_rows.get(k)
+        if ch and not so:
+            status = "missing_in_soma"
+        elif so and not ch:
+            status = "extra_in_soma"
+        elif ch["units"] != so["units"]:
+            status = "units_differ"
+        else:
+            status = "ok"
+        parts = k.split("|")
+        rows.append({
+            "sku_key": k,
+            "recipe": ((ch or {}).get("recipe")
+                       or (parts[1] if len(parts) > 1 else k)),
+            "channel_sku": (ch or {}).get("sku", ""),
+            "channel_units": (ch or {}).get("units"),
+            "soma_units": (so or {}).get("units"),
+            "channel_revenue": (round(ch["revenue"], 2) if ch else None),
+            "soma_revenue": (round(so["revenue"], 2) if so and so["priced"] else None),
+            "status": status,
+        })
+
+    no_sku = preview.get("skipped_no_sku", []) or []
+    other_brands = preview.get("skipped_other_brands", []) or []
+    unparseable = preview.get("unparseable", []) or []
+
+    chan_units = sum(r["units"] for r in chan_rows.values())
+    chan_rev = sum(r["revenue"] for r in chan_rows.values())
+    soma_units = sum(r["units"] for r in soma_rows.values())
+    soma_rev = sum(r["revenue"] for r in soma_rows.values() if r["priced"])
+    all_priced = all(r["priced"] for r in soma_rows.values()) if soma_rows else True
+
+    return {
+        "ok": True,
+        "channel": channel,
+        "week_id": week_id,
+        "order_count": preview.get("order_count"),
+        "line_item_count": preview.get("line_item_count"),
+        "rows": rows,
+        "totals": {
+            "channel_units": chan_units,
+            "soma_units": soma_units,
+            "unit_gap": chan_units - soma_units,
+            "channel_revenue": round(chan_rev, 2),
+            # None when any Soma row is still unpriced — a revenue gap would be
+            # meaningless against rows that simply have no price yet.
+            "soma_revenue": (round(soma_rev, 2) if all_priced else None),
+            "revenue_gap": (round(chan_rev - soma_rev, 2) if all_priced else None),
+            "soma_fully_priced": all_priced,
+        },
+        # SKU-less line items: the channel sold these but the importer can't
+        # attribute them. Titles included because for Clover most are non-Soma
+        # retail items, while on Shopify they may be Soma jars sold before SKUs
+        # were filled into the variants.
+        "skipped_no_sku": {
+            "count": len(no_sku),
+            "units": sum(int(x.get("quantity") or 0) for x in no_sku),
+            "revenue": round(sum(float(x.get("revenue") or 0) for x in no_sku), 2),
+            # Shopify names these with title/variant_title, Clover with name —
+            # normalise so the page renders one "Item" column.
+            "items": [{
+                "label": " · ".join(x for x in [
+                    (i.get("title") or i.get("name") or "").strip(),
+                    (i.get("variant_title") or "").strip(),
+                ] if x) or "(untitled)",
+                "order_id": i.get("order_id"),
+                "quantity": i.get("quantity"),
+                "revenue": i.get("revenue"),
+            } for i in no_sku[:60]],
+        },
+        "skipped_other_brands": {
+            "count": len(other_brands),
+            "units": sum(int(x.get("quantity") or 0) for x in other_brands),
+            "revenue": round(sum(float(x.get("revenue") or 0) for x in other_brands), 2),
+            "items": other_brands[:60],
+        },
+        "unparseable": unparseable,
+    }, 200
+
+
+@app.route("/admin/channel-prices/reconcile")
+@manager_required
+def channel_prices_reconcile():
+    """Read-only two-way reconciliation for one channel-week.
+
+    Query: channel=shopify|clover, week=YYYY-MM-DD
+    """
+    channel = (request.args.get("channel") or "").strip().lower()
+    week_id = (request.args.get("week") or "").strip()
+    body, status = _channel_reconcile(channel, week_id)
+    return jsonify(body), status
+
+
 @app.route("/admin/channel-prices")
 @manager_required
 def channel_prices_page():
