@@ -39,6 +39,7 @@ from helpers import (
     _sku_key,
     _add_contact,
     _load_company_info,
+    _in_date_window,
 )
 
 import app
@@ -208,14 +209,37 @@ def sales_receiving_page():
 @sales_bp.route("/api/organic/sales", methods=["GET"])
 @manager_required
 def get_organic_sales():
-    """Return sales records. Optional query param ?certification=X filters
-    to that tier. Sale records carry the certification of the SKU sold,
-    derived from the recipe at creation time."""
+    """Return sales records.
+
+    Optional query params, all AND-ed, all omittable:
+        ?certification=X   — that tier only
+        ?from=YYYY-MM-DD   — sale_date on or after (inclusive)
+        ?to=YYYY-MM-DD     — sale_date on or before (inclusive)
+
+    Sale records carry the certification of the SKU sold, derived from the
+    recipe at creation time.
+
+    Omitting from/to returns EVERYTHING, so every existing caller is unaffected.
+    The window is applied server-side on purpose: filtering in the browser would
+    still ship the whole table, and these params are the same predicate a
+    database would take as a WHERE clause — so moving sales to SQL later changes
+    this function's body, never its contract.
+
+    Filtered on sale_date (the business date), falling back to created_at. NOT
+    deducted_at: that is when stock left FG, which for a wholesale order is a
+    different day from the sale itself.
+    """
     sales = _load_json(app.ORGANIC_SALES_PATH, [])
     cert_filter = (request.args.get("certification") or "").strip()
     if cert_filter:
         sales = [s for s in sales
                  if (s.get("certification") or "").lower() == cert_filter.lower()]
+    date_from = (request.args.get("from") or "").strip()
+    date_to = (request.args.get("to") or "").strip()
+    if date_from or date_to:
+        sales = [s for s in sales
+                 if _in_date_window(s.get("sale_date") or s.get("created_at"),
+                                    date_from, date_to)]
     return jsonify(sales)
 
 

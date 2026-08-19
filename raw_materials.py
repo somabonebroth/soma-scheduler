@@ -43,6 +43,7 @@ from helpers import (
     _section_for_ingredient,
     _runs_using_raw_material,
     _record_adjustment,
+    _in_date_window,
 )
 
 import app
@@ -389,8 +390,23 @@ def add_organic_ingredient():
 @raw_materials_bp.route("/api/organic/raw-materials", methods=["GET"])
 @manager_required
 def get_raw_materials():
-    """GET /api/organic/raw-materials - return all raw-material lots."""
-    return jsonify(_load_json(app.ORGANIC_RAW_PATH, []))
+    """GET /api/organic/raw-materials - raw-material lots.
+
+    Optional, omittable query params:
+        ?from=YYYY-MM-DD — date_received on or after (inclusive)
+        ?to=YYYY-MM-DD   — date_received on or before (inclusive)
+
+    Omitting both returns everything, so existing callers are unaffected. Same
+    server-side windowing contract as /api/organic/sales — see that docstring
+    for why the filter lives here rather than in the browser.
+    """
+    materials = _load_json(app.ORGANIC_RAW_PATH, [])
+    date_from = (request.args.get("from") or "").strip()
+    date_to = (request.args.get("to") or "").strip()
+    if date_from or date_to:
+        materials = [m for m in materials
+                     if _in_date_window(m.get("date_received"), date_from, date_to)]
+    return jsonify(materials)
 
 
 @raw_materials_bp.route("/api/organic/raw-materials", methods=["POST"])

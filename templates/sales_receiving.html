@@ -37,6 +37,20 @@ body.inv-page .card h2 .count-badge {
     background: var(--row-alt); padding: 3px 10px; border-radius: 10px;
 }
 body.inv-page .card > p { font-size: 12px; line-height: 1.5; color: var(--text-light); margin-bottom: 14px; }
+.range-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+             background: var(--card-bg); border: 1px solid var(--border);
+             border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; }
+.range-label { font-size: 12px; color: var(--text-light); }
+.range-presets { display: inline-flex; }
+.range-btn { padding: 6px 14px; border: 1px solid var(--border); background: var(--white);
+             font-size: 12px; font-weight: 600; color: var(--text); cursor: pointer;
+             margin-left: -1px; }
+.range-presets .range-btn:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.range-presets .range-btn:last-child { border-radius: 0 6px 6px 0; }
+.range-btn.active { background: var(--accent); color: var(--white); border-color: var(--accent); position: relative; z-index: 1; }
+.range-bar input[type=date] { padding: 6px 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
+.btn-tiny { padding: 6px 12px; font-size: 12px; }
+.range-note { font-size: 11px; color: var(--text-light); margin-left: auto; }
 
 body.inv-page .form-field label {
     display: block; font-size: 11px; font-weight: 600;
@@ -172,7 +186,7 @@ body.inv-page .btn-sm:hover { background: var(--row-alt); border-color: #b8b8a8;
     <!-- Search & Trace — top -->
     <div class="card" id="trace">
         <h2>Search &amp; Trace</h2>
-        <p style="font-size:13px;color:var(--text-light);margin-bottom:14px;">Search by supplier, buyer, product name, LOT#, or date across all receiving and sales transactions.</p>
+        <p>Search by supplier, buyer, product name, LOT#, or date. Searches ALL records, ignoring the date range below.</p>
         <div class="search-bar" style="margin-bottom:0;">
             <input id="trace-query" placeholder="Supplier, buyer, product, LOT#, or date…" style="flex:1;" oninput="doTraceDebounced()">
             <button class="btn btn-primary" onclick="doTrace()">Search</button>
@@ -182,20 +196,32 @@ body.inv-page .btn-sm:hover { background: var(--row-alt); border-color: #b8b8a8;
     </div>
 
     <!-- Receiving Transactions -->
-    <div class="card" id="receiving">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:4px;">
-            <h2 style="border-bottom:none;padding-bottom:0;margin-bottom:0;">Receiving <span class="count-badge" id="receiving-count">—</span></h2>
+    <div class="range-bar">
+        <span class="range-label">Showing</span>
+        <div class="range-presets">
+            <button class="range-btn" data-days="30">30 days</button>
+            <button class="range-btn active" data-days="90">90 days</button>
+            <button class="range-btn" data-days="365">1 year</button>
+            <button class="range-btn" data-days="all">All time</button>
         </div>
-        <p style="font-size:13px;color:var(--text-light);margin-bottom:14px;">All supplier deliveries recorded via Add Inventory.</p>
+        <span class="range-label">or</span>
+        <input type="date" id="range-from" aria-label="From date">
+        <span class="range-label">to</span>
+        <input type="date" id="range-to" aria-label="To date">
+        <button class="btn btn-outline btn-tiny" id="range-apply">Apply</button>
+        <span class="range-note" id="range-note"></span>
+    </div>
+
+    <div class="card" id="receiving">
+        <h2>Receiving <span class="count-badge" id="receiving-count">—</span></h2>
+        <p>Supplier deliveries recorded via Add Inventory, within the date range above.</p>
         <div id="receiving-container"><div class="empty-state">Loading...</div></div>
     </div>
 
     <!-- Sales Transactions -->
     <div class="card" id="sales">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:4px;">
-            <h2 style="border-bottom:none;padding-bottom:0;margin-bottom:0;">Sales <span class="count-badge" id="sales-count">—</span></h2>
-        </div>
-        <p style="font-size:13px;color:var(--text-light);margin-bottom:14px;">All sales drawn from finished goods inventory.</p>
+        <h2>Sales <span class="count-badge" id="sales-count">—</span></h2>
+        <p>Sales drawn from finished goods inventory, within the date range above.</p>
         <div id="sales-container"><div class="empty-state">Loading...</div></div>
     </div>
 </div>
@@ -333,7 +359,7 @@ function _salesCount(n){ return n+' sale'+(n===1?'':'s'); }
 function _deliveriesCount(n){ return n+' deliver'+(n===1?'y':'ies'); }
 
 async function loadSales(){
-    var res=await fetch('/api/organic/sales');
+    var res=await fetch('/api/organic/sales'+rangeQuery());
     var data=await res.json();
     var container=document.getElementById('sales-container');
     var countEl=document.getElementById('sales-count');
@@ -682,7 +708,7 @@ async function doTrace(){
 // ── Receiving Transactions ────────────────────────────────────────────
 async function loadReceiving(){
     var [res, photoRes] = await Promise.all([
-        fetch('/api/organic/raw-materials'),
+        fetch('/api/organic/raw-materials'+rangeQuery()),
         fetch('/api/organic/raw-materials/receipt-photos'),
     ]);
     var data = await res.json();
@@ -744,8 +770,70 @@ async function loadReceiving(){
 
 
 
+// ── Date range ───────────────────────────────────────────────────────
+// The window is applied SERVER-SIDE via ?from=/?to= on both endpoints, not by
+// filtering here — the point is to stop shipping the whole table to the
+// browser. Those two params are also exactly what a SQL WHERE clause takes, so
+// when these files become tables the request URLs do not change at all.
+// Search & Trace deliberately ignores the range: a trace must reach any record.
+let _rangeFrom = '', _rangeTo = '';
+
+function isoDaysAgo(n) {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d.toISOString().slice(0, 10);
+}
+
+function rangeQuery() {
+    const p = [];
+    if (_rangeFrom) p.push('from=' + encodeURIComponent(_rangeFrom));
+    if (_rangeTo) p.push('to=' + encodeURIComponent(_rangeTo));
+    return p.length ? '?' + p.join('&') : '';
+}
+
+function describeRange() {
+    const note = document.getElementById('range-note');
+    if (!note) return;
+    if (!_rangeFrom && !_rangeTo) { note.textContent = 'Showing every record on file.'; return; }
+    note.textContent = 'Showing ' + (_rangeFrom || 'the beginning') + ' to ' + (_rangeTo || 'today') + '.';
+}
+
+function applyRange(from, to, activeBtn) {
+    _rangeFrom = from || '';
+    _rangeTo = to || '';
+    document.querySelectorAll('.range-btn').forEach(function (b) {
+        b.classList.toggle('active', b === activeBtn);
+    });
+    describeRange();
+    loadSales();
+    loadReceiving();
+}
+
+function initRange() {
+    document.querySelectorAll('.range-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const d = btn.dataset.days;
+            document.getElementById('range-from').value = '';
+            document.getElementById('range-to').value = '';
+            applyRange(d === 'all' ? '' : isoDaysAgo(parseInt(d, 10)), '', btn);
+        });
+    });
+    document.getElementById('range-apply').addEventListener('click', function () {
+        const f = document.getElementById('range-from').value;
+        const t = document.getElementById('range-to').value;
+        if (f && t && f > t) { alert('The "from" date is after the "to" date.'); return; }
+        if (!f && !t) { alert('Pick at least one date, or use a preset.'); return; }
+        applyRange(f, t, null);
+    });
+    // Default: the last 90 days. Deliberately a real default rather than "all"
+    // — the page previously loaded every record ever on every visit.
+    _rangeFrom = isoDaysAgo(90);
+    describeRange();
+}
+
 // ── Init ──
 document.addEventListener('DOMContentLoaded', function(){
+    initRange();
     loadSales();
     loadReceiving();
 });

@@ -442,3 +442,26 @@ def _prod_date(e):
             pass
     return (e.get("created_at") or "")[:10]
 
+
+
+def _in_date_window(value, date_from, date_to):
+    """Is an ISO date string inside an optional [date_from, date_to] window?
+
+    Both bounds are optional and INCLUSIVE; a missing bound means unbounded, so
+    no params at all means "everything" — the pre-filter behaviour, unchanged.
+    A record with no/blank date is KEPT: dropping undated rows from a record
+    view would silently hide data, which is worse than showing it.
+
+    Deliberately a plain string compare — ISO dates sort lexicographically, so
+    this is exactly the predicate a database would express as
+    `WHERE col BETWEEN ? AND ?`. Keeping the semantics identical is what makes
+    the eventual swap to SQL a change of implementation, not of contract.
+    """
+    d = (value or "")[:10]
+    if not d:
+        return True
+    if date_from and d < date_from:
+        return False
+    if date_to and d > date_to:
+        return False
+    return True
