@@ -111,6 +111,16 @@
 .dash-btn.full { grid-column: 1 / -1; }
 .dash-btn.placeholder { opacity: 0.45; cursor: default; border-style: dashed; }
 .dash-btn.placeholder:hover { transform: none; box-shadow: none; border-color: var(--border); }
+/* -- Greeting: the first thing the floor and the office both see. Sits above
+   everything, rotating through the team's languages (English twice as often)
+   with a live Toronto temperature beside it. -- */
+.greet-bar { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px 16px; margin: 2px 0 18px; }
+.greet-text { font-size: 27px; font-weight: 700; color: var(--dark); letter-spacing: .2px; line-height: 1.25; transition: opacity .45s ease; }
+.greet-weather { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; color: var(--text-light); background: var(--card-bg); border: 1px solid var(--border); border-radius: 999px; padding: 5px 13px; white-space: nowrap; }
+.greet-weather .w-icon { font-size: 16px; line-height: 1; }
+.greet-weather .w-temp { color: var(--dark); font-weight: 700; }
+.greet-weather[hidden] { display: none; }
+@media (max-width: 600px) { .greet-text { font-size: 22px; } }
 </style>
 </head>
 <body>
@@ -120,6 +130,93 @@
     <div class="header-right"><button class="header-btn" onclick="doLogout()">Log Out</button></div>
 </div>
 <div class="main">
+<div class="greet-bar">
+    <div class="greet-text" id="greet-text">&nbsp;</div>
+    <div class="greet-weather" id="greet-weather" hidden>
+        <span class="w-icon" id="greet-w-icon"></span>
+        <span class="w-temp" id="greet-w-temp"></span>
+        <span id="greet-w-desc"></span>
+    </div>
+</div>
+<script>
+(function () {
+    /* One phrase per slot per language. The rotation is English, Nepali,
+       English, Greek, English, French -- English lands on every other turn. */
+    const GREETINGS = {
+        morning: {
+            en: 'Good Morning Soma Team',
+            ne: '\u0936\u0941\u092d \u092a\u094d\u0930\u092d\u093e\u0924, \u0938\u094b\u092e\u093e \u091f\u093f\u092e',
+            el: '\u039a\u03b1\u03bb\u03b7\u03bc\u03ad\u03c1\u03b1 \u03bf\u03bc\u03ac\u03b4\u03b1 Soma',
+            fr: "Bonjour l'\u00e9quipe Soma"
+        },
+        afternoon: {
+            en: 'Good Afternoon Soma Team',
+            ne: '\u0936\u0941\u092d \u0926\u093f\u0909\u0901\u0938\u094b, \u0938\u094b\u092e\u093e \u091f\u093f\u092e',
+            el: '\u039a\u03b1\u03bb\u03cc \u03b1\u03c0\u03cc\u03b3\u03b5\u03c5\u03bc\u03b1 \u03bf\u03bc\u03ac\u03b4\u03b1 Soma',
+            fr: "Bon apr\u00e8s-midi l'\u00e9quipe Soma"
+        },
+        wrap: {
+            en: 'Time to start wrapping up',
+            ne: '\u0938\u092e\u0947\u091f\u094d\u0928 \u0938\u0941\u0930\u0941 \u0917\u0930\u094d\u0928\u0947 \u0938\u092e\u092f \u092d\u092f\u094b',
+            el: '\u038f\u03c1\u03b1 \u03bd\u03b1 \u03b1\u03c1\u03c7\u03af\u03c3\u03bf\u03c5\u03bc\u03b5 \u03bd\u03b1 \u03bc\u03b1\u03b6\u03b5\u03cd\u03bf\u03c5\u03bc\u03b5',
+            fr: 'Il est temps de commencer \u00e0 ranger'
+        }
+    };
+    const CYCLE = ['en', 'ne', 'en', 'el', 'en', 'fr'];
+    const ROTATE_MS = 7000;
+    const el = document.getElementById('greet-text');
+    let step = 0;
+
+    function slot() {
+        const h = new Date().getHours();
+        if (h < 12) return 'morning';
+        if (h < 16) return 'afternoon';
+        return 'wrap';
+    }
+    function render() {
+        el.textContent = GREETINGS[slot()][CYCLE[step % CYCLE.length]];
+    }
+    function rotate() {
+        el.style.opacity = '0';
+        setTimeout(function () { step++; render(); el.style.opacity = '1'; }, 450);
+    }
+    render();
+    setInterval(rotate, ROTATE_MS);
+
+    /* Weather: Open-Meteo, no key, Toronto. Purely decorative -- any failure
+       leaves the pill hidden rather than showing a stale or wrong number. */
+    const WX = {
+        0: ['\u2600\ufe0f', 'Clear'], 1: ['\ud83c\udf24\ufe0f', 'Mostly clear'], 2: ['\u26c5', 'Partly cloudy'],
+        3: ['\u2601\ufe0f', 'Overcast'], 45: ['\ud83c\udf2b\ufe0f', 'Fog'], 48: ['\ud83c\udf2b\ufe0f', 'Fog'],
+        51: ['\ud83c\udf26\ufe0f', 'Drizzle'], 53: ['\ud83c\udf26\ufe0f', 'Drizzle'], 55: ['\ud83c\udf26\ufe0f', 'Drizzle'],
+        61: ['\ud83c\udf27\ufe0f', 'Rain'], 63: ['\ud83c\udf27\ufe0f', 'Rain'], 65: ['\ud83c\udf27\ufe0f', 'Heavy rain'],
+        66: ['\ud83c\udf27\ufe0f', 'Freezing rain'], 67: ['\ud83c\udf27\ufe0f', 'Freezing rain'],
+        71: ['\ud83c\udf28\ufe0f', 'Snow'], 73: ['\ud83c\udf28\ufe0f', 'Snow'], 75: ['\ud83c\udf28\ufe0f', 'Heavy snow'],
+        77: ['\ud83c\udf28\ufe0f', 'Snow grains'], 80: ['\ud83c\udf26\ufe0f', 'Showers'], 81: ['\ud83c\udf26\ufe0f', 'Showers'],
+        82: ['\ud83c\udf27\ufe0f', 'Heavy showers'], 85: ['\ud83c\udf28\ufe0f', 'Snow showers'], 86: ['\ud83c\udf28\ufe0f', 'Snow showers'],
+        95: ['\u26c8\ufe0f', 'Thunderstorm'], 96: ['\u26c8\ufe0f', 'Thunderstorm'], 99: ['\u26c8\ufe0f', 'Thunderstorm']
+    };
+    const WX_URL = 'https://api.open-meteo.com/v1/forecast?latitude=43.6532&longitude=-79.3832'
+        + '&current=temperature_2m,weather_code&timezone=America%2FToronto';
+
+    async function loadWeather() {
+        try {
+            const res = await fetch(WX_URL);
+            if (!res.ok) return;
+            const data = await res.json();
+            const cur = data && data.current;
+            if (!cur || typeof cur.temperature_2m !== 'number') return;
+            const wx = WX[cur.weather_code] || ['\ud83c\udf21\ufe0f', ''];
+            document.getElementById('greet-w-icon').textContent = wx[0];
+            document.getElementById('greet-w-temp').textContent = Math.round(cur.temperature_2m) + '\u00b0C';
+            document.getElementById('greet-w-desc').textContent = wx[1];
+            document.getElementById('greet-weather').hidden = false;
+        } catch (e) { /* offline tablet -- stay quiet */ }
+    }
+    loadWeather();
+    setInterval(loadWeather, 15 * 60 * 1000);
+})();
+</script>
 {% if role == 'manager' %}
     <div class="dashboard-grid">
         <a href="/daily-review" class="review-btn" id="review-btn">
