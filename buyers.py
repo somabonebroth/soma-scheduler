@@ -65,6 +65,36 @@ def get_buyer_sku_catalog():
     return jsonify([{"brand": b, "skus": groups[b]} for b in sorted(groups.keys())])
 
 
+def _normalize_sku_pricing(sku):
+    """Round and complete a buyer SKU's pricing triangle IN PLACE.
+
+    price = cogs * (1 + margin_pct/100). Whichever two are present decide the
+    third; price+cogs win, since those are the two a human actually types.
+
+    This is the ONLY place the relationship is enforced. It used to live in the
+    browser (buyer_edit.html recomputes margin in an input listener) with the
+    server storing whatever it was handed — so an untouched row, which the edit
+    page initialises with margin_pct=null, silently wiped the stored margin on
+    every save. Deriving it here means the stored trio is coherent no matter
+    what a client sends, including a stale tab or a future integration.
+    """
+    for pf in ("price", "cogs", "margin_pct"):
+        if pf in sku and sku[pf] is not None:
+            try:
+                sku[pf] = round(float(sku[pf]), 2)
+            except (TypeError, ValueError):
+                sku[pf] = None
+
+    price, cogs, margin = sku.get("price"), sku.get("cogs"), sku.get("margin_pct")
+    if price is not None and cogs is not None:
+        sku["margin_pct"] = round(((price / cogs) - 1) * 100, 2) if cogs > 0 else 0.0
+    elif price is not None and margin is not None and (1 + margin / 100) > 0:
+        sku["cogs"] = round(price / (1 + margin / 100), 2)
+    elif cogs is not None and margin is not None:
+        sku["price"] = round(cogs * (1 + margin / 100), 2)
+    return sku
+
+
 @buyers_bp.route("/api/buyers", methods=["POST"])
 @manager_required
 def create_buyer():
@@ -87,12 +117,7 @@ def create_buyer():
             for ident in ("brand", "format"):
                 if not merged.get(ident) and cat.get(ident):
                     merged[ident] = cat[ident]
-            for pf in ("price", "cogs", "margin_pct"):
-                if pf in merged and merged[pf] is not None:
-                    try:
-                        merged[pf] = round(float(merged[pf]), 2)
-                    except (TypeError, ValueError):
-                        merged[pf] = None
+            _normalize_sku_pricing(merged)
             new_skus.append(merged)
         buyer["skus"] = new_skus
     else:
@@ -151,12 +176,7 @@ def update_buyer(bid):
             for ident in ("brand", "format"):
                 if not merged.get(ident) and cat.get(ident):
                     merged[ident] = cat[ident]
-            for pf in ("price", "cogs", "margin_pct"):
-                if pf in merged and merged[pf] is not None:
-                    try:
-                        merged[pf] = round(float(merged[pf]), 2)
-                    except (TypeError, ValueError):
-                        merged[pf] = None
+            _normalize_sku_pricing(merged)
             new_skus.append(merged)
         buyers[idx]["skus"] = new_skus
     for field in ("contact_name","phone","email","address","website","certifications","notes"):
@@ -174,53 +194,6 @@ def update_buyer(bid):
             ]
     app._save_buyers(buyers)
     return jsonify(buyers[idx])
-
-
-@buyers_bp.route("/api/buyers/<bid>/skus/<path:sku_key>/pricing", methods=["PATCH"])
-@manager_required
-def update_buyer_sku_pricing(bid, sku_key):
-    """Update pricing for a single SKU on a buyer.
-    Body: { price, cogs, margin_pct, buyer_sku, active }
-    Computes missing values using the price=cogs*(1+margin/100) relationship.
-    """
-    data = request.get_json() or {}
-    buyers = app._load_buyers()
-    idx = next((i for i, b in enumerate(buyers) if b["id"] == bid), None)
-    if idx is None:
-        return jsonify({"error": "Buyer not found"}), 404
-
-    skus = buyers[idx].get("skus") or []
-    sku_idx = next((i for i, s in enumerate(skus) if s.get("sku_key") == sku_key), None)
-    if sku_idx is None:
-        return jsonify({"error": "SKU not assigned to this buyer"}), 404
-
-    sku = dict(skus[sku_idx])
-
-    # Derive pricing triangle: price = cogs * (1 + margin/100)
-    price      = float(data["price"])      if "price"      in data and data["price"]      is not None else sku.get("price")
-    cogs       = float(data["cogs"])       if "cogs"       in data and data["cogs"]       is not None else sku.get("cogs")
-    margin_pct = float(data["margin_pct"]) if "margin_pct" in data and data["margin_pct"] is not None else sku.get("margin_pct")
-
-    if price is not None and cogs is not None:
-        margin_pct = round(((price / cogs) - 1) * 100, 2) if cogs > 0 else 0.0
-    elif price is not None and margin_pct is not None:
-        cogs = round(price / (1 + margin_pct / 100), 2) if (1 + margin_pct / 100) > 0 else price
-    elif cogs is not None and margin_pct is not None:
-        price = round(cogs * (1 + margin_pct / 100), 2)
-
-    if price      is not None: sku["price"]      = round(price, 2)
-    if cogs       is not None: sku["cogs"]        = round(cogs, 2)
-    if margin_pct is not None: sku["margin_pct"]  = round(margin_pct, 2)
-
-    if "buyer_sku" in data:
-        sku["buyer_sku"] = (data["buyer_sku"] or "").strip()
-    if "active" in data:
-        sku["active"] = bool(data["active"])
-
-    skus[sku_idx] = sku
-    buyers[idx]["skus"] = skus
-    app._save_buyers(buyers)
-    return jsonify({"ok": True, "sku": sku})
 
 
 @buyers_bp.route("/api/buyers/<bid>", methods=["DELETE"])

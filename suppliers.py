@@ -114,17 +114,3 @@ def delete_supplier(sid):
     _save_suppliers(suppliers)
     return jsonify({"ok": True})
 
-
-@suppliers_bp.route("/api/suppliers/<sid>/ingredients", methods=["PUT"])
-@manager_required
-def update_supplier_ingredients(sid):
-    """PUT /api/suppliers/<id>/ingredients - replace a supplier's ingredient list."""
-    data = request.get_json(force=True) or {}
-    ingredients = data.get("ingredients", [])
-    suppliers = _load_suppliers()
-    idx = next((i for i, s in enumerate(suppliers) if s["id"] == sid), None)
-    if idx is None:
-        return jsonify({"error": "Not found"}), 404
-    suppliers[idx]["ingredients"] = ingredients
-    _save_suppliers(suppliers)
-    return jsonify(suppliers[idx])
