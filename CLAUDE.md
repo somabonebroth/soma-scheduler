@@ -177,6 +177,10 @@ one record per date, works on non-production days) and the rotating **backlog** 
 explicitly fine). Closing records SNAPSHOT the labels signed against; item ids survive
 edits. Data lives in `cleaning_jobs.json` as `closing_items` + `closing_records`.
 
+**Two pages, split by role (2026-08-19).** `/cleaning` is the FLOOR's page — doing the work only: tonight's closing gate, the rotating pool, sign-offs, notes, declines. It no longer branches on role and is passed none. `/cleaning-records` (`cleaning_records.html`, manager-only) is the management side and holds four things: closing history (date-ranged, finally reading the long-orphaned `GET /api/cleaning/closing/records`), rotating-job history, the closing-list editor, and the rotating-job editor — both editors MOVED off the floor page. Job `POST`/`PATCH`/`DELETE` and `DELETE /api/cleaning/completions/<cid>` became `manager_required` at the same time; the floor could previously rewrite the job pool and delete its own cleaning sign-offs. Editing a list never rewrites history — closing records snapshot their labels.
+
+**API shape gotchas in this blueprint:** `PUT /api/cleaning/closing/items` takes a BARE LIST, not `{items: [...]}`. A closing record's signer is `staff` (not `signed_by`) and it carries TWO distinct notes — `notes` from the sign-off itself and `manager_note` from the End of Day handover. A completion is `job_title` + `staff` + `date`. `get_cleaning_jobs` sorts with `j.get("last_done")`, not `j[...]`: that endpoint feeds both the floor page and End of Day, so a record missing the key must not 500 it.
+
 **Jars are completed the day AFTER they are scheduled — one model, audited 2026-08-18.**
 A batch STARTED on day N is counted on day N+1 (seal check is next-day, per the CCP
 checklist). The tablet encodes this: `get_daily_production` splits a START side (today's

@@ -97,17 +97,6 @@
 <div class="main">
     <div class="section-label">Tonight&rsquo;s closing &mdash; all required</div>
     <div class="closing-card" id="closing-card">Loading&hellip;</div>
-{% if role == 'manager' %}
-    <details style="margin-top:10px;">
-        <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:1px;padding:8px 0;">&#9881; Manage closing list</summary>
-        <div style="margin-top:8px;">
-            <div id="ci-editor"></div>
-            <button class="done-btn" style="background:var(--accent);margin-top:6px;" onclick="addClosingItem()">+ Add item</button>
-            <button class="done-btn" style="margin-top:6px;" onclick="saveClosingItems()">&#10003; Save list</button>
-            <div class="closing-err" id="ci-err"></div>
-        </div>
-    </details>
-{% endif %}
 
     <div class="section-label" style="margin-top:26px;">Rotating jobs &mdash; pick one if you have time</div>
     <p class="intro">Extra time at the end of a shift? Grab a job from the top of the list, do it, and sign off with your name — it leaves the list and comes back a week, a month, 3 or 6 months later. Busy day? Skip it, no worries — it just stays in line.</p>
@@ -120,13 +109,6 @@
     <div class="section-label">Recent sign-offs</div>
     <div id="comp-list"></div>
 
-    <details style="margin-top:26px;">
-        <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:1px;padding:8px 0;">&#9881; Manage job list</summary>
-        <div style="margin-top:8px;">
-            <button class="done-btn" style="background:var(--accent);" onclick="openJobModal()">+ Add Job</button>
-            <div id="manage-list" style="margin-top:10px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--card-bg);"></div>
-        </div>
-    </details>
 </div>
 
 <!-- Sign-off modal -->
@@ -152,36 +134,6 @@
 </div>
 
 <!-- Add/Edit job modal -->
-<div class="cl-modal-overlay" id="job-modal">
-  <div class="cl-modal">
-    <button onclick="closeJobModal()" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-light);">&times;</button>
-    <h2 id="job-modal-title">Add Job</h2>
-    <p class="sub">A ~1 hour micro job for the end-of-shift rotation.</p>
-    <div class="cl-field">
-      <label>Job</label>
-      <input type="text" id="job-title" placeholder="e.g. Degrease hood filters" autocomplete="off">
-    </div>
-    <div class="cl-field">
-      <label>How often (roughly)</label>
-      <select id="job-interval">
-        <option value="7">Weekly — back in 1 week after completion</option>
-        <option value="30">Monthly — back 1 month after completion</option>
-        <option value="90">Quarterly — back 3 months after completion</option>
-        <option value="180">Semi-annual — back 6 months after completion</option>
-      </select>
-    </div>
-    <div class="cl-field">
-      <label>Notes (optional)</label>
-      <input type="text" id="job-notes" placeholder="Where supplies are, what to watch for" autocomplete="off">
-    </div>
-    <div class="cl-err" id="job-err"></div>
-    <div class="cl-actions">
-      <button class="cl-cancel" onclick="closeJobModal()">Cancel</button>
-      <button class="cl-primary" id="job-submit" onclick="submitJob()">Save</button>
-    </div>
-  </div>
-</div>
-
 <script>
 // New JS — let/const per the forward-only policy.
 let jobs = [];
@@ -262,7 +214,6 @@ async function loadClosing(){
     closingItems = closingRec.items || [];
     closingItems.forEach(i => { ticked[i.id] = !!i.done; });
     renderClosing();
-    if (document.getElementById('ci-editor')) renderClosingEditor();
 }
 
 function renderClosing(){
@@ -319,63 +270,6 @@ async function signClosing(){
 }
 
 // Manager-only: edit what's on the list. Ids are preserved so history lines up.
-function renderClosingEditor(){
-    // Order matters: End of Day walks the floor through these one at a time,
-    // in exactly this order, so the manager sets the walk around the kitchen.
-    const last = closingItems.length - 1;
-    document.getElementById('ci-editor').innerHTML = closingItems.map((i, idx) =>
-        '<div class="ci-edit-row" data-id="' + esc(i.id) + '">'
-        + '<span class="ci-ord">' + (idx + 1) + '</span>'
-        + '<input type="text" value="' + esc(i.label) + '">'
-        + '<button class="ci-move" onclick="moveClosingItem(' + idx + ',-1)" title="Move up"'
-        + (idx === 0 ? ' disabled' : '') + '>&#9650;</button>'
-        + '<button class="ci-move" onclick="moveClosingItem(' + idx + ',1)" title="Move down"'
-        + (idx === last ? ' disabled' : '') + '>&#9660;</button>'
-        + '<button onclick="removeClosingItem(' + idx + ')" title="Remove">&times;</button></div>').join('');
-}
-
-function moveClosingItem(idx, delta){
-    const items = collectEditor();
-    const to = idx + delta;
-    if (to < 0 || to >= items.length) return;
-    const moved = items.splice(idx, 1)[0];
-    items.splice(to, 0, moved);
-    closingItems = items;
-    renderClosingEditor();
-}
-
-function collectEditor(){
-    return Array.from(document.querySelectorAll('#ci-editor .ci-edit-row')).map(row => ({
-        id: row.getAttribute('data-id') || '',
-        label: row.querySelector('input').value.trim(),
-    })).filter(i => i.label);
-}
-
-function addClosingItem(){
-    closingItems = collectEditor().concat([{id: '', label: ''}]);
-    renderClosingEditor();
-}
-
-function removeClosingItem(idx){
-    closingItems = collectEditor().filter((_, i) => i !== idx);
-    renderClosingEditor();
-}
-
-async function saveClosingItems(){
-    const err = document.getElementById('ci-err');
-    const res = await fetch('/api/cleaning/closing/items', {
-        method: 'PUT', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(collectEditor()),
-    });
-    if (!res.ok) {
-        const d = await res.json().catch(() => ({error: 'Save failed'}));
-        err.textContent = d.error || 'Save failed'; err.style.display = 'block';
-        return;
-    }
-    err.style.display = 'none';
-    await loadClosing();
-}
-
 async function loadJobs(){
     const res = await fetch('/api/cleaning/jobs');
     jobs = await res.json();
@@ -383,7 +277,7 @@ async function loadJobs(){
     const rest = document.getElementById('rest-list');
     const restLabel = document.getElementById('rest-label');
     if (jobs.length === 0) {
-        up.innerHTML = '<div class="empty-state">No cleaning jobs yet. Open <strong>Manage job list</strong> below to build the rotation.</div>';
+        up.innerHTML = '<div class="empty-state">No cleaning jobs yet. A manager sets the rotation up in Cleaning Records.</div>';
         rest.innerHTML = '';
         restLabel.style.display = 'none';
     } else {
@@ -395,7 +289,6 @@ async function loadJobs(){
         rest.innerHTML = groupedJobsHtml(resting);
         restLabel.style.display = resting.length ? '' : 'none';
     }
-    renderManage();
 }
 
 async function loadCompletions(){
@@ -415,20 +308,6 @@ async function loadCompletions(){
         + '<button class="comp-undo" title="Undo this sign-off" onclick="undoCompletion(\'' + c.id + '\')">undo</button>'
         + '</div>'
     ).join('') + '</div>';
-}
-
-function renderManage(){
-    const el = document.getElementById('manage-list');
-    if (jobs.length === 0) { el.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-light);">No jobs yet.</div>'; return; }
-    const sorted = jobs.slice().sort((a, b) => a.title.localeCompare(b.title));
-    el.innerHTML = sorted.map(j =>
-        '<div class="manage-job-row"><div style="flex:1;min-width:0;"><strong>' + esc(j.title) + '</strong>'
-        + ' ' + slotBadge(j.interval_days) + '</div>'
-        + '<div class="manage-actions">'
-        + '<button onclick="openJobModal(\'' + j.id + '\')">Edit</button>'
-        + '<button class="del" onclick="deleteJob(\'' + j.id + '\')">Delete</button>'
-        + '</div></div>'
-    ).join('');
 }
 
 // ── Sign-off ──
@@ -476,61 +355,3 @@ async function undoCompletion(cid){
 }
 
 // ── Manage jobs ──
-function openJobModal(jid){
-    editJobId = jid || null;
-    const j = jid ? jobs.find(x => x.id === jid) : null;
-    document.getElementById('job-modal-title').textContent = j ? 'Edit Job' : 'Add Job';
-    document.getElementById('job-title').value = j ? j.title : '';
-    const intervalSel = document.getElementById('job-interval');
-    intervalSel.value = j ? String(j.interval_days) : '30';
-    if (!intervalSel.value) intervalSel.value = '30';
-    document.getElementById('job-notes').value = j ? (j.notes || '') : '';
-    document.getElementById('job-err').style.display = 'none';
-    document.getElementById('job-modal').classList.add('open');
-    setTimeout(() => document.getElementById('job-title').focus(), 50);
-}
-function closeJobModal(){ document.getElementById('job-modal').classList.remove('open'); }
-
-async function submitJob(){
-    const title = document.getElementById('job-title').value.trim();
-    const err = document.getElementById('job-err');
-    if (!title) { err.textContent = 'Please enter a job name.'; err.style.display = 'block'; return; }
-    const payload = {
-        title: title,
-        interval_days: parseInt(document.getElementById('job-interval').value, 10),
-        notes: document.getElementById('job-notes').value.trim()
-    };
-    const url = editJobId ? '/api/cleaning/jobs/' + editJobId : '/api/cleaning/jobs';
-    const method = editJobId ? 'PATCH' : 'POST';
-    try {
-        const res = await fetch(url, {method: method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
-        const d = await res.json();
-        if (!res.ok) { err.textContent = d.error || 'Failed to save.'; err.style.display = 'block'; return; }
-        closeJobModal();
-        await loadJobs();
-    } catch(e) {
-        err.textContent = 'Error — try again.'; err.style.display = 'block';
-    }
-}
-
-async function deleteJob(jid){
-    const j = jobs.find(x => x.id === jid);
-    if (!confirm('Remove "' + (j ? j.title : 'this job') + '" from the rotation? Past sign-offs are kept.')) return;
-    await fetch('/api/cleaning/jobs/' + jid, {method: 'DELETE'});
-    await loadJobs();
-}
-
-// Close modals on backdrop click / Escape
-document.getElementById('signoff-modal').addEventListener('click', function(e){ if (e.target === this) closeSignoff(); });
-document.getElementById('job-modal').addEventListener('click', function(e){ if (e.target === this) closeJobModal(); });
-document.addEventListener('keydown', function(e){
-    if (e.key === 'Escape') { closeSignoff(); closeJobModal(); }
-    if (e.key === 'Enter' && document.getElementById('signoff-modal').classList.contains('open')) submitSignoff();
-});
-
-loadClosing();
-loadJobs();
-loadCompletions();
-</script>
-</body>
-</html>

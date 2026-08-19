@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cleaning Records · Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  .cr-wrap { max-width: 1040px; margin: 0 auto; padding: 24px 16px 60px; }
+  .cr-wrap .card { background: var(--white); border: 1px solid var(--border);
+                   border-radius: var(--r-md); padding: 24px; margin-bottom: 20px; }
+  .cr-wrap .card h2 { font-size: 17px; font-weight: 600; color: var(--dark);
+                      padding-bottom: 11px; margin-bottom: 14px;
+                      border-bottom: 2px solid var(--border);
+                      display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .count-badge { font-size: 12px; font-weight: 500; color: var(--text-light);
+                 background: var(--row-alt); padding: 3px 10px; border-radius: 10px; }
+  .cr-wrap .card > p { font-size: 12px; line-height: 1.5; color: var(--text-light); margin-bottom: 14px; }
+  .range-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .range-bar input[type=date] { padding: 6px 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
+  .range-label { font-size: 12px; color: var(--text-light); }
+  .rec { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+  .rec summary { padding: 11px 14px; cursor: pointer; list-style: none; display: flex;
+                 align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+  .rec summary::-webkit-details-marker { display: none; }
+  .rec-date { font-weight: 700; color: var(--dark); }
+  .rec-who { color: var(--text-light); font-size: 12px; }
+  .pill { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+          padding: 2px 8px; border-radius: 999px; margin-left: auto; }
+  .pill-ok { background: var(--action-green-bg); color: var(--action-green); }
+  .pill-miss { background: var(--amber-bg); color: var(--amber-text-dark); }
+  .rec-body { padding: 4px 14px 14px; border-top: 1px solid var(--border); }
+  .rec-item { font-size: 12px; padding: 4px 0; display: flex; gap: 8px; }
+  .tick { color: var(--action-green); }
+  .cross { color: var(--action-red); }
+  .note { font-size: 12px; background: var(--amber-bg); border: 1px solid var(--amber-border);
+          border-radius: 6px; padding: 8px 11px; margin-top: 8px; color: var(--amber-text-dark); }
+  .ci-row, .job-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+                      border-bottom: 1px solid var(--border); }
+  .ci-row:last-child, .job-row:last-child { border-bottom: none; }
+  .ci-ord { font-size: 11px; color: var(--text-light); width: 20px; flex-shrink: 0; }
+  .ci-row input[type=text] { flex: 1; padding: 6px 9px; border: 1px solid var(--border);
+                             border-radius: 6px; font-size: 13px; min-width: 0; }
+  .icon-btn { padding: 4px 9px; border: 1px solid var(--border); background: var(--white);
+              border-radius: 5px; font-size: 12px; cursor: pointer; color: var(--text); }
+  .icon-btn.del { color: var(--action-red); border-color: var(--action-red); }
+  .listbox { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--card-bg); }
+  .slot { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+          padding: 2px 7px; border-radius: 999px; background: var(--row-alt); color: var(--text-light); }
+  .err { font-size: 12px; color: var(--action-red); margin-top: 8px; }
+  .empty-state { text-align: center; padding: 28px; color: var(--text-light); font-size: 13px;
+                 border: 2px dashed var(--border); border-radius: 10px; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none;
+                   align-items: center; justify-content: center; padding: 16px; z-index: 50; }
+  .modal-overlay.show { display: flex; }
+  .mo { background: var(--white); border-radius: 12px; padding: 22px; max-width: 440px;
+        width: 100%; position: relative; }
+  .fld { margin-bottom: 12px; }
+  .fld label { display: block; font-size: 10px; font-weight: 700; color: var(--text-light);
+               text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+  .fld input, .fld select { width: 100%; box-sizing: border-box; padding: 9px 11px;
+               border: 1px solid var(--border); border-radius: 7px; font-size: 14px; }
+</style>
+</head>
+<body class="inv-page">
+<div class="header">
+  <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+  <div class="header-text"><h1>Cleaning Records</h1><p>Closing history, rotating-job history, and both lists</p></div>
+  <div class="header-right" style="display:flex;align-items:center;gap:8px;">
+    <a href="/cleaning" class="header-btn">Cleaning &amp; Upkeep</a>
+    <a href="/" class="header-btn">⌂ Dashboard</a>
+  </div>
+</div>
+
+<div class="cr-wrap">
+  <div class="card" id="closing">
+    <h2>Closing checklist history <span class="count-badge" id="cl-count">—</span></h2>
+    <p>Every night's closing sign-off — who signed, and anything that was missed. Records snapshot
+    the labels as they read on the night, so editing the list below never rewrites history.</p>
+    <div class="range-bar">
+      <span class="range-label">From</span><input type="date" id="cl-from">
+      <span class="range-label">to</span><input type="date" id="cl-to">
+      <button class="btn btn-outline" style="font-size:12px;padding:6px 12px;" onclick="loadClosingRecords()">Apply</button>
+      <button class="btn btn-outline" style="font-size:12px;padding:6px 12px;" onclick="clearRange()">Last 30</button>
+    </div>
+    <div id="cl-list"><div class="empty-state">Loading…</div></div>
+  </div>
+
+  <div class="card" id="jobs">
+    <h2>Rotating job history <span class="count-badge" id="comp-count">—</span></h2>
+    <p>Completed rotating jobs, newest first.</p>
+    <div id="comp-list"><div class="empty-state">Loading…</div></div>
+  </div>
+
+  <div class="card" id="closing-list">
+    <h2>Closing list</h2>
+    <p>The fixed nightly list. <strong>Order matters</strong> — End of Day walks the floor through
+    these one at a time, in exactly this order, so it should read as a walk around the kitchen.</p>
+    <div id="ci-editor" class="listbox"></div>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-outline" style="font-size:13px;" onclick="addClosingItem()">+ Add item</button>
+      <button class="btn btn-primary" style="font-size:13px;" onclick="saveClosingItems()">✓ Save list</button>
+    </div>
+    <div class="err" id="ci-err"></div>
+  </div>
+
+  <div class="card" id="job-list">
+    <h2>Rotating job list</h2>
+    <p>The pool End of Day offers one job from. Skipping carries no penalty — a decline is recorded
+    as a note, never an issue.</p>
+    <button class="btn btn-outline" style="font-size:13px;margin-bottom:10px;" onclick="openJobModal()">+ Add job</button>
+    <div id="manage-list" class="listbox"></div>
+    <div class="err" id="job-list-err"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="job-modal">
+  <div class="mo">
+    <button onclick="closeJobModal()" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-light);">&times;</button>
+    <h2 id="job-modal-title" style="margin:0 0 4px;font-size:17px;">Add job</h2>
+    <p style="font-size:12px;color:var(--text-light);margin:0 0 14px;">A ~1 hour micro job for the end-of-shift rotation.</p>
+    <div class="fld"><label>Job</label>
+      <input type="text" id="job-title" placeholder="e.g. Degrease hood filters" autocomplete="off"></div>
+    <div class="fld"><label>How often (roughly)</label>
+      <select id="job-interval">
+        <option value="7">Weekly — back in 1 week after completion</option>
+        <option value="30">Monthly — back 1 month after completion</option>
+        <option value="90">Quarterly — back 3 months after completion</option>
+        <option value="180">Semi-annual — back 6 months after completion</option>
+      </select></div>
+    <div class="fld"><label>Notes (optional)</label>
+      <input type="text" id="job-notes" placeholder="Where supplies are, what to watch for" autocomplete="off"></div>
+    <div class="err" id="job-err"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px;">
+      <button class="btn btn-outline" onclick="closeJobModal()">Cancel</button>
+      <button class="btn btn-primary" id="job-submit" onclick="submitJob()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let closingItems = [];
+let jobs = [];
+let editJobId = null;
+
+function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function slotLabel(days) {
+  const d = Number(days) || 0;
+  if (d <= 7) return 'Weekly';
+  if (d <= 30) return 'Monthly';
+  if (d <= 90) return 'Quarterly';
+  return 'Semi-annual';
+}
+
+// ── Closing history ──────────────────────────────────────────────────
+function clearRange() {
+  document.getElementById('cl-from').value = '';
+  document.getElementById('cl-to').value = '';
+  loadClosingRecords();
+}
+
+async function loadClosingRecords() {
+  const f = document.getElementById('cl-from').value;
+  const t = document.getElementById('cl-to').value;
+  const q = [];
+  if (f) q.push('from=' + encodeURIComponent(f));
+  if (t) q.push('to=' + encodeURIComponent(t));
+  q.push('limit=' + (f || t ? 500 : 30));
+  const host = document.getElementById('cl-list');
+  try {
+    const recs = await (await fetch('/api/cleaning/closing/records?' + q.join('&'))).json();
+    document.getElementById('cl-count').textContent = recs.length;
+    if (!recs.length) { host.innerHTML = '<div class="empty-state">No closing records in this range.</div>'; return; }
+    host.innerHTML = recs.map(function (r) {
+      const items = r.items || [];
+      const missed = items.filter(function (i) { return !i.done; });
+      return '<details class="rec"><summary>'
+        + '<span class="rec-date">' + esc(r.date) + '</span>'
+        + '<span class="rec-who">signed by ' + esc(r.staff || '—') + '</span>'
+        + '<span class="pill ' + (missed.length ? 'pill-miss' : 'pill-ok') + '">'
+        + (missed.length ? missed.length + ' missed' : 'complete') + '</span>'
+        + '</summary><div class="rec-body">'
+        + items.map(function (i) {
+            return '<div class="rec-item"><span class="' + (i.done ? 'tick' : 'cross') + '">'
+              + (i.done ? '✓' : '✗') + '</span><span>' + esc(i.label) + '</span></div>';
+          }).join('')
+        + (r.manager_note ? '<div class="note"><strong>Note from the floor:</strong> ' + esc(r.manager_note) + '</div>' : '')
+        + (r.notes ? '<div class="note"><strong>Sign-off note:</strong> ' + esc(r.notes) + '</div>' : '')
+        + '</div></details>';
+    }).join('');
+  } catch (e) {
+    host.innerHTML = '<div class="empty-state">Could not load: ' + esc(e.message) + '</div>';
+  }
+}
+
+// ── Rotating job history ─────────────────────────────────────────────
+async function loadCompletions() {
+  const host = document.getElementById('comp-list');
+  try {
+    const comps = await (await fetch('/api/cleaning/completions?limit=100')).json();
+    document.getElementById('comp-count').textContent = comps.length;
+    if (!comps.length) { host.innerHTML = '<div class="empty-state">No rotating jobs completed yet.</div>'; return; }
+    host.innerHTML = '<div class="listbox">' + comps.map(function (c) {
+      return '<div class="job-row"><div style="flex:1;min-width:0;">'
+        + '<strong>' + esc(c.job_title || '—') + '</strong>'
+        + (c.notes ? '<div style="font-size:11px;color:var(--text-light);">' + esc(c.notes) + '</div>' : '')
+        + '</div>'
+        + '<span class="rec-who">' + esc(c.date || (c.ts || '').slice(0, 10)) + (c.staff ? ' · ' + esc(c.staff) : '') + '</span>'
+        + '<button class="icon-btn del" onclick="undoCompletion(\'' + esc(c.id) + '\')">Remove</button>'
+        + '</div>';
+    }).join('') + '</div>';
+  } catch (e) {
+    host.innerHTML = '<div class="empty-state">Could not load: ' + esc(e.message) + '</div>';
+  }
+}
+
+async function undoCompletion(cid) {
+  if (!confirm('Remove this completion record? The job returns to the rotation.')) return;
+  await fetch('/api/cleaning/completions/' + encodeURIComponent(cid), { method: 'DELETE' });
+  loadCompletions();
+}
+
+// ── Closing list editor ──────────────────────────────────────────────
+async function loadClosingItems() {
+  closingItems = await (await fetch('/api/cleaning/closing/items')).json();
+  renderClosingEditor();
+}
+
+function renderClosingEditor() {
+  const last = closingItems.length - 1;
+  document.getElementById('ci-editor').innerHTML = closingItems.length
+    ? closingItems.map(function (i, idx) {
+        return '<div class="ci-row" data-id="' + esc(i.id) + '">'
+          + '<span class="ci-ord">' + (idx + 1) + '</span>'
+          + '<input type="text" value="' + esc(i.label) + '">'
+          + '<button class="icon-btn" onclick="moveClosingItem(' + idx + ',-1)" title="Move up"'
+          + (idx === 0 ? ' disabled' : '') + '>↑</button>'
+          + '<button class="icon-btn" onclick="moveClosingItem(' + idx + ',1)" title="Move down"'
+          + (idx === last ? ' disabled' : '') + '>↓</button>'
+          + '<button class="icon-btn del" onclick="removeClosingItem(' + idx + ')">✕</button>'
+          + '</div>';
+      }).join('')
+    : '<div style="padding:12px;font-size:13px;color:var(--text-light);">No items yet.</div>';
+}
+
+function collectEditor() {
+  return Array.prototype.map.call(document.querySelectorAll('#ci-editor .ci-row'), function (row) {
+    return { id: row.dataset.id, label: row.querySelector('input').value.trim() };
+  }).filter(function (i) { return i.label; });
+}
+
+function moveClosingItem(idx, dir) {
+  closingItems = collectEditor();
+  const to = idx + dir;
+  if (to < 0 || to >= closingItems.length) return;
+  const tmp = closingItems[idx];
+  closingItems[idx] = closingItems[to];
+  closingItems[to] = tmp;
+  renderClosingEditor();
+}
+
+function addClosingItem() {
+  closingItems = collectEditor();
+  closingItems.push({ id: '', label: '' });
+  renderClosingEditor();
+}
+
+function removeClosingItem(idx) {
+  closingItems = collectEditor();
+  closingItems.splice(idx, 1);
+  renderClosingEditor();
+}
+
+async function saveClosingItems() {
+  const err = document.getElementById('ci-err');
+  err.textContent = '';
+  const items = collectEditor();
+  if (!items.length) { err.textContent = 'Keep at least one item.'; return; }
+  const res = await fetch('/api/cleaning/closing/items', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(items),   // endpoint takes a bare list, not {items:[…]}
+  });
+  const d = await res.json();
+  if (!res.ok) { err.textContent = d.error || 'Could not save.'; return; }
+  closingItems = d.items || items;
+  renderClosingEditor();
+  err.style.color = 'var(--action-green)';
+  err.textContent = 'Saved.';
+  setTimeout(function () { err.textContent = ''; err.style.color = ''; }, 2500);
+}
+
+// ── Rotating job list editor ─────────────────────────────────────────
+async function loadJobs() {
+  jobs = await (await fetch('/api/cleaning/jobs')).json();
+  renderManage();
+}
+
+function renderManage() {
+  const el = document.getElementById('manage-list');
+  if (!jobs.length) { el.innerHTML = '<div style="padding:12px;font-size:13px;color:var(--text-light);">No jobs yet.</div>'; return; }
+  el.innerHTML = jobs.slice().sort(function (a, b) { return a.title.localeCompare(b.title); })
+    .map(function (j) {
+      return '<div class="job-row"><div style="flex:1;min-width:0;"><strong>' + esc(j.title) + '</strong> '
+        + '<span class="slot">' + slotLabel(j.interval_days) + '</span>'
+        + (j.notes ? '<div style="font-size:11px;color:var(--text-light);">' + esc(j.notes) + '</div>' : '')
+        + '</div><div style="display:flex;gap:6px;">'
+        + '<button class="icon-btn" onclick="openJobModal(\'' + esc(j.id) + '\')">Edit</button>'
+        + '<button class="icon-btn del" onclick="deleteJob(\'' + esc(j.id) + '\')">Delete</button>'
+        + '</div></div>';
+    }).join('');
+}
+
+function openJobModal(jid) {
+  editJobId = jid || null;
+  const j = jid ? jobs.find(function (x) { return x.id === jid; }) : null;
+  document.getElementById('job-modal-title').textContent = j ? 'Edit job' : 'Add job';
+  document.getElementById('job-title').value = j ? j.title : '';
+  document.getElementById('job-interval').value = j ? String(j.interval_days || 30) : '30';
+  document.getElementById('job-notes').value = j ? (j.notes || '') : '';
+  document.getElementById('job-err').textContent = '';
+  document.getElementById('job-modal').classList.add('show');
+}
+
+function closeJobModal() { document.getElementById('job-modal').classList.remove('show'); }
+
+async function submitJob() {
+  const err = document.getElementById('job-err');
+  err.textContent = '';
+  const body = {
+    title: document.getElementById('job-title').value.trim(),
+    interval_days: parseInt(document.getElementById('job-interval').value, 10),
+    notes: document.getElementById('job-notes').value.trim(),
+  };
+  if (!body.title) { err.textContent = 'Give the job a name.'; return; }
+  const res = await fetch(editJobId ? '/api/cleaning/jobs/' + encodeURIComponent(editJobId) : '/api/cleaning/jobs', {
+    method: editJobId ? 'PATCH' : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const d = await res.json().catch(function () { return {}; });
+    err.textContent = d.error || 'Could not save.';
+    return;
+  }
+  closeJobModal();
+  loadJobs();
+}
+
+async function deleteJob(jid) {
+  if (!confirm('Delete this job from the rotation?')) return;
+  const res = await fetch('/api/cleaning/jobs/' + encodeURIComponent(jid), { method: 'DELETE' });
+  if (!res.ok) {
+    document.getElementById('job-list-err').textContent = 'Could not delete.';
+    return;
+  }
+  loadJobs();
+}
+
+loadClosingRecords();
+loadCompletions();
+loadClosingItems();
+loadJobs();
+</script>
+</body>
+</html>

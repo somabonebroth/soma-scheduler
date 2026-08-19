@@ -143,9 +143,21 @@ def _job_view(job):
 @cleaning_bp.route("/cleaning")
 @login_required
 def cleaning_page():
-    """Cleaning & Upkeep: tonight's closing gate + the rotating job pool."""
-    role = (session.get("role") or "manager") if session.get("authenticated") else None
-    return render_template("cleaning.html", role=role)
+    """Cleaning & Upkeep: tonight's closing gate + the rotating job pool.
+
+    Doing-the-work only. Both list editors moved to /cleaning-records
+    (manager-only) on 2026-08-19, so this template no longer branches on role.
+    """
+    return render_template("cleaning.html")
+
+
+@cleaning_bp.route("/cleaning-records")
+@manager_required
+def cleaning_records_page():
+    """Management side of cleaning: closing + rotating-job HISTORY, and the two
+    lists. Both editors live here rather than on /cleaning — the floor page is
+    for doing the work, not changing what the work is."""
+    return render_template("cleaning_records.html")
 
 
 @cleaning_bp.route("/api/cleaning/jobs", methods=["GET"])
@@ -157,13 +169,16 @@ def get_cleaning_jobs():
     # Active (ready) jobs first, most-overdue at the top; among ties,
     # never-done jobs outrank previously-done ones. Resting jobs follow,
     # which the same ratio ordering puts soonest-to-return first.
+    # .get, not [] — a job record missing last_done (hand-edited file, restored
+    # backup, older schema) would otherwise 500 this endpoint, and it feeds both
+    # the floor's cleaning page and the End of Day flow.
     jobs.sort(key=lambda j: (0 if j["ready"] else 1, -j["due_ratio"],
-                             0 if j["last_done"] is None else 1))
+                             0 if j.get("last_done") is None else 1))
     return jsonify(jobs)
 
 
 @cleaning_bp.route("/api/cleaning/jobs", methods=["POST"])
-@login_required
+@manager_required
 def create_cleaning_job():
     """Add a job. Body: {title, interval_days, notes?}."""
     body = request.get_json(force=True) or {}
@@ -194,7 +209,7 @@ def create_cleaning_job():
 
 
 @cleaning_bp.route("/api/cleaning/jobs/<jid>", methods=["PATCH"])
-@login_required
+@manager_required
 def update_cleaning_job(jid):
     """Edit a job's title, notes, or interval_days."""
     body = request.get_json(force=True) or {}
@@ -224,7 +239,7 @@ def update_cleaning_job(jid):
 
 
 @cleaning_bp.route("/api/cleaning/jobs/<jid>", methods=["DELETE"])
-@login_required
+@manager_required
 def delete_cleaning_job(jid):
     """Remove a job from the rotation. Its past sign-offs are kept."""
     data = _load_cleaning()
@@ -279,7 +294,7 @@ def get_cleaning_completions():
 
 
 @cleaning_bp.route("/api/cleaning/completions/<cid>", methods=["DELETE"])
-@login_required
+@manager_required
 def delete_cleaning_completion(cid):
     """Undo a sign-off (mis-click). Recomputes the job's last-done from its
     remaining sign-offs so the job returns to its previous queue position."""
