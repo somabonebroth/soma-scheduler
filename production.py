@@ -575,12 +575,27 @@ def summarize_day(week_id, day_idx, sched=None, ccp_titles=None):
     day_info = sched.get(str(day_idx), {}) or {}
     scheduled = {v: day_info.get(v, "").strip() for v in app.VESSELS if day_info.get(v, "").strip()}
 
+    # Jars entered on day N are the batches STARTED on day N-1 being finished
+    # and counted (see _check_organic_completion, and the tablet's FINISH side).
+    # So `produced` must be credited to the PREVIOUS day's recipe — crediting it
+    # to today's schedule mis-attributes the jars whenever a vessel changes
+    # recipe between consecutive production days. This matches the production
+    # tracker, the consumption chain, mass balance and the FG lot date.
+    prev_sched = app._get_previous_day_schedule(week_id, day_idx)
+    finished = {v: (prev_sched.get(v, "") or "").strip()
+                for v in app.VESSELS if (prev_sched.get(v, "") or "").strip()}
+
     produced = cl.get("produced", {}) or {}
     day_prod = {}
-    for v, recipe in scheduled.items():
-        qty = int(produced.get(v) or 0)
-        if qty:
-            day_prod[recipe] = day_prod.get(recipe, 0) + qty
+    for vessel, raw_qty in produced.items():
+        try:
+            qty = int(raw_qty or 0)
+        except (ValueError, TypeError):
+            continue
+        if qty <= 0:
+            continue
+        recipe = finished.get(vessel) or ("Unattributed (" + vessel + ")")
+        day_prod[recipe] = day_prod.get(recipe, 0) + qty
 
     # CCP confirmations are stored under "checks" as {"section-<num>": bool},
     # one tick per CCP master section, written by the tablet. This read used to
@@ -612,7 +627,9 @@ def summarize_day(week_id, day_idx, sched=None, ccp_titles=None):
         "day": app.DAYS[day_idx],
         "day_idx": day_idx,
         "date": app._run_start_date_str(week_id, day_idx),
+        # what was STARTED that day vs what was FINISHED (counted) that day
         "scheduled": list(scheduled.values()),
+        "finished_recipes": sorted(set(finished.values())),
         "produced": day_prod,
         "notes": (cl.get("notes") or "").strip(),
         "finish_notes": finish_notes,
@@ -692,32 +709,42 @@ def get_traceability():
     signoffs = app._load_weekly_signoffs()          # history only — no longer written
     day_signoffs = app._load_daily_signoffs()       # the live review record
     recipes = app.load_recipes()
+    fg_all = _load_json(app.ORGANIC_FG_PATH, [])
     records = []
     for week_id in weeks:
         week_record = {"week_id": week_id, "days": []}
-        schedule_data = app.load_schedule(week_id)
         for d_idx in range(7):
             cl = app.load_checklist(week_id, d_idx)
             if cl and cl.get("completed"):
-                day_info = {}
-                if schedule_data and schedule_data.get("schedule"):
-                    day_info = schedule_data["schedule"].get(str(d_idx), {})
                 # Certification PER VESSEL — a single day can run different
                 # certifications across kettles (e.g. Organic on K1, Conventional
-                # on K2), so we never collapse the day to one label. cert_by_vessel
-                # maps each producing vessel to its recipe's certification;
-                # certifications is the distinct set present that day.
+                # on K2), so we never collapse the day to one label.
+                #
+                # The cert describes the JARS COUNTED on this record, i.e. the
+                # batch that FINISHED that day (started the day before) — not the
+                # batch started that day. Preferred source is the FG entries the
+                # run itself wrote; older days that predate the runs chain fall
+                # back to the previous day's schedule.
                 cert_by_vessel = {}
                 certifications = []
-                if day_info:
+                for f in fg_all:
+                    if f.get("week_id") != week_id or f.get("day_idx") != d_idx:
+                        continue
+                    cert = (f.get("certification") or "").strip()
+                    vessel = f.get("vessel", "")
+                    if cert and vessel:
+                        cert_by_vessel[vessel] = cert
+                if not cert_by_vessel:
+                    prev_sched = app._get_previous_day_schedule(week_id, d_idx)
                     for v in app.VESSELS:
-                        rname = day_info.get(v, "")
+                        rname = (prev_sched.get(v, "") or "").strip()
                         if rname and rname in recipes:
                             cert = (recipes[rname].get("certification") or "").strip()
                             if cert:
                                 cert_by_vessel[v] = cert
-                                if cert not in certifications:
-                                    certifications.append(cert)
+                for cert in cert_by_vessel.values():
+                    if cert not in certifications:
+                        certifications.append(cert)
                 week_record["days"].append({
                     "day_idx": d_idx,
                     "day_name": app.DAYS[d_idx],
