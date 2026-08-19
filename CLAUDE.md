@@ -580,6 +580,19 @@ Unification is essentially complete (the history below is kept as the method rec
 - **Token round-2 — DONE (hybrid).** Promoted 8 token-less literals at exact value (no-op): `--info-dark` #1565c0, `--info-border` #1976d2, `--warning-text` #856404, `--success-text` #155724, and a cool neutral grey ramp `--grey-dark` #666 / `--grey` #888 / `--grey-light` #ccc / `--grey-border` #ddd (distinct from the warm `--text`/`--border` family). Then converged only the two *imperceptible* near-dupes (own eyes-on deploy): `--action-blue` now aliases `var(--info)` (#0277bd→#0288d1); `#333`→`var(--text)`. **Deliberately left exact:** the amber (`#8a6900`/`#856404`) and orange (`#e67e22`/`#e65100`) merges — they touch audit-critical warning banners, so a visible shift there wasn't worth it. `#aaa` (1 use) left literal.
 - **Style unification is effectively complete.** Every non-standalone template references the shared sheet and uses tokens for all exact-value colours. What remains literal is intentional: JS logic/categorical palettes (chart buckets, packing-slip borders), the deliberately-unmerged amber/orange near-dupes above, and a long tail of true one-off hexes with no token. If a future page introduces a recurring new colour, add a token first (never redeclare `:root`).
 
+**Dashboard greeting (2026-08-19).** `templates/dashboard.html` opens with one greeting
+bar above the tiles, shared by BOTH roles (one template renders both). Five slots by local
+hour — 04:00 "Good Morning Soma", 11:00 "Anyone hungry?", 13:00 "Good afternoon Soma",
+15:00 "Let's wrap this up", 18:00 "Zzzzzzzzz" — recomputed on every rotation tick so a
+tablet left open all day keeps up. The phrase rotates every 30s through English, Nepali,
+English, Greek, English, French (English on every other turn); the asleep line is identical
+in all four, so the rotation holds rather than fading between identical text. Beside it, a
+live Toronto temperature from Open-Meteo (no API key, client-side, refreshed every 15 min)
+that stays HIDDEN on any failure — an offline tablet must never see a stale number.
+**This is the codebase's only external font dependency:** Caveat (Latin + Greek) + Kalam
+(Devanagari) from Google Fonts, falling back to the device cursive. If another page ever
+needs handwriting, reuse that pair rather than adding a third family.
+
 ---
 
 ## Deployment workflow
