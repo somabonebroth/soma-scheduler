@@ -16,6 +16,9 @@
 <link rel="apple-touch-icon" sizes="512x512" href="/static/logo-512.png">
 <!-- /PWA tags -->
 <title>Soma - Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Kalam:wght@700&display=swap">
 <link rel="stylesheet" href="/static/style.css">
 <style>
 .dashboard-grid { display: grid; gap: 16px; margin-top: 8px; }
@@ -115,12 +118,15 @@
    everything, rotating through the team's languages (English twice as often)
    with a live Toronto temperature beside it. -- */
 .greet-bar { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px 16px; margin: 2px 0 18px; }
-.greet-text { font-size: 27px; font-weight: 700; color: var(--dark); letter-spacing: .2px; line-height: 1.25; transition: opacity .45s ease; }
+/* Handwriting stack: Caveat carries Latin, Kalam carries Devanagari, and
+   Greek falls through to whatever cursive the device has. A tablet with no
+   network gets the same fallback -- the greeting never disappears. */
+.greet-text { font-family: 'Caveat', 'Kalam', 'Segoe Script', 'Bradley Hand', cursive; font-size: 40px; font-weight: 700; color: var(--dark); letter-spacing: .3px; line-height: 1.15; transition: opacity .45s ease; }
 .greet-weather { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; color: var(--text-light); background: var(--card-bg); border: 1px solid var(--border); border-radius: 999px; padding: 5px 13px; white-space: nowrap; }
 .greet-weather .w-icon { font-size: 16px; line-height: 1; }
 .greet-weather .w-temp { color: var(--dark); font-weight: 700; }
 .greet-weather[hidden] { display: none; }
-@media (max-width: 600px) { .greet-text { font-size: 22px; } }
+@media (max-width: 600px) { .greet-text { font-size: 32px; } }
 </style>
 </head>
 <body>
@@ -142,41 +148,61 @@
 (function () {
     /* One phrase per slot per language. The rotation is English, Nepali,
        English, Greek, English, French -- English lands on every other turn. */
+    /* One phrase per slot per language. The rotation is English, Nepali,
+       English, Greek, English, French -- English lands on every other turn.
+       Slots: 04:00 morning, 11:00 hungry, 13:00 afternoon, 15:00 wrap, 18:00 asleep. */
     const GREETINGS = {
         morning: {
-            en: 'Good Morning Soma Team',
-            ne: '\u0936\u0941\u092d \u092a\u094d\u0930\u092d\u093e\u0924, \u0938\u094b\u092e\u093e \u091f\u093f\u092e',
-            el: '\u039a\u03b1\u03bb\u03b7\u03bc\u03ad\u03c1\u03b1 \u03bf\u03bc\u03ac\u03b4\u03b1 Soma',
-            fr: "Bonjour l'\u00e9quipe Soma"
+            en: 'Good Morning Soma',
+            ne: '\u0936\u0941\u092d \u092a\u094d\u0930\u092d\u093e\u0924, \u0938\u094b\u092e\u093e',
+            el: '\u039a\u03b1\u03bb\u03b7\u03bc\u03ad\u03c1\u03b1 Soma',
+            fr: 'Bonjour Soma'
+        },
+        hungry: {
+            en: 'Anyone hungry?',
+            ne: '\u0915\u0938\u0948\u0932\u093e\u0908 \u092d\u094b\u0915 \u0932\u093e\u0917\u094d\u092f\u094b?',
+            el: '\u03a0\u03b5\u03b9\u03bd\u03ac\u03b5\u03b9 \u03ba\u03b1\u03bd\u03b5\u03af\u03c2;',
+            fr: "Quelqu'un a faim ?"
         },
         afternoon: {
-            en: 'Good Afternoon Soma Team',
-            ne: '\u0936\u0941\u092d \u0926\u093f\u0909\u0901\u0938\u094b, \u0938\u094b\u092e\u093e \u091f\u093f\u092e',
-            el: '\u039a\u03b1\u03bb\u03cc \u03b1\u03c0\u03cc\u03b3\u03b5\u03c5\u03bc\u03b1 \u03bf\u03bc\u03ac\u03b4\u03b1 Soma',
-            fr: "Bon apr\u00e8s-midi l'\u00e9quipe Soma"
+            en: 'Good afternoon Soma',
+            ne: '\u0936\u0941\u092d \u0926\u093f\u0909\u0901\u0938\u094b, \u0938\u094b\u092e\u093e',
+            el: '\u039a\u03b1\u03bb\u03cc \u03b1\u03c0\u03cc\u03b3\u03b5\u03c5\u03bc\u03b1 Soma',
+            fr: 'Bon apr\u00e8s-midi Soma'
         },
         wrap: {
-            en: 'Time to start wrapping up',
-            ne: '\u0938\u092e\u0947\u091f\u094d\u0928 \u0938\u0941\u0930\u0941 \u0917\u0930\u094d\u0928\u0947 \u0938\u092e\u092f \u092d\u092f\u094b',
-            el: '\u038f\u03c1\u03b1 \u03bd\u03b1 \u03b1\u03c1\u03c7\u03af\u03c3\u03bf\u03c5\u03bc\u03b5 \u03bd\u03b1 \u03bc\u03b1\u03b6\u03b5\u03cd\u03bf\u03c5\u03bc\u03b5',
-            fr: 'Il est temps de commencer \u00e0 ranger'
-        }
+            en: "Let's wrap this up",
+            ne: '\u0905\u092c \u0938\u092e\u0947\u091f\u094c\u0902',
+            el: '\u0391\u03c2 \u03c4\u03b1 \u03bc\u03b1\u03b6\u03ad\u03c8\u03bf\u03c5\u03bc\u03b5',
+            fr: 'On termine'
+        },
+        /* Asleep reads the same in every language -- the rotation quietly
+           holds rather than fading between four identical lines. */
+        asleep: { en: 'Zzzzzzzzz', ne: 'Zzzzzzzzz', el: 'Zzzzzzzzz', fr: 'Zzzzzzzzz' }
     };
     const CYCLE = ['en', 'ne', 'en', 'el', 'en', 'fr'];
-    const ROTATE_MS = 7000;
+    const ROTATE_MS = 30000;
     const el = document.getElementById('greet-text');
     let step = 0;
 
     function slot() {
         const h = new Date().getHours();
-        if (h < 12) return 'morning';
-        if (h < 16) return 'afternoon';
-        return 'wrap';
+        if (h < 4) return 'asleep';
+        if (h < 11) return 'morning';
+        if (h < 13) return 'hungry';
+        if (h < 15) return 'afternoon';
+        if (h < 18) return 'wrap';
+        return 'asleep';
+    }
+    function phrase(n) {
+        return GREETINGS[slot()][CYCLE[n % CYCLE.length]];
     }
     function render() {
-        el.textContent = GREETINGS[slot()][CYCLE[step % CYCLE.length]];
+        el.textContent = phrase(step);
     }
     function rotate() {
+        /* Nothing to see -- advance without a fade so the sleep hours don't flicker. */
+        if (phrase(step + 1) === el.textContent) { step++; return; }
         el.style.opacity = '0';
         setTimeout(function () { step++; render(); el.style.opacity = '1'; }, 450);
     }
