@@ -65,7 +65,7 @@
    is mirrored onto the summary, so collapsing can never hide a flag. */
 /* The summary is the only thing standing between the manager and nine rows of
    links, so it carries the weight of a real control — same full-width row as
-   the Daily Review button above it, not a whispered section label. */
+   the Management Report button above it, not a whispered section label. */
 .mgmt-details { margin-top: 18px; }
 .mgmt-details > summary.mgmt-summary { display: flex; align-items: center; gap: 12px; cursor: pointer; list-style: none; background: var(--card-bg); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 10px; padding: 14px 18px; transition: background .12s, border-color .12s; }
 .mgmt-details > summary.mgmt-summary::-webkit-details-marker { display: none; }
@@ -73,12 +73,10 @@
 .mgmt-summary-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .mgmt-summary-title { font-size: 15px; font-weight: 700; color: var(--dark); letter-spacing: .3px; }
 .mgmt-summary-sub { font-size: 12.5px; color: var(--text-light); }
-.mgmt-summary-cta { margin-left: auto; font-size: 11px; font-weight: 700; padding: 5px 11px; border-radius: 8px; white-space: nowrap; background: var(--bg); border: 1px solid var(--border); color: var(--text-light); }
 .mgmt-caret { font-size: 15px; line-height: 1; color: var(--accent); flex-shrink: 0; transition: transform .12s; }
 .mgmt-details[open] .mgmt-caret { transform: rotate(90deg); }
-.mgmt-details[open] .mgmt-summary-cta { display: none; }
 .mgmt-list { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
-/* Daily Review — full-width entry point, highlighted until the day is reviewed */
+/* Management Report — full-width entry point, highlighted until the day is reviewed */
 .review-btn { display: flex; align-items: center; gap: 14px; width: 100%; box-sizing: border-box; text-decoration: none; background: var(--card-bg); border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 18px; transition: background .12s, border-color .12s; }
 .review-btn:hover { background: var(--bg); }
 .review-icon { font-size: 22px; line-height: 1; flex-shrink: 0; }
@@ -106,7 +104,6 @@
 .mgmt-links .soon { opacity: 0.45; cursor: default; pointer-events: none; }
 .mgmt-badge { background: var(--amber-text); color: var(--white); border-radius: 10px; padding: 1px 8px; font-size: 11px; font-weight: 800; line-height: 18px; display: none; }
 .mgmt-summary .mgmt-badge { margin-left: auto; }
-.mgmt-summary .mgmt-badge + .mgmt-summary-cta { margin-left: 0; }
 /* ── Production (tablet) view: bigger tap targets, no chrome ── */
 /* The floor finds a tile by its colour before it reads the label, so colour
    carries the meaning: green = today's work, amber = the end-of-shift flow,
@@ -259,7 +256,7 @@
         <a href="/daily-review" class="review-btn" id="review-btn">
             <span class="review-icon">&#128203;</span>
             <span class="review-text">
-                <span class="review-title">Daily Review</span>
+                <span class="review-title">Start Here &rarr; Management Report</span>
                 <span class="review-sub" id="review-sub">Loading&hellip;</span>
             </span>
             <span class="review-cta" id="review-cta"></span>
@@ -314,7 +311,6 @@
                     <span class="mgmt-summary-sub">Analytics &middot; Records &middot; Inventory &middot; Certification &middot; Contacts &middot; Recipes &middot; Settings</span>
                 </span>
                 <span class="mgmt-badge" id="mgmt-open-badge" title="Days the kitchen ran that you have not reviewed yet"></span>
-                <span class="mgmt-summary-cta">Open</span>
             </summary>
         <div class="mgmt-list">
             <div class="mgmt-row">
@@ -404,7 +400,7 @@ document.addEventListener('DOMContentLoaded',loadDayLabels);
 </script>
 {% if role == 'manager' %}
 <script>
-// ── Daily Review button — state only; the page itself owns the detail ────
+// ── Management Report button — state only; the page itself owns the detail ────
 // New JS — let/const per the forward-only policy.
 async function loadReviewButton(){
     const btn = document.getElementById('review-btn');
@@ -422,10 +418,12 @@ async function loadReviewButton(){
         if (pendRes.ok) pending = (await pendRes.json()).pending || [];
     } catch (e) {
         sub.textContent = 'Yesterday — open to review';
+        cta.hidden = true;
         return;
     }
 
     btn.classList.remove('attn', 'done');
+    cta.hidden = false;
     const older = pending.filter(iso => iso !== b.date);
     let bits = [b.label];
     if (b.production && b.production.total_jars) bits.push(b.production.total_jars + ' jars made');
@@ -440,7 +438,8 @@ async function loadReviewButton(){
         btn.classList.add('attn');
         cta.textContent = older.length + ' earlier day' + (older.length > 1 ? 's' : '');
     } else if (!b.needs_review) {
-        cta.textContent = 'Open';
+        cta.textContent = '';
+        cta.hidden = true;
     } else {
         btn.classList.add('attn');
         cta.textContent = b.actions.length

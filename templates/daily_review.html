@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" sizes="192x192" href="/static/logo-192.png">
 <link rel="apple-touch-icon" sizes="512x512" href="/static/logo-512.png">
 <!-- /PWA tags -->
-<title>Soma - Daily Review</title>
+<title>Soma - Management Report</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
 /* Page layout only — colours/components come from the shared sheet */
@@ -103,7 +103,7 @@
 <body>
 <div class="header">
     <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-    <div class="header-text"><h1>Daily Review</h1><p>What happened, and what needs you</p></div>
+    <div class="header-text"><h1>Management Report</h1><p>What happened, and what needs you</p></div>
     <div class="header-right"><button class="header-btn" onclick="window.location='/'">&#8962; Dashboard</button></div>
 </div>
 <div class="main">
@@ -143,8 +143,26 @@ function issuesHtml(list){
 
 function notesHtml(list){
     if (!list.length) return '';
-    return '<div class="dr-sublabel">Notes from the floor</div>' + list.map(n =>
+    return list.map(n =>
         '<div class="dr-note"><span class="src">' + esc(n.source) + '</span>' + esc(n.text) + '</div>').join('');
+}
+
+// Every note the floor left, gathered at the top. The End of Day handover
+// keeps its amber block — it is written FOR this page — and the rest (day
+// note, per-vessel finish notes, closing/cleaning notes) follow beneath it
+// rather than being scattered through the three sections.
+function staffNotesHtml(b){
+    const rest = (b.notes || []).filter(n => n.source !== 'Note for management');
+    if (!b.handover_note && !rest.length) return '';
+    return (b.handover_note
+            ? '<div class="dr-handover"><div class="dr-handover-k">Note from the floor</div>'
+              + esc(b.handover_note) + '</div>'
+            : '')
+        + (rest.length
+            ? '<div class="dr-section"><div class="dr-head">'
+              + '<span class="dr-title">Notes from staff</span></div>'
+              + '<div class="dr-body">' + notesHtml(rest) + '</div></div>'
+            : '');
 }
 
 // The stamp is set face-down, so the type reads right-to-left with every
@@ -229,8 +247,8 @@ function productionHtml(p){
     if (p.kitchen_signoff) {
         body += '<div class="dr-totals"><span>Kitchen sign-off: <b>' + esc(p.kitchen_signoff) + '</b></span></div>';
     }
-    body += notesHtml(p.notes) + issuesHtml(p.issues);
-    return section(1, 'What was made', p.total_jars ? p.total_jars + ' jars' : '', body);
+    body += issuesHtml(p.issues);
+    return section(1, "What's getting labelled today", p.total_jars ? p.total_jars + ' jars' : '', body);
 }
 
 function transactionsHtml(t){
@@ -295,9 +313,12 @@ function transactionsHtml(t){
                 + '<td class="num"><b>' + esc(r.quantity) + '</b> ' + esc(r.unit) + '</td></tr>').join('')
             + '</table></div>';
     }
-    body += notesHtml(t.notes) + issuesHtml(t.issues);
+    body += issuesHtml(t.issues);
     const sub = t.sales.units + ' sold · ' + t.receiving.count + ' delivered';
-    return section(2, 'What was sold and received', sub, body);
+    // The page navigates back through earlier days, so "yesterday" is only
+    // said on the day it is true.
+    const when = offset === 1 ? 'yesterday' : brief.label;
+    return section(2, 'Sales & Receiving from ' + when, sub, body);
 }
 
 function checklistsHtml(c){
@@ -346,9 +367,9 @@ function checklistsHtml(c){
             + (c.rotation.overdue === 1 ? '' : 's') + ' currently overdue</span></div>';
     }
 
-    body += notesHtml(c.notes) + issuesHtml(c.issues);
+    body += issuesHtml(c.issues);
     const done = (c.ccp.completed ? 1 : 0) + (cl.signed ? 1 : 0);
-    return section(3, 'Completed checklists', done + ' of 2 signed', body);
+    return section(3, 'Completed checklists and cleaning', done + ' of 2 signed', body);
 }
 
 function section(num, title, sub, body){
@@ -399,11 +420,8 @@ async function load(){
     el.innerHTML = '<div class="dr-bar"><span class="dr-date">' + esc(b.label) + '</span>'
         + '<div class="dr-nav"><button onclick="step(1)">&#8592; Earlier</button>'
         + '<button onclick="step(-1)"' + (offset <= 1 ? ' disabled' : '') + '>Later &#8594;</button></div></div>'
+        + staffNotesHtml(b)
         + banner
-        + (b.handover_note
-            ? '<div class="dr-handover"><div class="dr-handover-k">Note from the floor</div>'
-              + esc(b.handover_note) + '</div>'
-            : '')
         + productionHtml(b.production)
         + transactionsHtml(b.transactions)
         + checklistsHtml(b.checklists)

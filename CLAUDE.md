@@ -231,13 +231,20 @@ is re-orderable by the manager (↑/↓ in "Manage closing list"); order matters
 wizard walks the floor through the items in exactly that sequence, so it should read as a
 walk around the kitchen. The PUT already stored the list in order — only the UI was missing.
 
-**Daily Review (`daily_brief.py` + `templates/daily_review.html`, 2026-08-18).** A full page
-at `/daily-review` (manager-only) behind a full-width dashboard button, fed by
-`GET /api/daily-brief?date=` (default yesterday). THREE sections: (1) what was made —
-per-product rows with vessel/LOT#/cert/jars + totals; (2) what was sold and received —
-sales by buyer with lots/channel, deliveries with supplier/lot; (3) completed checklists —
+**Management Report (`daily_brief.py` + `templates/daily_review.html`, 2026-08-18;
+renamed from "Daily Review" 2026-08-19).** A full page at `/daily-review` (route and API
+names unchanged — the rename is titles only) behind the full-width dashboard button
+labelled "Start Here → Management Report", fed by `GET /api/daily-brief?date=` (default
+yesterday). Every note the floor left is gathered ABOVE the sections (`staffNotesHtml`):
+the End of Day handover keeps its amber block, the rest — day note, per-vessel finish
+notes, closing/cleaning notes — sit in a "Notes from staff" card beneath it. Then THREE
+sections: (1) What's getting labelled today — per-product rows with vessel/LOT#/cert/jars
++ totals; (2) Sales & Receiving from yesterday (the heading says "yesterday" only when the
+viewed day IS yesterday, else the day's label — the page navigates back) — sales by buyer
+with lots/channel, deliveries with supplier/lot; (3) Completed checklists and cleaning —
 CCP sections as ✓/✗ with the confirmed count, the closing gate (who signed, what was
-missed), and which rotating job was done. Each section carries its own notes + issues.
+missed), and which rotating job was done. Sections carry their own ISSUES; notes are
+top-only, so `notesHtml` is called from `staffNotesHtml` alone.
 **Section 1 reads FINISHED GOODS, not the checklist `produced` map** — jar counts entered on
 day N complete runs STARTED on day N-1, so `produced` against the same day's schedule can
 name the wrong recipe; FG rows were written by the run itself. Falls back to checklist
@@ -252,7 +259,7 @@ review and the daily brief must never drift in how they read a day. A missing cl
 sign-off is only flagged on a day the kitchen is known to have run (completed production or
 a cleaning sign-off), so quiet days stay quiet.
 
-**Daily Review — labelling + channel/portal sales (added 2026-08-19).** Section 1 shows the
+**Management Report — labelling + channel/portal sales (added 2026-08-19).** Section 1 shows the
 day's LOT# prominently plus the **hot-stamp guide**: the stamp is set by hand face-down, so
 the type is drawn REVERSED and MIRRORED (CSS `scaleX(-1)` per character) with slot numbers
 and a mirror check. `_lot_blocks` reads the lots off the **FG rows**, never recomputed from
