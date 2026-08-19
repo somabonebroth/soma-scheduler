@@ -209,6 +209,30 @@ review and the daily brief must never drift in how they read a day. A missing cl
 sign-off is only flagged on a day the kitchen is known to have run (completed production or
 a cleaning sign-off), so quiet days stay quiet.
 
+**Daily Review — labelling + channel/portal sales (added 2026-08-19).** Section 1 shows the
+day's LOT# prominently plus the **hot-stamp guide**: the stamp is set by hand face-down, so
+the type is drawn REVERSED and MIRRORED (CSS `scaleX(-1)` per character) with slot numbers
+and a mirror check. `_lot_blocks` reads the lots off the **FG rows**, never recomputed from
+the date, so the panel and the inventory record can't disagree; a day whose jars came from
+batches started on different dates gets one block per lot. Each product row has a Generate
+Label button → `/api/label` with the FG lot + the BATCH (start) date, so printed Best
+Before = lot. **Note the tablet disagrees:** `daily_production.html`'s finish-side button
+sends `productionData.lot` (finish+365) while FG stamps start+365, and `production.py`'s
+`prev_lot`/`prev_date` — computed for exactly this — have no reader. Unresolved; fix on the
+tablet, not by bending the review.
+Section 2 gained **Portal orders** (Ripe + Wholesale Portal sale rows regrouped by order,
+keyed on `deducted_at` — the day stock actually left — NOT `sale_date`, which for wholesale
+is a future delivery date) and **Retail channels**: Shopify + Clover read LIVE for the date
+via new `preview_day()` in both importers, served by `GET /api/daily-brief/channels?date=`
+and loaded AFTER the page renders. Live because the cron import runs weekly, so sales.json
+holds nothing for yesterday six mornings in seven; **read-only** — the weekly import is
+still the only path that writes sales and deducts FG, so it cannot double-count. Kept out
+of `/api/daily-brief` on purpose: `pending_reviews` builds up to 60 briefs and must never
+make network calls. An unconfigured/failing channel degrades to a status line. Both
+importers now share `_classify_skus` between `preview_week` and `preview_day` (the weekly
+commit and the daily report can never disagree about a SKU) and sum gross line revenue
+(Shopify nets line discounts; Clover's discount objects are deliberately not netted).
+
 **Review is DAILY, not weekly (changed 2026-08-18).** The HOO signs each day off on the
 morning brief: `POST/DELETE /api/daily-signoff/<date>` → `daily_signoffs.json` keyed by
 date, snapshotting `open_actions` at signing time. Signing is deliberately NOT gated on the
