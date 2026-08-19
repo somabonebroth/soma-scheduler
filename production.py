@@ -29,7 +29,7 @@ from flask import (
     Blueprint, request, jsonify, session, redirect, url_for, render_template,
 )
 
-from helpers import ORGANIC_RUNS_PATH, _load_json, _save_json, _classify_format
+from helpers import ORGANIC_RUNS_PATH, _load_json, _save_json, _in_date_window, _classify_format
 
 from pdf_engine import generate_filled_checklist_pdf
 
@@ -923,5 +923,26 @@ def delete_traceability_record(week_id, day_idx):
 @production_bp.route("/api/organic/production-runs", methods=["GET"])
 @manager_required
 def get_organic_runs():
-    """GET /api/organic/production-runs - return all organic production runs."""
-    return jsonify(_load_json(ORGANIC_RUNS_PATH, []))
+    """GET /api/organic/production-runs - organic production runs.
+
+    Optional, omittable query params:
+        ?from=YYYY-MM-DD — run START date on or after (inclusive)
+        ?to=YYYY-MM-DD   — run START date on or before (inclusive)
+
+    Omitting both returns everything, so existing callers are unaffected. Same
+    server-side windowing contract as /api/organic/sales — see that docstring
+    for why the filter lives here rather than in the browser.
+
+    Windowed on the run's START date (week_id + day_idx), which is the date the
+    rest of the system treats as the run's production date — NOT the finish day
+    the jars were counted on.
+    """
+    runs = _load_json(ORGANIC_RUNS_PATH, [])
+    date_from = (request.args.get("from") or "").strip()
+    date_to = (request.args.get("to") or "").strip()
+    if date_from or date_to:
+        runs = [r for r in runs
+                if _in_date_window(
+                    app._run_start_date_str(r.get("week_id"), r.get("day_idx")),
+                    date_from, date_to)]
+    return jsonify(runs)

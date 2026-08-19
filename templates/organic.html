@@ -927,7 +927,6 @@ body.inv-page .modal-actions {
     </div>
 
     <!-- Keep legacy sale-modal ID for any existing JS that references it -->
-    <div class="modal-overlay" id="sale-modal" style="display:none!important;"></div>
 
     <!-- Manual Add modal -->
     <div class="modal-overlay" id="manual-add-modal">
@@ -1205,52 +1204,6 @@ body.inv-page .modal-actions {
     </div>
 
     <!-- Scan Packing Slip modal — Record Sale via camera -->
-    <div class="modal-overlay" id="scan-sale-modal">
-        <div class="modal" style="max-width:780px;">
-            <button class="modal-close" onclick="closeScanSale()">&times;</button>
-            <h2 style="color:var(--info);">📷 Record Sale</h2>
-            <p style="font-size:12px;color:var(--text-light);margin-bottom:14px;line-height:1.5;">
-                Take a photo of the packing slip or PO. We'll extract product lines and FIFO-drain inventory after you review. <span id="scan-sale-usage" style="color:var(--text-light);font-weight:600;"></span>
-            </p>
-
-            <!-- Step 1: Camera capture -->
-            <div id="scan-sale-capture-step">
-                <div style="background:var(--action-blue-bg);border:2px dashed #81d4fa;border-radius:10px;padding:32px 16px;text-align:center;margin-bottom:16px;">
-                    <div style="font-size:48px;margin-bottom:8px;">📷</div>
-                    <input type="file" id="scan-sale-file" accept="image/*" capture="environment" style="display:block;margin:0 auto;font-size:14px;">
-                    <p style="font-size:11px;color:var(--text-light);margin-top:10px;">JPG, PNG, WebP, or HEIC. Max 10 MB.</p>
-                </div>
-                <div id="scan-sale-msg" class="status" style="margin:8px 0;"></div>
-                <div class="modal-actions">
-                    <button class="btn btn-outline" onclick="closeScanSale()">Cancel</button>
-                    <button class="btn btn-primary" id="scan-sale-go" onclick="runScanSale()" style="background:var(--info);">Extract Line Items</button>
-                </div>
-                <div style="margin-top:14px;text-align:center;">
-                    <button onclick="closeScanSale();showTab('fg');" style="background:none;border:none;color:var(--accent);text-decoration:underline;font-size:13px;cursor:pointer;">Or use the per-SKU Sell buttons</button>
-                </div>
-            </div>
-
-            <!-- Step 2: Review -->
-            <div id="scan-sale-review-step" style="display:none;">
-                <div style="background:var(--action-blue-bg);border-left:3px solid var(--info);padding:12px 14px;border-radius:6px;margin-bottom:14px;font-size:13px;">
-                    <strong>Review extraction:</strong> verify each product matches a SKU. Sales draw from oldest LOT first (FIFO).
-                </div>
-                <div class="form-row">
-                    <div class="form-field"><label>Buyer</label><input id="scan-sale-buyer" placeholder="Buyer / distributor"></div>
-                    <div class="form-field"><label>Sale Date</label><input type="date" id="scan-sale-date"></div>
-                </div>
-                <div class="form-row">
-                    <div class="form-field" style="grid-column: 1 / -1;"><label>PO # / Case LOT (optional)</label><input id="scan-sale-po" placeholder="PO number or case LOT"></div>
-                </div>
-                <div id="scan-sale-rows" style="margin-top:12px;max-height:50vh;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;background:var(--white);"></div>
-                <div id="scan-sale-submit-msg" class="status" style="margin:10px 0;"></div>
-                <div class="modal-actions">
-                    <button class="btn btn-outline" onclick="resetScanSale()">← Re-scan</button>
-                    <button class="btn btn-primary" id="scan-sale-submit" onclick="submitScanSale()" style="background:var(--info);">Save All Sales</button>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- Sections Management Modal — edit list + assign ingredients -->
     <div class="modal-overlay" id="sections-modal">
@@ -1730,15 +1683,6 @@ async function deleteRM(id){
 }
 
 // ── Invoices (standalone module) ──
-function addLotRow(){
-    var container=document.getElementById('inv-lots-container');
-    var row=document.createElement('div');
-    row.className='inv-lot-row';
-    row.style.cssText='display:flex;gap:6px;margin-bottom:4px;';
-    row.innerHTML='<input class="inv-lot" placeholder="LOT#" style="flex:1;"><button type="button" class="btn-danger" onclick="this.parentElement.remove()" style="font-size:10px;padding:4px 8px;">×</button>';
-    container.appendChild(row);
-}
-
 function collectLots(){
     var inputs=document.querySelectorAll('.inv-lot');
     var lots=[];
@@ -1755,34 +1699,6 @@ function clearInvoiceForm(){
     document.getElementById('inv-file').value='';
     var container=document.getElementById('inv-lots-container');
     container.innerHTML='<div class="inv-lot-row" style="display:flex;gap:6px;margin-bottom:4px;"><input class="inv-lot" placeholder="LOT#" style="flex:1;"></div>';
-}
-
-async function uploadInvoice(){
-    var st=document.getElementById('inv-status');
-    var supplier=document.getElementById('inv-supplier').value.trim();
-    var date=document.getElementById('inv-date').value;
-    var fileInput=document.getElementById('inv-file');
-    var lots=collectLots();
-    if(!supplier){st.className='status error';st.textContent='Supplier required';return;}
-    if(!date){st.className='status error';st.textContent='Invoice date required';return;}
-    if(!fileInput.files||!fileInput.files.length){st.className='status error';st.textContent='File required';return;}
-    var fd=new FormData();
-    fd.append('supplier',supplier);
-    fd.append('invoice_date',date);
-    lots.forEach(function(l){fd.append('lots[]',l);});
-    fd.append('file',fileInput.files[0]);
-    var res=await fetch('/api/organic/invoices',{method:'POST',body:fd});
-    var data=await res.json();
-    if(data.success){
-        st.className='status success';
-        st.textContent='Invoice uploaded: '+supplier+(lots.length?' — '+lots.length+' LOT#s':'');
-        clearInvoiceForm();
-        loadInvoices();
-        loadContacts();
-    } else {
-        st.className='status error';
-        st.textContent=data.error||'Upload failed';
-    }
 }
 
 async function loadInvoices(){
@@ -1988,22 +1904,6 @@ async function submitBaselineRMBulkGrid(){
 }
 
 // Single-ingredient baseline (fallback for missed items)
-async function openBaselineRMSingle(){
-    await loadIngredients();
-    var sel=document.getElementById('baseline-rm-single-ingredient');
-    sel.innerHTML='<option value="">— Pick an ingredient —</option>';
-    ingredientData.forEach(function(item, idx){
-        var opt=document.createElement('option');
-        opt.value=idx;
-        opt.textContent=item.name+' ('+(item.unit||'')+')';
-        sel.appendChild(opt);
-    });
-    document.getElementById('baseline-rm-single-qty').value='';
-    document.getElementById('baseline-rm-single-msg').textContent='';
-    document.getElementById('baseline-rm-single-msg').className='status';
-    document.getElementById('baseline-rm-single-modal').classList.add('active');
-}
-
 function closeBaselineRMSingle(){
     document.getElementById('baseline-rm-single-modal').classList.remove('active');
 }
@@ -2027,281 +1927,6 @@ async function submitBaselineRMSingle(){
 }
 
 // Legacy entry point — opens the bulk grid by default
-async function addBaselineRawMaterial(){
-    return openBaselineRMBulkGrid();
-}
-
-// ── Sections management — define + assign ingredients ────────────────────
-// State held while modal is open. Saved atomically on "Save Changes":
-//   1) PUT /api/organic/raw-materials/sections   — section list (id/name/order)
-//   2) PUT /api/organic/raw-materials/assignments — per-ingredient mappings
-// Modal stays open on validation errors so the user can fix them.
-var sectionsState = null;     // {sections, assignments}
-var sectionsCatalog = [];     // [{name, unit}] from grouped endpoint
-
-async function openSectionsModal(){
-    document.getElementById('sections-modal').classList.add('active');
-    document.getElementById('sections-msg').textContent = '';
-    document.getElementById('sections-msg').className = 'status';
-    // Fetch fresh state every time
-    var [sectionsRes, rowsRes] = await Promise.all([
-        fetch('/api/organic/raw-materials/sections'),
-        fetch('/api/organic/raw-materials/grouped'),
-    ]);
-    sectionsState = await sectionsRes.json();
-    var rows = await rowsRes.json();
-    // Build a flat catalog of all ingredients for the assignment grid
-    sectionsCatalog = rows.map(function(r){
-        return {name: r.name, unit: r.unit};
-    });
-    renderSectionsList();
-    renderAssignmentGrid();
-}
-
-function closeSectionsModal(){
-    document.getElementById('sections-modal').classList.remove('active');
-}
-
-function renderSectionsList(){
-    var container = document.getElementById('sections-list');
-    var sections = sectionsState.sections || [];
-    if(!sections.length){
-        container.innerHTML = '<p style="font-size:12px;color:var(--text-light);font-style:italic;padding:8px;">No sections yet — add one below.</p>';
-    } else {
-        var html = '';
-        sections.forEach(function(s, idx){
-            var sid = encodeURIComponent(s.id);
-            var nameEsc = (s.name || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-            html += '<div class="section-edit-row" data-sid="'+sid+'">';
-            html += '<button class="section-edit-arrow" onclick="moveSection('+idx+',-1)" '+(idx===0?'disabled':'')+' title="Move up">▲</button>';
-            html += '<button class="section-edit-arrow" onclick="moveSection('+idx+',1)" '+(idx===sections.length-1?'disabled':'')+' title="Move down">▼</button>';
-            html += '<input class="section-edit-name" type="text" value="'+nameEsc+'" onchange="updateSectionName(\''+sid+'\', this.value)">';
-            html += '<button class="section-edit-del" onclick="deleteSection(\''+sid+'\')" title="Delete section (assignments will become Unassigned)">Delete</button>';
-            html += '</div>';
-        });
-        container.innerHTML = html;
-    }
-    // Refresh the bulk-assign dropdown
-    refreshBulkAssignDropdown();
-}
-
-function refreshBulkAssignDropdown(){
-    var sel = document.getElementById('assignment-bulk-section');
-    var sections = sectionsState.sections || [];
-    var current = sel.value;
-    sel.innerHTML = '<option value="">— Bulk assign visible to… —</option>';
-    sections.forEach(function(s){
-        var opt = document.createElement('option');
-        opt.value = s.id;
-        opt.textContent = s.name;
-        sel.appendChild(opt);
-    });
-    var unOpt = document.createElement('option');
-    unOpt.value = '__unassign__';
-    unOpt.textContent = '(Unassign)';
-    sel.appendChild(unOpt);
-    if(current) sel.value = current;
-}
-
-function moveSection(idx, delta){
-    var sections = sectionsState.sections;
-    var newIdx = idx + delta;
-    if(newIdx < 0 || newIdx >= sections.length) return;
-    var temp = sections[idx];
-    sections[idx] = sections[newIdx];
-    sections[newIdx] = temp;
-    renderSectionsList();
-    renderAssignmentGrid();
-}
-
-function updateSectionName(encId, newName){
-    var id = decodeURIComponent(encId);
-    var sec = (sectionsState.sections || []).find(function(s){return s.id === id;});
-    if(sec) sec.name = (newName || '').trim();
-    refreshBulkAssignDropdown();
-    // No need to re-render assignment grid for a name change
-}
-
-function deleteSection(encId){
-    var id = decodeURIComponent(encId);
-    sectionsState.sections = (sectionsState.sections || []).filter(function(s){return s.id !== id;});
-    // Clear any assignments pointing at the deleted section
-    var assignments = sectionsState.assignments || {};
-    Object.keys(assignments).forEach(function(k){
-        if(assignments[k] === id) delete assignments[k];
-    });
-    renderSectionsList();
-    renderAssignmentGrid();
-}
-
-function addNewSection(){
-    var input = document.getElementById('new-section-name');
-    var name = (input.value || '').trim();
-    if(!name) return;
-    // Generate a stable id: lowercase + alphanum, with timestamp suffix to
-    // avoid collisions even if user types the same name twice
-    var baseId = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    if(!baseId) baseId = 'section';
-    var sections = sectionsState.sections || [];
-    var existingIds = new Set(sections.map(function(s){return s.id;}));
-    var newId = baseId;
-    var n = 2;
-    while(existingIds.has(newId)){
-        newId = baseId + '_' + n;
-        n++;
-    }
-    sections.push({id: newId, name: name, order: sections.length});
-    sectionsState.sections = sections;
-    input.value = '';
-    renderSectionsList();
-    renderAssignmentGrid();
-}
-
-function renderAssignmentGrid(){
-    var search = (document.getElementById('assignment-search').value || '').trim().toLowerCase();
-    var container = document.getElementById('assignment-grid');
-    var sections = sectionsState.sections || [];
-    var assignments = sectionsState.assignments || {};
-
-    // Build option HTML once
-    var optionsHtml = '<option value="">— Unassigned —</option>';
-    sections.forEach(function(s){
-        var nameEsc = (s.name || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-        optionsHtml += '<option value="'+s.id+'">'+nameEsc+'</option>';
-    });
-
-    var visible = sectionsCatalog.filter(function(c){
-        if(!search) return true;
-        return c.name.toLowerCase().indexOf(search) !== -1;
-    });
-
-    if(!visible.length){
-        container.innerHTML = '<p style="font-size:12px;color:var(--text-light);font-style:italic;padding:14px;text-align:center;">No ingredients match the filter.</p>';
-        return;
-    }
-
-    var html = '';
-    visible.forEach(function(c){
-        var key = c.name + '|' + c.unit;
-        var keyEsc = key.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-        var nameEsc = c.name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-        var unitEsc = c.unit.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-        var current = assignments[key] || '';
-        // Build the select with the right option pre-selected
-        var selectHtml = optionsHtml.replace(
-            'value="'+current+'"',
-            'value="'+current+'" selected'
-        );
-        html += '<div class="assign-row">';
-        html += '<div class="assign-name">'+nameEsc+' <span class="unit-tag">'+unitEsc+'</span></div>';
-        html += '<select class="assign-select" data-key="'+keyEsc+'" onchange="updateAssignment(this)">'+selectHtml+'</select>';
-        html += '</div>';
-    });
-    container.innerHTML = html;
-}
-
-function updateAssignment(selectEl){
-    var key = selectEl.getAttribute('data-key');
-    var value = selectEl.value;
-    if(!sectionsState.assignments) sectionsState.assignments = {};
-    if(!value) delete sectionsState.assignments[key];
-    else sectionsState.assignments[key] = value;
-}
-
-function bulkAssignVisible(){
-    var sel = document.getElementById('assignment-bulk-section');
-    var target = sel.value;
-    if(!target){
-        document.getElementById('sections-msg').className = 'status error';
-        document.getElementById('sections-msg').textContent = 'Pick a target section first.';
-        return;
-    }
-    var search = (document.getElementById('assignment-search').value || '').trim().toLowerCase();
-    var visible = sectionsCatalog.filter(function(c){
-        if(!search) return true;
-        return c.name.toLowerCase().indexOf(search) !== -1;
-    });
-    if(!sectionsState.assignments) sectionsState.assignments = {};
-    if(target === '__unassign__'){
-        visible.forEach(function(c){
-            var key = c.name + '|' + c.unit;
-            delete sectionsState.assignments[key];
-        });
-    } else {
-        visible.forEach(function(c){
-            var key = c.name + '|' + c.unit;
-            sectionsState.assignments[key] = target;
-        });
-    }
-    document.getElementById('sections-msg').className = 'status success';
-    document.getElementById('sections-msg').textContent = 'Assigned '+visible.length+' visible item'+(visible.length===1?'':'s')+'. Click "Save Changes" to persist.';
-    renderAssignmentGrid();
-}
-
-async function saveSections(){
-    var msg = document.getElementById('sections-msg');
-    var btn = document.getElementById('sections-save-btn');
-
-    // Validate sections — names must be non-empty
-    var sections = (sectionsState.sections || []).map(function(s, i){
-        return {id: s.id, name: (s.name || '').trim(), order: i};
-    });
-    for(var i = 0; i < sections.length; i++){
-        if(!sections[i].name){
-            msg.className = 'status error';
-            msg.textContent = 'Section #'+(i+1)+' has an empty name.';
-            return;
-        }
-    }
-
-    btn.disabled = true; btn.textContent = 'Saving…';
-    try {
-        // 1. Save the section list (this also drops orphan assignments server-side)
-        var r1 = await fetch('/api/organic/raw-materials/sections', {
-            method: 'PUT',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({sections: sections}),
-        });
-        var d1 = await r1.json();
-        if(!d1.success){
-            msg.className = 'status error';
-            msg.textContent = d1.error || 'Failed to save sections.';
-            btn.disabled = false; btn.textContent = 'Save Changes';
-            return;
-        }
-
-        // 2. Save assignments (only for sections that survived)
-        var validIds = new Set(sections.map(function(s){return s.id;}));
-        var assignments = {};
-        Object.keys(sectionsState.assignments || {}).forEach(function(k){
-            var v = sectionsState.assignments[k];
-            if(validIds.has(v)) assignments[k] = v;
-        });
-        var r2 = await fetch('/api/organic/raw-materials/assignments', {
-            method: 'PUT',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({assignments: assignments}),
-        });
-        var d2 = await r2.json();
-        if(!d2.success){
-            msg.className = 'status error';
-            msg.textContent = d2.error || 'Failed to save assignments.';
-            btn.disabled = false; btn.textContent = 'Save Changes';
-            return;
-        }
-
-        closeSectionsModal();
-        loadRawMaterials();
-    } catch(e){
-        msg.className = 'status error';
-        msg.textContent = 'Network error: ' + e.message;
-        btn.disabled = false; btn.textContent = 'Save Changes';
-    }
-}
-
-// ── Camera-scan: Receive Inventory ───────────────────────────────────────
-// Captures invoice photo, sends to Claude Vision via /api/scan/invoice,
-// renders an editable review grid, and submits via /api/organic/raw-materials/bulk.
 // ── Invoice photo helpers ────────────────────────────────────────────────
 function _getInvPhotoFile(){
     // Return whichever input has a selected file (camera takes priority)
@@ -2970,10 +2595,6 @@ function onSaleBuyerChange(){
 function openSellForm(skuKey){
     openRecordSaleModal();
 }
-function closeSellForm(){
-    closeRecordSaleModal();
-}
-
 // ── FG Adjust Modal ──────────────────────────────────────────────────────
 async function openFgAdjustModal(){
     document.getElementById('fg-adj-notes').value='';
@@ -3058,134 +2679,6 @@ async function submitFgAdjust(){
 }
 
 // ── Scan Packing Slip (Sale) ─────────────────────────────────────────────
-var scanSaleData = null;
-var scanSaleCatalog = [];
-
-async function refreshScanUsage(kind){
-    // Stub — scan usage display removed with invoice scanning
-}
-
-function openScanSale(){
-    resetScanSale();
-    document.getElementById('scan-sale-modal').classList.add('active');
-}
-
-function closeScanSale(){
-    document.getElementById('scan-sale-modal').classList.remove('active');
-}
-
-function resetScanSale(){
-    scanSaleData = null;
-    document.getElementById('scan-sale-capture-step').style.display = '';
-    document.getElementById('scan-sale-review-step').style.display = 'none';
-    document.getElementById('scan-sale-msg').textContent = '';
-    document.getElementById('scan-sale-file').value = '';
-}
-
-async function runScanSale(){
-    var file = document.getElementById('scan-sale-file').files[0];
-    var msg = document.getElementById('scan-sale-msg');
-    var btn = document.getElementById('scan-sale-go');
-    if(!file){ msg.className='status error'; msg.textContent='Please select a file.'; return; }
-    msg.className='status'; msg.textContent='Scanning…';
-    btn.disabled=true; btn.textContent='Scanning…';
-    var fd = new FormData();
-    fd.append('file', file);
-    try {
-        var res = await fetch('/api/scan/packing-slip', {method:'POST', body:fd});
-        var data = await res.json();
-        if(!res.ok){ throw new Error(data.error || 'Scan failed'); }
-        scanSaleData = data;
-        scanSaleCatalog = data.catalog || [];
-        renderScanSaleReview(data);
-        document.getElementById('scan-sale-capture-step').style.display='none';
-        document.getElementById('scan-sale-review-step').style.display='';
-        msg.textContent='';
-    } catch(e){
-        msg.className='status error'; msg.textContent=e.message;
-    }
-    btn.disabled=false; btn.textContent='Extract Line Items';
-}
-
-function renderScanSaleReview(data){
-    document.getElementById('scan-sale-buyer').value = data.buyer || '';
-    document.getElementById('scan-sale-date').value = data.ship_date || '';
-    document.getElementById('scan-sale-po').value = data.po_number || '';
-    var rows = document.getElementById('scan-sale-rows');
-    if(!data.line_items || !data.line_items.length){
-        rows.innerHTML='<div style="padding:12px;color:var(--text-light);">No line items found.</div>';
-        return;
-    }
-    var html='';
-    data.line_items.forEach(function(line, i){
-        var matched = line.match && line.confidence !== 'none';
-        var borderCol = matched ? '#a5d6a7' : '#ef9a9a';
-        html += '<div style="border:1px solid '+borderCol+';border-radius:6px;padding:10px 12px;margin-bottom:8px;background:#fff;">';
-        html += '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">';
-        html += '<div style="flex:1;min-width:160px;"><label style="font-size:11px;color:var(--text-light);">SKU</label>';
-        html += '<select data-sale-sku="'+i+'" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:13px;">';
-        var matchKey = line.match ? line.match.sku_key : '';
-        scanSaleCatalog.forEach(function(sku){
-            var sel = sku.sku_key === matchKey ? 'selected' : '';
-            html += '<option value="'+sku.sku_key+'" '+sel+'>'+sku.display+'</option>';
-        });
-        html += '</select></div>';
-        html += '<div style="width:80px;"><label style="font-size:11px;color:var(--text-light);">Qty</label>';
-        html += '<input type="number" data-sale-qty="'+i+'" value="'+(line.quantity||'')+'" min="0" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:13px;" inputmode="decimal"></div>';
-        html += '<div style="flex:1;min-width:120px;"><label style="font-size:11px;color:var(--text-light);">Case LOT (opt)</label>';
-        html += '<input type="text" data-sale-lot="'+i+'" value="'+(line.case_lot||'')+'" placeholder="Case LOT" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:13px;"></div>';
-        html += '</div></div>';
-    });
-    rows.innerHTML = html;
-}
-
-async function submitScanSale(){
-    var buyer = document.getElementById('scan-sale-buyer').value.trim();
-    var date = document.getElementById('scan-sale-date').value;
-    var po = document.getElementById('scan-sale-po').value.trim();
-    var msg = document.getElementById('scan-sale-submit-msg');
-    var btn = document.getElementById('scan-sale-submit');
-    msg.textContent=''; msg.className='status';
-
-    var skuEls = document.querySelectorAll('[data-sale-sku]');
-    var sales = [];
-    skuEls.forEach(function(el){
-        var i = el.getAttribute('data-sale-sku');
-        var skuKey = el.value;
-        var qty = parseFloat(document.querySelector('[data-sale-qty="'+i+'"]').value);
-        var lot = (document.querySelector('[data-sale-lot="'+i+'"]').value||'').trim();
-        if(skuKey && !isNaN(qty) && qty > 0){
-            var sku = scanSaleCatalog.find(function(s){ return s.sku_key===skuKey; }) || {};
-            sales.push({
-                brand: sku.brand||'', recipe: sku.recipe||'', format: sku.format||'',
-                quantity: qty, buyer: buyer, sale_date: date, case_lot: lot, po_number: po,
-            });
-        }
-    });
-
-    if(!sales.length){ msg.className='status error'; msg.textContent='No valid lines to save.'; return; }
-    if(!buyer){ msg.className='status error'; msg.textContent='Buyer name required.'; return; }
-    if(!date){ msg.className='status error'; msg.textContent='Sale date required.'; return; }
-
-    btn.disabled=true; btn.textContent='Saving…';
-    var saved=0, errors=[];
-    for(var i=0;i<sales.length;i++){
-        try{
-            var res = await fetch('/api/organic/sales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(sales[i])});
-            var data = await res.json();
-            if(data.success) saved++;
-            else errors.push('Line '+(i+1)+': '+(data.error||'failed'));
-        }catch(e){ errors.push('Line '+(i+1)+': '+e.message); }
-    }
-    if(errors.length){
-        msg.className='status error';
-        msg.textContent='Saved '+saved+' of '+sales.length+'. Errors: '+errors.join('; ');
-        btn.disabled=false; btn.textContent='Save All Sales';
-        loadFinishedGoods(); return;
-    }
-    closeScanSale();
-    loadFinishedGoods();
-}
 
 // Lets the user define raw-material sections, reorder them, and assign each
 // canonical ingredient to a section (or leave as Unassigned).
@@ -3638,29 +3131,6 @@ async function submitBaselineBulkGrid(){
 }
 
 // ── Single-recipe baseline (fallback for missed items after the bulk pass) ──
-async function openBaselineSingle(){
-    var recipes=await loadRecipesForBaseline();
-    if(!recipes){alert('Could not load recipes.');return;}
-    var names=Object.keys(recipes).filter(function(n){return !recipes[n].archived;}).sort();
-    if(!names.length){alert('No active recipes found.');return;}
-
-    var sel=document.getElementById('baseline-single-recipe');
-    sel.innerHTML='<option value="">— Pick a recipe —</option>';
-    names.forEach(function(n){
-        var displayName=n.replace(/\s+(SS|FZ|BB|ss|fz|bb)-?\s*\d+\s*[Mm][Ll]\s*$/,'').trim();
-        var fmt=recipes[n].format||'';
-        var brand=recipes[n].brand||'';
-        var label=(brand?brand+' • ':'')+displayName+(fmt?' • '+fmt:'');
-        var opt=document.createElement('option');
-        opt.value=n; opt.textContent=label;
-        sel.appendChild(opt);
-    });
-    document.getElementById('baseline-single-qty').value='';
-    document.getElementById('baseline-single-msg').textContent='';
-    document.getElementById('baseline-single-msg').className='status';
-    document.getElementById('baseline-single-modal').classList.add('active');
-}
-
 function closeBaselineSingle(){
     document.getElementById('baseline-single-modal').classList.remove('active');
 }
@@ -3682,10 +3152,6 @@ async function submitBaselineSingle(){
 }
 
 // Legacy entry point used by existing button click handlers — opens bulk grid by default
-async function addBaselineFinishedGood(){
-    return openBaselineBulkGrid();
-}
-
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 // ── Production Runs ──
@@ -4281,48 +3747,6 @@ async function editLotRemaining(skuKey,lot,current){
 }
 
 // Sell form (modal) — pre-fills with the SKU you clicked
-function openSellForm(skuKeyEnc){
-    var skuKey=decodeURIComponent(skuKeyEnc);
-    var sku=fgSkus.find(function(s){return s.sku_key===skuKey;});
-    if(!sku){alert('SKU not found');return;}
-    document.getElementById('sale-sku-key').value=skuKey;
-    document.getElementById('sale-sku-display').textContent=sku.display+' — '+sku.total_remaining+' available (FIFO across LOTs)';
-    document.getElementById('sale-modal').classList.add('active');
-    document.getElementById('sale-qty-modal').focus();
-}
-
-function closeSellForm(){
-    document.getElementById('sale-modal').classList.remove('active');
-    document.getElementById('sale-status-modal').textContent='';
-    document.getElementById('sale-qty-modal').value='';
-    document.getElementById('sale-buyer-modal').value='';
-    document.getElementById('sale-case-lot-modal').value='';
-}
-
-async function submitSale(){
-    var skuKey=document.getElementById('sale-sku-key').value;
-    var qty=document.getElementById('sale-qty-modal').value;
-    var date=document.getElementById('sale-date-modal').value;
-    var buyer=document.getElementById('sale-buyer-modal').value.trim();
-    var caseLot=document.getElementById('sale-case-lot-modal').value.trim();
-    var st=document.getElementById('sale-status-modal');
-    if(!skuKey){st.className='status error';st.textContent='No SKU selected';return;}
-    if(!qty||parseInt(qty)<=0){st.className='status error';st.textContent='Enter a positive quantity';return;}
-    if(!date){st.className='status error';st.textContent='Sale date required';return;}
-    var res=await fetch('/api/organic/sales',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({sku_key:skuKey,quantity:parseInt(qty),sale_date:date,buyer:buyer,case_lot:caseLot})});
-    var data=await res.json();
-    if(data.success){
-        var lotsUsed=(data.sale.lots||[]).map(function(l){return l.lot+' ('+l.quantity+')';}).join(', ');
-        st.className='status success';
-        st.textContent='Sale recorded — drew from LOT(s): '+lotsUsed;
-        loadFinishedGoods();loadContacts();
-        setTimeout(closeSellForm,1500);
-    } else {
-        st.className='status error';st.textContent=data.error||'Failed';
-    }
-}
-
 // ── Inventory Adjustment Modal ─────────────────────────────────────────
 async function openAdjustmentModal(){
     var today = new Date().toISOString().split('T')[0];
