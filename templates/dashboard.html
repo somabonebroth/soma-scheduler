@@ -108,6 +108,7 @@
 .prod-grid .dash-btn { padding: 34px 20px; }
 .prod-grid .dash-btn .icon { font-size: 34px; }
 .prod-grid .dash-btn .label { font-size: 16px; }
+.dash-btn.full { grid-column: 1 / -1; }
 .dash-btn.placeholder { opacity: 0.45; cursor: default; border-style: dashed; }
 .dash-btn.placeholder:hover { transform: none; box-shadow: none; border-color: var(--border); }
 </style>
@@ -230,8 +231,7 @@
         </div>
         <div class="section-label">End of day</div>
         <div class="dash-row">
-            <a href="/cleaning" class="dash-btn"><span class="icon">&#127769;</span><span class="label">Closing Checklist</span><span class="sublabel">Tonight&#39;s closing &mdash; tick &amp; sign</span></a>
-            <a href="/cleaning" class="dash-btn"><span class="icon">&#129529;</span><span class="label">Cleaning &amp; Upkeep</span><span class="sublabel">Rotating jobs — pick &amp; sign off</span></a>
+            <a href="/end-of-day" class="dash-btn full"><span class="icon">&#127769;</span><span class="label">Complete End of Day</span><span class="sublabel">Production sign-off, closing checklist &amp; a rotating job &mdash; one step at a time</span></a>
         </div>
         <div class="section-label">Reference</div>
         <div class="dash-row">

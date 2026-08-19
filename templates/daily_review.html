@@ -26,6 +26,8 @@
 .dr-nav button:disabled { opacity: .4; cursor: default; }
 
 .dr-banner { border-radius: 10px; padding: 12px 15px; font-size: 13.5px; font-weight: 600; margin-bottom: 18px; }
+.dr-handover { background: var(--amber-bg); border: 1px solid var(--amber-border); border-left: 4px solid var(--amber-text); border-radius: var(--r-md); padding: 13px 16px; margin-bottom: 14px; font-size: 14px; line-height: 1.5; color: var(--text); }
+.dr-handover-k { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.1px; color: var(--amber-text-dark); margin-bottom: 4px; }
 .dr-banner.ok { background: var(--action-green-bg); border: 1px solid var(--action-green); color: var(--action-green); }
 .dr-banner.attn { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark, var(--amber-text)); }
 
@@ -331,7 +333,9 @@ function checklistsHtml(c){
     body += '<div class="dr-sublabel">Cleaning &amp; upkeep rotation</div>';
     const jobs = (c.rotation && c.rotation.jobs_done) || [];
     if (!jobs.length) {
-        body += '<div class="dr-empty">No rotating job done this day.</div>';
+        body += '<div class="dr-empty">' + (c.rotation && c.rotation.declined
+            ? 'Rotating job declined — no time on the day.'
+            : 'No rotating job done this day.') + '</div>';
     } else {
         body += '<div class="dr-scroll"><table class="dr-table"><tr><th>Job</th><th>By</th></tr>'
             + jobs.map(j => '<tr><td>' + esc(j.title) + '</td><td>' + esc(j.staff) + '</td></tr>').join('')
@@ -396,6 +400,10 @@ async function load(){
         + '<div class="dr-nav"><button onclick="step(1)">&#8592; Earlier</button>'
         + '<button onclick="step(-1)"' + (offset <= 1 ? ' disabled' : '') + '>Later &#8594;</button></div></div>'
         + banner
+        + (b.handover_note
+            ? '<div class="dr-handover"><div class="dr-handover-k">Note from the floor</div>'
+              + esc(b.handover_note) + '</div>'
+            : '')
         + productionHtml(b.production)
         + transactionsHtml(b.transactions)
         + checklistsHtml(b.checklists)

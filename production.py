@@ -412,13 +412,27 @@ def get_daily_production(week_id, day_idx):
     })
 
 
+def _preserve_filing(week_id, day_idx, data):
+    """Carry a filed day's sign-off through a later autosave.
+
+    The tablet writes the whole checklist on every autosave, so going back to
+    correct a jar count after End of Day has signed the day would otherwise
+    silently drop `completed` / `signoff_kitchen` and un-file the record.
+    """
+    prev = app.load_checklist(week_id, day_idx) or {}
+    for key in ("completed", "completed_at", "signoff_kitchen"):
+        if key not in data and prev.get(key):
+            data[key] = prev[key]
+    return data
+
+
 @production_bp.route("/api/daily-production/<week_id>/<int:day_idx>/save", methods=["POST"])
 @login_required
 @require_valid_week
 @require_valid_day
 def save_daily_production(week_id, day_idx):
     """POST .../save - save daily production; finishes the prior day's organic runs (consumption chain)."""
-    data = request.json or {}
+    data = _preserve_filing(week_id, day_idx, request.json or {})
     data["last_updated"] = datetime.now().isoformat()
     app.save_checklist_data(week_id, day_idx, data)
     # Process any organic runs scheduled on the previous day —
@@ -453,19 +467,18 @@ def get_checklist_route(week_id, day_idx):
 @require_valid_day
 def save_checklist_route(week_id, day_idx):
     """POST /api/checklist/<week>/<day> - save the day's checklist."""
-    data = request.json or {}
+    data = _preserve_filing(week_id, day_idx, request.json or {})
     data["last_updated"] = datetime.now().isoformat()
     app.save_checklist_data(week_id, day_idx, data)
     return jsonify({"success": True})
 
 
-@production_bp.route("/api/checklist/<week_id>/<int:day_idx>/complete", methods=["POST"])
-@login_required
-@require_valid_week
-@require_valid_day
-def complete_checklist(week_id, day_idx):
-    """POST .../complete - mark the checklist complete and generate its PDF."""
-    data = request.json or {}
+def file_checklist(week_id, day_idx, data):
+    """Mark a day's checklist complete, file its PDF, run the consumption chain.
+
+    Shared by the tablet's complete route and the End of Day wizard's production
+    sign-off, so a day can only ever be filed one way. Returns (filename, warnings).
+    """
     data["last_updated"] = datetime.now().isoformat()
     data["completed"] = True
     app.save_checklist_data(week_id, day_idx, data)
@@ -503,6 +516,16 @@ def complete_checklist(week_id, day_idx):
     except Exception:
         pass
 
+    return filename, warnings
+
+
+@production_bp.route("/api/checklist/<week_id>/<int:day_idx>/complete", methods=["POST"])
+@login_required
+@require_valid_week
+@require_valid_day
+def complete_checklist(week_id, day_idx):
+    """POST .../complete - mark the checklist complete and generate its PDF."""
+    filename, warnings = file_checklist(week_id, day_idx, request.json or {})
     return jsonify({"success": True, "filename": filename, "warnings": warnings})
 
 
@@ -551,19 +574,22 @@ def ccp_titles_map():
     return out
 
 
-def summarize_day(week_id, day_idx, sched=None, ccp_titles=None):
+def summarize_day(week_id, day_idx, sched=None, ccp_titles=None, require_completed=True):
     """Summarise ONE production day, or None if that day has no completed checklist.
 
     Shared by the weekly HOO review and the daily management brief so the two can
     never disagree about what a day looks like — the same drift that let the PDF
     and the tablet show different checklists.
 
+    require_completed=False lets the End of Day wizard preview the day it is
+    about to file — the same read, before the sign-off rather than after.
+
     Returns: day/day_idx/date, what was scheduled vs produced, the floor's day
     note and per-vessel finish notes, the kitchen sign-off, and ccp_issues
     (unconfirmed CCP sections, named from the master).
     """
     cl = app.load_checklist(week_id, day_idx)
-    if not cl or not cl.get("completed"):
+    if not cl or (require_completed and not cl.get("completed")):
         return None
 
     if sched is None:

@@ -86,6 +86,11 @@ retail_orders.py    — Flask Blueprint (added 2026-07-02): SBBC Wholesale Porta
                       channel); decline proxies to the portal, which issues a full Stripe
                       refund. NO auto-approve. Env: RETAIL_PORTAL_URL + INTERNAL_API_KEY.
                       Portal repo: github.com/somabonebroth/SBBC-Wholesale-Portal.
+end_of_day.py       — Flask Blueprint (added 2026-08-19): the floor's one end-of-shift
+                      flow at /end-of-day. Owns NO data — it joins production
+                      (file_checklist) and cleaning (closing record, rotation) and is
+                      the ONLY place a production day is now signed off. See "End of
+                      Day" below.
 ledger.py           — Flask Blueprint: inventory event-ledger subsystem (added
                       2026-06-09). Read-only FG reconciliation/drift detector
                       (/admin/fg-reconcile), append-only event model + projection
@@ -187,6 +192,44 @@ day_idx)` for anything that reads `checklist["produced"]`. `summarize_day` retur
 stands in for the other. Completed-production records tag certification for the jars
 COUNTED that day (from the FG entries the run wrote; prev-day schedule as fallback), so a
 day where a batch started but nothing finished correctly shows no cert tags.
+
+**End of Day (`end_of_day.py` + `templates/end_of_day.html`, 2026-08-19).** The floor's ONE
+end-of-shift flow, behind a single full-width dashboard button (it replaced the separate
+Closing Checklist / Cleaning & Upkeep buttons). Steps appear one at a time: (1) the day's
+production read back — jars counted today, named for the batch that STARTED yesterday —
+plus every CCP section, tickable in place, then signed; (2) a note for management; (3) the
+closing checklist ONE ITEM AT A TIME in the manager's order, then signed; (4) one rotating
+job or an explicit decline; (5) a done card. `GET /api/end-of-day` returns the whole flow
+in one read and reports what is already done, so a re-opened flow RESUMES rather than
+asking twice.
+
+**Step 1 IS the checklist sign-off — the tablet no longer files the day.** The Sign &
+Complete button and the `signoff-kitchen` field are gone from `daily_production.html`; the
+tablet only captures numbers and ticks as they happen (still autosaving). Filing moved to
+`production.file_checklist(week_id, day_idx, data)`, extracted from `complete_checklist` so
+the route and the wizard can only file a day one way (PDF + consumption chain + warnings).
+`summarize_day` gained `require_completed=False` so the wizard previews the day it is about
+to file with the SAME read the weekly review and daily brief use. `production._preserve_filing`
+carries `completed`/`completed_at`/`signoff_kitchen` through a later tablet autosave —
+`save_checklist_data` replaces the file wholesale, so going back to fix a jar count would
+otherwise silently un-file a signed day.
+
+**The note and the decline live on the cleaning record, not a new file.**
+`POST /api/cleaning/closing/note` upserts `manager_note` on the day's closing record (it is
+written BEFORE the list is signed, hence the upsert) — one home, and a non-production day
+can still carry a note. The brief exposes it as `handover_note` and `daily_review.html`
+renders it ABOVE section 1 as "Note from the floor". `POST /api/cleaning/rotation/decline`
+records a dateless-reason decline in `declines[]`; it surfaces as a plain NOTE ("Rotating
+job declined"), never an issue — skipping carries no penalty, management only gets to see
+how often it happens.
+
+**Rotating jobs are grouped by slot** (`cleaning.slot_for`: weekly ≤7 / monthly ≤30 /
+quarterly ≤90 / semi-annual beyond; `_job_view` carries `slot`). Weekly was added 2026-08-19.
+Both the cleaning page and the wizard render slot headings with colour-coded pills — an
+ungrouped list made an hour-a-week job look identical to a six-month one. The closing list
+is re-orderable by the manager (↑/↓ in "Manage closing list"); order matters because the
+wizard walks the floor through the items in exactly that sequence, so it should read as a
+walk around the kitchen. The PUT already stored the list in order — only the UI was missing.
 
 **Daily Review (`daily_brief.py` + `templates/daily_review.html`, 2026-08-18).** A full page
 at `/daily-review` (manager-only) behind a full-width dashboard button, fed by

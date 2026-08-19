@@ -53,6 +53,19 @@ DEFAULT_CLOSING_ITEMS = [
 ]
 
 
+def slot_for(interval_days):
+    """Group an interval into its rotation slot. The floor reads the list by
+    slot, so Weekly work never sits visually mixed in with six-month work."""
+    days = max(1, int(interval_days or DEFAULT_INTERVAL_DAYS))
+    if days <= 7:
+        return "weekly"
+    if days <= 30:
+        return "monthly"
+    if days <= 90:
+        return "quarterly"
+    return "semiannual"
+
+
 def login_required(f):
     """Local copy of app.py's decorator (verbatim) — keeps the blueprint
     free of an import-time dependency on app.py. Behaviour is identical."""
@@ -84,12 +97,14 @@ def manager_required(f):
 
 
 def _load_cleaning():
-    """Load the cleaning data file ({jobs, completions, closing_items, closing_records})."""
+    """Load the cleaning data file
+    ({jobs, completions, closing_items, closing_records, declines})."""
     data = _load_json(CLEANING_PATH, {})
     data.setdefault("jobs", [])
     data.setdefault("completions", [])
     data.setdefault("closing_items", [dict(i) for i in DEFAULT_CLOSING_ITEMS])
     data.setdefault("closing_records", [])
+    data.setdefault("declines", [])
     return data
 
 
@@ -119,6 +134,7 @@ def _job_view(job):
     view["days_since"] = days_since
     view["due_ratio"] = round(days_since / interval, 3)
     view["ready"] = last_done is None or days_since >= interval
+    view["slot"] = slot_for(interval)
     if not view["ready"]:
         view["returns_on"] = (last_done + timedelta(days=interval)).isoformat()
     return view
@@ -283,8 +299,9 @@ def day_summary(on):
     """What happened on the cleaning side on one date, for the daily brief.
 
     Returns the closing gate's state (signed / complete / which items were
-    missed), the rotation sign-offs recorded that day, and how many rotating
-    jobs are currently overdue. `on` is a date object.
+    missed), the note the floor left for management, the rotation sign-offs
+    recorded that day (or that a job was declined), and how many rotating jobs
+    are currently overdue. `on` is a date object.
     """
     data = _load_cleaning()
     iso = on.isoformat()
@@ -310,13 +327,18 @@ def day_summary(on):
                   "notes": c.get("notes", "")}
                  for c in data["completions"] if c.get("date") == iso]
 
+    declined = next((d for d in data["declines"] if d.get("date") == iso), None)
+
     overdue = 0
     for job in data["jobs"]:
         view = _job_view(job)
         if view["ready"] and view.get("last_done") and view["due_ratio"] >= 1:
             overdue += 1
 
-    return {"closing": closing, "jobs_done": jobs_done, "jobs_overdue": overdue}
+    return {"closing": closing, "jobs_done": jobs_done, "jobs_overdue": overdue,
+            "declined": bool(declined),
+            "declined_by": (declined or {}).get("staff", ""),
+            "manager_note": (rec or {}).get("manager_note", "")}
 
 
 # ── Closing checklist (the daily gate) ────────────────────────────────────────
@@ -434,6 +456,56 @@ def get_closing_records():
         recs = [r for r in recs if (r.get("date") or "") <= to.isoformat()]
     recs = sorted(recs, key=lambda r: r.get("date", ""), reverse=True)
     return jsonify(recs[:limit])
+
+
+@cleaning_bp.route("/api/cleaning/closing/note", methods=["POST"])
+@login_required
+def save_closing_note():
+    """Leave the floor's note for management. Body: {note, staff?, date?}.
+
+    Lives on the day's closing record rather than the production checklist so a
+    non-production day can still carry a note, and so there is exactly one place
+    tomorrow's brief has to look. Written before the closing list is signed —
+    the End of Day wizard asks for it early — so this upserts the record.
+    """
+    body = request.get_json(force=True) or {}
+    on = (_parse_date(body.get("date")) or date.today()).isoformat()
+    data = _load_cleaning()
+    rec = next((r for r in data["closing_records"] if r.get("date") == on), None)
+    now = datetime.now().isoformat(timespec="seconds")
+    if rec is None:
+        rec = {"id": datetime.now().strftime("%Y%m%d%H%M%S%f"), "date": on,
+               "created_at": now, "staff": "", "notes": "", "items": []}
+        data["closing_records"].append(rec)
+    rec["manager_note"] = (body.get("note") or "").strip()
+    if body.get("staff"):
+        rec["manager_note_by"] = (body.get("staff") or "").strip()
+    rec["manager_note_ts"] = now
+    _save_cleaning(data)
+    return jsonify({"ok": True, "note": rec["manager_note"]})
+
+
+@cleaning_bp.route("/api/cleaning/rotation/decline", methods=["POST"])
+@login_required
+def decline_rotation():
+    """Record that no rotating job was taken tonight. Body: {staff?, date?}.
+
+    No reason is asked for — skipping is expected and carries no penalty (see
+    the module docstring). It surfaces on tomorrow's brief as a plain note, not
+    an issue, so management can see the frequency without it reading as a fault.
+    One record per date; declining again just refreshes it.
+    """
+    body = request.get_json(force=True) or {}
+    on = (_parse_date(body.get("date")) or date.today()).isoformat()
+    data = _load_cleaning()
+    rec = next((d for d in data["declines"] if d.get("date") == on), None)
+    if rec is None:
+        rec = {"id": datetime.now().strftime("%Y%m%d%H%M%S%f"), "date": on}
+        data["declines"].append(rec)
+    rec["staff"] = (body.get("staff") or "").strip()
+    rec["ts"] = datetime.now().isoformat(timespec="seconds")
+    _save_cleaning(data)
+    return jsonify({"ok": True})
 
 
 def _sync_job_last_done(job, completions):

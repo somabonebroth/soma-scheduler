@@ -475,17 +475,26 @@ def _checklists_section(on, prod):
         clean = cleaning.day_summary(on)
     except Exception:
         logger.warning("daily brief: cleaning summary failed", exc_info=True)
-        clean = {"closing": {}, "jobs_done": [], "jobs_overdue": 0}
+        clean = {"closing": {}, "jobs_done": [], "jobs_overdue": 0,
+                 "declined": False, "manager_note": ""}
     closing = clean.get("closing") or {}
 
     notes, issues = [], []
     for issue in prod.get("ccp_issues", []):
         issues.append({"level": "high", "text": "CCP section not confirmed: " + issue})
+    if clean.get("manager_note"):
+        # The floor's End of Day handover note — deliberately first, it is the
+        # one line written FOR this page rather than salvaged from a record.
+        notes.insert(0, {"source": "Note for management", "text": clean["manager_note"]})
     if closing.get("notes"):
         notes.append({"source": "Closing", "text": closing["notes"]})
     for j in clean.get("jobs_done", []):
         if j.get("notes"):
             notes.append({"source": j.get("title", "Cleaning job"), "text": j["notes"]})
+    if clean.get("declined") and not clean.get("jobs_done"):
+        # A plain note, never an issue — skipping the rotation carries no
+        # penalty (cleaning.py), management just gets to see how often it happens.
+        notes.append({"source": "Rotation", "text": "Rotating job declined"})
 
     kitchen_ran = _kitchen_ran(prod, clean)
     if not closing.get("signed"):
@@ -511,7 +520,8 @@ def _checklists_section(on, prod):
         },
         "closing": closing,
         "rotation": {"jobs_done": clean.get("jobs_done", []),
-                     "overdue": clean.get("jobs_overdue", 0)},
+                     "overdue": clean.get("jobs_overdue", 0),
+                     "declined": clean.get("declined", False)},
         "notes": notes,
         "issues": issues,
         "_kitchen_ran": kitchen_ran,
@@ -534,6 +544,10 @@ def _build_brief(on):
     actions.sort(key=lambda a: 0 if a["level"] == "high" else 1)
 
     notes = prod["notes"] + txn["notes"] + checks["notes"]
+    # The one line written FOR this page rather than salvaged from a record —
+    # the floor leaves it at End of Day expecting the office to read it first.
+    handover = next((n["text"] for n in checks["notes"]
+                     if n.get("source") == "Note for management"), "")
     signoffs = app._load_daily_signoffs()
     return {
         "date": on.isoformat(),
@@ -543,6 +557,7 @@ def _build_brief(on):
         "transactions": txn,
         "checklists": checks,
         "notes": notes,
+        "handover_note": handover,
         "actions": actions,
         "all_clear": not actions,
         "signoff": signoffs.get(on.isoformat()),

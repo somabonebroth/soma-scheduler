@@ -108,13 +108,9 @@
     <div id="ccp-container"></div>
     <div class="card"><h3>Daily Notes</h3><textarea id="day-notes" style="width:100%;min-height:60px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit;" oninput="autoSave()"></textarea></div>
     <div class="signoff-section">
-        <h3 style="font-size:14px;margin-bottom:12px;">Kitchen Lead Sign-Off</h3>
-        <div class="signoff-row" style="align-items:flex-end;">
-            <label>Kitchen Lead:</label>
-            <input type="text" id="signoff-kitchen" placeholder="Enter your name to sign" autocomplete="off" oninput="autoSave();updatePct()" style="flex:1;">
-            <button class="btn-complete" id="complete-btn" onclick="completeAndFile()" style="margin-left:8px;">Sign &amp; Complete</button>
-        </div>
-        <div class="complete-msg" id="complete-msg" style="margin-top:10px;"></div>
+        <h3 style="font-size:14px;margin-bottom:8px;">Sign-off happens at End of Day</h3>
+        <p style="font-size:13px;color:var(--text-light);line-height:1.5;margin-bottom:12px;">Everything here saves as you go. The day is signed and filed in <strong>Complete End of Day</strong>, which shows these numbers back to you and asks for the CCP confirmation once.</p>
+        <a href="/end-of-day" class="btn-complete" style="display:inline-block;text-decoration:none;">&#127769; Go to End of Day</a>
     </div>
     <div id="save-indicator" class="save-indicator">Not yet saved</div>
 </div>
@@ -246,20 +242,17 @@ function updatePct(){
     var total=0,done=0;
     for(var i=0;i<ccpSections.length;i++){total++;var el=document.getElementById('section-'+ccpSections[i].num);if(el&&el.checked)done++;}
     for(var v=0;v<VESSELS.length;v++){var vid=VESSELS[v].replace(/[()]/g,'');var pel=document.getElementById('produced-'+vid);if(pel){total++;if(pel.value)done++;}var bel=document.getElementById('bb-'+vid);if(bel){/* BB is optional, don't count toward required */}}
-    total+=1;
-    if(document.getElementById('signoff-kitchen').value.trim())done++;
     var pct=total>0?Math.round(done/total*100):0;
     document.getElementById('pct-text').textContent=pct+'% Complete';
     document.getElementById('pct-fill').style.width=pct+'%';
 }
 
 function collectData(){
-    var data={checks:{},produced:{},bb_produced:{},finish_notes:{},kettles_end:'',notes:'',signoff_kitchen:''};
+    var data={checks:{},produced:{},bb_produced:{},finish_notes:{},kettles_end:'',notes:''};
     for(var i=0;i<ccpSections.length;i++){var el=document.getElementById('section-'+ccpSections[i].num);if(el)data.checks['section-'+ccpSections[i].num]=el.checked;}
     for(var v=0;v<VESSELS.length;v++){var vid=VESSELS[v].replace(/[()]/g,'');var pel=document.getElementById('produced-'+vid);if(pel)data.produced[vid]=pel.value;var bel=document.getElementById('bb-'+vid);if(bel)data.bb_produced[vid]=bel.value;var nel=document.getElementById('fnotes-'+vid);if(nel)data.finish_notes[vid]=nel.value;}
     data.kettles_end=document.getElementById('kettles-end').value;
     data.notes=document.getElementById('day-notes').value;
-    data.signoff_kitchen=document.getElementById('signoff-kitchen').value;
     return data;
 }
 
@@ -270,7 +263,6 @@ function restoreData(d){
     if(d.finish_notes)Object.keys(d.finish_notes).forEach(function(k){var el=document.getElementById('fnotes-'+k);if(el)el.value=d.finish_notes[k];});
     if(d.kettles_end)document.getElementById('kettles-end').value=d.kettles_end;
     if(d.notes)document.getElementById('day-notes').value=d.notes;
-    if(d.signoff_kitchen)document.getElementById('signoff-kitchen').value=d.signoff_kitchen;
     updatePct();
 }
 
@@ -311,27 +303,6 @@ async function generateLabel(recipeName,brandName,format){
         if(res.ok){var blob=await res.blob();var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='Label_'+recipeName.replace(/[^a-zA-Z0-9]/g,'_')+'.pdf';a.click();URL.revokeObjectURL(url);}
         else{var err=await res.json();alert(err.error||'Label generation failed');}
     }catch(e){alert('Label generation failed');}
-}
-
-async function completeAndFile(){
-    var btn=document.getElementById('complete-btn');var msg=document.getElementById('complete-msg');
-    var name=document.getElementById('signoff-kitchen').value.trim();
-    if(!name){msg.style.color='#dc3545';msg.textContent='Enter your name to sign before completing.';document.getElementById('signoff-kitchen').focus();return;}
-    btn.disabled=true;btn.textContent='Filing...';
-    try{
-        var res=await fetch('/api/checklist/'+WEEK_ID+'/'+DAY_IDX+'/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collectData())});
-        var result=await res.json();
-        if(result.success){
-            showWarnings(result.warnings||[]);
-            var redirectDelay=(result.warnings&&result.warnings.length)?5000:1500;
-            msg.style.color='var(--accent)';
-            msg.textContent=(result.warnings&&result.warnings.length)
-                ?'Signed and completed with '+result.warnings.length+' warning(s). Review above. Redirecting in 5s…'
-                :'Signed and completed. Redirecting…';
-            setTimeout(function(){window.location.href='/';},redirectDelay);
-        }
-        else{msg.style.color='#dc3545';msg.textContent=result.error||'Failed';btn.disabled=false;btn.textContent='Sign & Complete';}
-    }catch(e){msg.style.color='#dc3545';msg.textContent='Error: '+e.message;btn.disabled=false;btn.textContent='Sign & Complete';}
 }
 
 document.addEventListener('DOMContentLoaded',init);
