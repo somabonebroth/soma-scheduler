@@ -56,7 +56,7 @@
 }
 #prod-record-btn.needs-signoff { animation: prod-pulse 2s ease infinite; }
 /* ── Management list: reduced-weight rows, each showing its sub-sections ── */
-.mgmt-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.mgmt-list { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
 /* Daily Review — full-width entry point, highlighted until the day is reviewed */
 .review-btn { display: flex; align-items: center; gap: 14px; width: 100%; box-sizing: border-box; text-decoration: none; background: var(--card-bg); border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 18px; transition: background .12s, border-color .12s; }
 .review-btn:hover { background: var(--bg); }
@@ -72,16 +72,18 @@
 .review-btn.attn .review-cta { background: var(--amber-text-dark, var(--amber-text)); border-color: var(--amber-text-dark, var(--amber-text)); color: var(--white); }
 .review-btn.done { border-left-color: var(--action-green); }
 .review-btn.done .review-cta { background: var(--action-green-bg); border-color: var(--action-green); color: var(--action-green); }
-.mgmt-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+/* Every row is the same shape — title line, then its chips. A flex row with a
+   fixed-width title made short rows sit inline and long ones wrap their whole
+   chip group to a second line, so the list read as two different layouts. */
+.mgmt-row { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 13px 16px; }
 .mgmt-row:hover { border-color: var(--accent); }
-.mgmt-title { font-size: 13px; font-weight: 700; color: var(--dark); text-decoration: none; min-width: 200px; display: flex; align-items: center; gap: 8px; }
+.mgmt-title { font-size: 13px; font-weight: 700; color: var(--dark); text-decoration: none; display: inline-flex; align-items: center; gap: 8px; margin-bottom: 10px; letter-spacing: .2px; }
 .mgmt-title:hover { color: var(--accent); }
-.mgmt-links { display: flex; flex-wrap: wrap; gap: 6px; }
-.mgmt-links a, .mgmt-links button { font-size: 12px; font-weight: 500; color: var(--text); text-decoration: none; background: var(--bg); border: 1px solid var(--border); border-radius: 14px; padding: 4px 11px; cursor: pointer; font-family: inherit; line-height: 1.4; }
+.mgmt-links { display: flex; flex-wrap: wrap; gap: 7px; }
+.mgmt-links a, .mgmt-links button { font-size: 12px; font-weight: 500; color: var(--text); text-decoration: none; background: var(--bg); border: 1px solid var(--border); border-radius: 14px; padding: 5px 12px; cursor: pointer; font-family: inherit; line-height: 1.5; }
 .mgmt-links a:hover, .mgmt-links button:hover { border-color: var(--accent); color: var(--accent); }
 .mgmt-links .soon { opacity: 0.45; cursor: default; pointer-events: none; }
 .mgmt-badge { background: var(--amber-text); color: var(--white); border-radius: 10px; padding: 1px 8px; font-size: 11px; font-weight: 800; line-height: 18px; display: none; }
-@media (max-width: 640px) { .mgmt-title { min-width: 0; width: 100%; } }
 /* ── Production (tablet) view: bigger tap targets, no chrome ── */
 .prod-grid .dash-btn { padding: 34px 20px; }
 .prod-grid .dash-btn .icon { font-size: 34px; }
@@ -152,39 +154,39 @@
         <div class="section-label">Management</div>
         <div class="mgmt-list">
             <div class="mgmt-row">
-                <a class="mgmt-title" href="/analytics?tab=sales">&#128200; Analytics</a>
+                <a class="mgmt-title" href="/analytics?tab=sales">Analytics</a>
                 <div class="mgmt-links"><a href="/analytics?tab=sales">Sales Data</a><a href="/analytics?tab=production">Production Data</a></div>
             </div>
             <div class="mgmt-row" id="prod-record-btn">
-                <a class="mgmt-title" href="/traceability">&#128451; Production Record <span class="mgmt-badge" id="prod-badge" title="Completed weeks awaiting HOO sign-off"></span></a>
-                <div class="mgmt-links"><a href="/traceability">Weekly records &amp; sign-off</a></div>
+                <a class="mgmt-title" href="/traceability">Production Record <span class="mgmt-badge" id="prod-badge" title="Days the kitchen ran that you have not reviewed yet"></span></a>
+                <div class="mgmt-links"><a href="/traceability">Week records</a></div>
             </div>
             <div class="mgmt-row">
-                <a class="mgmt-title" href="/organic">&#128230; Inventory</a>
+                <a class="mgmt-title" href="/organic">Inventory</a>
                 <div class="mgmt-links"><a href="/organic?tab=raw">Raw Materials</a><a href="/organic?tab=runs">Production Runs</a><a href="/organic?tab=fg">Finished Goods</a><a href="/audits">Stock Counts</a></div>
             </div>
             <div class="mgmt-row">
-                <a class="mgmt-title" href="/sales-receiving">&#128203; Sales &amp; Receiving Record</a>
+                <a class="mgmt-title" href="/sales-receiving">Sales &amp; Receiving Record</a>
                 <div class="mgmt-links"><a href="/sales-receiving#sales">Sales</a><a href="/sales-receiving#receiving">Receiving</a><a href="/sales-receiving#trace">Search &amp; Trace</a></div>
             </div>
             <div class="mgmt-row">
-                <a class="mgmt-title" href="/organic-certification">&#127807; Organic Certification</a>
+                <a class="mgmt-title" href="/organic-certification">Organic Certification</a>
                 <div class="mgmt-links"><a href="/organic-certification">Overview</a><a href="/admin/reconcile-raw">Reconcile Raw</a><a href="/mass-balance">Mass Balance</a><a href="/admin/fg-reconcile">FG Reconcile</a><a href="/audits">Stock Counts</a><a href="/certifications">Certificates &amp; Documents</a></div>
             </div>
             <div class="mgmt-row">
-                <a class="mgmt-title" href="/contacts">&#128101; Buyers &amp; Suppliers</a>
+                <a class="mgmt-title" href="/contacts">Buyers &amp; Suppliers</a>
                 <div class="mgmt-links"><a href="/contacts?tab=suppliers">Suppliers</a><a href="/contacts?tab=buyers">Buyers</a><a href="/contacts?tab=catalogue">SKU Catalogue</a></div>
             </div>
             <div class="mgmt-row">
-                <a class="mgmt-title" href="/recipes">&#128209; Recipe Cards</a>
+                <a class="mgmt-title" href="/recipes">Recipe Cards</a>
                 <div class="mgmt-links"><a href="/recipes">View &amp; edit recipes</a></div>
             </div>
             <div class="mgmt-row">
-                <a class="mgmt-title" href="/cleaning">&#129529; Cleaning Records</a>
+                <a class="mgmt-title" href="/cleaning">Cleaning Records</a>
                 <div class="mgmt-links"><a href="/cleaning">Cleaning &amp; Upkeep (do today's jobs)</a><a class="soon" href="#" title="Coming soon">Cleaning history</a><a href="/cleaning">Closing checklist &amp; list setup</a></div>
             </div>
             <div class="mgmt-row">
-                <a class="mgmt-title" href="/company-settings">&#9881; Settings &amp; Other</a>
+                <a class="mgmt-title" href="/company-settings">Settings &amp; Other</a>
                 <div class="mgmt-links"><a href="/company-settings">Company Settings</a><a href="/company-settings">Ripe buffer &amp; credits</a><a href="/ccp-master">CCP Master</a><button type="button" onclick="downloadBackup()">Data Backup</button><a href="/admin/shopify-import">Shopify Import</a><a href="/admin/clover-import">Clover Import</a><a href="/ripe-sku-audit">Ripe SKU Audit</a><a href="/ripe-analytics">Ripe Analytics</a></div>
             </div>
         </div>
