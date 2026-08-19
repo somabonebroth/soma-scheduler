@@ -172,6 +172,22 @@ one record per date, works on non-production days) and the rotating **backlog** 
 explicitly fine). Closing records SNAPSHOT the labels signed against; item ids survive
 edits. Data lives in `cleaning_jobs.json` as `closing_items` + `closing_records`.
 
+**Jars are completed the day AFTER they are scheduled — one model, audited 2026-08-18.**
+A batch STARTED on day N is counted on day N+1 (seal check is next-day, per the CCP
+checklist). The tablet encodes this: `get_daily_production` splits a START side (today's
+recipe) from a FINISH side (yesterday's), and "Amount Produced" sits on the FINISH side.
+Everything downstream must credit those jars to the PREVIOUS day's recipe —
+`_check_organic_completion`/`_complete_organic_run` (`_previous_day_coords`), the production
+tracker + its "Other" diagnostic, the boot backfill, mass balance ("raw consumed = the run's
+PRODUCTION (start) date; FG produced = finish date"), and the FG LOT# (= production date +
+365, matching the case label). `summarize_day` and `get_traceability` used the SAME day's
+schedule until 2026-08-18 and were fixed; use `app._get_previous_day_schedule(week_id,
+day_idx)` for anything that reads `checklist["produced"]`. `summarize_day` returns BOTH
+`scheduled` (started that day) and `finished_recipes` (counted that day) so neither reading
+stands in for the other. Completed-production records tag certification for the jars
+COUNTED that day (from the FG entries the run wrote; prev-day schedule as fallback), so a
+day where a batch started but nothing finished correctly shows no cert tags.
+
 **Daily Review (`daily_brief.py` + `templates/daily_review.html`, 2026-08-18).** A full page
 at `/daily-review` (manager-only) behind a full-width dashboard button, fed by
 `GET /api/daily-brief?date=` (default yesterday). THREE sections: (1) what was made —
