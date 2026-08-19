@@ -5021,6 +5021,172 @@ def clover_import_ui():
     return render_template_string(clover_html, default_week=default_week)
 
 
+# ── Channel price repair ─────────────────────────────────────────
+# Channel sales imported before 2026-08-19 carry no price at all, so they
+# counted as $0 revenue in api_sales_by_buyer. There is no buyer catalogue for
+# "SOMA (Shopify)"/"SOMA (Clover)", so the channel itself is the only place
+# those retail prices exist — repairing them means re-reading the week from
+# Shopify/Clover and copying the revenue onto the sale rows already on file.
+#
+# PRICE-ONLY, deliberately: this writes unit_price and line_total and NOTHING
+# else. It never creates or removes a sale, never touches quantity, lots,
+# fg_id, dates, or finished-goods stock. The FIFO deduction happened at import
+# time and must never run a second time.
+#
+# Scoped to ONE channel-week per request: a full re-read of every week would
+# make dozens of paginated API round trips in a single request and time out.
+# /weeks does a local-only scan so the page can list the work, then drive it
+# one week at a time.
+
+_REPAIR_CHANNELS = ("shopify", "clover")
+
+
+def _channel_weeks_needing_prices():
+    """Local scan (no network): every (channel, week_id) with channel sales,
+    and how many of those rows currently carry a line_total."""
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    groups = {}
+    for s in sales:
+        ch, wk = s.get("channel"), s.get("week_id")
+        if ch not in _REPAIR_CHANNELS or not wk:
+            continue
+        g = groups.setdefault((ch, wk), {"channel": ch, "week_id": wk,
+                                         "rows": 0, "priced": 0, "units": 0})
+        g["rows"] += 1
+        g["units"] += int(s.get("quantity") or 0)
+        if s.get("line_total") is not None:
+            g["priced"] += 1
+    return [groups[k] for k in sorted(groups, key=lambda k: (k[1], k[0]), reverse=True)]
+
+
+def _channel_week_revenue(channel, week_id):
+    """Re-read one week from a channel. Returns (by_sku_key, error_str)."""
+    recipes = _load_json(RECIPES_PATH, {})
+    try:
+        if channel == "shopify":
+            cid = os.environ.get("SHOPIFY_CLIENT_ID", "").strip()
+            csec = os.environ.get("SHOPIFY_CLIENT_SECRET", "").strip()
+            store = os.environ.get("SHOPIFY_STORE", "").strip()
+            if not (cid and csec and store):
+                return None, "Shopify not configured in environment"
+            preview = shopify_importer.preview_week(week_id, recipes, cid, csec, store)
+        else:
+            token = os.environ.get("CLOVER_API_TOKEN", "").strip()
+            mid = os.environ.get("CLOVER_MERCHANT_ID", "").strip()
+            if not (token and mid):
+                return None, "Clover not configured in environment"
+            preview = clover_importer.preview_week(
+                week_id, recipes, token, mid, os.environ.get("CLOVER_API_BASE"))
+    except Exception as e:
+        logger.exception("Channel price repair: %s preview failed for %s", channel, week_id)
+        return None, str(e)
+
+    return {m["soma_key"]: {"quantity": int(m.get("quantity") or 0),
+                            "revenue": float(m.get("revenue") or 0.0)}
+            for m in preview.get("matched", [])}, None
+
+
+def _channel_price_repair(channel, week_id, do_apply=False):
+    """Re-read one channel-week and reprice its sale rows. Returns (body, status).
+
+    A row is left ALONE — never zeroed — whenever the channel can't confirm it:
+    the SKU is absent from the re-read, or the channel's quantity no longer
+    matches what was imported (a refund or order edit after import), in which
+    case that week's revenue belongs to a different unit count.
+    """
+    if channel not in _REPAIR_CHANNELS:
+        return {"error": f"Unknown channel '{channel}'"}, 400
+    if not validate_week_id(week_id):
+        return {"error": "Invalid 'week' parameter; expected YYYY-MM-DD"}, 400
+
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    rows = [s for s in sales
+            if s.get("channel") == channel and s.get("week_id") == week_id]
+    if not rows:
+        return {"error": f"No {channel} sales on file for week {week_id}"}, 404
+
+    by_key, err = _channel_week_revenue(channel, week_id)
+    if err:
+        return {"error": err, "channel": channel, "week_id": week_id}, 502
+
+    out = []
+    changed = 0
+    for sale in rows:
+        sku_key = sale.get("sku_key") or ""
+        qty = int(sale.get("quantity") or 0)
+        old_total = sale.get("line_total")
+        hit = by_key.get(sku_key)
+        new_total = None
+
+        if hit is None:
+            status = "not_in_channel"
+        elif hit["quantity"] != qty:
+            status = "quantity_mismatch"
+        else:
+            new_total = round(hit["revenue"], 2)
+            if old_total is not None and abs(float(old_total) - new_total) < 0.005:
+                status = "unchanged"
+            else:
+                changed += 1
+                status = "updated" if do_apply else "would_update"
+                if do_apply:
+                    sale["line_total"] = new_total
+                    sale["unit_price"] = round(hit["revenue"] / qty, 2) if qty else 0.0
+
+        out.append({
+            "sale_id": sale.get("id"),
+            "sku_key": sku_key,
+            "recipe": sale.get("recipe", ""),
+            "quantity": qty,
+            "channel_quantity": (hit["quantity"] if hit else None),
+            "old_line_total": old_total,
+            "new_line_total": new_total,
+            "status": status,
+        })
+
+    if do_apply and changed:
+        _save_json(ORGANIC_SALES_PATH, sales)
+
+    return {
+        "ok": True,
+        "applied": bool(do_apply),
+        "channel": channel,
+        "week_id": week_id,
+        "changed_count": changed,
+        "row_count": len(out),
+        "rows": out,
+    }, 200
+
+
+@app.route("/admin/channel-prices")
+@manager_required
+def channel_prices_page():
+    """Control page for repairing missing Shopify/Clover sale prices."""
+    return render_template("channel_prices.html")
+
+
+@app.route("/admin/channel-prices/weeks")
+@manager_required
+def channel_prices_weeks():
+    """List every channel-week on file and how many rows already have a price.
+    Local scan only — makes no API calls."""
+    return jsonify({"weeks": _channel_weeks_needing_prices()})
+
+
+@app.route("/admin/channel-prices/run", methods=["GET", "POST"])
+@manager_required
+def channel_prices_run():
+    """GET = preview (no writes). POST = apply. One channel-week per call.
+
+    Query: channel=shopify|clover, week=YYYY-MM-DD
+    """
+    channel = (request.args.get("channel") or "").strip().lower()
+    week_id = (request.args.get("week") or "").strip()
+    body, status = _channel_price_repair(
+        channel, week_id, do_apply=(request.method == "POST"))
+    return jsonify(body), status
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
 

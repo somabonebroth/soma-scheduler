@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Channel Sale Prices · Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  .cp-wrap { max-width: 1040px; margin: 0 auto; padding: 24px 16px 60px; }
+  .cp-note { background: var(--amber-bg); border: 1px solid var(--amber-border); border-radius: var(--r-md);
+             padding: 12px 16px; font-size: 13px; line-height: 1.55; color: var(--amber-text-dark); margin: 16px 0; }
+  .wk { background: var(--white); border: 1px solid var(--border); border-radius: var(--r-md);
+        padding: 14px 16px; margin-bottom: 12px; }
+  .wk-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .wk-id { font-size: 15px; font-weight: 700; color: var(--dark); }
+  .wk-meta { font-size: 12px; color: var(--text-light); margin-top: 2px; }
+  .chip { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase;
+          letter-spacing: .05em; padding: 2px 8px; border-radius: 999px; margin-right: 6px; }
+  .chip-shopify { background: var(--green-tint); color: var(--action-green); }
+  .chip-clover  { background: var(--action-blue-bg); color: var(--info-dark); }
+  .chip-done    { background: var(--action-green-bg); color: var(--action-green); }
+  .chip-todo    { background: var(--amber-bg); color: var(--amber-text-dark); }
+  .wk-out { margin-top: 12px; display: none; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 9px; border-bottom: 1px solid var(--grey-border); }
+  th { background: var(--dark); color: var(--white); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .st { font-size: 11px; font-weight: 700; }
+  .st-would_update, .st-updated { color: var(--action-green); }
+  .st-unchanged { color: var(--text-light); }
+  .st-not_in_channel, .st-quantity_mismatch { color: var(--action-red); }
+  .msg { font-size: 13px; margin-top: 10px; }
+  .msg-err { color: var(--action-red); }
+  .btn-sm { padding: 7px 14px; font-size: 12px; }
+</style>
+</head>
+<body class="inv-page">
+<div class="header">
+  <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+  <div class="header-text"><h1>Channel Sale Prices</h1><p>Re-read Shopify &amp; Clover revenue onto imported sales</p></div>
+  <div class="header-right"><a href="/" class="header-btn">⌂ Dashboard</a></div>
+</div>
+
+<div class="cp-wrap">
+  <div class="cp-note">
+    <strong>Price-only repair.</strong> This re-reads a week from the channel and writes
+    <code>line_total</code> / <code>unit_price</code> onto sale rows already on file. It never
+    creates or removes a sale, and never touches quantity, lots, or finished-goods stock —
+    the stock deduction happened at import time and does not run again.
+    <br><br>
+    Preview first. A row is left untouched if the channel can't confirm it — the SKU is gone
+    from the re-read, or the channel's quantity no longer matches what was imported (a refund
+    or order edit since). Those are reported, never guessed at.
+    <br><br>
+    Note Shopify only serves orders from roughly the last 60 days unless the app holds the
+    <code>read_all_orders</code> scope, so older weeks may come back empty.
+  </div>
+
+  <div id="weeks"><div style="padding:24px;color:var(--text-light);font-size:14px;">Loading…</div></div>
+</div>
+
+<script>
+const STATUS_LABEL = {
+  would_update: 'would update', updated: 'updated', unchanged: 'already correct',
+  not_in_channel: 'not in channel — skipped', quantity_mismatch: 'qty changed — skipped',
+};
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function money(v) { return v == null ? '—' : '$' + Number(v).toFixed(2); }
+
+async function loadWeeks() {
+  const host = document.getElementById('weeks');
+  try {
+    const res = await fetch('/admin/channel-prices/weeks');
+    const data = await res.json();
+    const weeks = data.weeks || [];
+    if (!weeks.length) {
+      host.innerHTML = '<div class="card" style="padding:24px;text-align:center;color:var(--text-light);">'
+        + 'No Shopify or Clover sales on file.</div>';
+      return;
+    }
+    host.innerHTML = weeks.map(function (w) {
+      const done = w.priced >= w.rows;
+      const id = w.channel + '-' + w.week_id;
+      return '<div class="wk" id="wk-' + id + '">'
+        + '<div class="wk-head"><div>'
+        + '<div class="wk-id"><span class="chip chip-' + w.channel + '">' + w.channel + '</span>'
+        + 'Week of ' + esc(w.week_id) + '</div>'
+        + '<div class="wk-meta">' + w.rows + ' SKU row(s) · ' + w.units + ' units · '
+        + '<span class="chip ' + (done ? 'chip-done' : 'chip-todo') + '">'
+        + w.priced + ' of ' + w.rows + ' priced</span></div>'
+        + '</div><div>'
+        + '<button class="btn btn-secondary btn-sm" onclick="run(\'' + w.channel + '\',\'' + w.week_id + '\',false)">Preview</button> '
+        + '<button class="btn btn-primary btn-sm" onclick="run(\'' + w.channel + '\',\'' + w.week_id + '\',true)">Apply</button>'
+        + '</div></div>'
+        + '<div class="wk-out" id="out-' + id + '"></div></div>';
+    }).join('');
+  } catch (e) {
+    host.innerHTML = '<div class="msg msg-err">Failed to load: ' + esc(e.message) + '</div>';
+  }
+}
+
+async function run(channel, week, apply) {
+  const out = document.getElementById('out-' + channel + '-' + week);
+  if (apply && !confirm('Write channel prices onto ' + channel + ' sales for week ' + week + '?\n\n'
+      + 'Only unit_price and line_total change. Stock is not touched.')) return;
+  out.style.display = 'block';
+  out.innerHTML = '<div class="msg">Reading ' + esc(channel) + '…</div>';
+  const url = '/admin/channel-prices/run?channel=' + encodeURIComponent(channel)
+            + '&week=' + encodeURIComponent(week);
+  try {
+    const res = await fetch(url, { method: apply ? 'POST' : 'GET' });
+    const d = await res.json();
+    if (!res.ok) {
+      out.innerHTML = '<div class="msg msg-err">' + esc(d.error || ('HTTP ' + res.status)) + '</div>';
+      return;
+    }
+    out.innerHTML =
+      '<table><thead><tr><th>SKU</th><th class="num">Units</th><th class="num">Channel units</th>'
+      + '<th class="num">Current</th><th class="num">From channel</th><th>Status</th></tr></thead><tbody>'
+      + d.rows.map(function (r) {
+          return '<tr><td>' + esc(r.recipe || r.sku_key) + '</td>'
+            + '<td class="num">' + r.quantity + '</td>'
+            + '<td class="num">' + (r.channel_quantity == null ? '—' : r.channel_quantity) + '</td>'
+            + '<td class="num">' + money(r.old_line_total) + '</td>'
+            + '<td class="num">' + money(r.new_line_total) + '</td>'
+            + '<td class="st st-' + r.status + '">' + (STATUS_LABEL[r.status] || r.status) + '</td></tr>';
+        }).join('')
+      + '</tbody></table>'
+      + '<div class="msg">' + (d.applied ? 'Applied — ' : 'Preview — ')
+      + d.changed_count + ' of ' + d.row_count + ' row(s) '
+      + (d.applied ? 'updated.' : 'would change.') + '</div>';
+    if (d.applied) loadWeeks();
+  } catch (e) {
+    out.innerHTML = '<div class="msg msg-err">' + esc(e.message) + '</div>';
+  }
+}
+
+loadWeeks();
+</script>
+</body>
+</html>
