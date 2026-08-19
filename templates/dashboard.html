@@ -58,24 +58,12 @@
   50%      { box-shadow: 0 0 0 8px rgba(176,141,0,0); }
 }
 #prod-record-btn.needs-signoff { animation: prod-pulse 2s ease infinite; }
-/* ── Management list: reduced-weight rows, each showing its sub-sections ── */
-/* Collapsed by default — the daily work is above it, and nine rows of links
-   read as the point of the page when they are only ever an occasional errand.
-   Anything inside that needs the manager TODAY (the unreviewed-days count)
-   is mirrored onto the summary, so collapsing can never hide a flag. */
-/* The summary is the only thing standing between the manager and nine rows of
-   links, so it carries the weight of a real control — same full-width row as
-   the Management Report button above it, not a whispered section label. */
-.mgmt-details { margin-top: 18px; }
-.mgmt-details > summary.mgmt-summary { display: flex; align-items: center; gap: 12px; cursor: pointer; list-style: none; background: var(--card-bg); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 10px; padding: 14px 18px; transition: background .12s, border-color .12s; }
-.mgmt-details > summary.mgmt-summary::-webkit-details-marker { display: none; }
-.mgmt-details > summary.mgmt-summary:hover { background: var(--bg); }
-.mgmt-summary-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.mgmt-summary-title { font-size: 15px; font-weight: 700; color: var(--dark); letter-spacing: .3px; }
-.mgmt-summary-sub { font-size: 12.5px; color: var(--text-light); }
-.mgmt-caret { font-size: 15px; line-height: 1; color: var(--accent); flex-shrink: 0; transition: transform .12s; }
-.mgmt-details[open] .mgmt-caret { transform: rotate(90deg); }
-.mgmt-list { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+/* ── Administration list: reduced-weight rows, each showing its sub-sections ──
+   Just another labelled section — same `.section-label` type and spacing as
+   Schedule / Quick Actions / Buyer Portals above it. It used to be a
+   collapsible card with its own header, which made an occasional errand look
+   like a control; the rows carry themselves. */
+.mgmt-list { display: flex; flex-direction: column; gap: 10px; }
 /* Management Report — full-width entry point, highlighted until the day is reviewed */
 .review-btn { display: flex; align-items: center; gap: 14px; width: 100%; box-sizing: border-box; text-decoration: none; background: var(--card-bg); border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 18px; transition: background .12s, border-color .12s; }
 .review-btn:hover { background: var(--bg); }
@@ -103,7 +91,6 @@
 .mgmt-links a:hover, .mgmt-links button:hover { border-color: var(--accent); color: var(--accent); }
 .mgmt-links .soon { opacity: 0.45; cursor: default; pointer-events: none; }
 .mgmt-badge { background: var(--amber-text); color: var(--white); border-radius: 10px; padding: 1px 8px; font-size: 11px; font-weight: 800; line-height: 18px; display: none; }
-.mgmt-summary .mgmt-badge { margin-left: auto; }
 /* ── Production (tablet) view: bigger tap targets, no chrome ── */
 /* The floor finds a tile by its colour before it reads the label, so colour
    carries the meaning: green = today's work, amber = the end-of-shift flow,
@@ -303,15 +290,7 @@
                 </div>
             </a>
         </div>
-        <details class="mgmt-details">
-            <summary class="mgmt-summary">
-                <span class="mgmt-caret" aria-hidden="true">&#9656;</span>
-                <span class="mgmt-summary-text">
-                    <span class="mgmt-summary-title">Management</span>
-                    <span class="mgmt-summary-sub">Analytics &middot; Records &middot; Inventory &middot; Certification &middot; Contacts &middot; Recipes &middot; Settings</span>
-                </span>
-                <span class="mgmt-badge" id="mgmt-open-badge" title="Days the kitchen ran that you have not reviewed yet"></span>
-            </summary>
+        <div class="section-label">Administration</div>
         <div class="mgmt-list">
             <div class="mgmt-row">
                 <a class="mgmt-title" href="/analytics?tab=sales">Analytics</a>
@@ -350,7 +329,6 @@
                 <div class="mgmt-links"><a href="/company-settings">Company Settings</a><a href="/company-settings">Ripe buffer &amp; credits</a><a href="/ccp-master">CCP Master</a><button type="button" onclick="downloadBackup()">Data Backup</button><a href="/admin/shopify-import">Shopify Import</a><a href="/admin/clover-import">Clover Import</a><a href="/ripe-sku-audit">Ripe SKU Audit</a><a href="/ripe-analytics">Ripe Analytics</a></div>
             </div>
         </div>
-        </details>
     </div>
 {% else %}
     <div class="dashboard-grid prod-grid">
@@ -460,20 +438,15 @@ async function loadProdBadge() {
     if (needsSignoff.length > 0) {
       var badge = document.getElementById('prod-badge');
       var btn   = document.getElementById('prod-record-btn');
-      var open  = document.getElementById('mgmt-open-badge');
       if (badge) { badge.textContent = needsSignoff.length; badge.style.display = 'inline-block'; }
       if (btn)   btn.classList.add('needs-signoff');
-      // Management is collapsed by default, so surface the count on its header.
-      if (open) { open.textContent = needsSignoff.length; open.style.display = 'inline-block'; }
     } else {
       // Signing the last outstanding day should clear the badge, not leave a
       // stale count sitting directly under the brief that cleared it.
       const badge = document.getElementById('prod-badge');
       const btn   = document.getElementById('prod-record-btn');
-      const open  = document.getElementById('mgmt-open-badge');
       if (badge) badge.style.display = 'none';
       if (btn)   btn.classList.remove('needs-signoff');
-      if (open)  open.style.display = 'none';
     }
   } catch(e) {}
 }
