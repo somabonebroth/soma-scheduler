@@ -656,8 +656,13 @@ Quick Actions / Buyer Portals tiles, then reduced-weight expandable rows whose h
 list their sub-sections — Analytics, Completed Production, Inventory, **Sales & Receiving
 Record** (Records tab extracted from organic.html to its own page), Organic
 Certification, Buyers & Suppliers, Recipe Cards, Cleaning Records [placeholder],
-Settings & Other [company settings incl. Ripe buffer + credits, CCP master, backup,
-Shopify/Clover import, Ripe tools — home for every orphan]). The current manager gate
+Settings, Data & Imports). **The "Settings & Other" junk drawer was split 2026-08-19** — it had
+grown to nine unrelated links. Now: **Settings** (Company Settings, Ripe buffer & credits →
+`/company-settings#ripe`, CCP Master) and **Data & Imports** (Data Backup, Shopify Import,
+Clover Import, Channel Prices). The two Ripe tools (`/ripe-sku-audit`, `/ripe-analytics`) moved
+OUT of Administration into a `.portal-tools` strip under the Buyer Portals tiles, where their
+domain already lives. Don't let a catch-all row re-form: a new orphan belongs in whichever of
+those two rows fits, or gets its own. The current manager gate
 (`/api/verify-manager` + sessionStorage on the dashboard's Administration `<details>`)
 is client-side only and gets deleted; recipe write routes become truly manager-only.
 

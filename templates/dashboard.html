@@ -90,6 +90,9 @@
 .mgmt-links a, .mgmt-links button { font-size: 12px; font-weight: 500; color: var(--text); text-decoration: none; background: var(--bg); border: 1px solid var(--border); border-radius: 14px; padding: 5px 12px; cursor: pointer; font-family: inherit; line-height: 1.5; }
 .mgmt-links a:hover, .mgmt-links button:hover { border-color: var(--accent); color: var(--accent); }
 .mgmt-links .soon { opacity: 0.45; cursor: default; pointer-events: none; }
+.portal-tools { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.portal-tools a { font-size: 12px; font-weight: 500; color: var(--text); text-decoration: none; background: var(--bg); border: 1px solid var(--border); border-radius: 14px; padding: 5px 12px; }
+.portal-tools a:hover { border-color: var(--accent); color: var(--accent); }
 .mgmt-badge { background: var(--amber-text); color: var(--white); border-radius: 10px; padding: 1px 8px; font-size: 11px; font-weight: 800; line-height: 18px; display: none; }
 /* ── Production (tablet) view: bigger tap targets, no chrome ── */
 /* The floor finds a tile by its colour before it reads the label, so colour
@@ -290,6 +293,7 @@
                 </div>
             </a>
         </div>
+        <div class="portal-tools"><a href="/ripe-sku-audit">Ripe SKU Audit</a><a href="/ripe-analytics">Ripe Analytics</a></div>
         <div class="section-label">Administration</div>
         <div class="mgmt-list">
             <div class="mgmt-row">
@@ -325,8 +329,12 @@
                 <div class="mgmt-links"><a href="/cleaning-records#closing">Closing history</a><a href="/cleaning-records#jobs">Rotating job history</a><a href="/cleaning-records#closing-list">Closing list</a><a href="/cleaning-records#job-list">Rotating job list</a><a href="/cleaning">Cleaning &amp; Upkeep (floor page)</a></div>
             </div>
             <div class="mgmt-row">
-                <a class="mgmt-title" href="/company-settings">Settings &amp; Other</a>
-                <div class="mgmt-links"><a href="/company-settings">Company Settings</a><a href="/company-settings">Ripe buffer &amp; credits</a><a href="/ccp-master">CCP Master</a><button type="button" onclick="downloadBackup()">Data Backup</button><a href="/admin/shopify-import">Shopify Import</a><a href="/admin/clover-import">Clover Import</a><a href="/admin/channel-prices">Channel Prices</a><a href="/ripe-sku-audit">Ripe SKU Audit</a><a href="/ripe-analytics">Ripe Analytics</a></div>
+                <a class="mgmt-title" href="/company-settings">Settings</a>
+                <div class="mgmt-links"><a href="/company-settings">Company Settings</a><a href="/company-settings#ripe">Ripe buffer &amp; credits</a><a href="/ccp-master">CCP Master</a></div>
+            </div>
+            <div class="mgmt-row">
+                <a class="mgmt-title" href="/admin/channel-prices">Data &amp; Imports</a>
+                <div class="mgmt-links"><button type="button" onclick="downloadBackup()">Data Backup</button><a href="/admin/shopify-import">Shopify Import</a><a href="/admin/clover-import">Clover Import</a><a href="/admin/channel-prices">Channel Prices</a></div>
             </div>
         </div>
     </div>

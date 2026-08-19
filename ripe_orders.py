@@ -828,11 +828,13 @@ def ripe_retail_batch_approve(session_id):
 @ripe_orders_bp.route("/ripe-products")
 @_soma_manager_required
 def ripe_products_page():
-    """Products & pricing are now managed via the Buyer edit page.
-    Redirect to the Buyers & Suppliers page with a hint.
+    """Legacy bookmark catcher: products & pricing moved to the Buyer edit page.
+
+    Redirects to Buyers & Suppliers. It used to flash a hint, but no template in
+    this codebase renders get_flashed_messages(), so that message was only ever
+    banked in the session cookie — dropped rather than left to accumulate.
     """
-    from flask import redirect, url_for, flash
-    flash("Products and pricing are managed in Buyers & Suppliers → Edit Buyer → Catalogue & Pricing.", "info")
+    from flask import redirect
     return redirect("/contacts?tab=buyers")
 
 
