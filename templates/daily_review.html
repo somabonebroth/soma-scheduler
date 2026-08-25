@@ -19,40 +19,57 @@
 <link rel="stylesheet" href="/static/style.css">
 <style>
 /* Page layout only — colours/components come from the shared sheet */
-.dr-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-.dr-date { font-size: 17px; font-weight: 700; color: var(--dark); }
+.dr-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+.dr-date { font-size: 18px; font-weight: 700; color: var(--dark); }
 .dr-nav { margin-left: auto; display: flex; gap: 6px; }
-.dr-nav button { background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer; color: var(--text); }
+.dr-nav button { background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 7px 13px; font-size: 13px; cursor: pointer; color: var(--text); }
 .dr-nav button:disabled { opacity: .4; cursor: default; }
 
-.dr-banner { border-radius: 10px; padding: 12px 15px; font-size: 13.5px; font-weight: 600; margin-bottom: 18px; }
-.dr-handover { background: var(--amber-bg); border: 1px solid var(--amber-border); border-left: 4px solid var(--amber-text); border-radius: var(--r-md); padding: 13px 16px; margin-bottom: 14px; font-size: 14px; line-height: 1.5; color: var(--text); }
-.dr-handover-k { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.1px; color: var(--amber-text-dark); margin-bottom: 4px; }
-.dr-banner.ok { background: var(--action-green-bg); border: 1px solid var(--action-green); color: var(--action-green); }
-.dr-banner.attn { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark, var(--amber-text)); }
+.dr-banner { border-radius: var(--r-md); padding: 13px 17px; font-size: 14px; font-weight: 600; margin-bottom: 22px; }
+.dr-handover { background: var(--amber-bg); border: 1px solid var(--amber-border); border-left: 4px solid var(--amber-text); border-radius: var(--r-md); padding: 14px 17px; margin-bottom: 16px; font-size: 14px; line-height: 1.55; color: var(--text); }
+.dr-handover-k { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.1px; color: var(--amber-text-dark); margin-bottom: 5px; }
+.dr-banner.ok { background: var(--action-green-bg); border: 1px solid var(--action-green); border-left: 4px solid var(--action-green); color: var(--action-green); }
+.dr-banner.attn { background: var(--amber-bg); border: 1px solid var(--amber-border); border-left: 4px solid var(--amber-text); color: var(--amber-text-dark, var(--amber-text)); }
 
-.dr-section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 16px; overflow: hidden; }
-.dr-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 13px 16px; border-bottom: 1px solid var(--border); background: var(--bg); }
-.dr-num { font-size: 11px; font-weight: 700; color: var(--white); background: var(--accent); border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.dr-section { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--r-lg); margin-bottom: 24px; overflow: hidden; }
+.dr-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 14px 18px; border-bottom: 1px solid var(--border); background: var(--bg); }
+.dr-num { font-size: 11px; font-weight: 700; color: var(--white); background: var(--accent); border-radius: 50%; width: 21px; height: 21px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .dr-title { font-size: 13.5px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: .8px; }
 .dr-sub { font-size: 12px; color: var(--text-light); margin-left: auto; }
-.dr-body { padding: 14px 16px; }
+.dr-body { padding: 16px 18px 18px; }
+
+/* Per-section tone: each of the three sections carries its own colour so the
+   eye can find "production / sales / checklists" before reading a word —
+   same idea as the dashboard tiles. All values are existing tokens. */
+.sec-green { border-top: 3px solid var(--accent); }
+.sec-green .dr-head { background: var(--green-tint); }
+.sec-green .dr-num, .sec-green .dr-sublabel::before { background: var(--accent); }
+.sec-blue { border-top: 3px solid var(--info); }
+.sec-blue .dr-head { background: var(--action-blue-bg); }
+.sec-blue .dr-num, .sec-blue .dr-sublabel::before { background: var(--info); }
+.sec-amber { border-top: 3px solid var(--amber-text); }
+.sec-amber .dr-head { background: var(--amber-bg); }
+.sec-amber .dr-num, .sec-amber .dr-sublabel::before { background: var(--amber-text); }
+.sec-notes { border-left: 4px solid var(--amber-text); }
+.sec-notes .dr-head { background: var(--amber-bg); }
 
 .dr-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.dr-table th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-light); font-weight: 700; padding: 0 10px 7px 0; border-bottom: 1px solid var(--border); }
-.dr-table td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+.dr-table th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-light); font-weight: 700; padding: 0 12px 8px 6px; border-bottom: 2px solid var(--border); }
+.dr-table td { padding: 9px 12px 9px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.dr-table tr:nth-child(even) td { background: var(--row-alt); }
 .dr-table tr:last-child td { border-bottom: none; }
-.dr-table td.num, .dr-table th.num { text-align: right; padding-right: 0; white-space: nowrap; }
+.dr-table td.num, .dr-table th.num { text-align: right; padding-right: 6px; white-space: nowrap; }
 .dr-scroll { overflow-x: auto; }
 .dr-lot { font-size: 11px; color: var(--text-light); }
 .dr-tag { font-size: 9.5px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: var(--green-tint, var(--action-green-bg)); color: var(--action-green); border: 1px solid var(--action-green); white-space: nowrap; }
-.dr-totals { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--border); font-size: 13px; color: var(--text-light); }
+.dr-totals { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 12px; padding: 9px 13px; background: var(--bg); border-radius: var(--r-sm); font-size: 13px; color: var(--text-light); }
 .dr-totals b { color: var(--dark); }
-.dr-empty { font-size: 13px; color: var(--text-light); font-style: italic; }
+.dr-totals + .dr-totals { margin-top: 8px; }
+.dr-empty { font-size: 13px; color: var(--text-light); font-style: italic; padding: 2px 0 4px; }
 
 /* LOT# + hot-stamp guide. The stamp is set by hand, face-down, so the guide
    shows the type exactly as it sits in the holder: reversed and mirrored. */
-.dr-lotcard { display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: flex-start; background: var(--bg); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 10px; padding: 13px 16px; margin-bottom: 14px; }
+.dr-lotcard { display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: flex-start; background: var(--green-tint); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: var(--r-md); padding: 15px 18px; margin-bottom: 16px; }
 .dr-lotmain { min-width: 150px; }
 .dr-lotlabel { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-light); margin-bottom: 5px; }
 .dr-lotnum { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 32px; font-weight: 700; letter-spacing: 3px; color: var(--dark); line-height: 1.1; }
@@ -67,23 +84,27 @@
 .dr-labelbtn:hover { background: var(--accent-light); }
 .dr-labelbtn:disabled { opacity: .5; cursor: default; }
 
-.dr-chan { border: 1px solid var(--border); border-radius: 9px; padding: 11px 13px; margin-bottom: 10px; }
+.dr-chan { border: 1px solid var(--border); border-radius: var(--r-md); padding: 12px 15px; margin-bottom: 10px; background: var(--row-alt); }
 .dr-chan-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 7px; }
 .dr-chan-name { font-size: 12.5px; font-weight: 700; color: var(--dark); }
 .dr-chan-fig { font-size: 12.5px; color: var(--text-light); margin-left: auto; }
 .dr-chan-fig b { color: var(--dark); }
 .dr-chan-msg { font-size: 12px; color: var(--text-light); font-style: italic; }
 
-.dr-sublabel { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-light); margin: 16px 0 7px; }
+.dr-sublabel { display: flex; align-items: center; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text); margin: 20px 0 8px; }
+.dr-sublabel::before { content: ''; width: 8px; height: 8px; border-radius: 2px; background: var(--text-light); margin-right: 8px; flex-shrink: 0; }
 .dr-sublabel:first-child { margin-top: 0; }
 
-.dr-issue { display: flex; align-items: flex-start; gap: 9px; padding: 7px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
+.dr-sublabel.attn::before { background: var(--action-red) !important; }
+.dr-issue { display: flex; align-items: flex-start; gap: 9px; padding: 8px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
 .dr-issue:last-child { border-bottom: none; }
 .dr-lvl { font-size: 9.5px; font-weight: 700; padding: 2px 7px; border-radius: 8px; white-space: nowrap; flex-shrink: 0; margin-top: 1px; }
 .dr-lvl.high { background: var(--action-red-bg); border: 1px solid var(--action-red); color: var(--action-red); }
 .dr-lvl.medium { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark, var(--amber-text)); }
-.dr-note { font-size: 13px; padding: 5px 0; }
-.dr-note .src { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--text-light); margin-right: 7px; }
+.dr-note { font-size: 13px; padding: 8px 0; line-height: 1.5; border-bottom: 1px solid var(--border); }
+.dr-note:last-child { border-bottom: none; padding-bottom: 2px; }
+.dr-note:first-child { padding-top: 2px; }
+.dr-note .src { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--amber-text-dark); background: var(--amber-bg); border: 1px solid var(--amber-border); border-radius: 8px; padding: 1px 8px; margin-right: 8px; }
 
 .dr-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .dr-chip { font-size: 11.5px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--white); color: var(--text-light); }
@@ -136,7 +157,7 @@ function offsetFor(iso){
 
 function issuesHtml(list){
     if (!list.length) return '';
-    return '<div class="dr-sublabel">Needs attention</div>' + list.map(i =>
+    return '<div class="dr-sublabel attn">Needs attention</div>' + list.map(i =>
         '<div class="dr-issue"><span class="dr-lvl ' + i.level + '">'
         + (i.level === 'high' ? 'Issue' : 'Check') + '</span><span>' + esc(i.text) + '</span></div>').join('');
 }
@@ -159,7 +180,7 @@ function staffNotesHtml(b){
               + esc(b.handover_note) + '</div>'
             : '')
         + (rest.length
-            ? '<div class="dr-section"><div class="dr-head">'
+            ? '<div class="dr-section sec-notes"><div class="dr-head">'
               + '<span class="dr-title">Notes from staff</span></div>'
               + '<div class="dr-body">' + notesHtml(rest) + '</div></div>'
             : '');
@@ -248,7 +269,7 @@ function productionHtml(p){
         body += '<div class="dr-totals"><span>Kitchen sign-off: <b>' + esc(p.kitchen_signoff) + '</b></span></div>';
     }
     body += issuesHtml(p.issues);
-    return section(1, "What's getting labelled today", p.total_jars ? p.total_jars + ' jars' : '', body);
+    return section(1, "What's getting labelled today", p.total_jars ? p.total_jars + ' jars' : '', body, 'green');
 }
 
 function transactionsHtml(t){
@@ -318,7 +339,7 @@ function transactionsHtml(t){
     // The page navigates back through earlier days, so "yesterday" is only
     // said on the day it is true.
     const when = offset === 1 ? 'yesterday' : brief.label;
-    return section(2, 'Sales & Receiving from ' + when, sub, body);
+    return section(2, 'Sales & Receiving from ' + when, sub, body, 'blue');
 }
 
 function checklistsHtml(c){
@@ -369,11 +390,11 @@ function checklistsHtml(c){
 
     body += issuesHtml(c.issues);
     const done = (c.ccp.completed ? 1 : 0) + (cl.signed ? 1 : 0);
-    return section(3, 'Completed checklists and cleaning', done + ' of 2 signed', body);
+    return section(3, 'Completed checklists and cleaning', done + ' of 2 signed', body, 'amber');
 }
 
-function section(num, title, sub, body){
-    return '<div class="dr-section"><div class="dr-head">'
+function section(num, title, sub, body, tone){
+    return '<div class="dr-section' + (tone ? ' sec-' + tone : '') + '"><div class="dr-head">'
         + '<span class="dr-num">' + num + '</span><span class="dr-title">' + esc(title) + '</span>'
         + (sub ? '<span class="dr-sub">' + esc(sub) + '</span>' : '')
         + '</div><div class="dr-body">' + body + '</div></div>';
