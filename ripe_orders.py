@@ -486,12 +486,15 @@ def ripe_order_action(order_id):
             if _order_obj:
                 _items      = _order_obj.get("items", [])
                 _fzbb_cases = sum(i.get("cases",0) for i in _items if (i.get("format","") or "").upper().startswith(("FZ","BB")))
-                _req_date   = _order_obj.get("requested_date","")
 
                 # SS case minimums were removed 2026-08 — an order of any size is
                 # approvable on any destination. FZ/BB lead times below are
                 # unchanged. See RETAIL_CONTRACT.md.
-                if _fzbb_cases > 0 and _req_date:
+                # The lead time is validated against the delivery_date being
+                # approved for — not the order's original requested_date, which
+                # is frozen at submit time and would make an order that asked
+                # for a too-soon date permanently unapprovable.
+                if _fzbb_cases > 0 and delivery_date:
                     # Lead time only applies when FZ/BB stock cannot cover the
                     # order. If every FZ/BB line is fully in stock, the order
                     # can be picked up same-day. Any shortfall on any line
@@ -533,8 +536,9 @@ def ripe_order_action(order_id):
 
                     if _fzbb_shortfall:
                         try:
-                            _req   = _dt.strptime(_req_date, "%Y-%m-%d").date()
-                            _today = _dt.utcnow().date()
+                            from zoneinfo import ZoneInfo
+                            _req   = _dt.strptime(delivery_date, "%Y-%m-%d").date()
+                            _today = _dt.now(ZoneInfo("America/Toronto")).date()
                             _lead_req = _fzbb_large if _fzbb_cases >= _fzbb_thresh else _fzbb_small
                             _lead_act = (_req - _today).days
                             if _lead_act < _lead_req:
