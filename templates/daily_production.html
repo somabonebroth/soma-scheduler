@@ -117,6 +117,7 @@
 <script>
 var WEEK_ID='{{ week_id }}';
 var DAY_IDX={{ day_idx }};
+const CAN_EDIT={{ 'true' if can_edit else 'false' }};
 var DAYS_LIST=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 var VESSELS=['K1','K2','K3','115L'];
 var productionData=null;
@@ -142,6 +143,19 @@ async function init(){
     buildKettles();buildCCP();
     if(clData.checklist)restoreData(clData.checklist);
     updatePct();
+    if(!CAN_EDIT)applyReadOnly();
+}
+
+function applyReadOnly(){
+    // FOH view: everything visible, nothing touchable. The save routes are
+    // also gated server-side (boh_required), so this is presentation only.
+    const main=document.querySelector('.main');
+    main.querySelectorAll('input,textarea').forEach(function(el){el.disabled=true;});
+    main.querySelectorAll('.label-btn').forEach(function(el){el.style.display='none';});
+    const signoff=document.querySelector('.signoff-section');
+    if(signoff)signoff.style.display='none';
+    const ind=document.getElementById('save-indicator');
+    ind.textContent='View only';ind.className='save-indicator';
 }
 
 function buildKettles(){
@@ -284,6 +298,7 @@ function showWarnings(warnings){
 }
 
 function autoSave(){
+    if(!CAN_EDIT)return;
     var ind=document.getElementById('save-indicator');ind.textContent='Saving...';ind.className='save-indicator';
     if(saveTimeout)clearTimeout(saveTimeout);
     saveTimeout=setTimeout(async function(){
