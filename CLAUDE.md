@@ -703,6 +703,39 @@ Jeremy's decision — the floor has no link to it and sign-off is the HOO's.
 **Still open:** daily checklists + cleaning records (separate design session), `base.html`
 consolidation (deferred). Details in the memory note `project_ux_simplification`.
 
+**THIRD ROLE — FOH (front of house), SHIPPED 2026-08-26 (11 deploys).** `FOH_PASSWORD` →
+`session["role"] = "foh"` (unset = disabled; branch sits between manager and APP in
+`login()`). The FOH dashboard (own `{% elif %}` branch): greeting bar, view-only Today's
+Production + Weekly Schedule, the labelling panel, the three portal tiles, the FOH End of
+Day tile, read-only Recipes. What changed where:
+- **Gates.** New `boh_required` (manager+production, blocks foh) local copies in
+  `production.py`/`cleaning.py`/`end_of_day.py` on the 8 BOH writes (daily-production save,
+  checklist save/complete, BOH closing sign/note, rotation decline, job complete, EOD
+  production sign) + the whole BOH wizard; new `foh_required` (manager+foh) in
+  `cleaning.py`/`end_of_day.py`. `_soma_manager_required` in `ripe_orders.py`/
+  `retail_orders.py` now accepts foh — **FOH has FULL portal actions** (approve/decline/
+  fulfill/pack, whole domain incl. the Ripe tools, by Jeremy's decision); production stays
+  locked out. `daily_production.html` renders read-only for foh via route-passed `can_edit`.
+- **Labelling.** Section 1's renderer lives in the shared partial
+  `templates/_labelling_panel.html` (`lp*`-namespaced JS; `lpSetData`/`lpBodyHtml`), used by
+  BOTH `daily_review.html` and the FOH dashboard — edit the partial, never fork it.
+  `GET /api/labelling-today` (login_required, daily_brief.py) serves a PROJECTION of
+  `_production_section(yesterday)` — rows/lots/totals/total_jars/source only.
+  Portal tiles likewise live in `templates/_portal_tiles.html` (manager + foh branches).
+- **FOH End of Day** (`/foh-end-of-day` + `GET /api/foh-end-of-day`, both `foh_required`,
+  in end_of_day.py; `templates/foh_end_of_day.html`): note → FOH closing list one item at a
+  time → sign → done. No production step, no rotation. Data = `foh_closing_items` +
+  `foh_closing_records` in cleaning_jobs.json (setdefault-seeded), six
+  `/api/cleaning/foh-closing*` routes cloning the BOH contracts exactly (bare-list PUT,
+  snapshot-on-sign, one record per date, pre-sign note upsert). Manager edits the list +
+  reads history on `/cleaning-records` (`#foh-closing`, `#foh-closing-list`).
+- **Management Report.** `foh_day_summary(on)` (cleaning.py) feeds `_checklists_section`:
+  second amber block "Note from front of house" (`foh_handover_note`, source label
+  `"FOH note"` — the string is the coupling, same as the BOH one), an FOH closing sub-block
+  in section 3 ONLY when a record exists (never a missing-FOH issue — FOH may not work
+  daily), subtitle "of 3" only then. **`needs_review` = kitchen ran OR an FOH record
+  exists** — an FOH-only Saturday demands Monday review (Jeremy's call).
+
 ### Coco Market direct ship — PLANNED (2026-08-17)
 
 > **The authoritative spec is `RETAIL_CONTRACT.md`** at this repo's root, kept
