@@ -96,6 +96,24 @@ def manager_required(f):
     return decorated
 
 
+def boh_required(f):
+    """Back-of-house gate: manager + production may act, the FOH role may not
+    (2026-08-26 three-role split). FOH gets its own closing list and note
+    endpoints; the kitchen's sign-offs and rotation stay the kitchen's."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("authenticated"):
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Not authenticated"}), 401
+            return redirect(url_for("login_page"))
+        if (session.get("role") or "manager") == "foh":
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Not available to the FOH role"}), 403
+            return redirect("/")
+        return f(*args, **kwargs)
+    return decorated
+
+
 def _load_cleaning():
     """Load the cleaning data file
     ({jobs, completions, closing_items, closing_records, declines})."""
@@ -252,7 +270,7 @@ def delete_cleaning_job(jid):
 
 
 @cleaning_bp.route("/api/cleaning/jobs/<jid>/complete", methods=["POST"])
-@login_required
+@boh_required
 def complete_cleaning_job(jid):
     """Sign off a job. Body: {staff, date?, notes?}. Resets the job's clock,
     which sends it to the back of the rotation."""
@@ -421,7 +439,7 @@ def get_closing_record():
 
 
 @cleaning_bp.route("/api/cleaning/closing", methods=["POST"])
-@login_required
+@boh_required
 def save_closing_record():
     """Sign off the closing list. Body: {staff, done: {item_id: bool}, notes?, date?}.
 
@@ -474,7 +492,7 @@ def get_closing_records():
 
 
 @cleaning_bp.route("/api/cleaning/closing/note", methods=["POST"])
-@login_required
+@boh_required
 def save_closing_note():
     """Leave the floor's note for management. Body: {note, staff?, date?}.
 
@@ -501,7 +519,7 @@ def save_closing_note():
 
 
 @cleaning_bp.route("/api/cleaning/rotation/decline", methods=["POST"])
-@login_required
+@boh_required
 def decline_rotation():
     """Record that no rotating job was taken tonight. Body: {staff?, date?}.
 

@@ -34,15 +34,21 @@ logger = logging.getLogger(__name__)
 end_of_day_bp = Blueprint("end_of_day", __name__)
 
 
-def login_required(f):
-    """Local copy of app.py's decorator (verbatim) — keeps the blueprint free
-    of an import-time dependency on app.py. Behaviour is identical."""
+def boh_required(f):
+    """Back-of-house gate (local copy pattern — keeps the blueprint free of an
+    import-time dependency on app.py): manager + production may act, the FOH
+    role may not (2026-08-26 three-role split). This wizard files the day and
+    signs the kitchen's closing list; FOH gets its own flow."""
     @wraps(f)
     def decorated(*args, **kwargs):
         if not session.get("authenticated"):
             if request.is_json or request.path.startswith("/api/"):
                 return jsonify({"error": "Not authenticated"}), 401
             return redirect(url_for("login_page"))
+        if (session.get("role") or "manager") == "foh":
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Not available to the FOH role"}), 403
+            return redirect("/")
         return f(*args, **kwargs)
     return decorated
 
@@ -123,14 +129,14 @@ def _production_step(week_id, day_idx):
 
 
 @end_of_day_bp.route("/end-of-day")
-@login_required
+@boh_required
 def end_of_day_page():
     """The end-of-shift flow — one step on screen at a time."""
     return render_template("end_of_day.html")
 
 
 @end_of_day_bp.route("/api/end-of-day", methods=["GET"])
-@login_required
+@boh_required
 def get_end_of_day():
     """Everything the flow needs in one read: today's production and CCP state,
     the note already left, the closing list in the manager's order with what is
@@ -180,7 +186,7 @@ def get_end_of_day():
 
 
 @end_of_day_bp.route("/api/end-of-day/production", methods=["POST"])
-@login_required
+@boh_required
 def sign_production():
     """Step 1's sign-off — files the day. Body: {staff, checks:{key: bool}, date?}.
 

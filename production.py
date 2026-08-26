@@ -70,6 +70,24 @@ def manager_required(f):
     return decorated
 
 
+def boh_required(f):
+    """Back-of-house gate: manager + production may act, the FOH role may not
+    (2026-08-26 three-role split). FOH reads the kitchen's pages, but filing a
+    day, saving checklist data and the consumption chain stay off-limits."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("authenticated"):
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Not authenticated"}), 401
+            return redirect(url_for("login_page"))
+        if (session.get("role") or "manager") == "foh":
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Not available to the FOH role"}), 403
+            return redirect("/")
+        return f(*args, **kwargs)
+    return decorated
+
+
 def require_valid_week(f):
     """Local copy of app.py's decorator. Validation logic is unchanged; the
     actual check delegates to app.validate_week_id at REQUEST time (the
@@ -424,7 +442,7 @@ def _preserve_filing(week_id, day_idx, data):
 
 
 @production_bp.route("/api/daily-production/<week_id>/<int:day_idx>/save", methods=["POST"])
-@login_required
+@boh_required
 @require_valid_week
 @require_valid_day
 def save_daily_production(week_id, day_idx):
@@ -459,7 +477,7 @@ def get_checklist_route(week_id, day_idx):
 
 
 @production_bp.route("/api/checklist/<week_id>/<int:day_idx>", methods=["POST"])
-@login_required
+@boh_required
 @require_valid_week
 @require_valid_day
 def save_checklist_route(week_id, day_idx):
@@ -517,7 +535,7 @@ def file_checklist(week_id, day_idx, data):
 
 
 @production_bp.route("/api/checklist/<week_id>/<int:day_idx>/complete", methods=["POST"])
-@login_required
+@boh_required
 @require_valid_week
 @require_valid_day
 def complete_checklist(week_id, day_idx):
