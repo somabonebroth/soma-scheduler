@@ -324,6 +324,21 @@
             <div class="dash-btn tile-green" onclick="goToDay(0)" style="cursor:pointer;"><span class="icon">&#9654;</span><span class="label">Today's Production</span><span class="sublabel" id="today-label">Loading...</span></div>
             <a href="/weekly-schedule" class="dash-btn tile-green"><span class="icon">&#128197;</span><span class="label">Weekly Schedule</span><span class="sublabel">View only</span></a>
         </div>
+        <div class="section-label">What's getting labelled today</div>
+        <div class="card" id="labelling-card" style="padding:16px 18px;">Loading&hellip;</div>
+        {% include "_labelling_panel.html" %}
+        <script>
+        (async function loadLabelling(){
+            const el = document.getElementById('labelling-card');
+            try {
+                const d = await (await fetch('/api/labelling-today')).json();
+                lpSetData(d.production, d.date);
+                el.innerHTML = lpBodyHtml();
+            } catch(e) {
+                el.innerHTML = '<div class="dr-empty">Could not load today&rsquo;s labelling.</div>';
+            }
+        })();
+        </script>
         <div class="section-label">Orders</div>
         {% include "_portal_tiles.html" %}
         <div class="section-label">Reference</div>
