@@ -67,22 +67,8 @@
 .dr-totals + .dr-totals { margin-top: 8px; }
 .dr-empty { font-size: 13px; color: var(--text-light); font-style: italic; padding: 2px 0 4px; }
 
-/* LOT# + hot-stamp guide. The stamp is set by hand, face-down, so the guide
-   shows the type exactly as it sits in the holder: reversed and mirrored. */
-.dr-lotcard { display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: flex-start; background: var(--green-tint); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: var(--r-md); padding: 15px 18px; margin-bottom: 16px; }
-.dr-lotmain { min-width: 150px; }
-.dr-lotlabel { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-light); margin-bottom: 5px; }
-.dr-lotnum { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 32px; font-weight: 700; letter-spacing: 3px; color: var(--dark); line-height: 1.1; }
-.dr-lotmeta { font-size: 12px; color: var(--text-light); margin-top: 5px; }
-.dr-stamp { flex: 1; min-width: 240px; }
-.dr-slots { display: flex; gap: 5px; }
-.dr-slot { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.dr-slot .ch { width: 30px; height: 38px; display: flex; align-items: center; justify-content: center; background: var(--white); border: 1px solid var(--grey-light, var(--border)); border-radius: 4px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 21px; font-weight: 700; color: var(--dark); transform: scaleX(-1); }
-.dr-slot .n { font-size: 9px; color: var(--text-light); }
-.dr-stampnote { font-size: 11.5px; color: var(--text-light); margin-top: 7px; max-width: 44em; }
-.dr-labelbtn { margin-left: 10px; background: var(--accent); color: var(--white); border: none; border-radius: 6px; padding: 5px 11px; font-size: 11.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
-.dr-labelbtn:hover { background: var(--accent-light); }
-.dr-labelbtn:disabled { opacity: .5; cursor: default; }
+/* LOT# + hot-stamp guide styles live in _labelling_panel.html (shared with
+   the FOH dashboard since 2026-08-26). */
 
 .dr-chan { border: 1px solid var(--border); border-radius: var(--r-md); padding: 12px 15px; margin-bottom: 10px; background: var(--row-alt); }
 .dr-chan-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 7px; }
@@ -131,6 +117,7 @@
     <div id="dr-content">Loading&hellip;</div>
 </div>
 
+{% include "_labelling_panel.html" %}
 <script>
 // New JS — let/const per the forward-only policy.
 let offset = 1;                 // days back from today; 1 = yesterday
@@ -186,85 +173,12 @@ function staffNotesHtml(b){
             : '');
 }
 
-// The stamp is set face-down, so the type reads right-to-left with every
-// character mirrored. Show it in that order, mirrored, with slot numbers —
-// doing the reversal in your head at a hot machine is where errors come from.
-function stampHtml(block){
-    return '<div class="dr-lotlabel">Hot stamp &mdash; set the type in this order</div>'
-        + '<div class="dr-slots">' + block.stamp.map((ch, i) =>
-            '<span class="dr-slot"><span class="ch">' + esc(ch) + '</span>'
-            + '<span class="n">' + (i + 1) + '</span></span>').join('') + '</div>'
-        + '<div class="dr-stampnote">Slot 1 is the left-hand character as you face the holder. '
-        + 'Every character is shown mirrored, exactly as the type sits. '
-        + 'Checked in a mirror it must read <b>' + esc(block.lot) + '</b>.</div>';
-}
-
-function lotsHtml(p){
-    if (!p.lots || !p.lots.length) return '';
-    return p.lots.map(b =>
-        '<div class="dr-lotcard"><div class="dr-lotmain">'
-        + '<div class="dr-lotlabel">Lot # on these jars</div>'
-        + '<div class="dr-lotnum">' + esc(b.lot) + '</div>'
-        + '<div class="dr-lotmeta">' + b.jars + ' jar' + (b.jars === 1 ? '' : 's')
-        + (b.batched_on ? ' &middot; batched ' + esc(b.batched_on) : '')
-        + '<br>' + esc(b.products.join(', ')) + '</div></div>'
-        + '<div class="dr-stamp">' + stampHtml(b) + '</div></div>').join('');
-}
-
-async function generateLabel(idx){
-    const r = brief.production.rows[idx];
-    if (!r) return;
-    const btn = document.getElementById('lbl-' + idx);
-    if (btn) { btn.disabled = true; btn.textContent = '…'; }
-    try {
-        const res = await fetch('/api/label', {
-            method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({brand_name: r.brand, recipe_name: r.recipe,
-                                  recipe_format: r.format, lot: r.lot,
-                                  production_date: r.production_date}),
-        });
-        if (!res.ok) { alert('Label generation failed'); return; }
-        const url = URL.createObjectURL(await res.blob());
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'Label_' + r.recipe.replace(/[^a-zA-Z0-9]/g, '_') + '_' + r.lot + '.pdf';
-        a.click();
-        URL.revokeObjectURL(url);
-    } catch (e) {
-        alert('Label generation failed');
-    } finally {
-        if (btn) { btn.disabled = false; btn.textContent = 'Label'; }
-    }
-}
-
 function productionHtml(p){
-    let body = '';
-    if (!p.rows.length) {
-        body += '<div class="dr-empty">No production recorded for this day.</div>';
-    } else {
-        const showBatch = p.rows.some(r => r.batched_on && r.batched_on !== brief.date);
-        body += lotsHtml(p);
-        body += '<div class="dr-scroll"><table class="dr-table"><tr>'
-            + '<th>Product</th><th>Vessel</th><th>Lot</th>'
-            + (showBatch ? '<th>Batched</th>' : '')
-            + '<th class="num">Jars</th><th class="num"></th></tr>'
-            + p.rows.map((r, i) =>
-                '<tr><td>' + esc(r.item)
-                + (r.certification ? ' <span class="dr-tag">' + esc(r.certification) + '</span>' : '')
-                + '</td><td>' + esc(r.vessel || '—') + '</td>'
-                + '<td class="dr-lot">' + esc(r.lot || '—') + '</td>'
-                + (showBatch ? '<td class="dr-lot">' + esc(r.batched_on || '—') + '</td>' : '')
-                + '<td class="num"><b>' + r.quantity + '</b></td>'
-                + '<td class="num">' + (r.recipe
-                    ? '<button class="dr-labelbtn" id="lbl-' + i + '" onclick="generateLabel(' + i + ')">Label</button>'
-                    : '') + '</td></tr>').join('')
-            + '</table></div>';
-        body += '<div class="dr-totals"><span>Total jars: <b>' + p.total_jars + '</b></span>'
-            + p.totals.map(t => '<span>' + esc(t[0]) + ': <b>' + t[1] + '</b></span>').join('') + '</div>';
-        if (p.source === 'checklist') {
-            body += '<div class="dr-totals"><span>Counts taken from the day&rsquo;s checklist — this day predates the production-run records.</span></div>';
-        }
-    }
+    // Lots + stamp guide + table + totals come from the shared labelling
+    // panel (_labelling_panel.html); this page adds its own sign-off line,
+    // issues and section chrome on top.
+    lpSetData(p, brief.date);
+    let body = lpBodyHtml();
     if (p.kitchen_signoff) {
         body += '<div class="dr-totals"><span>Kitchen sign-off: <b>' + esc(p.kitchen_signoff) + '</b></span></div>';
     }

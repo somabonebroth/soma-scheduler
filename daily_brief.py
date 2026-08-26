@@ -54,6 +54,19 @@ def manager_required(f):
     return decorated
 
 
+def login_required(f):
+    """Local copy of app.py's decorator (verbatim) — added 2026-08-26 for the
+    one non-manager read in this module, /api/labelling-today."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("authenticated"):
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Not authenticated"}), 401
+            return redirect(url_for("login_page"))
+        return f(*args, **kwargs)
+    return decorated
+
+
 def _parse_date(s):
     """Parse YYYY-MM-DD → date, or None if missing/invalid."""
     try:
@@ -574,6 +587,26 @@ def get_daily_brief():
     """
     on = _parse_date(request.args.get("date")) or (date.today() - timedelta(days=1))
     return jsonify(_build_brief(on))
+
+
+@daily_brief_bp.route("/api/labelling-today", methods=["GET"])
+@login_required
+def labelling_today():
+    """Section 1 of the brief for any logged-in role — the FOH dashboard's
+    labelling panel (?date=, default yesterday: jars counted yesterday are the
+    ones physically labelled this morning, same semantics as the brief).
+
+    Deliberately a PROJECTION of _production_section, not the whole dict:
+    notes, issues, CCP state, sign-off and stock exceptions are management
+    context and stay behind /api/daily-brief."""
+    on = _parse_date(request.args.get("date")) or (date.today() - timedelta(days=1))
+    prod = _production_section(on)
+    return jsonify({
+        "date": on.isoformat(),
+        "label": on.strftime("%A %d %B"),
+        "production": {k: prod.get(k) for k in
+                       ("rows", "lots", "totals", "total_jars", "source")},
+    })
 
 
 @daily_brief_bp.route("/api/daily-brief/channels", methods=["GET"])
