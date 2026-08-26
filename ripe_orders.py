@@ -323,15 +323,16 @@ def create_ripe_sale_records(order, delivery_date, payment_key):
 
 
 def _soma_manager_required(f):
-    """Decorator: require an authenticated Soma session with the manager role.
-    Buyer-portal order handling is the HOO's desk, not the production tablet
-    (2026-08-18 two-role split). Sessions from before roles existed count as
-    manager (see app.current_role)."""
+    """Decorator: require an authenticated Soma session with the manager or
+    FOH role. Buyer-portal order handling moved off the HOO's desk to front
+    of house (2026-08-26 three-role split; full actions by Jeremy's call) —
+    the production tablet stays locked out. Sessions from before roles
+    existed count as manager (see app.current_role)."""
     @wraps(f)
     def wrapper(*args, **kwargs):
         if not session.get("authenticated"):
             return jsonify({"error": "Not authenticated"}), 401
-        if (session.get("role") or "manager") != "manager":
+        if (session.get("role") or "manager") not in ("manager", "foh"):
             if request.path.startswith("/api/"):
                 return jsonify({"error": "Manager access required"}), 403
             return redirect("/")
