@@ -160,11 +160,15 @@ function notesHtml(list){
 // note, per-vessel finish notes, closing/cleaning notes) follow beneath it
 // rather than being scattered through the three sections.
 function staffNotesHtml(b){
-    const rest = (b.notes || []).filter(n => n.source !== 'Note for management');
-    if (!b.handover_note && !rest.length) return '';
+    const rest = (b.notes || []).filter(n => n.source !== 'Note for management' && n.source !== 'FOH note');
+    if (!b.handover_note && !b.foh_handover_note && !rest.length) return '';
     return (b.handover_note
             ? '<div class="dr-handover"><div class="dr-handover-k">Note from the floor</div>'
               + esc(b.handover_note) + '</div>'
+            : '')
+        + (b.foh_handover_note
+            ? '<div class="dr-handover"><div class="dr-handover-k">Note from front of house</div>'
+              + esc(b.foh_handover_note) + '</div>'
             : '')
         + (rest.length
             ? '<div class="dr-section sec-notes"><div class="dr-head">'
@@ -286,6 +290,23 @@ function checklistsHtml(c){
         }
     }
 
+    // FOH closing shows only when a record exists — front of house may not
+    // work every day, so a missing record is silence, not an issue.
+    const fcl = c.foh_closing || {};
+    if (fcl.exists) {
+        body += '<div class="dr-sublabel">FOH closing checklist</div>';
+        if (!fcl.signed) {
+            body += '<div class="dr-empty">A note was left but the list was not signed.</div>';
+        } else {
+            body += '<div class="dr-totals"><span>Signed by <b>' + esc(fcl.staff) + '</b></span>'
+                + '<span>Done: <b>' + fcl.done_count + '/' + fcl.total + '</b></span></div>';
+            if ((fcl.missed || []).length) {
+                body += '<div class="dr-chips" style="margin-top:8px;">' + fcl.missed.map(m =>
+                    '<span class="dr-chip no">&#10007; ' + esc(m) + '</span>').join('') + '</div>';
+            }
+        }
+    }
+
     body += '<div class="dr-sublabel">Cleaning &amp; upkeep rotation</div>';
     const jobs = (c.rotation && c.rotation.jobs_done) || [];
     if (!jobs.length) {
@@ -303,8 +324,10 @@ function checklistsHtml(c){
     }
 
     body += issuesHtml(c.issues);
-    const done = (c.ccp.completed ? 1 : 0) + (cl.signed ? 1 : 0);
-    return section(3, 'Completed checklists and cleaning', done + ' of 2 signed', body, 'amber');
+    // FOH joins the count only on days it left a record.
+    const done = (c.ccp.completed ? 1 : 0) + (cl.signed ? 1 : 0) + (fcl.exists && fcl.signed ? 1 : 0);
+    const of = 2 + (fcl.exists ? 1 : 0);
+    return section(3, 'Completed checklists and cleaning', done + ' of ' + of + ' signed', body, 'amber');
 }
 
 function section(num, title, sub, body, tone){
@@ -349,7 +372,7 @@ async function load(){
     const banner = b.all_clear
         ? '<div class="dr-banner ok">&#10003; Nothing needs your attention.</div>'
         : '<div class="dr-banner attn">' + b.actions.length + ' thing'
-          + (b.actions.length === 1 ? '' : 's') + ' need your attention'
+          + (b.actions.length === 1 ? ' needs' : 's need') + ' your attention'
           + (high ? ' — ' + high + ' important' : '') + '.</div>';
 
     el.innerHTML = '<div class="dr-bar"><span class="dr-date">' + esc(b.label) + '</span>'

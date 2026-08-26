@@ -491,6 +491,12 @@ def _checklists_section(on, prod):
         clean = {"closing": {}, "jobs_done": [], "jobs_overdue": 0,
                  "declined": False, "manager_note": ""}
     closing = clean.get("closing") or {}
+    try:
+        foh = cleaning.foh_day_summary(on)
+    except Exception:
+        logger.warning("daily brief: FOH summary failed", exc_info=True)
+        foh = {"closing": {}, "manager_note": "", "exists": False}
+    foh_closing = foh.get("closing") or {}
 
     notes, issues = [], []
     for issue in prod.get("ccp_issues", []):
@@ -499,8 +505,14 @@ def _checklists_section(on, prod):
         # The floor's End of Day handover note — deliberately first, it is the
         # one line written FOR this page rather than salvaged from a record.
         notes.insert(0, {"source": "Note for management", "text": clean["manager_note"]})
+    if foh.get("manager_note"):
+        # Front of house's handover — its own source label so the page can
+        # render it as a second amber block and _build_brief can extract it.
+        notes.append({"source": "FOH note", "text": foh["manager_note"]})
     if closing.get("notes"):
         notes.append({"source": "Closing", "text": closing["notes"]})
+    if foh_closing.get("notes"):
+        notes.append({"source": "FOH closing", "text": foh_closing["notes"]})
     for j in clean.get("jobs_done", []):
         if j.get("notes"):
             notes.append({"source": j.get("title", "Cleaning job"), "text": j["notes"]})
@@ -523,6 +535,16 @@ def _checklists_section(on, prod):
             text += " (+%d more)" % (len(missed) - 3)
         issues.append({"level": "medium", "text": text})
 
+    # FOH: a day with no record raises NOTHING — front of house may not work
+    # every day, and the system can't tell a day off from a forgotten one.
+    # Only a signed-but-incomplete record is worth a flag.
+    if foh.get("exists") and foh_closing.get("signed") and not foh_closing.get("complete"):
+        missed = foh_closing.get("missed", [])
+        text = "FOH closing incomplete — missed: " + " · ".join(missed[:3])
+        if len(missed) > 3:
+            text += " (+%d more)" % (len(missed) - 3)
+        issues.append({"level": "medium", "text": text})
+
     return {
         "ccp": {
             "completed": prod.get("completed", False),
@@ -532,12 +554,14 @@ def _checklists_section(on, prod):
             "kitchen_signoff": prod.get("kitchen_signoff", ""),
         },
         "closing": closing,
+        "foh_closing": {**foh_closing, "exists": foh.get("exists", False)},
         "rotation": {"jobs_done": clean.get("jobs_done", []),
                      "overdue": clean.get("jobs_overdue", 0),
                      "declined": clean.get("declined", False)},
         "notes": notes,
         "issues": issues,
         "_kitchen_ran": kitchen_ran,
+        "_foh_ran": foh.get("exists", False),
     }
 
 
@@ -561,6 +585,8 @@ def _build_brief(on):
     # the floor leaves it at End of Day expecting the office to read it first.
     handover = next((n["text"] for n in checks["notes"]
                      if n.get("source") == "Note for management"), "")
+    foh_handover = next((n["text"] for n in checks["notes"]
+                         if n.get("source") == "FOH note"), "")
     signoffs = app._load_daily_signoffs()
     return {
         "date": on.isoformat(),
@@ -571,10 +597,14 @@ def _build_brief(on):
         "checklists": checks,
         "notes": notes,
         "handover_note": handover,
+        "foh_handover_note": foh_handover,
         "actions": actions,
         "all_clear": not actions,
         "signoff": signoffs.get(on.isoformat()),
-        "needs_review": checks["_kitchen_ran"],
+        # Reviewable when the kitchen ran OR front of house left a record —
+        # an FOH Saturday note must still reach the Monday review (2026-08-26,
+        # Jeremy's call).
+        "needs_review": checks["_kitchen_ran"] or checks["_foh_ran"],
     }
 
 
