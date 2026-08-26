@@ -218,3 +218,60 @@ def sign_production():
         return jsonify({"error": "Could not file the day: %s" % e}), 500
     return jsonify({"ok": True, "filename": filename, "warnings": warnings,
                     "signed_at": cl["completed_at"]})
+
+
+# ── Front of house (2026-08-26) — FOH's own flow: note → closing → done.
+#    No production step (that's BOH's) and no rotating jobs. Data lives on
+#    cleaning.py's foh_closing_* keys; this blueprint still owns NO data. ────
+
+def foh_required(f):
+    """Front-of-house gate (local copy pattern): manager + foh may act,
+    production may not — this wizard signs the FOH closing list."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("authenticated"):
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Not authenticated"}), 401
+            return redirect(url_for("login_page"))
+        if (session.get("role") or "manager") not in ("manager", "foh"):
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "FOH access required"}), 403
+            return redirect("/")
+        return f(*args, **kwargs)
+    return decorated
+
+
+@end_of_day_bp.route("/foh-end-of-day")
+@foh_required
+def foh_end_of_day_page():
+    """The FOH end-of-shift flow — one step on screen at a time."""
+    return render_template("foh_end_of_day.html")
+
+
+@end_of_day_bp.route("/api/foh-end-of-day", methods=["GET"])
+@foh_required
+def get_foh_end_of_day():
+    """Everything the FOH flow needs in one read: the note already left and
+    the FOH closing list in the manager's order with what is already ticked.
+
+    Also reports which steps are done so a re-opened flow resumes rather than
+    asking twice — the same resume contract as /api/end-of-day, minus the
+    production and rotation halves FOH doesn't have.
+    """
+    on = _parse_date(request.args.get("date")) or date.today()
+    data = cleaning._load_cleaning()
+    iso = on.isoformat()
+    rec = next((r for r in data["foh_closing_records"] if r.get("date") == iso), None)
+    closing = cleaning._closing_record_view(
+        rec or {"date": iso, "staff": "", "notes": "", "items": []},
+        data["foh_closing_items"])
+
+    return jsonify({
+        "date": iso,
+        "label": on.strftime("%A %d %B"),
+        "note": (rec or {}).get("manager_note", ""),
+        "note_saved": bool((rec or {}).get("manager_note_ts")),
+        "closing": closing,
+        "closing_signed": bool((rec or {}).get("staff")),
+        "staff": (rec or {}).get("staff", ""),
+    })
