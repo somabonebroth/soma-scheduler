@@ -108,6 +108,7 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # CSRF mitigation
 
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "soma2026")
 MANAGER_PASSWORD = os.environ.get("MANAGER_PASSWORD", "")  # empty = feature disabled
+FOH_PASSWORD = os.environ.get("FOH_PASSWORD", "")  # empty = FOH login disabled
 VESSELS = ["K1", "K2", "K3", "115L"]
 DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
@@ -171,7 +172,7 @@ def login_required(f):
 
 
 def current_role():
-    """Role of the current session: "manager" | "production" | None.
+    """Role of the current session: "manager" | "production" | "foh" | None.
 
     Sessions created before roles existed (authenticated, no role key) count
     as manager so nothing changes for anyone on deploy; they pick up a real
@@ -886,12 +887,15 @@ def login_page():
 def login():
     """Handle login form submission and set the session + role.
 
-    Two roles, one login form (2026-08-18):
+    Three roles, one login form (third added 2026-08-26):
       MANAGER_PASSWORD -> "manager"    (the HOO's desktop: everything)
+      FOH_PASSWORD     -> "foh"        (front of house: portals, labelling,
+                                        view-only schedules, own end of day)
       APP_PASSWORD     -> "production" (kitchen tablet: schedule, cleaning,
                                         read-only recipes)
     If MANAGER_PASSWORD is not configured, APP_PASSWORD grants manager so the
     split is simply "off" rather than locking everyone out of management.
+    An unset FOH_PASSWORD simply disables the FOH login.
     """
     import hmac as _hmac
     data = request.json or {}
@@ -903,6 +907,8 @@ def login():
     role = None
     if _match(MANAGER_PASSWORD):
         role = "manager"
+    elif _match(FOH_PASSWORD):
+        role = "foh"
     elif _match(APP_PASSWORD):
         role = "manager" if not MANAGER_PASSWORD else "production"
     if role:

@@ -130,7 +130,7 @@
 <body>
 <div class="header">
     <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-    <div class="header-text"><h1>SOMA BONE BROTH</h1><p>{{ 'Management Dashboard' if role == 'manager' else 'Production' }}</p></div>
+    <div class="header-text"><h1>SOMA BONE BROTH</h1><p>{{ 'Management Dashboard' if role == 'manager' else ('Front of House' if role == 'foh' else 'Production') }}</p></div>
     <div class="header-right"><button class="header-btn" onclick="doLogout()">Log Out</button></div>
 </div>
 <div class="main">
@@ -315,6 +315,20 @@
                 <a class="mgmt-title" href="/admin/channel-prices">Data &amp; Imports</a>
                 <div class="mgmt-links"><button type="button" onclick="downloadBackup()">Data Backup</button><a href="/admin/shopify-import">Shopify Import</a><a href="/admin/clover-import">Clover Import</a><a href="/admin/channel-prices">Channel Prices</a></div>
             </div>
+        </div>
+    </div>
+{% elif role == 'foh' %}
+    <div class="dashboard-grid prod-grid">
+        <div class="section-label">Today</div>
+        <div class="dash-row">
+            <div class="dash-btn tile-green" onclick="goToDay(0)" style="cursor:pointer;"><span class="icon">&#9654;</span><span class="label">Today's Production</span><span class="sublabel" id="today-label">Loading...</span></div>
+            <a href="/weekly-schedule" class="dash-btn tile-green"><span class="icon">&#128197;</span><span class="label">Weekly Schedule</span><span class="sublabel">View only</span></a>
+        </div>
+        <div class="section-label">Orders</div>
+        {% include "_portal_tiles.html" %}
+        <div class="section-label">Reference</div>
+        <div class="dash-row">
+            <a href="/recipes" class="dash-btn tile-blue"><span class="icon">&#128209;</span><span class="label">Recipe Cards</span><span class="sublabel">Read-only</span></a>
         </div>
     </div>
 {% else %}

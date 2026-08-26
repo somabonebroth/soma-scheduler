@@ -493,6 +493,7 @@ bugs were found and **fixed**:
 - `SECRET_KEY`
 - `APP_PASSWORD`
 - `MANAGER_PASSWORD`
+- `FOH_PASSWORD` — front-of-house login (third role, 2026-08-26); unset = FOH login disabled
 - `INTERNAL_API_KEY` — used by Ripe→Soma calls AND by the Shopify/Clover cron jobs
 - `RIPE_PORTAL_URL`
 - `RETAIL_PORTAL_URL` — the SBBC Wholesale Portal (retail_orders.py); set 2026-07-02
