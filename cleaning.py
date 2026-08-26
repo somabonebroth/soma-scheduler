@@ -52,6 +52,18 @@ DEFAULT_CLOSING_ITEMS = [
     {"id": "c10", "label": "Lights off; doors and windows locked"},
 ]
 
+# Front of house has its own closing list (2026-08-26 three-role split) —
+# separate items, separate records, edited by the manager like the BOH one.
+# These seeds are placeholders; the manager rewrites them on /cleaning-records.
+DEFAULT_FOH_CLOSING_ITEMS = [
+    {"id": "f1", "label": "Retail fridges and displays closed and faced"},
+    {"id": "f2", "label": "Front counters and tables wiped down"},
+    {"id": "f3", "label": "Till closed out and secured"},
+    {"id": "f4", "label": "Front-of-house floors swept"},
+    {"id": "f5", "label": "Signage brought in"},
+    {"id": "f6", "label": "Front lights off; door locked"},
+]
+
 
 def slot_for(interval_days):
     """Group an interval into its rotation slot. The floor reads the list by
@@ -114,15 +126,35 @@ def boh_required(f):
     return decorated
 
 
+def foh_required(f):
+    """Front-of-house gate: manager + foh may act, production may not — the
+    mirror of boh_required, for signing the FOH closing list and note."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("authenticated"):
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "Not authenticated"}), 401
+            return redirect(url_for("login_page"))
+        if (session.get("role") or "manager") not in ("manager", "foh"):
+            if request.is_json or request.path.startswith("/api/"):
+                return jsonify({"error": "FOH access required"}), 403
+            return redirect("/")
+        return f(*args, **kwargs)
+    return decorated
+
+
 def _load_cleaning():
     """Load the cleaning data file
-    ({jobs, completions, closing_items, closing_records, declines})."""
+    ({jobs, completions, closing_items, closing_records, declines,
+      foh_closing_items, foh_closing_records})."""
     data = _load_json(CLEANING_PATH, {})
     data.setdefault("jobs", [])
     data.setdefault("completions", [])
     data.setdefault("closing_items", [dict(i) for i in DEFAULT_CLOSING_ITEMS])
     data.setdefault("closing_records", [])
     data.setdefault("declines", [])
+    data.setdefault("foh_closing_items", [dict(i) for i in DEFAULT_FOH_CLOSING_ITEMS])
+    data.setdefault("foh_closing_records", [])
     return data
 
 
@@ -374,6 +406,36 @@ def day_summary(on):
             "manager_note": (rec or {}).get("manager_note", "")}
 
 
+def foh_day_summary(on):
+    """The FOH side of one date, for the daily brief: the FOH closing gate,
+    the FOH note for management, and whether a record exists at all — a day
+    front of house didn't work has no record and must raise no issue."""
+    data = _load_cleaning()
+    iso = on.isoformat()
+
+    rec = next((r for r in data["foh_closing_records"] if r.get("date") == iso), None)
+    if rec is None:
+        closing = {"signed": False, "complete": False, "staff": "", "notes": "",
+                   "missed": [], "done_count": 0,
+                   "total": len(data["foh_closing_items"])}
+    else:
+        items = rec.get("items") or []
+        missed = [i["label"] for i in items if not i.get("done")]
+        closing = {
+            "signed": bool(rec.get("staff")),
+            "complete": bool(rec.get("complete")),
+            "staff": rec.get("staff", ""),
+            "notes": rec.get("notes", ""),
+            "missed": missed,
+            "done_count": len(items) - len(missed),
+            "total": len(items),
+        }
+
+    return {"closing": closing,
+            "manager_note": (rec or {}).get("manager_note", ""),
+            "exists": rec is not None}
+
+
 # ── Closing checklist (the daily gate) ────────────────────────────────────────
 
 def _closing_record_view(rec, items):
@@ -510,6 +572,124 @@ def save_closing_note():
         rec = {"id": datetime.now().strftime("%Y%m%d%H%M%S%f"), "date": on,
                "created_at": now, "staff": "", "notes": "", "items": []}
         data["closing_records"].append(rec)
+    rec["manager_note"] = (body.get("note") or "").strip()
+    if body.get("staff"):
+        rec["manager_note_by"] = (body.get("staff") or "").strip()
+    rec["manager_note_ts"] = now
+    _save_cleaning(data)
+    return jsonify({"ok": True, "note": rec["manager_note"]})
+
+
+# ── FOH closing checklist (2026-08-26) — deliberate clones of the BOH routes
+#    above with foh_ keys, matching the codebase's near-duplicate ethos. Same
+#    contracts: PUT takes a BARE LIST, records snapshot labels at sign time,
+#    one record per date, the note upserts a shell record pre-sign. ──────────
+
+@cleaning_bp.route("/api/cleaning/foh-closing/items", methods=["GET"])
+@login_required
+def get_foh_closing_items():
+    """The FOH closing checklist definition."""
+    return jsonify(_load_cleaning()["foh_closing_items"])
+
+
+@cleaning_bp.route("/api/cleaning/foh-closing/items", methods=["PUT"])
+@manager_required
+def update_foh_closing_items():
+    """Replace the FOH closing checklist definition. Body: [{id?, label}, ...]."""
+    body = request.get_json(force=True)
+    if not isinstance(body, list):
+        return jsonify({"error": "Expected a list of items"}), 400
+    items, seen = [], set()
+    for idx, raw in enumerate(body):
+        label = (raw.get("label") or "").strip() if isinstance(raw, dict) else str(raw).strip()
+        if not label:
+            continue
+        iid = (raw.get("id") or "").strip() if isinstance(raw, dict) else ""
+        if not iid or iid in seen:
+            iid = datetime.now().strftime("%Y%m%d%H%M%S%f") + "-" + str(idx)
+        seen.add(iid)
+        items.append({"id": iid, "label": label})
+    if not items:
+        return jsonify({"error": "At least one item required"}), 400
+    data = _load_cleaning()
+    data["foh_closing_items"] = items
+    _save_cleaning(data)
+    return jsonify({"ok": True, "items": items})
+
+
+@cleaning_bp.route("/api/cleaning/foh-closing", methods=["GET"])
+@login_required
+def get_foh_closing_record():
+    """Today's FOH closing record (?date=), merged against the current list."""
+    data = _load_cleaning()
+    on = _parse_date(request.args.get("date")) or date.today()
+    rec = next((r for r in data["foh_closing_records"] if r.get("date") == on.isoformat()), None)
+    if rec is None:
+        rec = {"date": on.isoformat(), "staff": "", "notes": "", "items": []}
+    return jsonify(_closing_record_view(rec, data["foh_closing_items"]))
+
+
+@cleaning_bp.route("/api/cleaning/foh-closing", methods=["POST"])
+@foh_required
+def save_foh_closing_record():
+    """Sign off the FOH closing list. Body: {staff, done: {item_id: bool}, notes?, date?}."""
+    body = request.get_json(force=True) or {}
+    staff = (body.get("staff") or "").strip()
+    if not staff:
+        return jsonify({"error": "Staff name required"}), 400
+    on = (_parse_date(body.get("date")) or date.today()).isoformat()
+    done = body.get("done") or {}
+
+    data = _load_cleaning()
+    items = [{"id": i["id"], "label": i["label"], "done": bool(done.get(i["id"]))}
+             for i in data["foh_closing_items"]]
+    rec = next((r for r in data["foh_closing_records"] if r.get("date") == on), None)
+    now = datetime.now().isoformat(timespec="seconds")
+    if rec is None:
+        rec = {"id": datetime.now().strftime("%Y%m%d%H%M%S%f"), "date": on, "created_at": now}
+        data["foh_closing_records"].append(rec)
+    rec["items"] = items
+    rec["staff"] = staff
+    rec["notes"] = (body.get("notes") or "").strip()
+    rec["complete"] = bool(items) and all(i["done"] for i in items)
+    rec["ts"] = now
+    _save_cleaning(data)
+    return jsonify({"ok": True, "record": rec})
+
+
+@cleaning_bp.route("/api/cleaning/foh-closing/records", methods=["GET"])
+@manager_required
+def get_foh_closing_records():
+    """FOH closing history, newest first. ?limit= (default 30), ?from=&to=."""
+    try:
+        limit = max(1, min(500, int(request.args.get("limit", 30))))
+    except ValueError:
+        limit = 30
+    frm = _parse_date(request.args.get("from"))
+    to = _parse_date(request.args.get("to"))
+    recs = _load_cleaning()["foh_closing_records"]
+    if frm:
+        recs = [r for r in recs if (r.get("date") or "") >= frm.isoformat()]
+    if to:
+        recs = [r for r in recs if (r.get("date") or "") <= to.isoformat()]
+    recs = sorted(recs, key=lambda r: r.get("date", ""), reverse=True)
+    return jsonify(recs[:limit])
+
+
+@cleaning_bp.route("/api/cleaning/foh-closing/note", methods=["POST"])
+@foh_required
+def save_foh_closing_note():
+    """FOH's note for management. Body: {note, staff?, date?}. Upserts the
+    day's FOH closing record (written before the list is signed)."""
+    body = request.get_json(force=True) or {}
+    on = (_parse_date(body.get("date")) or date.today()).isoformat()
+    data = _load_cleaning()
+    rec = next((r for r in data["foh_closing_records"] if r.get("date") == on), None)
+    now = datetime.now().isoformat(timespec="seconds")
+    if rec is None:
+        rec = {"id": datetime.now().strftime("%Y%m%d%H%M%S%f"), "date": on,
+               "created_at": now, "staff": "", "notes": "", "items": []}
+        data["foh_closing_records"].append(rec)
     rec["manager_note"] = (body.get("note") or "").strip()
     if body.get("staff"):
         rec["manager_note_by"] = (body.get("staff") or "").strip()
