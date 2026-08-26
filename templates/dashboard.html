@@ -271,28 +271,7 @@
             </div>
         </div>
         <div class="section-label">Buyer Portals</div>
-        <div class="dash-row">
-            <a href="/ripe-orders" class="dash-btn portal-tile tint-blue" id="ripe-orders-btn">
-                <span class="label">Ripe Wholesale</span>
-                <div class="portal-stats">
-                    <div class="portal-stat" id="ripe-stat-new" title="New orders awaiting approval"><span>New</span><span class="n">–</span></div>
-                    <div class="portal-stat" id="ripe-stat-prog" title="Approved orders awaiting fulfillment"><span>In process</span><span class="n">–</span></div>
-                </div>
-            </a>
-            <a href="/ripe-retail" class="dash-btn portal-tile tint-amber" id="ripe-retail-btn">
-                <span class="label">Ripe Retail</span>
-                <div class="portal-stats">
-                    <div class="portal-stat" id="ripe-retail-stat" title="Paid parcels waiting to be packed"><span>To pack</span><span class="n">–</span></div>
-                </div>
-            </a>
-            <a href="/retail-orders" class="dash-btn portal-tile tint-green" id="retail-orders-btn">
-                <span class="label">Soma Orders</span>
-                <div class="portal-stats">
-                    <div class="portal-stat" id="retail-stat-new" title="New orders awaiting approval"><span>New</span><span class="n">–</span></div>
-                    <div class="portal-stat" id="retail-stat-prog" title="Approved orders awaiting delivery"><span>In process</span><span class="n">–</span></div>
-                </div>
-            </a>
-        </div>
+        {% include "_portal_tiles.html" %}
         <div class="portal-tools"><a href="/ripe-sku-audit">Ripe SKU Audit</a><a href="/ripe-analytics">Ripe Analytics</a></div>
         <div class="section-label">Administration</div>
         <div class="mgmt-list">
@@ -460,37 +439,8 @@ async function loadProdBadge() {
 }
 loadProdBadge();
 
-// Buyer portal tiles — live counts. red = new (pending), amber = in process.
-function setPortalStat(id, n, tone){
-  const el = document.getElementById(id); if (!el) return;
-  const v = (typeof n === 'number') ? n : 0;
-  el.querySelector('.n').textContent = v;
-  el.classList.remove('hot','warm');
-  if (v > 0) el.classList.add(tone);
-}
-(async function loadRipeCounts() {
-  try {
-    const d = await (await fetch('/api/ripe-orders/pending-count')).json();
-    setPortalStat('ripe-stat-new', d.count, 'hot');
-    setPortalStat('ripe-stat-prog', d.in_progress, 'warm');
-    if (d.count > 0) document.getElementById('ripe-orders-btn').classList.add('has-pending');
-  } catch(e) {}
-})();
-(async function loadRipeRetailCount() {
-  try {
-    const d = await (await fetch('/api/ripe-retail/pack-count')).json();
-    setPortalStat('ripe-retail-stat', d.count, 'hot');
-    if (d.count > 0) document.getElementById('ripe-retail-btn').classList.add('has-pending');
-  } catch(e) {}
-})();
-(async function loadRetailCounts() {
-  try {
-    const d = await (await fetch('/api/retail-orders/pending-count')).json();
-    setPortalStat('retail-stat-new', d.count, 'hot');
-    setPortalStat('retail-stat-prog', d.in_progress, 'warm');
-    if (d.count > 0) document.getElementById('retail-orders-btn').classList.add('has-pending');
-  } catch(e) {}
-})();
+// Portal tiles + their live-count JS moved to _portal_tiles.html (shared
+// with the FOH dashboard, 2026-08-26).
 
 // ── Dashboard Record Sale modal ──
 async function openDashSaleModal(){
