@@ -86,7 +86,10 @@ ripe_orders.py      — Flask Blueprint handling Ripe order workflow within Soma
                       unconfigured / 502 portal-or-SMTP failure, so run the cron with
                       `curl -f`; a zero-order month still sends). Both share
                       `_build_bookkeeping_csv` so button and email can never disagree.
-                      Also the CREDIT LEDGER card (2026-09-10) at the top of /ripe-orders:
+                      Also the CREDIT LEDGER (2026-09-10): `GET /api/ripe-credit-ledger`
+                      feeds the "Credit History" block in Company Settings' Ripe Portal
+                      card (company_settings.html, loaded async so settings never blocks
+                      on the portal; Jeremy moved it there from /ripe-orders same day) —
                       per-credit issued/used/remaining with the orders that drew each one.
                       Soma only stores REMAINING balances (a depleted credit is dropped
                       from company_info on approve), so `_credit_ledger` reconstructs

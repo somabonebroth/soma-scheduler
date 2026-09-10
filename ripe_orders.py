@@ -462,9 +462,6 @@ def ripe_orders_page():
     """Render the Ripe orders page: awaiting-payment orders plus settled orders grouped by month."""
     status, data = _ripe_request("GET", "/api/internal/orders")
     orders = data if isinstance(data, list) else []
-    # Credit ledger reads the FULL order list (before the retail filter) —
-    # retail orders never apply credits today, but the join should not care.
-    credit_ledger, credit_totals = _credit_ledger(orders)
     # Retail direct-ship parcels live on /ripe-retail. They share the "pending"
     # status with unapproved wholesale orders, so without this filter they'd
     # show up here as wholesale orders awaiting approval.
@@ -489,8 +486,23 @@ def ripe_orders_page():
     return render_template("ripe_orders.html",
         awaiting_orders=awaiting_orders, settled_months=settled_months,
         pending_count=pending_count, configured=configured, error=error,
-        service_fees=service_fees, service_fee_outstanding=service_fee_outstanding,
-        credit_ledger=credit_ledger, credit_totals=credit_totals)
+        service_fees=service_fees, service_fee_outstanding=service_fee_outstanding)
+
+
+@ripe_orders_bp.route("/api/ripe-credit-ledger")
+@_soma_manager_required
+def ripe_credit_ledger():
+    """Credit history for Company Settings: issued/used/remaining per credit.
+
+    Loaded async by company_settings.html so the settings page never blocks
+    on the Ripe portal. A 502 carries the portal error for a status line.
+    """
+    status, data = _ripe_request("GET", "/api/internal/orders")
+    if status != 200 or not isinstance(data, list):
+        err = data.get("error") if isinstance(data, dict) else "Unknown error"
+        return jsonify({"error": err}), 502
+    rows, totals = _credit_ledger(data)
+    return jsonify({"credits": rows, "totals": totals})
 
 
 @ripe_orders_bp.route("/api/ripe-orders/service-fees/<fee_id>", methods=["PATCH"])

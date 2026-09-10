@@ -75,6 +75,13 @@
       <button type="button" id="add-credit-btn" class="btn btn-secondary" style="margin-top:10px;">+ Add credit</button>
       <div style="font-size:11px;color:var(--text-light);margin-top:6px;">Give each credit a name and amount. Ripe can apply any portion of each to an e-transfer order; the balance auto-depletes when you approve.</div>
     </div>
+    <div id="credit-history" hidden style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:18px;">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;">Credit History</div>
+        <div id="credit-history-totals" style="font-size:12px;color:var(--text-light);"></div>
+      </div>
+      <div id="credit-history-body" style="display:flex;flex-direction:column;gap:12px;"></div>
+    </div>
     <div style="border-top:1px solid var(--border);padding-top:16px;">
       <div style="font-size:12px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;">Order Rules</div>
       <div class="rule-grid">
@@ -174,6 +181,51 @@ function scrapeCredits() {
 document.getElementById('add-credit-btn').addEventListener('click', function () {
   G('credits-list').insertAdjacentHTML('beforeend', creditRowHTML({ id: genCreditId(), name: '', amount: '' }));
 });
+
+// ─── Credit history — issued/used/remaining, joined from Ripe's orders ───
+// Loaded async so the settings page never waits on the Ripe portal.
+function money(n) { return '$' + Number(n || 0).toFixed(2); }
+function creditHistoryHTML(c) {
+  const spent = c.remaining <= 0.005;
+  const uses = (c.uses || []).map(u =>
+    '<span style="font-variant-numeric:tabular-nums;">' + escAttr(u.date) + ' · '
+    + (u.order_number ? '#' + escAttr(u.order_number) : escAttr(u.order_id))
+    + ' · −' + money(u.amount) + (u.pending ? ' <em>(pending)</em>' : '') + '</span>'
+  ).join('');
+  return '<div' + (spent ? ' style="opacity:.65;"' : '') + '>'
+    + '<div style="display:flex;align-items:baseline;gap:8px;font-size:13px;">'
+    + '<strong>' + escAttr(c.name) + '</strong>'
+    + (spent ? '<span style="background:var(--bg);color:var(--text-light);font-size:10px;padding:1px 7px;border-radius:10px;">fully used</span>' : '')
+    + '<span style="margin-left:auto;font-size:12px;color:var(--text-light);font-variant-numeric:tabular-nums;">'
+    + (c.used > 0 ? money(c.used) + ' used · ' : '')
+    + '<strong style="color:' + (spent ? 'var(--text-light)' : 'var(--action-green)') + ';">' + money(c.remaining) + '</strong> of ' + money(c.issued) + ' left</span>'
+    + '</div>'
+    + '<div style="height:8px;border-radius:4px;background:var(--grey-border);overflow:hidden;margin-top:5px;">'
+    + '<div style="height:100%;width:' + (100 - (c.used_pct || 0)) + '%;background:var(--action-green);"></div></div>'
+    + (c.reserved > 0 ? '<div style="font-size:11px;color:var(--warning-text);margin-top:4px;">⏳ ' + money(c.reserved) + ' reserved by a pending order — depletes when you approve it.</div>' : '')
+    + (uses ? '<div style="font-size:11px;color:var(--text-light);margin-top:4px;display:flex;flex-direction:column;gap:2px;">' + uses + '</div>'
+            : '<div style="font-size:11px;color:var(--text-light);margin-top:4px;font-style:italic;">Not used yet.</div>')
+    + '</div>';
+}
+async function loadCreditHistory() {
+  const wrap = G('credit-history');
+  try {
+    const res = await fetch('/api/ripe-credit-ledger');
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || 'Ripe portal unreachable');
+    if (!d.credits || !d.credits.length) return; // nothing issued yet — stay hidden
+    G('credit-history-totals').innerHTML =
+      money(d.totals.issued) + ' issued · ' + money(d.totals.used) + ' used · '
+      + '<strong style="color:var(--action-green);">' + money(d.totals.remaining) + ' remaining</strong>';
+    G('credit-history-body').innerHTML = d.credits.map(creditHistoryHTML).join('');
+    wrap.hidden = false;
+  } catch (e) {
+    G('credit-history-totals').textContent = 'Could not load history: ' + e.message;
+    G('credit-history-body').innerHTML = '';
+    wrap.hidden = false;
+  }
+}
+loadCreditHistory();
 
 (function(){
   var back = document.getElementById('nav-back');
