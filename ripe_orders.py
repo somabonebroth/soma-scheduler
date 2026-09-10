@@ -869,27 +869,111 @@ def ripe_packing_slip(order_id):
     )
 
 
+def _build_bookkeeping_csv(date_from=None, date_to=None):
+    """Fetch Ripe orders and build the bookkeeping CSV (one row per order).
+
+    Includes only approved + fulfilled orders — Soma records the sale at
+    approval, so this matches Soma's own books; pending and declined orders
+    are not revenue. Window is on the ORDER date (created_at, inclusive);
+    the fulfillment date is a column so either basis can be read off.
+
+    Returns (error, payload): error is a message when the Ripe portal can't
+    be reached, else payload is (csv_text, order_count, sum_total).
+    """
+    import io, csv
+    status, data = _ripe_request("GET", "/api/internal/orders")
+    if status != 200 or not isinstance(data, list):
+        msg = data.get("error") if isinstance(data, dict) else "Unexpected response"
+        return f"Could not fetch orders from the Ripe portal: {msg}", None
+
+    rows = []
+    for o in data:
+        if o.get("status") not in ("approved", "fulfilled"):
+            continue
+        od = (o.get("created_at") or "")[:10]
+        if date_from or date_to:
+            if not od:
+                continue          # a period report must not repeat undated rows every month
+            if date_from and od < date_from:
+                continue
+            if date_to and od > date_to:
+                continue
+        rows.append(o)
+    rows.sort(key=lambda o: (o.get("created_at") or ""))
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["Order ID", "Order Date", "Fulfillment Date", "Status", "Mode",
+                "Payment", "Payment Status", "Paid Date", "Cases", "Units",
+                "Subtotal", "Surcharge", "Small Order Fee", "Credit Applied", "Total"])
+
+    def _f(v):
+        try:
+            return float(v or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    sums = {"subtotal": 0.0, "surcharge": 0.0, "fee": 0.0, "credit": 0.0, "total": 0.0}
+    for o in rows:
+        subtotal = _f(o.get("subtotal"))
+        surcharge = _f(o.get("surcharge"))
+        fee = _f(o.get("small_order_fee"))
+        credit = _f(o.get("credit_applied"))
+        total = _f(o.get("total"))
+        sums["subtotal"] += subtotal
+        sums["surcharge"] += surcharge
+        sums["fee"] += fee
+        sums["credit"] += credit
+        sums["total"] += total
+        w.writerow([
+            o.get("id", ""), (o.get("created_at") or "")[:10],
+            o.get("fulfillment_date") or "", o.get("status", ""),
+            o.get("order_mode") or "wholesale",
+            o.get("payment_label", ""), o.get("payment_status", ""),
+            (o.get("paid_at") or "")[:10],
+            sum(int(i.get("cases") or 0) for i in o.get("items", [])),
+            sum(int(i.get("units") or 0) for i in o.get("items", [])),
+            f"{subtotal:.2f}", f"{surcharge:.2f}", f"{fee:.2f}",
+            f"{credit:.2f}", f"{total:.2f}",
+        ])
+    w.writerow(["TOTAL", "", "", "", "", "", "", "", "", "",
+                f"{sums['subtotal']:.2f}", f"{sums['surcharge']:.2f}",
+                f"{sums['fee']:.2f}", f"{sums['credit']:.2f}", f"{sums['total']:.2f}"])
+    return None, (buf.getvalue(), len(rows), sums["total"])
+
+
+def _valid_iso_date(s):
+    """True when s parses as a real YYYY-MM-DD date."""
+    try:
+        datetime.strptime(s, "%Y-%m-%d")
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
 @ripe_orders_bp.route("/ripe-orders/export.csv")
 @_soma_manager_required
 def ripe_export_csv():
-    """Export all Ripe orders as CSV."""
-    import io, csv
-    status, data = _ripe_request("GET", "/api/internal/orders")
-    orders = data if isinstance(data, list) else []
-    buf = io.StringIO()
-    w = csv.writer(buf)
-    w.writerow(["Order ID","Status","Date","Delivery","Payment","Cases","Units","Subtotal","Total"])
-    for o in orders:
-        w.writerow([
-            o.get("id",""), o.get("status",""), o.get("created_at","")[:10],
-            o.get("delivery_label",""), o.get("payment_label",""),
-            sum(i.get("cases",0) for i in o.get("items",[])),
-            sum(i.get("units",0) for i in o.get("items",[])),
-            o.get("subtotal",""), o.get("total",""),
-        ])
-    from flask import Response
-    return Response(buf.getvalue(), mimetype="text/csv",
-                    headers={"Content-Disposition": "attachment; filename=ripe-orders.csv"})
+    """Bookkeeping CSV of approved + fulfilled Ripe orders.
+
+    Query params (optional, inclusive, on the order date):
+        from=YYYY-MM-DD   to=YYYY-MM-DD
+    Omitting both exports every approved/fulfilled order.
+    """
+    date_from = (request.args.get("from") or "").strip() or None
+    date_to = (request.args.get("to") or "").strip() or None
+    for d in (date_from, date_to):
+        if d and not _valid_iso_date(d):
+            return jsonify({"error": f"Invalid date: {d} (expected YYYY-MM-DD)"}), 400
+    error, payload = _build_bookkeeping_csv(date_from, date_to)
+    if error:
+        return jsonify({"error": error}), 502
+    csv_text, _, _ = payload
+    name = "ripe-sales"
+    if date_from or date_to:
+        name += f"-{date_from or 'start'}_to_{date_to or 'today'}"
+    return Response(csv_text, mimetype="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename={name}.csv"})
 
 
 @ripe_orders_bp.route("/ripe-sku-audit")

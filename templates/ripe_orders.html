@@ -81,6 +81,10 @@
 
 .toast{position:fixed;bottom:20px;right:20px;background:var(--text);color:var(--white);padding:10px 16px;border-radius:8px;font-size:13px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;}
 .toast.show{opacity:1;}
+
+.export-bar{margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.export-label{font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;}
+.export-bar input[type=date]{padding:5px 7px;border:1px solid var(--grey-border);border-radius:6px;font-size:12px;}
 </style>
 </head>
 <body>
@@ -103,6 +107,13 @@
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
     <h2 style="margin:0;font-size:18px;">Ripe Orders</h2>
     {% if pending_count > 0 %}<span class="tag tag-pending">{{ pending_count }} pending</span>{% endif %}
+    <div class="export-bar">
+      <span class="export-label">Bookkeeping export</span>
+      <input type="date" id="export-from">
+      <span style="color:var(--text-light);font-size:12px;">to</span>
+      <input type="date" id="export-to">
+      <button class="btn-outline" onclick="downloadBookkeepingCsv()">&#11015; CSV</button>
+    </div>
   </div>
 
   <div class="filter-bar">
@@ -307,6 +318,25 @@
 var _filter = 'all';
 var _approveOrderId = null;
 var _approvePaymentKey = null;
+
+// Bookkeeping export — default the range to the last full calendar month.
+(function () {
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const last = new Date(now.getFullYear(), now.getMonth(), 0);
+  const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  document.getElementById('export-from').value = iso(first);
+  document.getElementById('export-to').value = iso(last);
+})();
+
+function downloadBookkeepingCsv() {
+  const from = document.getElementById('export-from').value;
+  const to = document.getElementById('export-to').value;
+  const params = new URLSearchParams();
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  window.location = '/ripe-orders/export.csv' + (params.toString() ? '?' + params.toString() : '');
+}
 
 function setFilter(f, btn) {
   _filter = f;
