@@ -388,12 +388,83 @@ def _group_orders_by_month(orders):
     return months
 
 
+def _credit_ledger(orders):
+    """Join current credit balances with the usage recorded on Ripe's orders.
+
+    Soma only stores each credit's REMAINING balance (company_info drops a
+    credit entirely once approval depletes it to zero), so the issued amount
+    is reconstructed per credit id: issued = remaining + what approved orders
+    drew. Declined orders are skipped — their credit was never depleted. A
+    pending order's draw is still inside the remaining balance, so it is
+    reported as `reserved`, never added to `used`. Hand-edits to a balance in
+    Company Settings shift the inferred issued figure; that is inherent.
+    Returns (rows, totals) — rows active-first, then fully-used.
+    """
+    from app import _load_company_info, _active_ripe_credits
+    try:
+        active = _active_ripe_credits(_load_company_info())
+    except Exception:
+        logger.warning("Credit ledger: could not read company info", exc_info=True)
+        active = []
+
+    ledger = {}
+
+    def slot(cid, name):
+        if cid not in ledger:
+            ledger[cid] = {"id": cid, "name": name or "Credit", "used": 0.0,
+                           "reserved": 0.0, "remaining": 0.0, "uses": []}
+        elif name and ledger[cid]["name"] == "Credit":
+            ledger[cid]["name"] = name
+        return ledger[cid]
+
+    for o in sorted(orders, key=lambda o: o.get("created_at", "")):
+        status = o.get("status")
+        if status == "declined":
+            continue
+        for a in (o.get("credits_applied") or []):
+            try:
+                amt = round(float(a.get("amount") or 0), 2)
+            except (TypeError, ValueError):
+                continue
+            if amt <= 0:
+                continue
+            entry = slot(str(a.get("id") or ""), str(a.get("name") or "").strip())
+            bucket = "reserved" if status == "pending" else "used"
+            entry[bucket] = round(entry[bucket] + amt, 2)
+            entry["uses"].append({
+                "order_id": o.get("id"),
+                "order_number": o.get("order_number"),
+                "date": (o.get("created_at") or "")[:10],
+                "amount": amt,
+                "pending": status == "pending",
+            })
+    for c in active:
+        slot(c["id"], c["name"])["remaining"] = c["amount"]
+
+    rows = []
+    for e in ledger.values():
+        e["issued"] = round(e["used"] + e["remaining"], 2)
+        e["used_pct"] = round(e["used"] / e["issued"] * 100) if e["issued"] > 0 else 100
+        e["uses"].reverse()  # newest first
+        rows.append(e)
+    rows.sort(key=lambda e: (e["remaining"] <= 0.005, e["name"].lower()))
+    totals = {
+        "issued": round(sum(e["issued"] for e in rows), 2),
+        "used": round(sum(e["used"] for e in rows), 2),
+        "remaining": round(sum(e["remaining"] for e in rows), 2),
+    }
+    return rows, totals
+
+
 @ripe_orders_bp.route("/ripe-orders")
 @_soma_manager_required
 def ripe_orders_page():
     """Render the Ripe orders page: awaiting-payment orders plus settled orders grouped by month."""
     status, data = _ripe_request("GET", "/api/internal/orders")
     orders = data if isinstance(data, list) else []
+    # Credit ledger reads the FULL order list (before the retail filter) —
+    # retail orders never apply credits today, but the join should not care.
+    credit_ledger, credit_totals = _credit_ledger(orders)
     # Retail direct-ship parcels live on /ripe-retail. They share the "pending"
     # status with unapproved wholesale orders, so without this filter they'd
     # show up here as wholesale orders awaiting approval.
@@ -418,7 +489,8 @@ def ripe_orders_page():
     return render_template("ripe_orders.html",
         awaiting_orders=awaiting_orders, settled_months=settled_months,
         pending_count=pending_count, configured=configured, error=error,
-        service_fees=service_fees, service_fee_outstanding=service_fee_outstanding)
+        service_fees=service_fees, service_fee_outstanding=service_fee_outstanding,
+        credit_ledger=credit_ledger, credit_totals=credit_totals)
 
 
 @ripe_orders_bp.route("/api/ripe-orders/service-fees/<fee_id>", methods=["PATCH"])

@@ -86,6 +86,15 @@ ripe_orders.py      — Flask Blueprint handling Ripe order workflow within Soma
                       unconfigured / 502 portal-or-SMTP failure, so run the cron with
                       `curl -f`; a zero-order month still sends). Both share
                       `_build_bookkeeping_csv` so button and email can never disagree.
+                      Also the CREDIT LEDGER card (2026-09-10) at the top of /ripe-orders:
+                      per-credit issued/used/remaining with the orders that drew each one.
+                      Soma only stores REMAINING balances (a depleted credit is dropped
+                      from company_info on approve), so `_credit_ledger` reconstructs
+                      issued = remaining + draws on approved/fulfilled orders'
+                      `credits_applied`; declined orders skipped (never depleted), a
+                      pending order's draw shown as "reserved" (still inside remaining —
+                      don't double count). Read-only; hand-edited balances shift the
+                      inferred issued figure by design.
 retail_orders.py    — Flask Blueprint (added 2026-07-02): SBBC Wholesale Portal order
                       ingestion, mirroring ripe_orders.py (which shares a live contract
                       with Ripe and stays untouched). /retail-orders admin page +
