@@ -39,6 +39,7 @@ from ledger import ledger_bp
 from cleaning import cleaning_bp
 from daily_brief import daily_brief_bp
 from end_of_day import end_of_day_bp
+from delivery_zone_routes import delivery_zones_bp
 import shopify_importer
 import clover_importer
 
@@ -99,6 +100,7 @@ app.register_blueprint(ledger_bp)
 app.register_blueprint(cleaning_bp)
 app.register_blueprint(end_of_day_bp)
 app.register_blueprint(daily_brief_bp)
+app.register_blueprint(delivery_zones_bp)
 
 # Session lifetime — 4 hours. After this the user must log in again.
 from datetime import timedelta as _timedelta

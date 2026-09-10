@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Delivery Zones — Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  /* Page layout only — colours and components come from the shared sheet. */
+  .main { max-width: 960px; }
+  .lookup-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .lookup-row label { display: block; font-size: 12px; font-weight: 600; color: var(--text-light); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .04em; }
+  .lookup-row input { padding: 11px 12px; border: 1px solid var(--border); border-radius: var(--r-md); font-size: 18px; font-family: inherit; background: var(--white); color: var(--text); }
+  .lookup-row input:focus { outline: none; border-color: var(--accent); }
+  #postal { width: 150px; letter-spacing: .1em; text-transform: uppercase; }
+  #cases { width: 110px; }
+  .lookup-row .hint { flex-basis: 100%; font-size: 12px; color: var(--text-light); margin-top: 2px; }
+  .store-line { font-size: 12px; color: var(--text-light); margin-top: 10px; }
+
+  .result { display: none; }
+  .result.show { display: block; }
+  .zone-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+  .zone-pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; font-weight: 700; font-size: 16px; border: 1px solid transparent; }
+  .zone-pill .n { font-size: 22px; }
+  .zone-1 { background: var(--action-green-bg); color: var(--action-green); border-color: var(--green-light); }
+  .zone-2 { background: var(--action-blue-bg); color: var(--info-dark); border-color: var(--info-light); }
+  .zone-3 { background: var(--amber-bg); color: var(--amber-text-dark); border-color: var(--amber-border); }
+  .zone-4 { background: var(--bg); color: var(--grey-dark); border-color: var(--grey-border); }
+  .zone-code { font-size: 22px; font-weight: 700; letter-spacing: .08em; font-variant-numeric: tabular-nums; }
+  .zone-matched { font-size: 12px; color: var(--text-light); }
+  .zone-matched code { background: var(--bg); padding: 2px 6px; border-radius: 4px; }
+
+  .terms { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .term { background: var(--row-alt); border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; }
+  .term .k { font-size: 11px; font-weight: 600; color: var(--text-light); text-transform: uppercase; letter-spacing: .04em; }
+  .term .v { font-size: 20px; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .term .v.free { color: var(--action-green); }
+  .term .s { font-size: 12px; color: var(--text-light); margin-top: 2px; }
+
+  .order-box { border-radius: var(--r-md); padding: 12px 14px; margin-bottom: 12px; border: 1px solid var(--border); }
+  .order-box.ok { background: var(--action-green-bg); border-color: var(--green-light); }
+  .order-box.short { background: var(--action-red-bg); border-color: var(--action-red); }
+  .order-box .headline { font-size: 16px; font-weight: 700; }
+  .order-box .detail { font-size: 13px; margin-top: 4px; }
+  .note { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark); border-radius: var(--r-md); padding: 10px 14px; font-size: 13px; margin-top: 8px; }
+  .note.contact { background: var(--bg); border-color: var(--grey-border); color: var(--text); }
+
+  table.ref { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.ref th, table.ref td { padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  table.ref th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-light); font-weight: 600; }
+  table.ref td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  table.ref .zn { display: inline-block; width: 26px; height: 26px; line-height: 24px; text-align: center; border-radius: 50%; font-weight: 700; border: 1px solid transparent; }
+  table.ref .rn { font-size: 12px; color: var(--text-light); margin-top: 3px; }
+  details.patterns { margin-top: 8px; }
+  details.patterns summary { cursor: pointer; font-size: 12px; color: var(--accent); font-weight: 600; }
+  .pattern-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .pattern-list code { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-size: 12px; }
+  .rules { font-size: 12px; color: var(--text-light); line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="header">
+  <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+  <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Delivery Zone Lookup &mdash; wholesale quoting</p></div>
+  <div class="header-right"><button class="header-btn" onclick="window.location='/'">&#8962; Dashboard</button></div>
+</div>
+
+<div class="main">
+  {% if config_error %}
+  <div class="status error" style="display:block;">Zone table unavailable: {{ config_error }}</div>
+  {% endif %}
+
+  <div class="card">
+    <h2>Look up a postal code</h2>
+    <div class="lookup-row">
+      <div>
+        <label for="postal">Postal code</label>
+        <input id="postal" type="text" placeholder="M5J 2M2" maxlength="7" autocomplete="off" spellcheck="false" autofocus>
+      </div>
+      <div>
+        <label for="cases">Cases <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
+        <input id="cases" type="number" min="0" step="1" placeholder="—" inputmode="numeric">
+      </div>
+      <button class="btn btn-primary" id="go" onclick="doLookup()">Look up</button>
+      <div class="hint">Zone, minimum order and delivery fee for a wholesale customer. Cases are {{ summary.case_size }} units. Nothing here is saved.</div>
+    </div>
+    <div class="status error" id="err"></div>
+    {% if summary.store.address %}<div class="store-line">Delivering from {{ summary.store.label or 'the store' }}, {{ summary.store.address }}.</div>{% endif %}
+  </div>
+
+  <div class="card result" id="result"></div>
+
+  <div class="card">
+    <h2>Zone reference</h2>
+    <table class="ref">
+      <thead><tr><th>Zone</th><th>Name</th><th>Minimum</th><th>Delivery fee</th><th>Free at</th><th>Patterns</th></tr></thead>
+      <tbody>
+      {% for z in summary.zones %}
+        <tr>
+          <td><span class="zn zone-{{ z.number }}">{{ z.number }}</span></td>
+          <td>
+            {{ z.name }}
+            {% if z.note %}<div class="rn">{{ z.note }}</div>{% endif %}
+          </td>
+          <td class="num">{% if z.min_cases is not none %}{{ z.min_cases }} cases{% else %}&mdash;{% endif %}</td>
+          <td class="num">{% if z.delivery_fee is none %}&mdash;{% elif z.delivery_fee == 0 %}Free{% else %}${{ '%.0f'|format(z.delivery_fee) }}{% endif %}</td>
+          <td class="num">{% if z.free_at_cases %}{{ z.free_at_cases }} cases{% else %}&mdash;{% endif %}</td>
+          <td>
+            {% if z.patterns %}
+              <details class="patterns"><summary>{{ z.pattern_count }} patterns</summary>
+                <div class="pattern-list">{% for p in z.patterns %}<code>{{ p }}</code>{% endfor %}</div>
+              </details>
+            {% else %}<span class="rn">everything unmatched</span>{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="rules" style="margin-top:12px;">
+      <strong>How a code is matched.</strong> The <em>longest</em> matching pattern wins, not the first one listed:
+      a full 6-character pattern beats a 5-character prefix beats a 3-character prefix. So Zone 1 claims specific
+      M5J sub-codes, Zone 2&rsquo;s bare <code>M5J*</code> takes the rest of M5J, and Zone 3&rsquo;s <code>L*</code> / <code>M*</code>
+      only catch what Zones 1 and 2 left. Zones are edited in <code>delivery_zones.json</code> in the repo and redeployed.
+    </p>
+  </div>
+</div>
+
+<script>
+// New JS: let/const only (forward-only policy — see CLAUDE.md).
+const $ = (id) => document.getElementById(id);
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function money(n) { return n === 0 ? 'Free' : '$' + Number(n).toFixed(0); }
+function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
+
+function termsHtml(d) {
+  if (!d.deliverable) return '';
+  const feeCls = d.delivery_fee === 0 ? ' free' : '';
+  const freeAt = d.free_at_cases ? plural(d.free_at_cases, 'case') : (d.delivery_fee === 0 ? 'Always' : '—');
+  return `<div class="terms">
+    <div class="term"><div class="k">Minimum order</div><div class="v">${plural(d.min_cases, 'case')}</div><div class="s">${d.min_cases * d.case_size} units</div></div>
+    <div class="term"><div class="k">Delivery fee</div><div class="v${feeCls}">${money(d.delivery_fee)}</div><div class="s">per delivery</div></div>
+    <div class="term"><div class="k">Free delivery at</div><div class="v">${freeAt}</div>${d.free_at_cases ? `<div class="s">${d.free_at_cases * d.case_size} units</div>` : ''}</div>
+  </div>`;
+}
+
+function orderHtml(d) {
+  const o = d.order;
+  if (!o || !d.deliverable) return '';
+  if (!o.meets_minimum) {
+    return `<div class="order-box short">
+      <div class="headline">${plural(o.cases, 'case')} is below the ${plural(d.min_cases, 'case')} minimum for this zone</div>
+      <div class="detail">Short by ${plural(o.short_by, 'case')}. Delivery fee would be ${money(o.fee).toLowerCase()} once the minimum is met.</div>
+    </div>`;
+  }
+  let detail;
+  if (o.free_delivery) {
+    detail = 'Meets the minimum and qualifies for free delivery.';
+  } else if (o.cases_to_free) {
+    detail = `Meets the minimum. ${plural(o.cases_to_free, 'more case')} would make delivery free (${plural(d.free_at_cases, 'case')}).`;
+  } else {
+    detail = 'Meets the minimum.';
+  }
+  return `<div class="order-box ok">
+    <div class="headline">${plural(o.cases, 'case')} &middot; delivery ${money(o.fee).toLowerCase()}</div>
+    <div class="detail">${detail}</div>
+  </div>`;
+}
+
+function render(d) {
+  const notes = (d.notes || []).map((n) => `<div class="note${d.deliverable ? '' : ' contact'}">${esc(n)}</div>`).join('');
+  const matched = d.matched_pattern
+    ? `<span class="zone-matched">matched <code>${esc(d.matched_pattern)}</code></span>`
+    : `<span class="zone-matched">no pattern matched</span>`;
+  $('result').innerHTML = `
+    <div class="zone-head">
+      <span class="zone-code">${esc(d.formatted)}</span>
+      <span class="zone-pill zone-${d.zone}"><span class="n">${d.zone}</span> ${esc(d.zone_name)}</span>
+      ${matched}
+    </div>
+    ${termsHtml(d)}
+    ${orderHtml(d)}
+    ${notes}`;
+  $('result').classList.add('show');
+}
+
+async function doLookup() {
+  const postal = $('postal').value.trim();
+  const cases = $('cases').value.trim();
+  const err = $('err');
+  err.className = 'status error'; err.textContent = '';
+  if (!postal) { err.textContent = 'Enter a postal code.'; err.style.display = 'block'; return; }
+  $('go').disabled = true;
+  try {
+    const qs = new URLSearchParams({ postal });
+    if (cases !== '') qs.set('cases', cases);
+    const r = await fetch('/api/delivery-zones/lookup?' + qs.toString());
+    const d = await r.json();
+    if (!r.ok) {
+      err.textContent = d.error || ('Lookup failed (' + r.status + ')');
+      err.style.display = 'block';
+      $('result').classList.remove('show');
+      return;
+    }
+    err.style.display = 'none';
+    render(d);
+    const url = new URL(window.location);
+    url.searchParams.set('postal', d.postal_code);
+    if (cases !== '') url.searchParams.set('cases', cases); else url.searchParams.delete('cases');
+    history.replaceState(null, '', url);
+  } catch (e) {
+    err.textContent = 'Could not reach the server.'; err.style.display = 'block';
+  } finally {
+    $('go').disabled = false;
+  }
+}
+
+$('postal').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLookup(); });
+$('cases').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLookup(); });
+
+// Deep link: /delivery-zones?postal=M5J2M2&cases=6
+(function init() {
+  const p = new URLSearchParams(window.location.search);
+  if (p.get('postal')) {
+    $('postal').value = p.get('postal');
+    if (p.get('cases')) $('cases').value = p.get('cases');
+    doLookup();
+  }
+})();
+</script>
+</body>
+</html>

@@ -113,6 +113,28 @@ end_of_day.py       — Flask Blueprint (added 2026-08-19): the floor's one end-
                       (file_checklist) and cleaning (closing record, rotation) and is
                       the ONLY place a production day is now signed off. See "End of
                       Day" below.
+delivery_zones.py   — PURE wholesale delivery-zone engine (added 2026-09-10; stdlib only,
+                      no Flask, tests drive it directly). Reads the COMMITTED
+                      `delivery_zones.json` at the repo root (config like the SBBC
+                      portal's zones.json, NOT on the data disk — edit + redeploy).
+                      Matching is LONGEST-PREFIX-WINS, never list order: `X*` = prefix
+                      (scores its length), no `*` = exact 6-char (scores 6), tie → lower
+                      zone number, unmatched → fallback zone 4. That is what lets Zone 1
+                      hold specific M5J sub-codes under Zone 2's bare `M5J*` under Zone
+                      3's bare `L*`/`M*`. `build_table` REJECTS a duplicate pattern across
+                      zones, a short exact pattern, and a 6-char `*` pattern. `quote()`
+                      is the API shape; `_order_terms` does the fee arithmetic (fee is 0
+                      at/above `free_at_cases`; `cases_to_free` only between minimum and
+                      threshold). Tests: `python3 -m unittest tests.test_delivery_zones`
+                      (the repo's FIRST tests — stdlib unittest, no pytest installed).
+delivery_zone_routes.py — the thin Blueprint over it: `/delivery-zones` page +
+                      `GET /api/delivery-zones/lookup?postal=&cases=` + `GET
+                      /api/delivery-zones` (reference). Manager + FOH (local
+                      `foh_required` copy); production locked out. An internal QUOTING
+                      tool with NO pathways in or out — nothing reads it, no order
+                      writes it, and the SBBC portal's retail zone table is separate
+                      and untouched. Linked from the manager dashboard's Buyers &
+                      Suppliers row and a tools strip under the FOH Orders tiles.
 ledger.py           — Flask Blueprint: inventory event-ledger subsystem (added
                       2026-06-09). Read-only FG reconciliation/drift detector
                       (/admin/fg-reconcile), append-only event model + projection
