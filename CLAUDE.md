@@ -75,7 +75,17 @@ production.py       — Flask Blueprint (771 lines, extracted 2026-06-03): the F
 ripe_orders.py      — Flask Blueprint handling Ripe order workflow within Soma
                       (wholesale approve/decline/fulfill + ripe_retail_auto_approve for
                       Stripe-Checkout-paid retail pickup orders + monthly service-fee
-                      e-transfer confirmation, proxied to the Ripe portal)
+                      e-transfer confirmation, proxied to the Ripe portal). Also the
+                      BOOKKEEPING EXPORT (2026-09-10): `/ripe-orders/export.csv?from=&to=`
+                      (approved+fulfilled orders only — Soma records the sale at approval;
+                      window is on the ORDER date, inclusive; fee/credit breakdown columns
+                      + TOTAL row; export bar on the Ripe Orders page defaults to last
+                      full month) and `POST /api/internal/ripe-sales-report` (X-Internal-Key;
+                      emails last month's CSV — or `?month=YYYY-MM` — to BOOKKEEPER_EMAIL
+                      via the same Fastmail account Ripe sends from; fails LOUDLY: 503
+                      unconfigured / 502 portal-or-SMTP failure, so run the cron with
+                      `curl -f`; a zero-order month still sends). Both share
+                      `_build_bookkeeping_csv` so button and email can never disagree.
 retail_orders.py    — Flask Blueprint (added 2026-07-02): SBBC Wholesale Portal order
                       ingestion, mirroring ripe_orders.py (which shares a live contract
                       with Ripe and stays untouched). /retail-orders admin page +
@@ -503,6 +513,11 @@ bugs were found and **fixed**:
 - `CLOVER_API_TOKEN` — Merchant Dashboard API token with `Orders: read` + `Inventory: read` scopes
 - `CLOVER_MERCHANT_ID` — alphanumeric merchant identifier (e.g. `2KC4HPQ71T6W1`), NOT the numerical MID used by card processors
 - `CLOVER_API_BASE` — optional; defaults to `https://api.clover.com/v3`
+- `SMTP_USER` / `SMTP_PASS` — Fastmail account for the monthly bookkeeping report
+  (2026-09-10; copy the values from the Ripe service — same account). `SMTP_HOST`/
+  `SMTP_PORT` optional (default `smtp.fastmail.com`:587)
+- `BOOKKEEPER_EMAIL` — recipient(s) for the monthly report, comma-separated; unset =
+  the report endpoint returns 503
 
 **Ripe:**
 - `DATA_DIR`, `SECRET_KEY`, `RIPE_PASSWORD`, `INTERNAL_API_KEY`, `SOMA_APP_URL`
@@ -519,6 +534,7 @@ Two automated weekly imports run on Render Cron Jobs (separate services from the
 |---|---|---|---|
 | `soma-shopify-weekly` | `0 14 * * 1` (Mon 14:00 UTC) | `/api/internal/shopify-import-week` | buyer `SOMA (Shopify)`, channel `shopify`, `ORD-SHOPIFY-{week}` |
 | `soma-clover-weekly`  | `15 14 * * 1` (Mon 14:15 UTC) | `/api/internal/clover-import-week`  | buyer `SOMA (Clover)`, channel `clover`, `ORD-CLOVER-{week}` |
+| `soma-bookkeeper-monthly` | `0 14 1 * *` (1st 14:00 UTC) | `/api/internal/ripe-sales-report` | nothing — read-only; emails last month's Ripe sales CSV to `BOOKKEEPER_EMAIL`. Use `curl -f` so a failed send marks the cron run failed |
 
 Each channel has a matching set of routes for manual operation (in `app.py`):
 

@@ -14,6 +14,9 @@ records whose deduction_date has arrived.
 Env vars on Soma's Render service:
   RIPE_PORTAL_URL   — e.g. https://ripe-portal.onrender.com
   INTERNAL_API_KEY  — same value on both Render services
+  SMTP_USER / SMTP_PASS — Fastmail account for the monthly bookkeeping
+                      report (same values as on the Ripe service)
+  BOOKKEEPER_EMAIL  — recipient(s) for the monthly report, comma-separated
 """
 
 import os, json, logging
@@ -29,6 +32,13 @@ ripe_orders_bp = Blueprint("ripe_orders", __name__)
 
 RIPE_PORTAL_URL = os.environ.get("RIPE_PORTAL_URL", "").rstrip("/")
 INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY", "")
+
+# Monthly bookkeeping report — same Fastmail account the Ripe portal sends from.
+SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.fastmail.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASS = os.environ.get("SMTP_PASS", "")
+BOOKKEEPER_EMAIL = os.environ.get("BOOKKEEPER_EMAIL", "")
 
 # Paths set by init_paths() once app.py knows INVENTORY_DIR
 _FG_PATH = None
@@ -974,6 +984,117 @@ def ripe_export_csv():
         name += f"-{date_from or 'start'}_to_{date_to or 'today'}"
     return Response(csv_text, mimetype="text/csv",
                     headers={"Content-Disposition": f"attachment; filename={name}.csv"})
+
+
+def _send_bookkeeping_email(recipients, month_label, date_from, date_to,
+                            csv_text, order_count, sum_total):
+    """Email the bookkeeping CSV as an attachment. Raises on SMTP failure —
+    the caller turns that into a non-200 so the cron run shows as failed."""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.application import MIMEApplication
+
+    body = f"""Hello,
+
+Attached is the Soma Bone Broth × Ripe wholesale sales report for {month_label}.
+
+Period:       {date_from} to {date_to} (order date)
+Orders:       {order_count} (approved + fulfilled)
+Total:        ${sum_total:,.2f}
+
+Each row is one order, with subtotal, surcharge, small-order fee, applied
+credit and total broken out. The final row sums the period.
+
+This is an automated monthly report from the Soma production system.
+For questions contact {SMTP_USER}.
+
+— Soma Bone Broth Co Ltd.
+"""
+    msg = MIMEMultipart()
+    msg["From"] = SMTP_USER
+    msg["To"] = ", ".join(recipients)
+    msg["Subject"] = f"Ripe wholesale sales report — {month_label} | Soma Bone Broth"
+    msg.attach(MIMEText(body, "plain"))
+    att = MIMEApplication(csv_text.encode("utf-8"), _subtype="csv")
+    att.add_header("Content-Disposition", "attachment",
+                   filename=f"ripe-sales-{date_from[:7]}.csv")
+    msg.attach(att)
+
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as server:
+        server.ehlo()
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASS)
+        server.sendmail(SMTP_USER, recipients, msg.as_string())
+
+
+@ripe_orders_bp.route("/api/internal/ripe-sales-report", methods=["POST"])
+def internal_ripe_sales_report():
+    """Internal endpoint for the monthly Render Cron Job: email last month's
+    bookkeeping CSV to BOOKKEEPER_EMAIL.
+
+    Auth: X-Internal-Key header must match INTERNAL_API_KEY.
+    Query param month=YYYY-MM overrides the default (previous calendar month
+    in America/Toronto) for testing or resending a period.
+
+    Fails LOUDLY: missing config is 503, an unreachable Ripe portal or an
+    SMTP failure is 502 — run the cron with `curl -f` so a non-2xx marks the
+    run failed instead of a month silently going unmailed. A month with zero
+    orders still sends (an empty report is distinguishable from a broken one).
+    """
+    import hmac as _hmac
+    provided = (request.headers.get("X-Internal-Key") or "").strip()
+    if not INTERNAL_API_KEY or not _hmac.compare_digest(
+        provided.encode(), INTERNAL_API_KEY.encode()
+    ):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    missing = [n for n, v in [("SMTP_USER", SMTP_USER), ("SMTP_PASS", SMTP_PASS),
+                              ("BOOKKEEPER_EMAIL", BOOKKEEPER_EMAIL)] if not v]
+    if missing:
+        return jsonify({"error": f"Not configured — set {', '.join(missing)} on the Soma Render service"}), 503
+
+    month = (request.args.get("month") or "").strip()
+    if month:
+        try:
+            first = datetime.strptime(month + "-01", "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"error": f"Invalid month: {month} (expected YYYY-MM)"}), 400
+    else:
+        try:
+            today = datetime.now(ZoneInfo("America/Toronto")).date()
+        except Exception:
+            today = datetime.now().date()
+        first = today.replace(day=1)
+        first = (first.replace(year=first.year - 1, month=12) if first.month == 1
+                 else first.replace(month=first.month - 1))
+    if first.month == 12:
+        next_first = first.replace(year=first.year + 1, month=1)
+    else:
+        next_first = first.replace(month=first.month + 1)
+    from datetime import timedelta as _td
+    last = next_first - _td(days=1)
+    date_from, date_to = first.isoformat(), last.isoformat()
+    month_label = first.strftime("%B %Y")
+
+    error, payload = _build_bookkeeping_csv(date_from, date_to)
+    if error:
+        return jsonify({"error": error}), 502
+    csv_text, order_count, sum_total = payload
+
+    recipients = [r.strip() for r in BOOKKEEPER_EMAIL.split(",") if r.strip()]
+    try:
+        _send_bookkeeping_email(recipients, month_label, date_from, date_to,
+                                csv_text, order_count, sum_total)
+    except Exception as e:
+        logger.exception("Bookkeeping report email failed for %s", month_label)
+        return jsonify({"error": f"Email send failed: {e}"}), 502
+
+    logger.info("Bookkeeping report for %s sent to %s (%d orders, $%.2f)",
+                month_label, recipients, order_count, sum_total)
+    return jsonify({"ok": True, "month": month_label, "from": date_from,
+                    "to": date_to, "orders": order_count,
+                    "total": round(sum_total, 2), "sent_to": recipients})
 
 
 @ripe_orders_bp.route("/ripe-sku-audit")
