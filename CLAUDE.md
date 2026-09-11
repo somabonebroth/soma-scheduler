@@ -108,6 +108,14 @@ retail_orders.py    — Flask Blueprint (added 2026-07-02): SBBC Wholesale Porta
                       channel); decline proxies to the portal, which issues a full Stripe
                       refund. NO auto-approve. Env: RETAIL_PORTAL_URL + INTERNAL_API_KEY.
                       Portal repo: github.com/somabonebroth/SBBC-Wholesale-Portal.
+                      **Print prompt on approve (2026-09-11, both this page and
+                      /ripe-orders):** a successful approve swaps the modal's buttons for
+                      Done + "Print packing slip", which opens the slip with `?print=1`;
+                      all three slip templates call `window.print()` on load for that
+                      flag. A button, not an automatic `window.open` — browsers block tabs
+                      not opened from a click. `closeApproveModal` reloads the page when
+                      the print row is showing so the list is never stale. Not on Ripe
+                      retail pickup orders — those auto-approve, nobody clicks.
 end_of_day.py       — Flask Blueprint (added 2026-08-19): the floor's one end-of-shift
                       flow at /end-of-day. Owns NO data — it joins production
                       (file_checklist) and cleaning (closing record, rotation) and is

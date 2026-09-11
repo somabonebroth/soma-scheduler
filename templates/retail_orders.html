@@ -72,7 +72,7 @@
 .modal-field label{display:block;font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;}
 .modal-field input{width:100%;box-sizing:border-box;padding:11px;border:1px solid var(--grey-border);border-radius:8px;font-size:14px;}
 .modal-actions{display:flex;gap:10px;margin-top:18px;}
-.modal-actions button{flex:1;padding:12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;}
+.modal-actions button,.modal-actions a{flex:1;padding:12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;}
 .modal-cancel{background:var(--white);border:1px solid var(--grey-border);color:var(--text);}
 .modal-confirm{background:var(--action-green);border:none;color:var(--white);}
 .modal-confirm:disabled{background:#aaa;}
@@ -258,6 +258,13 @@
       <button class="modal-cancel" onclick="closeApproveModal()">Cancel</button>
       <button class="modal-confirm" id="approve-confirm-btn" onclick="submitApprove()">Confirm Approval</button>
     </div>
+    <!-- Shown after a successful approve: one click to the packing slip, which
+         opens with the print dialog already up (?print=1). A button rather than
+         an automatic window.open — browsers block tabs not opened from a click. -->
+    <div class="modal-actions" id="approve-print-actions" style="display:none;">
+      <button class="modal-cancel" onclick="closeApproveModal()">Done</button>
+      <a class="modal-confirm" id="approve-print-link" target="_blank" href="#" style="text-decoration:none;text-align:center;">&#128424; Print packing slip</a>
+    </div>
   </div>
 </div>
 
@@ -309,6 +316,7 @@ function openApproveModal(orderId, e) {
   document.getElementById('approve-error').style.display = 'none';
   document.getElementById('approve-success').style.display = 'none';
   document.getElementById('approve-modal-actions').style.display = 'flex';
+  document.getElementById('approve-print-actions').style.display = 'none';
   const btn = document.getElementById('approve-confirm-btn');
   btn.disabled = false; btn.textContent = 'Confirm Approval';
   document.getElementById('approve-modal').classList.add('open');
@@ -316,6 +324,9 @@ function openApproveModal(orderId, e) {
 
 function closeApproveModal() {
   document.getElementById('approve-modal').classList.remove('open');
+  // After a successful approve the list on the page is stale — reload however
+  // the modal was dismissed (Done, overlay click).
+  if (document.getElementById('approve-print-actions').style.display === 'flex') location.reload();
 }
 
 async function submitApprove() {
@@ -335,7 +346,8 @@ async function submitApprove() {
     if (resp.ok) {
       document.getElementById('approve-modal-actions').style.display = 'none';
       document.getElementById('approve-success').style.display = 'block';
-      setTimeout(() => { closeApproveModal(); location.reload(); }, 2000);
+      document.getElementById('approve-print-link').href = '/retail-orders/' + encodeURIComponent(_approveOrderId) + '/packing-slip?print=1';
+      document.getElementById('approve-print-actions').style.display = 'flex';
     } else {
       errEl.textContent = data.error || data.warning || 'Failed to approve order.';
       errEl.style.display = 'block';

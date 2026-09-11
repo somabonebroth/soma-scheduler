@@ -103,5 +103,12 @@ table.ps-tbl th.r, table.ps-tbl td.r { text-align:right; }
   · Order {{ order.id }}
 </div>
 </main>
+<script>
+// ?print=1 (from the approve modal's "Print packing slip" button) opens the
+// browser's print dialog as soon as the slip has rendered.
+if (new URLSearchParams(location.search).get('print') === '1') {
+  window.addEventListener('load', function () { window.print(); });
+}
+</script>
 </body>
 </html>
