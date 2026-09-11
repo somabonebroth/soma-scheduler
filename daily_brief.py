@@ -661,7 +661,7 @@ def get_daily_channels():
 @daily_brief_bp.route("/daily-review")
 @manager_required
 def daily_review_page():
-    """The full Daily Review page — the three sections, then sign-off."""
+    """The full Daily Summary page — the three sections, then sign-off."""
     return render_template("daily_review.html")
 
 

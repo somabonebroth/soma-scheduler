@@ -278,8 +278,11 @@ is re-orderable by the manager (↑/↓ in "Manage closing list"); order matters
 wizard walks the floor through the items in exactly that sequence, so it should read as a
 walk around the kitchen. The PUT already stored the list in order — only the UI was missing.
 
-**Management Report (`daily_brief.py` + `templates/daily_review.html`, 2026-08-18;
-renamed from "Daily Review" 2026-08-19).** A full page at `/daily-review` (route and API
+**Daily Summary (`daily_brief.py` + `templates/daily_review.html`, 2026-08-18;
+renamed from "Daily Review" 2026-08-19 and from "Management Report" 2026-09-11 — titles
+only; route and API names unchanged; still called "Management Report" below).** Sections are
+native `<details>` since 2026-09-11: section 1 opens by default, 2 and 3 start collapsed
+(`OPEN_BY_DEFAULT` in the template). A full page at `/daily-review` (route and API
 names unchanged — the rename is titles only) behind the full-width dashboard button
 labelled "Start Here → Management Report", fed by `GET /api/daily-brief?date=` (default
 yesterday). Every note the floor left is gathered ABOVE the sections (`staffNotesHtml`):

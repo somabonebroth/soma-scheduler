@@ -64,7 +64,7 @@
    collapsible card with its own header, which made an occasional errand look
    like a control; the rows carry themselves. */
 .mgmt-list { display: flex; flex-direction: column; gap: 10px; }
-/* Management Report — full-width entry point, highlighted until the day is reviewed */
+/* Daily Summary — full-width entry point, highlighted until the day is reviewed */
 .review-btn { display: flex; align-items: center; gap: 14px; width: 100%; box-sizing: border-box; text-decoration: none; background: var(--card-bg); border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 18px; transition: background .12s, border-color .12s; }
 .review-btn:hover { background: var(--bg); }
 .review-icon { font-size: 22px; line-height: 1; flex-shrink: 0; }
@@ -246,7 +246,7 @@
         <a href="/daily-review" class="review-btn" id="review-btn">
             <span class="review-icon">&#128203;</span>
             <span class="review-text">
-                <span class="review-title">Start Here &rarr; Management Report</span>
+                <span class="review-title">Start Here &rarr; Daily Summary</span>
                 <span class="review-sub" id="review-sub">Loading&hellip;</span>
             </span>
             <span class="review-cta" id="review-cta"></span>
@@ -399,7 +399,7 @@ document.addEventListener('DOMContentLoaded',loadDayLabels);
 </script>
 {% if role == 'manager' %}
 <script>
-// ── Management Report button — state only; the page itself owns the detail ────
+// ── Daily Summary button — state only; the page itself owns the detail ────
 // New JS — let/const per the forward-only policy.
 async function loadReviewButton(){
     const btn = document.getElementById('review-btn');

@@ -849,7 +849,7 @@ def delete_traceability_record(week_id, day_idx):
     if day_date and app._load_daily_signoffs().get(day_date):
         return jsonify({
             "error": f"{day_date} has been reviewed and signed off. Un-sign the "
-                     "day on the Management Report before deleting this record."
+                     "day on the Daily Summary before deleting this record."
         }), 409
     if app._load_weekly_signoffs().get(week_id):
         return jsonify({
