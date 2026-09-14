@@ -135,9 +135,28 @@ delivery_zones.py   — PURE wholesale delivery-zone engine (added 2026-09-10; s
                       at/above `free_at_cases`; `cases_to_free` only between minimum and
                       threshold). Tests: `python3 -m unittest tests.test_delivery_zones`
                       (the repo's FIRST tests — stdlib unittest, no pytest installed).
+                      **FSA classification for the Delivery Zone Map (2026-09-14):**
+                      `zone_for_fsa(fsa)` = the same longest-prefix rule restricted to
+                      patterns of ≤3 chars (the ones that decide on the FSA alone); any
+                      LONGER pattern inside the FSA in a DIFFERENT zone sets `split`
+                      (today only M5J: Zone 2 base, Zone 1 sub-codes). `load_fsa_index`
+                      reads codes + `neighbours` from the committed
+                      `static/ontario_fsa.geojson` (520 Ontario FSAs, 2021 Census,
+                      1.2 MB, built ONCE on the Mac by `tools/build_fsa_geojson.py` —
+                      needs pyshp + pyproj in a LOCAL venv, never in requirements.txt;
+                      neighbours = FSAs sharing ≥2 boundary vertices in the
+                      unsimplified StatCan source). `fsa_map()` classifies every FSA
+                      + two audit lists: `unmatched_nearby` (fallback FSAs that BORDER
+                      a served one — the deliberately excluded rural codes show here
+                      on purpose) and `patterns_without_fsa` (pattern no mapped FSA
+                      satisfies: a typo, OR a real business-only FSA StatCan does not
+                      draw — M5K and M5X are the known two, not typos).
 delivery_zone_routes.py — the thin Blueprint over it: `/delivery-zones` page +
                       `GET /api/delivery-zones/lookup?postal=&cases=` + `GET
-                      /api/delivery-zones` (reference). Manager + FOH (local
+                      /api/delivery-zones` (reference) + `GET
+                      /api/delivery-zones/fsa-map` (FSA→zone for the map, server-
+                      classified so map and lookup can never disagree; geometry is
+                      fetched separately from `/static/ontario_fsa.geojson`). Manager + FOH (local
                       `foh_required` copy); production locked out. An internal QUOTING
                       tool with NO pathways in or out — nothing reads it, no order
                       writes it, and the SBBC portal's retail zone table is separate

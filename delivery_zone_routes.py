@@ -9,6 +9,9 @@ Routes (manager + FOH — the people who quote; production is locked out):
   GET /delivery-zones                     the page
   GET /api/delivery-zones/lookup?postal=&cases=
   GET /api/delivery-zones                 zone reference (terms + patterns)
+  GET /api/delivery-zones/fsa-map         every Ontario FSA's zone (+ audit lists)
+                                          for the map; the browser fetches the
+                                          polygons from /static/ontario_fsa.geojson
 """
 
 from functools import wraps
@@ -82,3 +85,22 @@ def api_delivery_zone_lookup():
         return jsonify({"error": str(e)}), 400
     except dz.ZoneConfigError as e:
         return jsonify({"error": f"Zone table unavailable: {e}"}), 503
+
+
+@delivery_zones_bp.route("/api/delivery-zones/fsa-map")
+@foh_required
+def api_delivery_zone_fsa_map():
+    """FSA → zone for every FSA the committed GeoJSON draws, classified
+    server-side by the SAME engine as the lookup so the map and the quote can
+    never disagree, plus the two audit lists (unmatched FSAs next to served
+    ones; patterns no mapped FSA satisfies). Geometry is NOT here — the page
+    loads /static/ontario_fsa.geojson separately and joins on `fsa`."""
+    try:
+        out = dz.fsa_map()
+        summary = dz.zone_summary()
+    except dz.ZoneConfigError as e:
+        return jsonify({"error": f"Zone map unavailable: {e}"}), 503
+    out["store"] = summary["store"]
+    out["fallback_zone"] = summary["fallback_zone"]
+    out["zone_names"] = {z["number"]: z["name"] for z in summary["zones"]}
+    return jsonify(out)

@@ -3,7 +3,9 @@
   "store": {
     "label": "Soma Bone Broth",
     "address": "676 Pape Ave, Toronto ON M4K 3S5",
-    "postal_code": "M4K3S5"
+    "postal_code": "M4K3S5",
+    "lat": 43.67819,
+    "lng": -79.3449
   },
   "case_size": 12,
   "fallback_zone": 4,

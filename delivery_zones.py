@@ -64,7 +64,7 @@ class ZoneTable:
     zones: Tuple[Zone, ...]
     fallback_zone: int
     case_size: int
-    store: Dict[str, str]
+    store: Dict[str, object]   # label/address/postal_code as str; lat/lng stay numeric
 
     def zone(self, number: int) -> Zone:
         for z in self.zones:
@@ -170,8 +170,15 @@ def build_table(data: dict) -> ZoneTable:
     if isinstance(case_size, bool) or not isinstance(case_size, int) or case_size <= 0:
         raise ZoneConfigError("'case_size' must be a positive integer")
     store = data.get("store") or {}
-    return ZoneTable(zones=tuple(zones), fallback_zone=int(fallback), case_size=case_size,
-                     store={k: str(v) for k, v in store.items()} if isinstance(store, dict) else {})
+    if not isinstance(store, dict):
+        store = {}
+    clean_store: Dict[str, object] = {}
+    for k, v in store.items():
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            clean_store[str(k)] = v          # lat / lng for the map marker
+        else:
+            clean_store[str(k)] = str(v)
+    return ZoneTable(zones=tuple(zones), fallback_zone=int(fallback), case_size=case_size, store=clean_store)
 
 
 _TABLE: Optional[ZoneTable] = None
@@ -296,4 +303,158 @@ def zone_summary(table: Optional[ZoneTable] = None) -> dict:
             }
             for z in table.zones
         ],
+    }
+
+
+# ── FSA classification (feeds the zone map) ────────────────────────────────────
+#
+# A Forward Sortation Area is the first three characters of a postal code. The
+# map colours whole FSAs, so it needs the zone an FSA lands in when nothing
+# longer than three characters is known. Same patterns, same longest-prefix
+# rule, restricted to patterns short enough to decide on the FSA alone; any
+# LONGER pattern inside the FSA (today only Zone 1's M5J sub-codes) marks the
+# FSA as SPLIT — the map hatches it and tells the user to run the lookup.
+
+FSA_GEOJSON_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "ontario_fsa.geojson")
+_FSA_RE = re.compile(r"^[ABCEGHJ-NPRSTVXY]\d[ABCEGHJ-NPRSTV-Z]$")
+
+
+@dataclass(frozen=True)
+class FsaMatch:
+    fsa: str
+    zone: Zone
+    pattern: Optional[str]   # the ≤3-char pattern that decided it, None when the fallback fired
+    split: bool              # a longer pattern claims part of this FSA for another zone
+
+
+def validate_fsa(raw: str) -> str:
+    code = normalize(raw)
+    if not _FSA_RE.match(code):
+        raise InvalidPostalCode(f"'{(raw or '').strip()}' is not a valid FSA (expected A1A).")
+    return code
+
+
+def zone_for_fsa(fsa: str, table: Optional[ZoneTable] = None) -> FsaMatch:
+    """Zone of an FSA from the patterns that decide on three characters or
+    fewer, longest prefix winning as in match(). Exact six-character patterns
+    and prefixes longer than three never decide an FSA — they set `split`."""
+    table = table or load_table()
+    code = validate_fsa(fsa)
+    best: Optional[Tuple[int, Zone, str]] = None
+    split = False
+    for zone in table.zones:
+        for pattern in zone.patterns:
+            prefix = pattern[:-1] if pattern.endswith("*") else pattern
+            if len(prefix) > 3:
+                if prefix.startswith(code):
+                    split = True
+                continue
+            if code.startswith(prefix) and (best is None or len(prefix) > best[0]):
+                best = (len(prefix), zone, pattern)
+    if best is None:
+        return FsaMatch(fsa=code, zone=table.zone(table.fallback_zone), pattern=None, split=split)
+    # A longer pattern that lands in the SAME zone is not a split worth flagging.
+    if split:
+        split = any(
+            (p[:-1] if p.endswith("*") else p).startswith(code)
+            and len(p[:-1] if p.endswith("*") else p) > 3
+            for z in table.zones if z.number != best[1].number
+            for p in z.patterns
+        )
+    return FsaMatch(fsa=code, zone=best[1], pattern=best[2], split=split)
+
+
+@dataclass(frozen=True)
+class FsaIndex:
+    codes: Tuple[str, ...]                    # every FSA the GeoJSON draws, sorted
+    neighbours: Dict[str, Tuple[str, ...]]    # FSA -> FSAs sharing a border (from the build script)
+
+
+_FSA_INDEX: Optional[FsaIndex] = None
+_FSA_INDEX_LOCK = threading.Lock()
+
+
+def load_fsa_index(path: str = FSA_GEOJSON_PATH, force: bool = False) -> FsaIndex:
+    """The FSA codes + neighbour graph the committed GeoJSON carries, read once
+    and cached. The engine never needs the geometry — only which codes exist
+    on the map and which touch which (tools/build_fsa_geojson.py computes the
+    adjacency from the unsimplified source, where shared borders share vertices)."""
+    global _FSA_INDEX
+    if _FSA_INDEX is not None and not force and path == FSA_GEOJSON_PATH:
+        return _FSA_INDEX
+    with _FSA_INDEX_LOCK:
+        try:
+            with open(path) as f:
+                fc = json.load(f)
+            neighbours: Dict[str, Tuple[str, ...]] = {}
+            for feat in fc.get("features", []):
+                props = feat.get("properties") if isinstance(feat, dict) else None
+                if not isinstance(props, dict) or not props.get("fsa"):
+                    continue
+                code = str(props["fsa"]).upper()
+                nbs = props.get("neighbours") or []
+                neighbours[code] = tuple(sorted(str(n).upper() for n in nbs if n))
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+            raise ZoneConfigError(f"FSA map file unreadable: {e}")
+        if not neighbours:
+            raise ZoneConfigError("FSA map file carries no FSA codes")
+        index = FsaIndex(codes=tuple(sorted(neighbours)), neighbours=neighbours)
+        if path == FSA_GEOJSON_PATH:
+            _FSA_INDEX = index
+        return index
+
+
+def _pattern_covers(pattern: str, fsa: str) -> bool:
+    """Could this pattern ever match a postal code in this FSA?"""
+    prefix = pattern[:-1] if pattern.endswith("*") else pattern
+    return fsa.startswith(prefix[:3]) if len(prefix) >= 3 else fsa.startswith(prefix)
+
+
+def fsa_map(index: Optional[FsaIndex] = None, table: Optional[ZoneTable] = None) -> dict:
+    """Everything the map page needs in one call: each FSA's zone, which FSAs
+    are split, and two audit lists —
+      * `unmatched_nearby`: FSAs on the fallback zone that share a BORDER with
+        a served FSA — the ring just outside the delivery area. The
+        deliberately excluded rural codes that touch it show up here on
+        purpose; a reviewer should see what sits one step out (each entry
+        names the served neighbours, so an accidental hole is obvious);
+      * `patterns_without_fsa`: zone patterns no FSA on the map can satisfy — a
+        typo in the pattern list, or an FSA StatCan does not draw (single-
+        building business FSAs like M5K / M5X are real but unmapped).
+    """
+    table = table or load_table()
+    index = index or load_fsa_index()
+    codes = index.codes
+    zones: Dict[str, int] = {}
+    matched_pattern: Dict[str, Optional[str]] = {}
+    split: List[str] = []
+    for code in codes:
+        m = zone_for_fsa(code, table)
+        zones[code] = m.zone.number
+        matched_pattern[code] = m.pattern
+        if m.split:
+            split.append(code)
+    unmatched_nearby = []
+    for code in codes:
+        if zones[code] != table.fallback_zone:
+            continue
+        served = [n for n in index.neighbours.get(code, ()) if n in zones and zones[n] != table.fallback_zone]
+        if served:
+            unmatched_nearby.append({"fsa": code, "beside": served})
+    patterns_without_fsa = [
+        {"zone": z.number, "pattern": p}
+        for z in table.zones for p in z.patterns
+        if not any(_pattern_covers(p, c) for c in codes)
+    ]
+    counts = {z.number: 0 for z in table.zones}
+    for z in zones.values():
+        counts[z] += 1
+    return {
+        "fsa_count": len(codes),
+        "zones": zones,
+        "matched_pattern": matched_pattern,
+        "split": split,
+        "counts": counts,
+        "unmatched_nearby": unmatched_nearby,
+        "patterns_without_fsa": patterns_without_fsa,
     }

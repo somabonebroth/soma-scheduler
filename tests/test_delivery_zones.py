@@ -202,5 +202,125 @@ class MatchingRules(unittest.TestCase):
             dz.build_table({"zones": [{"number": 1, "name": "A", "patterns": []}], "fallback_zone": 4})
 
 
+class FsaClassification(unittest.TestCase):
+    """zone_for_fsa + fsa_map: the map must agree with the lookup."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.table = dz.load_table(force=True)
+        cls.index = dz.load_fsa_index(force=True)
+        cls.codes = cls.index.codes
+
+    def fsa(self, code):
+        return dz.zone_for_fsa(code, self.table)
+
+    def test_spec_cases(self):
+        self.assertEqual(self.fsa("M4K").zone.number, 1)
+        self.assertEqual(self.fsa("M1B").zone.number, 2)
+        self.assertEqual(self.fsa("L8H").zone.number, 2)
+        self.assertEqual(self.fsa("N2L").zone.number, 3)
+        self.assertEqual(self.fsa("K1A").zone.number, 4)
+        self.assertEqual(self.fsa("N0H").zone.number, 4)   # deliberately excluded rural FSA
+
+    def test_m5j_is_zone_2_but_split(self):
+        m = self.fsa("M5J")
+        self.assertEqual((m.zone.number, m.pattern, m.split), (2, "M5J*", True))
+
+    def test_only_m5j_is_split_today(self):
+        self.assertEqual(dz.fsa_map(self.index, self.table)["split"], ["M5J"])
+
+    def test_unsplit_fsa_reports_no_split(self):
+        for code in ("M4K", "M1B", "N2L", "K1A"):
+            self.assertFalse(self.fsa(code).split, code)
+
+    def test_fsa_zone_agrees_with_every_postal_code_lookup_off_a_short_pattern(self):
+        # For an FSA that is NOT split, every postal code inside it must land in
+        # the FSA's zone — that is the promise the map makes.
+        for code in ("M4K", "M1B", "L8H", "N2L", "K1A", "N0H", "L5B", "M7A"):
+            expect = self.fsa(code).zone.number
+            for tail in ("1A1", "2M2", "9Z9"):
+                self.assertEqual(dz.lookup(code + tail, self.table).zone.number, expect, code + tail)
+
+    def test_input_normalized_and_validated(self):
+        self.assertEqual(self.fsa(" m4k ").fsa, "M4K")
+        for bad in ("", "M4", "M4K3", "D1A", "M4D", "123"):
+            with self.assertRaises(dz.InvalidPostalCode, msg=repr(bad)):
+                self.fsa(bad)
+
+    def test_geojson_covers_all_of_ontario(self):
+        self.assertEqual(len(self.codes), 520)
+        self.assertEqual({c[0] for c in self.codes}, set("KLMNP"))
+        self.assertIn("M4K", self.codes)
+
+    def test_geojson_neighbour_graph_is_symmetric_and_complete(self):
+        nb = self.index.neighbours
+        for code, others in nb.items():
+            self.assertTrue(others, f"{code} has no neighbours")
+            for o in others:
+                self.assertIn(code, nb[o], f"{code}->{o} not symmetric")
+        self.assertIn("M4J", nb["M4K"])
+        self.assertIn("L1V", nb["M1B"])   # Scarborough touches Pickering
+
+    def test_every_mapped_fsa_gets_a_zone(self):
+        r = dz.fsa_map(self.index, self.table)
+        self.assertEqual(set(r["zones"]), set(self.codes))
+        self.assertEqual(sum(r["counts"].values()), 520)
+        self.assertEqual(r["zones"]["M4K"], 1)
+        self.assertEqual(r["zones"]["P0X"], 4)
+
+    def test_audit_lists(self):
+        r = dz.fsa_map(self.index, self.table)
+        # Business-only downtown FSAs are real Canada Post FSAs that the census
+        # file does not draw — they must be REPORTED, not silently dropped.
+        self.assertEqual([p["pattern"] for p in r["patterns_without_fsa"]], ["M5K*", "M5X*"])
+        nearby = {e["fsa"]: e["beside"] for e in r["unmatched_nearby"]}
+        # Every entry is unserved and every "beside" is served.
+        for fsa, beside in nearby.items():
+            self.assertEqual(r["zones"][fsa], 4, fsa)
+            self.assertTrue(beside)
+            for b in beside:
+                self.assertNotEqual(r["zones"][b], 4, f"{fsa} beside {b}")
+        # The deliberately excluded rural codes that BORDER the area show up —
+        # that is the point of the list. (K7R, N7G, N0N, N0P, N0R sit two FSAs
+        # out behind other excluded ones, so they are correctly absent.)
+        for fsa in ("N0H", "N0L", "N0M", "P0A", "K0K", "K0L", "P2A", "N7A"):
+            self.assertIn(fsa, nearby, fsa)
+        for fsa in ("K7R", "N7G", "N0N", "N0P", "N0R"):
+            self.assertNotIn(fsa, nearby, fsa)
+        self.assertIn("N0G", nearby["N0H"])
+        # Ottawa is nowhere near the delivery area.
+        self.assertNotIn("K1A", nearby)
+
+    def test_split_detection_on_a_tiny_table(self):
+        t = _table([
+            {"number": 1, "name": "A", "min_cases": 1, "delivery_fee": 0, "patterns": ["M5J2M2", "M5J1*"]},
+            {"number": 2, "name": "B", "min_cases": 1, "delivery_fee": 0, "patterns": ["M5J*", "M4K3*"]},
+            {"number": 3, "name": "C", "min_cases": 1, "delivery_fee": 0, "patterns": ["M*"]},
+        ])
+        m = dz.zone_for_fsa("M5J", t)
+        self.assertEqual((m.zone.number, m.split), (2, True))
+        # A longer pattern in the FSA's OWN zone is not a split.
+        m = dz.zone_for_fsa("M4K", t)
+        self.assertEqual((m.zone.number, m.pattern, m.split), (3, "M*", True))
+        t2 = _table([{"number": 2, "name": "B", "min_cases": 1, "delivery_fee": 0, "patterns": ["M4K*", "M4K3*"]}])
+        m = dz.zone_for_fsa("M4K", t2)
+        self.assertEqual((m.zone.number, m.split), (2, False))
+        # No short pattern at all + a long one → fallback, split.
+        t3 = _table([{"number": 1, "name": "A", "min_cases": 1, "delivery_fee": 0, "patterns": ["M5J2M2"]}])
+        m = dz.zone_for_fsa("M5J", t3)
+        self.assertEqual((m.zone.number, m.pattern, m.split), (9, None, True))
+        idx = dz.FsaIndex(codes=("K1A", "M4K", "M5J"), neighbours={"M5J": ("M4K",), "M4K": ("M5J",), "K1A": ()})
+        r = dz.fsa_map(idx, t3)
+        self.assertEqual(r["zones"], {"M5J": 9, "M4K": 9, "K1A": 9})
+        self.assertEqual(r["unmatched_nearby"], [])
+        self.assertEqual(r["patterns_without_fsa"], [])
+
+    def test_unmatched_nearby_uses_the_neighbour_graph(self):
+        t = _table([{"number": 1, "name": "A", "min_cases": 1, "delivery_fee": 0, "patterns": ["M5J*"]}])
+        idx = dz.FsaIndex(codes=("K1A", "M4K", "M5J"), neighbours={"M5J": ("M4K",), "M4K": ("M5J",), "K1A": ()})
+        r = dz.fsa_map(idx, t)
+        self.assertEqual(r["unmatched_nearby"], [{"fsa": "M4K", "beside": ["M5J"]}])
+
+
 if __name__ == "__main__":
     unittest.main()
