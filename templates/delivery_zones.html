@@ -5,9 +5,44 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Delivery Zones — Soma</title>
 <link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
 <style>
   /* Page layout only — colours and components come from the shared sheet. */
   .main { max-width: 960px; }
+
+  /* Zone map */
+  .map-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .map-status { font-size: 12px; color: var(--text-light); }
+  #map { height: 60vh; min-height: 320px; max-height: 620px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg); margin-top: 10px; }
+  #map.hidden { display: none; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; font-size: 13px; align-items: center; }
+  .legend .sw { display: inline-block; width: 16px; height: 16px; border-radius: 4px; vertical-align: -3px; margin-right: 6px; border: 1px solid transparent; }
+  /* Swatches carry the MAP fill (the zone's strong colour at the map's opacity), not the pill tint. */
+  .legend .sw.zone-1 { background: var(--action-green); border-color: var(--action-green); opacity: .45; }
+  .legend .sw.zone-2 { background: var(--info-dark); border-color: var(--info-dark); opacity: .45; }
+  .legend .sw.zone-3 { background: var(--amber-text-dark); border-color: var(--amber-text-dark); opacity: .45; }
+  .legend .sw.zone-4 { background: var(--grey); border-color: var(--grey); opacity: .35; }
+  .legend .sw.split { background: repeating-linear-gradient(45deg, var(--action-green-bg) 0 4px, var(--action-blue-bg) 4px 8px); border: 1px dashed var(--info-dark); }
+  .legend .sw.store { background: var(--text); border-radius: 50%; width: 12px; height: 12px; margin-left: 2px; margin-right: 8px; }
+  .fsa-panel { display: none; margin-top: 10px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--row-alt); font-size: 13px; }
+  .fsa-panel.show { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .fsa-panel .code { font-size: 20px; font-weight: 700; letter-spacing: .08em; }
+  .fsa-panel .zone-pill { font-size: 13px; padding: 4px 12px; }
+  .fsa-panel .zone-pill .n { font-size: 16px; }
+  .fsa-panel .split-note { color: var(--amber-text-dark); }
+  .fsa-panel a { color: var(--accent); cursor: pointer; }
+  details.audit { margin-top: 12px; }
+  details.audit summary { cursor: pointer; font-size: 12px; color: var(--accent); font-weight: 600; }
+  .audit-body { font-size: 13px; margin-top: 8px; line-height: 1.6; }
+  .audit-body h4 { margin: 10px 0 2px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-light); }
+  .audit-body .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .audit-body .chips a { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-family: monospace; font-size: 12px; color: var(--text); text-decoration: none; cursor: pointer; }
+  .audit-body .chips a:hover { border-color: var(--accent); }
+  .audit-body .muted { color: var(--text-light); font-size: 12px; }
+  .map-caveat { font-size: 12px; color: var(--text-light); margin-top: 10px; line-height: 1.5; }
+  .leaflet-container { font-family: inherit; }
+  .leaflet-tooltip.fsa-tip { font-size: 12px; font-weight: 600; padding: 3px 8px; }
+  .leaflet-tooltip.fsa-tip .zn { font-weight: 400; color: var(--text-light); }
   .lookup-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
   .lookup-row label { display: block; font-size: 12px; font-weight: 600; color: var(--text-light); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .04em; }
   .lookup-row input { padding: 11px 12px; border: 1px solid var(--border); border-radius: var(--r-md); font-size: 18px; font-family: inherit; background: var(--white); color: var(--text); }
@@ -84,11 +119,32 @@
       <button class="btn btn-primary" id="go" onclick="doLookup()">Look up</button>
       <div class="hint">Zone, minimum order and delivery fee for a wholesale customer. Cases are {{ summary.case_size }} units. Nothing here is saved.</div>
     </div>
-    <div class="status error" id="err"></div>
+    <div class="status error" id="err" style="display:none;"></div>
     {% if summary.store.address %}<div class="store-line">Delivering from {{ summary.store.label or 'the store' }}, {{ summary.store.address }}.</div>{% endif %}
   </div>
 
   <div class="card result" id="result"></div>
+
+  <div class="card" id="map-card">
+    <div class="map-head">
+      <h2 style="margin:0;">Zone map</h2>
+      <span class="map-status" id="map-status">Loading map&hellip;</span>
+    </div>
+    <div id="map"></div>
+    <div class="fsa-panel" id="fsa-panel"></div>
+    <div class="legend" id="legend">
+      {% for z in summary.zones %}<span><span class="sw zone-{{ z.number }}"></span>Zone {{ z.number }} &middot; {{ z.name }}</span>{% endfor %}
+      <span><span class="sw split"></span>Split FSA &mdash; use the lookup</span>
+      <span><span class="sw store"></span>{{ summary.store.label or 'Store' }}</span>
+    </div>
+    <details class="audit" id="audit"><summary>Map audit</summary><div class="audit-body" id="audit-body"></div></details>
+    <div class="map-caveat">
+      Each Forward Sortation Area (the first three characters of a postal code) is coloured by the zone the same
+      rule above gives it; an FSA where a longer pattern sends some codes elsewhere is hatched. Boundaries are
+      Statistics Canada&rsquo;s 2021 Census FSAs &mdash; an FSA created since will not appear, and census boundaries
+      differ slightly from Canada Post&rsquo;s live ones. The lookup is the authority; the map is the picture.
+    </div>
+  </div>
 
   <div class="card">
     <h2>Zone reference</h2>
@@ -125,6 +181,7 @@
   </div>
 </div>
 
+<script src="/static/vendor/leaflet/leaflet.js"></script>
 <script>
 // New JS: let/const only (forward-only policy — see CLAUDE.md).
 const $ = (id) => document.getElementById(id);
@@ -206,6 +263,7 @@ async function doLookup() {
     }
     err.style.display = 'none';
     render(d);
+    mapFocus(d.postal_code.slice(0, 3), d.zone);
     const url = new URL(window.location);
     url.searchParams.set('postal', d.postal_code);
     if (cases !== '') url.searchParams.set('cases', cases); else url.searchParams.delete('cases');
@@ -229,6 +287,139 @@ $('cases').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLookup(
     doLookup();
   }
 })();
+
+// ── Zone map ──────────────────────────────────────────────────────────────────
+// Loads AFTER the page renders so the lookup is never waiting on 1.2 MB of
+// polygons. The server classifies every FSA (/api/delivery-zones/fsa-map) with
+// the same engine as the lookup; the browser only joins zone → polygon and
+// paints. Any failure (offline tablet, missing file) degrades to a status line.
+const MAP = { map: null, layers: {}, data: null, selected: null, pendingFocus: null };
+
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+const ZONE_COLOUR = { 1: cssVar('--action-green'), 2: cssVar('--info-dark'), 3: cssVar('--amber-text-dark'), 4: cssVar('--grey') };
+
+function fsaStyle(fsa, state) {
+  const z = MAP.data.zones[fsa];
+  const colour = ZONE_COLOUR[z] || ZONE_COLOUR[4];
+  const split = MAP.data.split.includes(fsa);
+  const s = { color: colour, weight: split ? 2 : 1, opacity: 0.9, fillColor: colour,
+              fillOpacity: z === 4 ? 0.10 : 0.35, dashArray: split ? '6 4' : null };
+  if (state === 'hover') { s.weight = 3; s.fillOpacity = z === 4 ? 0.25 : 0.55; }
+  if (state === 'selected') { s.weight = 3; s.color = cssVar('--text'); s.fillOpacity = z === 4 ? 0.3 : 0.6; }
+  return s;
+}
+
+function fsaTip(fsa) {
+  const z = MAP.data.zones[fsa];
+  const name = MAP.data.zone_names[z] || '';
+  const split = MAP.data.split.includes(fsa) ? ' · split — use the lookup' : '';
+  return `${esc(fsa)} <span class="zn">· Zone ${z} ${esc(name)}${split}</span>`;
+}
+
+function showFsaPanel(fsa) {
+  const z = MAP.data.zones[fsa];
+  const pat = MAP.data.matched_pattern[fsa];
+  const split = MAP.data.split.includes(fsa);
+  $('fsa-panel').innerHTML = `
+    <span class="code">${esc(fsa)}</span>
+    <span class="zone-pill zone-${z}"><span class="n">${z}</span> ${esc(MAP.data.zone_names[z] || '')}</span>
+    <span class="zone-matched">${pat ? 'matched <code>' + esc(pat) + '</code>' : 'no pattern matched'}</span>
+    ${split ? '<span class="split-note">Some codes in this FSA belong to another zone — look the full postal code up.</span>' : ''}
+    <a onclick="$('postal').focus()">Look up a full code &rarr;</a>`;
+  $('fsa-panel').classList.add('show');
+}
+
+function selectFsa(fsa, pan) {
+  if (!MAP.map || !MAP.layers[fsa]) return false;
+  if (MAP.selected && MAP.layers[MAP.selected]) MAP.layers[MAP.selected].setStyle(fsaStyle(MAP.selected));
+  MAP.selected = fsa;
+  const layer = MAP.layers[fsa];
+  layer.setStyle(fsaStyle(fsa, 'selected'));
+  layer.bringToFront();
+  if (pan) MAP.map.fitBounds(layer.getBounds().pad(0.6), { maxZoom: 13 });
+  showFsaPanel(fsa);
+  return true;
+}
+
+// Called by the lookup: highlight + pan to the FSA of the code just quoted.
+// The map may still be loading — remember the request and apply it on load.
+function mapFocus(fsa, zone) {
+  if (!selectFsa(fsa, true)) MAP.pendingFocus = fsa;
+  else if (!MAP.layers[fsa]) $('map-status').textContent = `${fsa} is not drawn on the map (zone ${zone} by the lookup).`;
+}
+
+function auditHtml(d) {
+  const chips = (items) => `<div class="chips">${items.map((i) => `<a onclick="selectFsa('${esc(i.fsa)}', true)" title="${esc((i.beside || []).join(', '))}">${esc(i.fsa)}</a>`).join('')}</div>`;
+  const noFsa = d.patterns_without_fsa || [];
+  const nearby = d.unmatched_nearby || [];
+  const counts = Object.keys(d.counts).map((z) => `Zone ${z}: ${d.counts[z]}`).join(' · ');
+  return `
+    <div class="muted">${d.fsa_count} Ontario FSAs drawn. ${counts}. Split: ${d.split.length ? d.split.map(esc).join(', ') : 'none'}.</div>
+    <h4>Patterns no mapped FSA satisfies (${noFsa.length})</h4>
+    ${noFsa.length ? `<div class="chips">${noFsa.map((p) => `<a title="Zone ${p.zone}">${esc(p.pattern)} <span class="muted">z${p.zone}</span></a>`).join('')}</div>` : '<div class="muted">none</div>'}
+    <div class="muted">A typo in the pattern list — or a real business-only FSA the census file does not draw (M5K, M5X are known). Postal codes there still quote correctly.</div>
+    <h4>Unserved FSAs bordering the delivery area (${nearby.length})</h4>
+    ${nearby.length ? chips(nearby) : '<div class="muted">none</div>'}
+    <div class="muted">Zone ${d.fallback_zone} FSAs that touch a served one. The deliberately excluded rural codes belong here; anything unexpected is a hole in the pattern lists. Hover a code for its served neighbours; click to see it.</div>`;
+}
+
+async function initMap() {
+  const status = $('map-status');
+  if (typeof L === 'undefined') { status.textContent = 'Map library did not load — the lookup still works.'; $('map').classList.add('hidden'); return; }
+  let geo, data;
+  try {
+    const [gr, dr] = await Promise.all([fetch('/static/ontario_fsa.geojson'), fetch('/api/delivery-zones/fsa-map')]);
+    if (!gr.ok || !dr.ok) throw new Error('http ' + gr.status + '/' + dr.status);
+    [geo, data] = await Promise.all([gr.json(), dr.json()]);
+    if (data.error) throw new Error(data.error);
+  } catch (e) {
+    status.textContent = 'Map unavailable (offline?) — the lookup still works.';
+    $('map').classList.add('hidden');
+    return;
+  }
+  MAP.data = data;
+  // A view must exist BEFORE layers are added or Leaflet never projects their
+  // bounds (fitBounds on them then throws). Start on the store; refit below.
+  const map = L.map('map', { scrollWheelZoom: false, preferCanvas: true })
+    .setView([Number(data.store.lat) || 43.68, Number(data.store.lng) || -79.34], 9);
+  MAP.map = map;
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors · FSA boundaries: Statistics Canada, 2021 Census',
+  }).addTo(map);
+
+  const served = [];
+  const layer = L.geoJSON(geo, {
+    style: (f) => fsaStyle(f.properties.fsa),
+    onEachFeature: (f, lyr) => {
+      const fsa = f.properties.fsa;
+      MAP.layers[fsa] = lyr;
+      if (data.zones[fsa] !== data.fallback_zone) served.push(lyr);
+      lyr.bindTooltip(fsaTip(fsa), { sticky: true, className: 'fsa-tip' });
+      lyr.on('mouseover', () => { if (MAP.selected !== fsa) { lyr.setStyle(fsaStyle(fsa, 'hover')); lyr.bringToFront(); } });
+      lyr.on('mouseout', () => { if (MAP.selected !== fsa) lyr.setStyle(fsaStyle(fsa)); });
+      lyr.on('click', () => selectFsa(fsa, false));
+    },
+  }).addTo(map);
+
+  if (data.store && data.store.lat && data.store.lng) {
+    L.circleMarker([Number(data.store.lat), Number(data.store.lng)], {
+      radius: 7, color: cssVar('--white'), weight: 2, fillColor: cssVar('--text'), fillOpacity: 1,
+    }).addTo(map).bindTooltip(`${esc(data.store.label || 'Store')} · ${esc(data.store.address || '')}`, { className: 'fsa-tip' });
+  }
+
+  // Frame the delivery area, not all of Ontario — the north would swallow the GTA.
+  // animate:false — an animated zoom issued in the same tick as map creation
+  // can be dropped, leaving the map on the setView above.
+  const frame = served.length ? L.featureGroup(served).getBounds() : layer.getBounds();
+  map.fitBounds(frame.pad(0.02), { animate: false });
+
+  status.textContent = `${data.fsa_count} FSAs · scroll to zoom with ctrl/⌘, drag to pan`;
+  $('audit-body').innerHTML = auditHtml(data);
+  if (MAP.pendingFocus) { const f = MAP.pendingFocus; MAP.pendingFocus = null; mapFocus(f, data.zones[f]); }
+}
+
+initMap();
 </script>
 </body>
 </html>

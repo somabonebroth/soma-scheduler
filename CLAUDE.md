@@ -156,7 +156,28 @@ delivery_zone_routes.py — the thin Blueprint over it: `/delivery-zones` page +
                       /api/delivery-zones` (reference) + `GET
                       /api/delivery-zones/fsa-map` (FSA→zone for the map, server-
                       classified so map and lookup can never disagree; geometry is
-                      fetched separately from `/static/ontario_fsa.geojson`). Manager + FOH (local
+                      fetched separately from `/static/ontario_fsa.geojson`).
+                      **The Delivery Zone Map (shipped 2026-09-14, two deploys)** is a
+                      "Zone map" card on `/delivery-zones` between the lookup and the
+                      zone reference: Leaflet 1.9.4 VENDORED at `static/vendor/leaflet/`
+                      (the codebase's only vendored JS library — no CDN, so the CSP/
+                      offline story is the same as the rest of the app), OpenStreetMap
+                      tiles fetched by the browser (fine at internal volume; attribution
+                      is mandatory and stays on the map). GeoJSON + fsa-map load AFTER
+                      the page renders, so the lookup never waits on 1.2 MB; any failure
+                      degrades to a status line and the lookup still works. Fills use the
+                      zone tokens read via `getComputedStyle` (legend swatches carry the
+                      SAME fill, not the pale pill tint). Split FSAs (M5J) are dashed;
+                      the store is a circle marker at the lat/lng stored in
+                      `delivery_zones.json` (geocoded ONCE, never at runtime). A lookup
+                      selects + pans to its FSA (`mapFocus`, queued if the map is still
+                      loading); clicking an FSA shows a code/zone/pattern panel; the
+                      collapsed "Map audit" lists the two audit lists with click-to-pan
+                      chips. Leaflet gotchas learned here: a view must be set BEFORE
+                      layers are added or their bounds never project (fitBounds then
+                      throws), and the load-time `fitBounds` must be `animate:false` or
+                      it is silently dropped. The preview server caches templates —
+                      restart it after every rsync. Manager + FOH (local
                       `foh_required` copy); production locked out. An internal QUOTING
                       tool with NO pathways in or out — nothing reads it, no order
                       writes it, and the SBBC portal's retail zone table is separate
