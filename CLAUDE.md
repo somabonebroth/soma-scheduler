@@ -181,8 +181,10 @@ delivery_zone_routes.py — the thin Blueprint over it: `/delivery-zones` page +
                       `foh_required` copy); production locked out. An internal QUOTING
                       tool with NO pathways in or out — nothing reads it, no order
                       writes it, and the SBBC portal's retail zone table is separate
-                      and untouched. Linked from the manager dashboard's Buyers &
-                      Suppliers row and a tools strip under the FOH Orders tiles.
+                      and untouched. Since 2026-09-14 it is a full-width `.tile-blue`
+                      dashboard tile in its own "Delivery Zones" section — above
+                      Administration for the manager, above End of Day for FOH (it
+                      left the Buyers & Suppliers admin row and the FOH tools strip).
 ledger.py           — Flask Blueprint: inventory event-ledger subsystem (added
                       2026-06-09). Read-only FG reconciliation/drift detector
                       (/admin/fg-reconcile), append-only event model + projection
