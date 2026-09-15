@@ -1,0 +1,364 @@
+{# Produced vs sold — two lines in JARS on one time axis, fed by
+   GET /api/production-tracker/overlay (manager-only). Shared by the Production
+   Tracker (full controls: bucket + "show last" + "ending") and the manager
+   dashboard (`ov_compact`: bucket toggle only, defaults ending now, plus a link
+   to the tracker). Extracted 2026-09-15 so the two can never drift — edit here,
+   never fork. Set `ov_compact` before including. Self-contained: own CSS
+   (ov-* namespace), own markup (#overlay-card), own JS (ov* / loadOverlay). #}
+<style>
+.ov-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 20px 24px; margin-bottom: 16px; }
+.ov-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.ov-title { font-size: 16px; font-weight: 600; color: var(--dark); }
+.ov-title a { font-size: 12px; font-weight: 500; color: var(--text-light); text-decoration: none; margin-left: 10px; }
+.ov-title a:hover { color: var(--accent); }
+.ov-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.ov-toggle { display: flex; }
+.ov-toggle button { padding: 7px 16px; border: 1px solid var(--border); font-size: 13px; font-weight: 600; cursor: pointer; background: var(--card-bg); color: var(--text); margin-left: -1px; }
+.ov-toggle button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.ov-toggle button:last-child { border-radius: 0 6px 6px 0; }
+.ov-toggle button.active { background: var(--accent); color: var(--white); border-color: var(--accent); position: relative; z-index: 1; }
+.ov-picker { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ov-picker label { font-size: 13px; font-weight: 600; }
+.ov-picker input[type="date"], .ov-picker select { padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--card-bg); }
+.ov-stats { display: flex; align-items: baseline; gap: 22px; flex-wrap: wrap; margin: 2px 0 10px; }
+.ov-stat b { font-size: 22px; font-weight: 700; color: var(--dark); letter-spacing: -.01em; }
+.ov-stat span { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-light); margin-left: 6px; }
+.ov-span { font-size: 12px; color: var(--text-light); margin-left: auto; }
+.ov-foot { font-size: 11px; color: var(--text-light); margin-top: 8px; }
+.ov-legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--text); margin-bottom: 8px; }
+.ov-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.ov-key { display: inline-block; width: 16px; height: 0; border-top: 2px solid; }
+.ov-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; }
+.ov-wrap { position: relative; }
+.ov-wrap svg { display: block; width: 100%; height: auto; overflow: visible; font-family: inherit; }
+.ov-axis { font-size: 11px; fill: var(--text-light); }
+.ov-grid { stroke: var(--border); stroke-width: 1; }
+.ov-hair { stroke: var(--text-muted); stroke-width: 1; pointer-events: none; }
+.ov-tip { position: absolute; display: none; background: var(--dark); color: var(--white); font-size: 11px; line-height: 1.6; padding: 6px 10px; border-radius: 4px; pointer-events: none; z-index: 5; white-space: nowrap; }
+.ov-tip .t-date { font-weight: 600; margin-bottom: 2px; }
+.ov-tip .t-row { display: flex; align-items: center; gap: 6px; }
+.ov-tip .t-row b { font-weight: 700; min-width: 3.5em; text-align: right; }
+.ov-tip .t-key { display: inline-block; width: 12px; border-top: 2px solid; }
+.ov-multiples { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+.ov-panel { border: 1px solid var(--border); border-radius: 6px; padding: 10px 10px 4px; background: var(--row-alt); }
+.ov-panel-title { font-size: 12px; font-weight: 600; color: var(--dark); margin-bottom: 2px; display: flex; justify-content: space-between; }
+.ov-panel-title small { font-weight: 400; color: var(--text-light); }
+.ov-table { margin-top: 14px; font-size: 12px; }
+.ov-table summary { cursor: pointer; color: var(--text-light); }
+.ov-table table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+.ov-table th, .ov-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); text-align: right; font-variant-numeric: tabular-nums; }
+.ov-table th:first-child, .ov-table td:first-child { text-align: left; }
+.ov-table th { font-size: 11px; color: var(--text-light); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.ov-status { font-size: 13px; color: var(--text-light); padding: 24px 0; text-align: center; }
+@media (max-width: 900px) { .ov-multiples { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .ov-multiples { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+</style>
+<div class="ov-card" id="overlay-card" data-compact="{{ '1' if ov_compact else '0' }}">
+    <div class="ov-head">
+        <div class="ov-title">Produced vs sold{% if ov_compact %}<a href="/production-tracker">Production Tracker &rarr;</a>{% endif %}</div>
+        <div class="ov-controls">
+            <div class="ov-toggle" id="ov-bucket">
+                <button class="active" data-grain="week" onclick="ovSetGrain('week')">Week</button>
+                <button data-grain="month" onclick="ovSetGrain('month')">Month</button>
+                <button data-grain="year" onclick="ovSetGrain('year')">Year</button>
+            </div>
+            {% if not ov_compact %}<div class="ov-picker" id="ov-picker"></div>{% endif %}
+        </div>
+    </div>
+    <div class="ov-stats" id="ov-stats"></div>
+    <div class="ov-legend" id="ov-legend"></div>
+    <div id="ov-main"><div class="ov-status">Loading…</div></div>
+    <div class="ov-multiples" id="ov-multiples"></div>
+    <details class="ov-table" id="ov-table-wrap"><summary>Show the numbers</summary><div id="ov-table"></div>
+        <div class="ov-foot">Jars: 876 / 750 / 473 ml, frozen, Back Bar. Kettle's End is not a product and is not counted.</div>
+    </details>
+</div>
+<script>
+// ── Produced vs sold overlay ─────────────────────────────────────────────
+// Two lines in jars on one time axis, fed by /api/production-tracker/overlay.
+// Has its OWN bucket toggle + range + end picker, independent of the bars above:
+// week = one point per Mon–Sun week, month = one per calendar month,
+// year = one per calendar year (annual totals).
+const OV_LABELS = {'SS-876ML':'876 ml','SS-750ML':'750 ml','SS-473ML':'473 ml','FZ':'Frozen','BB':'Back Bar'};
+const OV_RANGES = { week: [12, 26, 52], month: [6, 12, 24], year: [3, 5, 10] };
+const OV_COMPACT_N = { week: 12, month: 12, year: 5 };   // dashboard defaults — a glance, not a study
+const OV_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const OV_COMPACT = document.getElementById('overlay-card').dataset.compact === '1';
+let _ovData = null;
+let _ovGrain = 'week';
+
+function ovMondayIso(){
+    const t = new Date(); const d = t.getDay(); const m = new Date(t);
+    m.setDate(t.getDate() + (d === 0 ? -6 : 1 - d));
+    return m.toISOString().split('T')[0];
+}
+
+function ovSetGrain(g){
+    _ovGrain = g;
+    document.querySelectorAll('#ov-bucket button').forEach(b => b.classList.toggle('active', b.dataset.grain === g));
+    ovBuildPicker();
+    loadOverlay();
+}
+
+function ovBuildPicker(){
+    const bar = document.getElementById('ov-picker');
+    if (!bar) return;                                   // compact card: toggle only
+    const now = new Date();
+    const unit = _ovGrain;
+    const ranges = OV_RANGES[unit].map((r, i) => '<option value="' + r + '"' + (i === 1 ? ' selected' : '') + '>' + r + ' ' + unit + 's</option>').join('');
+    let html = '<label>Show last</label><select id="ov-n" onchange="loadOverlay()">' + ranges + '</select>';
+    html += '<label>ending</label>';
+    if (unit === 'week') {
+        html += '<input type="date" id="ov-end-date" value="' + ovMondayIso() + '" onchange="loadOverlay()">';
+    } else if (unit === 'month') {
+        html += '<select id="ov-end-month" onchange="loadOverlay()">';
+        for (let i = 0; i < 12; i++) html += '<option value="' + i + '"' + (i === now.getMonth() ? ' selected' : '') + '>' + OV_MONTHS[i] + '</option>';
+        html += '</select><select id="ov-end-year" onchange="loadOverlay()">';
+        for (let y = now.getFullYear() - 3; y <= now.getFullYear() + 1; y++) html += '<option value="' + y + '"' + (y === now.getFullYear() ? ' selected' : '') + '>' + y + '</option>';
+        html += '</select>';
+    } else {
+        html += '<select id="ov-end-year" onchange="loadOverlay()">';
+        for (let y = now.getFullYear() - 3; y <= now.getFullYear() + 1; y++) html += '<option value="' + y + '"' + (y === now.getFullYear() ? ' selected' : '') + '>' + y + '</option>';
+        html += '</select>';
+    }
+    bar.innerHTML = html;
+}
+
+function ovParams(){
+    const nEl = document.getElementById('ov-n');
+    const n = nEl ? (parseInt(nEl.value, 10) || OV_RANGES[_ovGrain][1]) : OV_COMPACT_N[_ovGrain];
+    if (OV_COMPACT) {                                   // dashboard: defaults, ending now
+        const now = new Date();
+        if (_ovGrain === 'week')  return {grain:'week',  end:ovMondayIso(), n:n, unit:'week'};
+        if (_ovGrain === 'month') return {grain:'month', end:now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'), n:n, unit:'month'};
+        return {grain:'year', end:String(now.getFullYear()), n:n, unit:'year'};
+    }
+    if (_ovGrain === 'week') {
+        return {grain:'week', end:document.getElementById('ov-end-date').value, n:n, unit:'week'};
+    }
+    if (_ovGrain === 'month') {
+        const m = parseInt(document.getElementById('ov-end-month').value, 10) + 1;
+        const y = document.getElementById('ov-end-year').value;
+        return {grain:'month', end:y + '-' + (m < 10 ? '0' + m : m), n:n, unit:'month'};
+    }
+    return {grain:'year', end:document.getElementById('ov-end-year').value, n:n, unit:'year'};
+}
+
+async function loadOverlay(){
+    const main=document.getElementById('ov-main');
+    const p=ovParams();
+    if(!p.end){ main.innerHTML='<div class="ov-status">Pick a period above.</div>'; return; }
+    main.style.opacity = _ovData ? '.5' : '1';
+    try{
+        const res=await fetch('/api/production-tracker/overlay?grain='+p.grain+'&end='+encodeURIComponent(p.end)+'&n='+p.n);
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        _ovData=await res.json();
+        _ovData.unit=p.unit;
+        renderOverlay();
+    }catch(e){
+        main.style.opacity='1';
+        main.innerHTML='<div class="ov-status">Could not load: '+e.message+'</div>';
+    }
+}
+
+function ovColors(){
+    const cs=getComputedStyle(document.documentElement);
+    return {
+        produced: cs.getPropertyValue('--action-green').trim() || '#2e7d32',
+        sold:     cs.getPropertyValue('--indigo').trim() || '#3949ab',
+        surface:  cs.getPropertyValue('--card-bg').trim() || '#ffffff',
+    };
+}
+
+function ovNiceStep(max){
+    if(max<=0) return 1;
+    const raw=max/5, mag=Math.pow(10,Math.floor(Math.log10(raw)));
+    const norm=raw/mag;
+    const step = norm<=1?1 : norm<=2?2 : norm<=2.5?2.5 : norm<=5?5 : 10;
+    return step*mag;
+}
+function ovFmt(n){ return (+n).toLocaleString(); }
+
+// One SVG line chart. rows = [{label, produced, sold}]; opts.yMax shares a scale
+// across panels; opts.compact drops most axis labels + markers for small multiples.
+function ovChart(host, rows, opts){
+    const C=ovColors();
+    const W=Math.max(host.clientWidth||600, 240), H=opts.compact?130:260;
+    const padL=opts.compact?42:48, padR=opts.compact?10:64, padT=12, padB=opts.compact?20:26;
+    const pw=W-padL-padR, ph=H-padT-padB;
+    const n=rows.length;
+    const step=ovNiceStep(opts.yMax);
+    const yMax=Math.max(step*Math.ceil(opts.yMax/step), step);
+    const x=i=> padL + (n===1 ? pw/2 : i*pw/(n-1));
+    const y=v=> padT + ph - (v/yMax)*ph;
+
+    let s='<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="'+(opts.aria||'Produced vs sold')+'">';
+    // gridlines + y ticks (hairline, solid, recessive)
+    for(let v=0; v<=yMax+1e-9; v+=step){
+        const yy=y(v);
+        s+='<line class="ov-grid" x1="'+padL+'" x2="'+(W-padR)+'" y1="'+yy+'" y2="'+yy+'"/>';
+        if(!opts.compact || v===0 || Math.abs(v-yMax)<1e-9)
+            s+='<text class="ov-axis" x="'+(padL-6)+'" y="'+(yy+4)+'" text-anchor="end">'+ovFmt(v)+'</text>';
+    }
+    // x labels — thin out when crowded
+    // ~48px per label; the END label always shows and any regular label within 44px of it yields
+    const every = opts.compact ? Math.max(1,n-1) : Math.max(1, Math.ceil(n*48/pw));
+    rows.forEach((r,i)=>{
+        const draw = i===n-1 || (i%every===0 && (x(n-1)-x(i)) >= 44);
+        if(draw)
+            s+='<text class="ov-axis" x="'+x(i)+'" y="'+(H-6)+'" text-anchor="middle">'+r.label+'</text>';
+    });
+    // shaded gap between the lines: produced above → produced tint (stock building),
+    // sold above → sold tint (stock draining). Split a segment at the crossing.
+    for(let i=0;i<n-1;i++){
+        const p0=rows[i].produced, p1=rows[i+1].produced, q0=rows[i].sold, q1=rows[i+1].sold;
+        const d0=p0-q0, d1=p1-q1;
+        const quad=(xa,pa,qa,xb,pb,qb)=>{
+            const build=(pa+pb)>=(qa+qb);
+            return '<polygon points="'+xa+','+y(pa)+' '+xb+','+y(pb)+' '+xb+','+y(qb)+' '+xa+','+y(qa)+'" fill="'+(build?C.produced:C.sold)+'" fill-opacity=".14"/>';
+        };
+        if(d0*d1<0){
+            const t=d0/(d0-d1), xm=x(i)+(x(i+1)-x(i))*t, pm=p0+(p1-p0)*t;
+            s+=quad(x(i),p0,q0,xm,pm,pm)+quad(xm,pm,pm,x(i+1),p1,q1);
+        }else{
+            s+=quad(x(i),p0,q0,x(i+1),p1,q1);
+        }
+    }
+    const pts=key=>rows.map((r,i)=>x(i)+','+y(r[key])).join(' ');
+    s+='<polyline points="'+pts('sold')+'" fill="none" stroke="'+C.sold+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+    s+='<polyline points="'+pts('produced')+'" fill="none" stroke="'+C.produced+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+    if(!opts.compact && n<=26){
+        rows.forEach((r,i)=>{
+            s+='<circle cx="'+x(i)+'" cy="'+y(r.sold)+'" r="4" fill="'+C.sold+'" stroke="'+C.surface+'" stroke-width="2"/>';
+            s+='<circle cx="'+x(i)+'" cy="'+y(r.produced)+'" r="4" fill="'+C.produced+'" stroke="'+C.surface+'" stroke-width="2"/>';
+        });
+    }
+    if(!opts.compact && n){
+        // direct labels at the line ends, nudged apart if they collide
+        const last=rows[n-1]; let yp=y(last.produced), ys=y(last.sold);
+        if(Math.abs(yp-ys)<14){ if(yp<=ys){yp-=7;ys+=7;} else {yp+=7;ys-=7;} }
+        s+='<text class="ov-axis" style="fill:var(--text)" x="'+(W-padR+8)+'" y="'+(yp+4)+'">Produced</text>';
+        s+='<text class="ov-axis" style="fill:var(--text)" x="'+(W-padR+8)+'" y="'+(ys+4)+'">Sold</text>';
+    }
+    // hover layer: hairline + hit rect
+    s+='<line class="ov-hair" id="'+opts.id+'-hair" x1="0" x2="0" y1="'+padT+'" y2="'+(padT+ph)+'" style="display:none"/>';
+    s+='<g id="'+opts.id+'-dots" style="display:none"><circle r="5" fill="'+C.sold+'" stroke="'+C.surface+'" stroke-width="2"/><circle r="5" fill="'+C.produced+'" stroke="'+C.surface+'" stroke-width="2"/></g>';
+    s+='<rect x="'+padL+'" y="'+padT+'" width="'+pw+'" height="'+ph+'" fill="transparent" id="'+opts.id+'-hit"/>';
+    s+='</svg><div class="ov-tip" id="'+opts.id+'-tip"></div>';
+    host.innerHTML='<div class="ov-wrap">'+s+'</div>';
+
+    const wrap=host.firstChild, svg=wrap.querySelector('svg');
+    const hit=svg.querySelector('#'+opts.id+'-hit'), hair=svg.querySelector('#'+opts.id+'-hair');
+    const dots=svg.querySelector('#'+opts.id+'-dots'), tip=wrap.querySelector('#'+opts.id+'-tip');
+    const show=i=>{
+        const r=rows[i], xx=x(i);
+        hair.setAttribute('x1',xx); hair.setAttribute('x2',xx); hair.style.display='';
+        const cs=dots.querySelectorAll('circle');
+        cs[0].setAttribute('cx',xx); cs[0].setAttribute('cy',y(r.sold));
+        cs[1].setAttribute('cx',xx); cs[1].setAttribute('cy',y(r.produced));
+        dots.style.display='';
+        tip.textContent='';
+        const d=document.createElement('div'); d.className='t-date'; d.textContent=r.title||r.label; tip.appendChild(d);
+        [['Produced',r.produced,C.produced],['Sold',r.sold,C.sold]].forEach(([name,val,col])=>{
+            const row=document.createElement('div'); row.className='t-row';
+            const k=document.createElement('span'); k.className='t-key'; k.style.borderColor=col;
+            const b=document.createElement('b'); b.textContent=ovFmt(val);
+            const l=document.createElement('span'); l.textContent=name;
+            row.appendChild(k); row.appendChild(b); row.appendChild(l); tip.appendChild(row);
+        });
+        const net=document.createElement('div'); net.className='t-row';
+        const nb=document.createElement('b'); const diff=r.produced-r.sold; nb.textContent=(diff>0?'+':'')+ovFmt(diff);
+        const nl=document.createElement('span'); nl.textContent='net';
+        net.appendChild(document.createElement('span')).className='t-key'; net.appendChild(nb); net.appendChild(nl); tip.appendChild(net);
+        tip.style.display='block';
+        const scale=wrap.clientWidth/W, px=xx*scale;
+        tip.style.top=(padT*scale)+'px';
+        if(px>wrap.clientWidth/2){ tip.style.right=(wrap.clientWidth-px+10)+'px'; tip.style.left='auto'; }
+        else { tip.style.left=(px+10)+'px'; tip.style.right='auto'; }
+    };
+    const hide=()=>{ hair.style.display='none'; dots.style.display='none'; tip.style.display='none'; };
+    hit.addEventListener('pointermove',ev=>{
+        const rect=svg.getBoundingClientRect();
+        const mx=(ev.clientX-rect.left)*(W/rect.width);
+        let best=0, bd=Infinity;
+        for(let i=0;i<n;i++){ const d=Math.abs(x(i)-mx); if(d<bd){bd=d;best=i;} }
+        show(best);
+    });
+    hit.addEventListener('pointerleave',hide);
+}
+
+function renderOverlay(){
+    const d=_ovData; if(!d) return;
+    const main=document.getElementById('ov-main'); main.style.opacity='1';
+    const C=ovColors();
+    let periods=(d.periods||[]).filter(p=>!p.future);   // nothing to plot for a period that hasn't started
+    // drop leading periods from before the records begin (a 5-year view on 2 years of data), keep ≥2 points
+    while(periods.length>2 && !periods[0].produced_total && !periods[0].sold_total) periods=periods.slice(1);
+    const unitWord = d.unit || 'week';
+    const titleOf=p=>(unitWord==='week'?'Week of '+p.label:p.label)+(p.partial?' (so far)':'');
+    const rows=periods.map(p=>({label:p.label, title:titleOf(p), produced:p.produced_total, sold:p.sold_total}));
+    const totalP=rows.reduce((a,r)=>a+r.produced,0), totalS=rows.reduce((a,r)=>a+r.sold,0);
+    if(!rows.length || (!totalP && !totalS)){
+        main.innerHTML='<div class="ov-status">Nothing in this window.</div>';
+        document.getElementById('ov-multiples').innerHTML='';
+        document.getElementById('ov-table').innerHTML='';
+        document.getElementById('ov-legend').innerHTML='';
+        document.getElementById('ov-stats').innerHTML='';
+        return;
+    }
+    const net=totalP-totalS;
+    const span = rows[0].label + ' – ' + rows[rows.length-1].label + ' · ' + rows.length + ' ' + unitWord + (rows.length===1?'':'s') + (periods[periods.length-1].partial ? ' · last one so far' : '');
+    const stats = document.getElementById('ov-stats'); stats.textContent = '';
+    [[ovFmt(totalP),'produced'],[ovFmt(totalS),'sold'],[(net>0?'+':'')+ovFmt(net),'net']].forEach(([v,l])=>{
+        const st=document.createElement('div'); st.className='ov-stat';
+        const b=document.createElement('b'); b.textContent=v; const sm=document.createElement('span'); sm.textContent=l;
+        st.appendChild(b); st.appendChild(sm); stats.appendChild(st);
+    });
+    const sp=document.createElement('div'); sp.className='ov-span'; sp.textContent=span; stats.appendChild(sp);
+    document.getElementById('ov-legend').innerHTML =
+        '<span><i class="ov-key" style="border-color:'+C.produced+'"></i>Produced</span>'
+        + '<span><i class="ov-key" style="border-color:'+C.sold+'"></i>Sold</span>'
+        + '<span><i class="ov-swatch" style="background:'+C.produced+';opacity:.25"></i>Building</span>'
+        + '<span><i class="ov-swatch" style="background:'+C.sold+';opacity:.25"></i>Drawing down</span>';
+
+    const yMax=Math.max(...rows.map(r=>Math.max(r.produced,r.sold)),1);
+    ovChart(main, rows, {id:'ovm', yMax:yMax, aria:'Produced vs sold, all jars'});
+
+    // small multiples, one per format, sharing a y scale
+    const mult=document.getElementById('ov-multiples'); mult.innerHTML='';
+    let subMax=1;
+    d.buckets.forEach(b=>periods.forEach(p=>{ subMax=Math.max(subMax,p.produced[b]||0,p.sold[b]||0); }));
+    d.buckets.forEach((b,bi)=>{
+        const panel=document.createElement('div'); panel.className='ov-panel';
+        const bp=periods.reduce((a,p)=>a+(p.produced[b]||0),0), bs=periods.reduce((a,p)=>a+(p.sold[b]||0),0);
+        const t=document.createElement('div'); t.className='ov-panel-title';
+        const tn=document.createElement('span'); tn.textContent=OV_LABELS[b]||b;
+        const ts=document.createElement('small'); ts.textContent=ovFmt(bp)+' / '+ovFmt(bs);
+        t.appendChild(tn); t.appendChild(ts); panel.appendChild(t);
+        const host=document.createElement('div'); panel.appendChild(host); mult.appendChild(panel);
+        const brows=periods.map(p=>({label:p.label, title:(OV_LABELS[b]||b)+' · '+titleOf(p), produced:p.produced[b]||0, sold:p.sold[b]||0}));
+        ovChart(host, brows, {id:'ovs'+bi, yMax:subMax, compact:true, aria:(OV_LABELS[b]||b)+' produced vs sold'});
+    });
+
+    // table view — every value reachable without hovering
+    const tbl=document.getElementById('ov-table');
+    let h='<table><thead><tr><th>'+(unitWord==='week'?'Week of':unitWord==='month'?'Month':'Year')+'</th><th>Produced</th><th>Sold</th><th>Net</th>';
+    d.buckets.forEach(b=>{ h+='<th>'+(OV_LABELS[b]||b)+' made</th><th>'+(OV_LABELS[b]||b)+' sold</th>'; });
+    h+='</tr></thead><tbody>';
+    periods.forEach(p=>{
+        const diff=p.produced_total-p.sold_total;
+        h+='<tr><td>'+p.label+(p.partial?' <span style="color:var(--text-light)">(so far)</span>':'')+'</td><td>'+ovFmt(p.produced_total)+'</td><td>'+ovFmt(p.sold_total)+'</td><td>'+(diff>0?'+':'')+ovFmt(diff)+'</td>';
+        d.buckets.forEach(b=>{ h+='<td>'+ovFmt(p.produced[b]||0)+'</td><td>'+ovFmt(p.sold[b]||0)+'</td>'; });
+        h+='</tr>';
+    });
+    h+='<tr><td><strong>Total</strong></td><td><strong>'+ovFmt(totalP)+'</strong></td><td><strong>'+ovFmt(totalS)+'</strong></td><td><strong>'+(net>0?'+':'')+ovFmt(net)+'</strong></td>';
+    d.buckets.forEach(b=>{ h+='<td>'+ovFmt(periods.reduce((a,p)=>a+(p.produced[b]||0),0))+'</td><td>'+ovFmt(periods.reduce((a,p)=>a+(p.sold[b]||0),0))+'</td>'; });
+    h+='</tr></tbody></table>';
+    tbl.innerHTML=h;
+}
+
+let _ovResizeT=null;
+window.addEventListener('resize',function(){ clearTimeout(_ovResizeT); _ovResizeT=setTimeout(renderOverlay,150); });
+
+document.addEventListener('DOMContentLoaded', function(){ ovBuildPicker(); loadOverlay(); });
+</script>

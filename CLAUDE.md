@@ -102,7 +102,17 @@ production.py       — Flask Blueprint (771 lines, extracted 2026-06-03): the F
                       Hand-drawn inline
                       SVG, no library; colours are `--action-green` / `--indigo` (the brand
                       `--accent` reads grey at 2px — validated, don't swap it back). New JS in
-                      `let`/`const` per the forward-only policy.
+                      `let`/`const` per the forward-only policy. **The card lives in the shared
+                      partial `templates/_produced_vs_sold.html`** (CSS + markup + JS, `ov*`
+                      namespace, self-contained) since later on 2026-09-15, when Jeremy asked
+                      for it on the MANAGER DASHBOARD below the Daily Summary button and
+                      "more minimalist, fewer sentences": set `ov_compact` before including.
+                      Compact (dashboard) = bucket toggle only, defaults 12 wk / 12 mo / 5 yr
+                      ending now, a "Production Tracker →" link; full (tracker) = + "Show
+                      last N" + "ending" picker. Wording is figure-first everywhere — a stat
+                      strip (produced / sold / net + span), not a sentence; the "jars only,
+                      Kettle's End excluded" note is a footnote inside "Show the numbers".
+                      Edit the partial, never fork it (same rule as `_labelling_panel.html`).
 ripe_orders.py      — Flask Blueprint handling Ripe order workflow within Soma
                       (wholesale approve/decline/fulfill + ripe_retail_auto_approve for
                       Stripe-Checkout-paid retail pickup orders + monthly service-fee
@@ -233,7 +243,8 @@ clover_importer.py  — Clover REST API client. Same preview shape as Shopify
 pdf_engine.py       — PDF generation (labels, checklists, schedules)
 default_recipes.py  — Seed data
 add_pwa_tags.py     — PWA manifest support
-templates/          — Jinja2 HTML templates (one per page)
+templates/          — Jinja2 HTML templates (one per page; `_*.html` are shared partials:
+                      `_portal_tiles`, `_labelling_panel`, `_produced_vs_sold`)
 static/             — CSS, JS, images
 ```
 
