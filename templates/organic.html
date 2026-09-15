@@ -864,6 +864,10 @@ body.inv-page .modal-actions {
                     <button style="background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;text-decoration:underline;" onclick="goBackToSaleStep1()">← Change buyer</button>
                 </div>
                 <p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Enter quantity for each product sold. Leave blank to skip.</p>
+                <div class="form-field" style="margin-bottom:12px;max-width:280px;">
+                    <label>PO # <span style="font-weight:400;color:var(--text-light);">(optional)</span></label>
+                    <input type="text" id="sale-po-modal" placeholder="Buyer's purchase order number" autocomplete="off">
+                </div>
                 <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px;">
                     <div id="sale-sku-grid-header" style="display:grid;grid-template-columns:1fr 90px 110px;background:var(--bg);padding:8px 12px;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;gap:8px;">
                         <div>Product</div><div>In Stock</div><div>Qty</div>
@@ -2211,7 +2215,7 @@ var _rsAlloc = {};      // organic: sku_key -> {lot: units packed}
 async function openRecordSaleModal(){
     var today = new Date().toISOString().split('T')[0];
     document.getElementById('sale-date-modal').value = today;
-    // sale-po removed
+    document.getElementById('sale-po-modal').value = '';
     document.getElementById('sale-step1-msg').textContent = '';
     document.getElementById('sale-step2-msg').textContent = '';
     document.getElementById('sale-step1').style.display = '';
@@ -2527,7 +2531,7 @@ async function submitRecordSale(){
                 buyer:            buyer ? buyer.name : '',
                 buyer_id:         buyer ? buyer.id   : '',
                 sale_date:        date,
-                po_number:        '',
+                po_number:        (document.getElementById('sale-po-modal').value || '').trim(),
                 location_name:    locName,
                 location_address: locAddr,
                 lines:            lines,
