@@ -29,7 +29,7 @@ from flask import (
     Blueprint, request, jsonify, session, redirect, url_for, render_template,
 )
 
-from helpers import ORGANIC_RUNS_PATH, _load_json, _save_json, _in_date_window, _classify_format
+from helpers import ORGANIC_RUNS_PATH, _load_json, _save_json, _in_date_window, _classify_format, FORMAT_RE
 
 from pdf_engine import generate_filled_checklist_pdf
 
@@ -359,7 +359,7 @@ def _sold_units_between(start_date, end_date):
         fmt = s.get("format") or ""
         if not fmt and "|" in (s.get("sku_key") or ""):
             fmt = s["sku_key"].split("|")[-1]
-        bucket = _classify_format(fmt)
+        bucket = _overlay_bucket(fmt)
         try:
             qty = int(s.get("quantity") or 0)
         except (ValueError, TypeError):
@@ -371,7 +371,18 @@ def _sold_units_between(start_date, end_date):
     return out
 
 
-OVERLAY_BUCKETS = ["SS-876ML", "SS-750ML", "SS-473ML", "FZ"]
+OVERLAY_BUCKETS = ["SS-876ML", "SS-750ML", "SS-473ML", "FZ", "BB"]
+
+
+def _overlay_bucket(fmt):
+    """Tracker bucket for a SALE's format. Same as _classify_format, except a
+    Back Bar format (BB-*) lands in the tracker's own "BB" bucket instead of
+    "Other" — production counts Back Bar jars separately (`bb_produced`), and
+    they are sold under BB-* SKUs, so the two sides have to meet."""
+    m = FORMAT_RE.search(fmt or "")
+    if m and m.group(1).upper() == "BB":
+        return "BB"
+    return _classify_format(fmt)
 
 
 @production_bp.route("/api/production-tracker/overlay", methods=["GET"])
@@ -383,8 +394,8 @@ def get_production_tracker_overlay():
     ?grain=week&end=YYYY-MM-DD&n=12  → the n Mon–Sun weeks ending at `end`
     ?grain=month&end=YYYY-MM&n=12    → the n calendar months ending at `end`
 
-    Only the four jar buckets (SS 876/750/473 + frozen) are compared: BB and
-    Kettle's End are production-only and nothing sells as "Other". Monthly
+    Five jar buckets are compared (SS 876/750/473, frozen, Back Bar); Kettle's
+    End is not a product and nothing sells as "Other", so both are left out. Monthly
     figures are exact calendar-month sums by day, the same rule the year
     bars use since 2026-09-15."""
     grain = (request.args.get("grain") or "week").lower()

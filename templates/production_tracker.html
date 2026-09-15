@@ -66,7 +66,7 @@
 .ov-tip .t-row { display: flex; align-items: center; gap: 6px; }
 .ov-tip .t-row b { font-weight: 700; min-width: 3.5em; text-align: right; }
 .ov-tip .t-key { display: inline-block; width: 12px; border-top: 2px solid; }
-.ov-multiples { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+.ov-multiples { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
 .ov-panel { border: 1px solid var(--border); border-radius: 6px; padding: 10px 10px 4px; background: var(--row-alt); }
 .ov-panel-title { font-size: 12px; font-weight: 600; color: var(--dark); margin-bottom: 2px; display: flex; justify-content: space-between; }
 .ov-panel-title small { font-weight: 400; color: var(--text-light); }
@@ -77,7 +77,8 @@
 .ov-table th:first-child, .ov-table td:first-child { text-align: left; }
 .ov-table th { font-size: 11px; color: var(--text-light); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .ov-status { font-size: 13px; color: var(--text-light); padding: 24px 0; text-align: center; }
-@media (max-width: 720px) { .ov-multiples { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .ov-multiples { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .ov-multiples { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
 </head>
 <body>
@@ -99,7 +100,7 @@
     <div id="chart-area"></div>
     <div class="chart-container" id="overlay-card">
         <div class="chart-title">Produced vs sold</div>
-        <div class="ov-sub" id="ov-sub">Jars only (876 / 750 / 473 ml + frozen). Back Bar and Kettle's End are not sold, so they are left out.</div>
+        <div class="ov-sub" id="ov-sub">Jars only (876 / 750 / 473 ml, frozen, Back Bar). Kettle's End is not a product, so it is left out.</div>
         <div class="ov-legend" id="ov-legend"></div>
         <div id="ov-main"><div class="ov-status">Loading…</div></div>
         <div class="ov-multiples" id="ov-multiples"></div>
@@ -320,7 +321,7 @@ async function showOtherDetails(){
 // Two lines in jars on one time axis, fed by /api/production-tracker/overlay.
 // Window follows the view: week → last 12 weeks ending on the picked week,
 // month → 26 weeks ending in the picked month, year → the 12 months of that year.
-const OV_LABELS = {'SS-876ML':'876 ml','SS-750ML':'750 ml','SS-473ML':'473 ml','FZ':'Frozen'};
+const OV_LABELS = {'SS-876ML':'876 ml','SS-750ML':'750 ml','SS-473ML':'473 ml','FZ':'Frozen','BB':'Back Bar'};
 let _ovData = null;
 
 function ovParams(){
@@ -502,7 +503,7 @@ function renderOverlay(){
     document.getElementById('ov-sub').innerHTML =
         'Jars per '+unitWord+', '+rows[0].label+' – '+rows[rows.length-1].label+' ('+rows.length+' '+unitWord+(rows.length===1?'':'s')+(periods[periods.length-1].partial?', the last one still running':'')+'): <strong>'+ovFmt(totalP)+' produced</strong> vs <strong>'+ovFmt(totalS)+' sold</strong>, '
         + (net>=0 ? 'so stock grew by <strong>'+ovFmt(net)+'</strong>.' : 'so stock fell by <strong>'+ovFmt(-net)+'</strong>.')
-        + ' <span style="color:var(--text-light)">Jars only (876 / 750 / 473 ml + frozen); Back Bar and Kettle\'s End are not sold, so they are left out.</span>';
+        + ' <span style="color:var(--text-light)">Jars only (876 / 750 / 473 ml, frozen, Back Bar); Kettle\'s End is not a product, so it is left out.</span>';
     document.getElementById('ov-legend').innerHTML =
         '<span><i class="ov-key" style="border-color:'+C.produced+'"></i>Produced</span>'
         + '<span><i class="ov-key" style="border-color:'+C.sold+'"></i>Sold</span>'

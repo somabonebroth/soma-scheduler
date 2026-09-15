@@ -74,9 +74,12 @@ production.py       — Flask Blueprint (771 lines, extracted 2026-06-03): the F
                       app.-qualified; they call app.validate_week_id/day_idx at request time).
                       **Produced vs sold overlay (2026-09-15):** `GET /api/production-tracker/
                       overlay?grain=week|month&end=&n=` feeds the "Produced vs sold" card on
-                      `/production-tracker` — two lines in JARS on one axis (the four jar
-                      buckets only; BB + Kettle's End are never sold), the gap shaded by sign,
-                      four small multiples per format on a shared y-scale, crosshair tooltip,
+                      `/production-tracker` — two lines in JARS on one axis (five buckets: SS
+                      876/750/473, frozen, Back Bar — BB IS sold as `BB-*` SKUs and counted
+                      separately as `bb_produced`, so `_overlay_bucket` routes BB-* sales to
+                      the tracker's "BB" bucket where `_classify_format` would say Other;
+                      Kettle's End is not a product and is left out), the gap shaded by sign,
+                      five small multiples per format on a shared y-scale, crosshair tooltip,
                       and a "Show the numbers" table. Produced reuses `app._day_buckets` (same
                       day-after attribution as the bars); sold buckets sales by `format` via
                       `_classify_format` on the day stock LEFT (`deducted_at` → `sale_date` →
