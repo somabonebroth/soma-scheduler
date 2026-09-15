@@ -59,11 +59,19 @@
 }
 #prod-record-btn.needs-signoff { animation: prod-pulse 2s ease infinite; }
 /* ── Administration list: reduced-weight rows, each showing its sub-sections ──
-   Just another labelled section — same `.section-label` type and spacing as
-   Schedule / Quick Actions / Buyer Portals above it. It used to be a
-   collapsible card with its own header, which made an occasional errand look
-   like a control; the rows carry themselves. */
-.mgmt-list { display: flex; flex-direction: column; gap: 10px; }
+   A native <details>, COLLAPSED by default (2026-09-15): the rows are
+   occasional errands, so they stay out of the way until asked for. The
+   summary IS the `.section-label` — same type and spacing as Schedule / Quick
+   Actions / Buyer Portals above it, plus a chevron — not a card header. */
+.mgmt-details > summary.section-label { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; user-select: none; }
+.mgmt-details > summary::-webkit-details-marker { display: none; }
+.mgmt-details > summary .chev { display: inline-block; font-size: 9px; color: var(--text-light); transition: transform .15s; }
+.mgmt-details[open] > summary .chev { transform: rotate(90deg); }
+.mgmt-details > summary:hover { color: var(--accent); }
+/* The pending-review count mirrors onto the summary so a collapsed section
+   never hides the signal (it is only shown when > 0). */
+.mgmt-details > summary .mgmt-badge { text-transform: none; letter-spacing: 0; }
+.mgmt-list { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
 /* Daily Summary — full-width entry point, highlighted until the day is reviewed */
 .review-btn { display: flex; align-items: center; gap: 14px; width: 100%; box-sizing: border-box; text-decoration: none; background: var(--card-bg); border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 18px; transition: background .12s, border-color .12s; }
 .review-btn:hover { background: var(--bg); }
@@ -112,6 +120,14 @@
 .dash-btn.tile-amber .sublabel { color: var(--amber-text-dark); }
 .dash-btn.tile-blue { background: var(--action-blue-bg); border-color: var(--info-light); border-left-color: var(--info); }
 .dash-btn.tile-blue:hover { border-color: var(--info); box-shadow: 0 2px 12px rgba(2,136,209,0.18); }
+/* Delivery Zones tile: three numbered badges in the zone colours from
+   /delivery-zones (green / blue / amber), instead of a map emoji. */
+.zone-trio { display: inline-flex; gap: 6px; }
+.zone-trio span { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; font-size: 15px; font-weight: 800; line-height: 1; border: 1px solid transparent; }
+.zone-trio .zone-1 { background: var(--action-green-bg); color: var(--action-green); border-color: var(--green-light); }
+.zone-trio .zone-2 { background: var(--action-blue-bg); color: var(--info-dark); border-color: var(--info-light); }
+.zone-trio .zone-3 { background: var(--amber-bg); color: var(--amber-text-dark); border-color: var(--amber-border); }
+.prod-grid .zone-trio span { width: 36px; height: 36px; font-size: 18px; }
 /* -- Greeting: the first thing the floor and the office both see. Sits above
    everything, rotating through the team's languages (English twice as often)
    with a live Toronto temperature beside it. -- */
@@ -276,9 +292,10 @@
         <div class="portal-tools"><a href="/ripe-sku-audit">Ripe SKU Audit</a><a href="/ripe-analytics">Ripe Analytics</a></div>
         <div class="section-label">Delivery Zones</div>
         <div class="dash-row">
-            <a href="/delivery-zones" class="dash-btn full tile-blue"><span class="icon">&#128506;</span><span class="label">Delivery Zone Lookup &amp; Map</span><span class="sublabel">Postal code &rarr; zone, minimum order, delivery fee &mdash; with the Ontario zone map</span></a>
+            <a href="/delivery-zones" class="dash-btn full tile-blue"><span class="icon zone-trio" aria-hidden="true"><span class="zone-1">1</span><span class="zone-2">2</span><span class="zone-3">3</span></span><span class="label">Delivery Zone Lookup &amp; Map</span><span class="sublabel">Postal code &rarr; zone, minimum order, delivery fee &mdash; with the Ontario zone map</span></a>
         </div>
-        <div class="section-label">Administration</div>
+        <details class="mgmt-details">
+        <summary class="section-label"><span class="chev">&#9654;</span>Administration <span class="mgmt-badge" id="admin-badge" title="Days the kitchen ran that you have not reviewed yet"></span></summary>
         <div class="mgmt-list">
             <div class="mgmt-row">
                 <a class="mgmt-title" href="/analytics">Analytics</a>
@@ -321,6 +338,7 @@
                 <div class="mgmt-links"><button type="button" onclick="downloadBackup()">Data Backup</button><a href="/admin/shopify-import">Shopify Import</a><a href="/admin/clover-import">Clover Import</a><a href="/admin/channel-prices">Channel Prices</a></div>
             </div>
         </div>
+        </details>
     </div>
 {% elif role == 'foh' %}
     <div class="dashboard-grid prod-grid">
@@ -348,7 +366,7 @@
         {% include "_portal_tiles.html" %}
         <div class="section-label">Delivery Zones</div>
         <div class="dash-row">
-            <a href="/delivery-zones" class="dash-btn full tile-blue"><span class="icon">&#128506;</span><span class="label">Delivery Zone Lookup &amp; Map</span><span class="sublabel">Postal code &rarr; zone, minimum order, delivery fee &mdash; with the Ontario zone map</span></a>
+            <a href="/delivery-zones" class="dash-btn full tile-blue"><span class="icon zone-trio" aria-hidden="true"><span class="zone-1">1</span><span class="zone-2">2</span><span class="zone-3">3</span></span><span class="label">Delivery Zone Lookup &amp; Map</span><span class="sublabel">Postal code &rarr; zone, minimum order, delivery fee &mdash; with the Ontario zone map</span></a>
         </div>
         <div class="section-label">End of day</div>
         <div class="dash-row">
@@ -464,17 +482,18 @@ async function loadProdBadge() {
     var r = await fetch('/api/daily-signoffs/pending');
     var d = await r.json();
     var needsSignoff = d.pending || [];
+    // The Administration section starts collapsed, so the count is shown on
+    // its summary too — otherwise the signal would be hidden by default.
+    const badges = ['prod-badge', 'admin-badge'].map(id => document.getElementById(id)).filter(Boolean);
     if (needsSignoff.length > 0) {
-      var badge = document.getElementById('prod-badge');
       var btn   = document.getElementById('prod-record-btn');
-      if (badge) { badge.textContent = needsSignoff.length; badge.style.display = 'inline-block'; }
+      badges.forEach(b => { b.textContent = needsSignoff.length; b.style.display = 'inline-block'; });
       if (btn)   btn.classList.add('needs-signoff');
     } else {
       // Signing the last outstanding day should clear the badge, not leave a
       // stale count sitting directly under the brief that cleared it.
-      const badge = document.getElementById('prod-badge');
       const btn   = document.getElementById('prod-record-btn');
-      if (badge) badge.style.display = 'none';
+      badges.forEach(b => { b.style.display = 'none'; });
       if (btn)   btn.classList.remove('needs-signoff');
     }
   } catch(e) {}
