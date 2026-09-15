@@ -2270,11 +2270,18 @@ function goToSaleStep2(){
         msg.className='status error'; msg.textContent='This buyer has no products assigned. Go to the Buyers tab to assign them.';
         return;
     }
-    // Capture selected location NOW before step 1 is hidden
+    // Capture selected location NOW before step 1 is hidden. Only read the
+    // dropdown when it is showing — when the sale was started from the dashboard
+    // the location arrives pre-filled in _rsLocationName/_rsLocationAddress and
+    // the dropdown may not have been populated, so reading it would wipe the
+    // choice the user already made (that is how packing slips lost the location).
+    var locField = document.getElementById('sale-location-field');
     var locSel = document.getElementById('sale-location-select');
-    var locOpt = locSel ? locSel.options[locSel.selectedIndex] : null;
-    _rsLocationName    = locOpt ? (locOpt.getAttribute('data-name')    || '') : '';
-    _rsLocationAddress = locOpt ? (locOpt.getAttribute('data-address') || '') : '';
+    if(locField && locField.style.display !== 'none' && locSel && locSel.options.length > 1){
+        var locOpt = locSel.options[locSel.selectedIndex];
+        _rsLocationName    = locOpt ? (locOpt.getAttribute('data-name')    || '') : '';
+        _rsLocationAddress = locOpt ? (locOpt.getAttribute('data-address') || '') : '';
+    }
     msg.textContent='';
     document.getElementById('sale-buyer-label').textContent = buyer.name;
     document.getElementById('sale-date-label').textContent = new Date(date+'T12:00:00').toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'});
@@ -2583,6 +2590,7 @@ function onSaleBuyerChange(){
             opt.textContent = loc.name + (loc.address ? ' — ' + loc.address : '');
             opt.setAttribute('data-address', loc.address || '');
             opt.setAttribute('data-name', loc.name || '');
+            if(_rsLocationName && loc.name === _rsLocationName) opt.selected = true;
             locSel.appendChild(opt);
         });
         if(locField) locField.style.display = '';
@@ -3890,9 +3898,11 @@ document.addEventListener('DOMContentLoaded',function(){
             var locName = params.get('loc_name') || '';
             var locAddr = params.get('loc_addr') || '';
             if(locName || locAddr){
-                // Set the captured vars directly — no need to show step 1
+                // Location chosen on the dashboard: pre-fill it, build the dropdown
+                // with it selected (so Back shows the choice), then advance.
                 _rsLocationName    = locName;
                 _rsLocationAddress = locAddr;
+                onSaleBuyerChange();
                 goToSaleStep2();
             } else if(buyerId && date){
                 // No pre-supplied location — show step 1 with location dropdown
