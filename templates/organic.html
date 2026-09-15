@@ -560,6 +560,63 @@ body.inv-page .modal-actions {
 }
 
 /* ── Mobile adjustments ─────────────────────────────────────────────── */
+/* ── Record Sale, step 2 (PO # + products) — layout only, tokens for colour ── */
+.rs-summary {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; margin-bottom: 12px;
+}
+.rs-summary-main { min-width: 0; }
+.rs-summary-buyer { font-size: 15px; font-weight: 700; color: var(--dark); line-height: 1.3; }
+.rs-summary-meta { font-size: 12.5px; color: var(--text-light); margin-top: 3px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.rs-summary-meta span[hidden] { display: none; }
+.rs-summary-meta span:not([hidden]) + span::before { content: '\00b7'; margin-right: 6px; color: var(--grey-light); }
+.rs-link {
+    background: none; border: none; padding: 4px 0; flex: none;
+    color: var(--accent); font-size: 13px; cursor: pointer; text-decoration: underline;
+}
+.rs-po { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.rs-po label { font-size: 12px; font-weight: 600; color: var(--text-light); text-transform: uppercase; letter-spacing: .4px; flex: none; }
+.rs-po input {
+    flex: 1; max-width: 320px; box-sizing: border-box;
+    padding: 9px 11px; font-size: 14px;
+    border: 1px solid var(--border); border-radius: 6px;
+}
+.rs-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.rs-section-head > span:first-child { font-size: 12px; font-weight: 600; color: var(--text-light); text-transform: uppercase; letter-spacing: .4px; }
+.rs-hint { font-size: 12px; color: var(--text-light); }
+.rs-grid-wrap { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 14px; }
+#sale-sku-grid { max-height: 45vh; overflow-y: auto; }
+.rs-row {
+    display: grid; grid-template-columns: 1fr 84px 128px; gap: 10px;
+    align-items: center; padding: 10px 12px;
+}
+.rs-grid-header {
+    background: var(--bg); padding: 8px 12px;
+    font-size: 11px; font-weight: 600; color: var(--text-light);
+    text-transform: uppercase; letter-spacing: .4px;
+}
+.rs-grid-header > div:last-child { text-align: center; }
+.rs-divider {
+    padding: 6px 12px 4px; background: var(--bg); position: sticky; top: 0;
+    font-size: 10px; font-weight: 700; color: var(--text-light);
+    text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid var(--border);
+}
+.rs-row.rs-sku { border-bottom: 1px solid var(--bg); background: var(--white); }
+.rs-row.rs-sku.alt { background: var(--card-bg); }
+.rs-row.rs-sku.out { opacity: .45; }
+.rs-row.rs-sku .rs-name { font-size: 13.5px; font-weight: 500; line-height: 1.3; }
+.rs-row.rs-sku .rs-stock { font-size: 13px; color: var(--accent); white-space: nowrap; }
+.rs-row.rs-sku.out .rs-stock { color: var(--action-red); }
+.rs-row.rs-sku .rs-qty input[type="number"] { font-size: 14px; font-weight: 600; padding: 8px 4px; }
+.rs-row.rs-sku.has-qty { background: var(--action-blue-bg); }
+.rs-badge-org { font-size: 9px; background: var(--dark); color: var(--white); padding: 1px 5px; border-radius: 3px; vertical-align: middle; margin-left: 4px; }
+.rs-packed { display: block; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-light); }
+.rs-lot-panel { background: var(--green-tint); border-bottom: 1px solid var(--border); padding: 6px 12px 8px 24px; font-size: 12px; color: var(--text-light); }
+.rs-actions { align-items: center; }
+.rs-total { margin-right: auto; font-size: 13px; color: var(--text-light); }
+.rs-total b { color: var(--dark); }
+
 @media (max-width: 768px) {
     /* Cards */
     body.inv-page .card { padding: 16px; margin-bottom: 14px; }
@@ -663,11 +720,10 @@ body.inv-page .modal-actions {
 
     /* ── New FG / Buyers / Record Sale mobile rules ── */
 
-    /* Record Sale SKU grid — drop stock col, keep product + qty */
-    #sale-sku-grid > div {
-        grid-template-columns: 1fr 60px !important;
-    }
-    #sale-sku-grid > div > div:nth-child(2) { display: none; }
+    /* Record Sale SKU grid — drop stock col, keep product + units */
+    #sale-sku-grid .rs-row { grid-template-columns: 1fr 112px; }
+    #sale-sku-grid .rs-row > div:nth-child(2) { display: none; }
+    .rs-po input { max-width: none; }
 
     /* FG Adjust grid — drop stock col, keep SKU + adjust */
     #fg-adj-grid > div {
@@ -718,15 +774,12 @@ body.inv-page .modal-actions {
         flex: 1;
     }
 
-    /* Sale step 2 buyer/date header — stack on mobile */
-    #sale-step2 > div:first-child {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 4px;
-    }
+    /* Sale step 2 summary — stack on mobile */
+    .rs-summary { flex-direction: column; gap: 4px; }
+    .rs-total { width: 100%; text-align: center; margin: 0; }
 
     /* Hide matching header cols when grid cols are hidden */
-    #sale-sku-grid-header { grid-template-columns: 1fr 60px !important; }
+    #sale-sku-grid-header { grid-template-columns: 1fr 112px; }
     #sale-sku-grid-header > div:nth-child(2) { display: none; }
     #fg-adj-grid-header { grid-template-columns: 1fr 80px !important; }
     #fg-adj-grid-header > div:nth-child(2) { display: none; }
@@ -855,35 +908,43 @@ body.inv-page .modal-actions {
                 </div>
             </div>
 
-            <!-- Step 2: SKU grid -->
+            <!-- Step 2: PO # + SKU grid -->
             <div id="sale-step2" style="display:none;">
-                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-                    <div style="font-size:13px;color:var(--text-light);">
-                        <strong id="sale-buyer-label"></strong> · <span id="sale-date-label"></span>
+                <div class="rs-summary" id="sale-step2-summary">
+                    <div class="rs-summary-main">
+                        <div class="rs-summary-buyer" id="sale-buyer-label"></div>
+                        <div class="rs-summary-meta">
+                            <span id="sale-location-label" hidden></span>
+                            <span id="sale-date-label"></span>
+                        </div>
                     </div>
-                    <button style="background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;text-decoration:underline;" onclick="goBackToSaleStep1()">← Change buyer</button>
+                    <button type="button" class="rs-link" onclick="goBackToSaleStep1()">&larr; Change buyer</button>
                 </div>
-                <p style="font-size:12px;color:var(--text-light);margin-bottom:10px;">Enter quantity for each product sold. Leave blank to skip.</p>
-                <div class="form-field" style="margin-bottom:12px;max-width:280px;">
-                    <label>PO # <span style="font-weight:400;color:var(--text-light);">(optional)</span></label>
-                    <input type="text" id="sale-po-modal" placeholder="Buyer's purchase order number" autocomplete="off">
+                <div class="rs-po">
+                    <label for="sale-po-modal">PO #</label>
+                    <input type="text" id="sale-po-modal" placeholder="Optional &middot; printed on the packing slip" autocomplete="off">
                 </div>
-                <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px;">
-                    <div id="sale-sku-grid-header" style="display:grid;grid-template-columns:1fr 90px 110px;background:var(--bg);padding:8px 12px;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;gap:8px;">
-                        <div>Product</div><div>In Stock</div><div>Qty</div>
+                <div class="rs-section-head">
+                    <span>Products</span>
+                    <span class="rs-hint">Enter units sold &middot; leave blank to skip</span>
+                </div>
+                <div class="rs-grid-wrap">
+                    <div id="sale-sku-grid-header" class="rs-row rs-grid-header">
+                        <div>Product</div><div>In stock</div><div>Units</div>
                     </div>
-                    <div id="sale-sku-grid" style="max-height:45vh;overflow-y:auto;"></div>
+                    <div id="sale-sku-grid"></div>
                 </div>
                 <div id="sale-step2-msg" class="status" style="margin-bottom:10px;"></div>
                 <!-- After-save doc buttons (shown after successful save) -->
                 <div id="sale-doc-buttons" style="display:none;background:var(--action-green-bg);border-radius:8px;padding:14px;margin-bottom:14px;">
-                    <div style="font-size:13px;font-weight:600;color:var(--action-green);margin-bottom:10px;">&#10003; Sale recorded — export documents:</div>
+                    <div style="font-size:13px;font-weight:600;color:var(--action-green);margin-bottom:10px;">&#10003; Sale recorded &mdash; export documents:</div>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;">
                         <button class="btn btn-primary" id="sale-packing-slip-btn" onclick="openPackingSlip()" style="background:var(--info);border-color:var(--info);">&#128196; Packing Slip PDF</button>
                         <button class="btn-outline" id="sale-qbo-btn" onclick="downloadQBO()">&#128190; QBO Invoice CSV</button>
                     </div>
                 </div>
-                <div class="modal-actions">
+                <div class="modal-actions rs-actions">
+                    <span class="rs-total" id="sale-running-total"></span>
                     <button class="btn btn-outline" id="sale-close-btn" onclick="closeRecordSaleModal()">Close</button>
                     <button class="btn btn-primary" id="sale-submit-btn" onclick="submitRecordSale()" style="background:var(--info);border-color:var(--info);">Save Sale</button>
                 </div>
@@ -2289,6 +2350,9 @@ function goToSaleStep2(){
     msg.textContent='';
     document.getElementById('sale-buyer-label').textContent = buyer.name;
     document.getElementById('sale-date-label').textContent = new Date(date+'T12:00:00').toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'});
+    var locLabel = document.getElementById('sale-location-label');
+    locLabel.textContent = _rsLocationName ? '\u{1F4CD} ' + _rsLocationName : '';
+    locLabel.hidden = !_rsLocationName;
 
     // Build SKU grid — grouped by format, sorted by position, out-of-stock at bottom
     var grid = document.getElementById('sale-sku-grid');
@@ -2329,41 +2393,39 @@ function goToSaleStep2(){
     formatOrder.forEach(function(fmt){
         // Format divider
         var divider = document.createElement('div');
-        divider.style.cssText = 'padding:6px 12px 4px;background:#f0f0eb;font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--border);position:sticky;top:0;';
+        divider.className = 'rs-divider';
         divider.textContent = fmt;
         grid.appendChild(divider);
 
         formatGroups[fmt].forEach(function(sku, idx){
             var stock = stockMap[sku.sku_key] || 0;
             var outOfStock = stock <= 0;
-            var bg = idx % 2 === 0 ? '#fff' : '#fafaf8';
             var isOrg = (_rsCertMap[sku.sku_key] || '').toLowerCase() === 'organic';
             var row = document.createElement('div');
+            row.className = 'rs-row rs-sku' + (idx % 2 ? ' alt' : '') + (outOfStock ? ' out' : '');
 
             if(isOrg && !outOfStock){
                 // ORGANIC: no plain qty box — the packer builds the order by
                 // allocating from the actual physical LOTs below (qty = the sum).
-                row.style.cssText = 'display:grid;grid-template-columns:1fr 90px 110px;gap:8px;padding:8px 12px;background:'+bg+';align-items:center;border-bottom:1px solid #f0f0eb;';
                 row.innerHTML =
-                    '<div style="font-size:13px;font-weight:500;">'+escHtml(sku.display||sku.recipe)
-                    +' <span style="font-size:9px;background:#1b5e20;color:#fff;padding:1px 5px;border-radius:3px;vertical-align:middle;">ORGANIC</span></div>'
-                    +'<div style="font-size:13px;color:var(--accent);">'+stock+' u</div>'
-                    +'<div style="text-align:right;"><span class="rs-packed" style="font-size:13px;font-weight:600;color:var(--text-light);">0 packed</span>'
+                    '<div class="rs-name">'+escHtml(sku.display||sku.recipe)
+                    +'<span class="rs-badge-org">ORGANIC</span></div>'
+                    +'<div class="rs-stock">'+stock+' u</div>'
+                    +'<div class="rs-qty"><span class="rs-packed">0 packed</span>'
                     +'<input type="hidden" data-rs-sku="'+escHtml(sku.sku_key)+'"></div>';
                 grid.appendChild(row);
                 var panel = document.createElement('div');
-                panel.style.cssText = 'background:#f4f9f4;border-bottom:1px solid #e6ece6;padding:6px 12px 6px 24px;font-size:12px;color:var(--text-light);';
+                panel.className = 'rs-lot-panel';
                 panel.textContent = 'Loading lots…';
                 grid.appendChild(panel);
                 _rsOrgToLoad.push({sku: sku.sku_key, panel: panel,
                                    packed: row.querySelector('.rs-packed'),
                                    hidden: row.querySelector('input[data-rs-sku]')});
             } else {
-                row.style.cssText = 'display:grid;grid-template-columns:1fr 90px 110px;gap:8px;padding:8px 12px;background:'+bg+';align-items:center;border-bottom:1px solid #f0f0eb;'+(outOfStock?'opacity:0.45;':'');
                 row.innerHTML =
-                    '<div style="font-size:13px;font-weight:500;">'+escHtml(sku.display||sku.recipe)+'</div>'
-                    +'<div style="font-size:13px;color:'+(outOfStock?'#c62828':'var(--accent)')+';">'+(outOfStock?'Out':stock+' u')+'</div>'
-                    +'<div><input type="number" data-rs-sku="'+escHtml(sku.sku_key)+'" min="0" step="1" inputmode="numeric" placeholder="0" '+(outOfStock?'disabled':'')+' style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;'+(outOfStock?'background:#f0f0f0;':'')+'"></div>';
+                    '<div class="rs-name">'+escHtml(sku.display||sku.recipe)+'</div>'
+                    +'<div class="rs-stock">'+(outOfStock?'Out':stock+' u')+'</div>'
+                    +'<div class="rs-qty"><input type="number" data-rs-sku="'+escHtml(sku.sku_key)+'" min="0" max="'+stock+'" step="1" inputmode="numeric" placeholder="0" '+(outOfStock?'disabled':'')+'></div>';
                 grid.appendChild(row);
             }
         });
@@ -2372,11 +2434,37 @@ function goToSaleStep2(){
     // −/+ steppers on the plain qty boxes (hidden inputs excluded by type).
     grid.querySelectorAll('input[type="number"][data-rs-sku]').forEach(attachQtyStepper);
 
+    // Running total in the footer. Typing, the −/+ buttons and the organic lot
+    // steppers all dispatch a bubbling 'input' on their [data-rs-sku] box, so
+    // one delegated listener covers every path. Wired once per grid element.
+    if(!grid.dataset.totalWired){
+        grid.addEventListener('input', rsUpdateRunningTotal);
+        grid.dataset.totalWired = '1';
+    }
+    rsUpdateRunningTotal();
+
     document.getElementById('sale-step1').style.display = 'none';
     document.getElementById('sale-step2').style.display = '';
 
     // Fetch + render the per-LOT allocation steppers for each organic SKU.
     _rsOrgToLoad.forEach(function(t){ loadLotPanel(t.sku, t.panel, t.packed, t.hidden); });
+}
+
+// Sum every [data-rs-sku] box (plain + organic hidden) into the footer line and
+// tint the rows that carry a quantity so a long list reads at a glance.
+function rsUpdateRunningTotal(){
+    var units = 0, products = 0;
+    document.querySelectorAll('#sale-sku-grid input[data-rs-sku]').forEach(function(inp){
+        var q = parseInt(inp.value, 10) || 0;
+        var row = inp.closest('.rs-row');
+        if(row) row.classList.toggle('has-qty', q > 0);
+        if(q > 0){ units += q; products += 1; }
+    });
+    var el = document.getElementById('sale-running-total');
+    if(!el) return;
+    el.innerHTML = units
+        ? '<b>' + units + '</b> unit' + (units === 1 ? '' : 's') + ' &middot; ' + products + ' product' + (products === 1 ? '' : 's')
+        : 'Nothing entered yet';
 }
 
 // Wrap a number input with −/+ buttons (the shared .qty-stepper component in
