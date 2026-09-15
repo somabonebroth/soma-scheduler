@@ -393,6 +393,7 @@ def get_production_tracker_overlay():
 
     ?grain=week&end=YYYY-MM-DD&n=12  → the n Mon–Sun weeks ending at `end`
     ?grain=month&end=YYYY-MM&n=12    → the n calendar months ending at `end`
+    ?grain=year&end=YYYY&n=5         → the n calendar years ending at `end`
 
     Five jar buckets are compared (SS 876/750/473, frozen, Back Bar); Kettle's
     End is not a product and nothing sells as "Other", so both are left out. Monthly
@@ -400,7 +401,7 @@ def get_production_tracker_overlay():
     bars use since 2026-09-15."""
     grain = (request.args.get("grain") or "week").lower()
     try:
-        n = max(1, min(int(request.args.get("n") or 12), 60))
+        n = max(1, min(int(request.args.get("n") or 12), 104))
     except ValueError:
         return jsonify({"error": "n must be an integer"}), 400
     end_raw = request.args.get("end") or ""
@@ -434,8 +435,18 @@ def get_production_tracker_overlay():
             periods.append({"key": first.strftime("%Y-%m"),
                             "label": first.strftime("%b %Y" if mm == 1 or i == n - 1 else "%b"),
                             "start": first, "end": last})
+    elif grain == "year":
+        m = re.match(r"^(\d{4})$", end_raw)
+        y = int(m.group(1)) if m else datetime.now().year
+        if not 2020 <= y <= 2099:
+            return jsonify({"error": "Invalid year"}), 400
+        for i in range(n - 1, -1, -1):
+            yy = y - i
+            periods.append({"key": str(yy), "label": str(yy),
+                            "start": datetime(yy, 1, 1).date(),
+                            "end": datetime(yy, 12, 31).date()})
     else:
-        return jsonify({"error": "grain must be week or month"}), 400
+        return jsonify({"error": "grain must be week, month or year"}), 400
 
     start_date, end_date = periods[0]["start"], periods[-1]["end"]
     produced_by_day = _daily_buckets_between(start_date, end_date)

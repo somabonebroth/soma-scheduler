@@ -50,6 +50,9 @@
 .total-section-head { font-size: 12px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 0 4px; border-bottom: none; }
 .no-data { text-align: center; padding: 60px 20px; color: var(--text-light); font-size: 14px; }
 /* Produced vs sold overlay */
+.ov-controls { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 4px 0 8px; }
+.ov-controls .view-toggle, .ov-controls .picker-bar { margin-bottom: 0; }
+.ov-controls label { font-size: 13px; font-weight: 600; }
 .ov-sub { font-size: 12px; color: var(--text-light); margin-bottom: 12px; }
 .ov-sub strong { color: var(--dark); font-weight: 600; }
 .ov-legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--text); margin-bottom: 8px; }
@@ -100,6 +103,14 @@
     <div id="chart-area"></div>
     <div class="chart-container" id="overlay-card">
         <div class="chart-title">Produced vs sold</div>
+        <div class="ov-controls">
+            <div class="view-toggle" id="ov-bucket">
+                <button class="active" data-grain="week" onclick="ovSetGrain('week')">Week</button>
+                <button data-grain="month" onclick="ovSetGrain('month')">Month</button>
+                <button data-grain="year" onclick="ovSetGrain('year')">Year</button>
+            </div>
+            <div class="picker-bar" id="ov-picker"></div>
+        </div>
         <div class="ov-sub" id="ov-sub">Jars only (876 / 750 / 473 ml, frozen, Back Bar). Kettle's End is not a product, so it is left out.</div>
         <div class="ov-legend" id="ov-legend"></div>
         <div id="ov-main"><div class="ov-status">Loading…</div></div>
@@ -156,11 +167,9 @@ function buildPicker(){
 }
 
 async function loadData(){
-    var ovPromise = loadOverlay();
     if(currentView==='week') await loadWeek();
     else if(currentView==='month') await loadMonth();
     else await loadYear();
-    await ovPromise;
 }
 
 async function loadWeek(){
@@ -319,25 +328,55 @@ async function showOtherDetails(){
 
 // ── Produced vs sold overlay ─────────────────────────────────────────────
 // Two lines in jars on one time axis, fed by /api/production-tracker/overlay.
-// Window follows the view: week → last 12 weeks ending on the picked week,
-// month → 26 weeks ending in the picked month, year → the 12 months of that year.
+// Has its OWN bucket toggle + range + end picker, independent of the bars above:
+// week = one point per Mon–Sun week, month = one per calendar month,
+// year = one per calendar year (annual totals).
 const OV_LABELS = {'SS-876ML':'876 ml','SS-750ML':'750 ml','SS-473ML':'473 ml','FZ':'Frozen','BB':'Back Bar'};
+const OV_RANGES = { week: [12, 26, 52], month: [6, 12, 24], year: [3, 5, 10] };
 let _ovData = null;
+let _ovGrain = 'week';
+
+function ovSetGrain(g){
+    _ovGrain = g;
+    document.querySelectorAll('#ov-bucket button').forEach(b => b.classList.toggle('active', b.dataset.grain === g));
+    ovBuildPicker();
+    loadOverlay();
+}
+
+function ovBuildPicker(){
+    const bar = document.getElementById('ov-picker');
+    const now = new Date();
+    const unit = _ovGrain;
+    const ranges = OV_RANGES[unit].map((r, i) => '<option value="' + r + '"' + (i === 1 ? ' selected' : '') + '>' + r + ' ' + unit + 's</option>').join('');
+    let html = '<label>Show last</label><select id="ov-n" onchange="loadOverlay()">' + ranges + '</select>';
+    html += '<label>ending</label>';
+    if (unit === 'week') {
+        html += '<input type="date" id="ov-end-date" value="' + formatDate(getCurrentMonday()) + '" onchange="loadOverlay()">';
+    } else if (unit === 'month') {
+        html += '<select id="ov-end-month" onchange="loadOverlay()">';
+        for (let i = 0; i < 12; i++) html += '<option value="' + i + '"' + (i === now.getMonth() ? ' selected' : '') + '>' + MONTHS[i] + '</option>';
+        html += '</select><select id="ov-end-year" onchange="loadOverlay()">';
+        for (let y = now.getFullYear() - 3; y <= now.getFullYear() + 1; y++) html += '<option value="' + y + '"' + (y === now.getFullYear() ? ' selected' : '') + '>' + y + '</option>';
+        html += '</select>';
+    } else {
+        html += '<select id="ov-end-year" onchange="loadOverlay()">';
+        for (let y = now.getFullYear() - 3; y <= now.getFullYear() + 1; y++) html += '<option value="' + y + '"' + (y === now.getFullYear() ? ' selected' : '') + '>' + y + '</option>';
+        html += '</select>';
+    }
+    bar.innerHTML = html;
+}
 
 function ovParams(){
-    if(currentView==='week'){
-        return {grain:'week', end:document.getElementById('week-date').value, n:12, unit:'week'};
+    const n = parseInt(document.getElementById('ov-n').value, 10) || OV_RANGES[_ovGrain][1];
+    if (_ovGrain === 'week') {
+        return {grain:'week', end:document.getElementById('ov-end-date').value, n:n, unit:'week'};
     }
-    if(currentView==='month'){
-        const m=parseInt(document.getElementById('month-sel').value,10);
-        const y=parseInt(document.getElementById('month-year-sel').value,10);
-        const last=new Date(y,m+1,0);                       // last day of month
-        const dow=last.getDay(); const back=dow===0?6:dow-1;   // back to Monday
-        last.setDate(last.getDate()-back);
-        return {grain:'week', end:formatDate(last), n:26, unit:'week'};
+    if (_ovGrain === 'month') {
+        const m = parseInt(document.getElementById('ov-end-month').value, 10) + 1;
+        const y = document.getElementById('ov-end-year').value;
+        return {grain:'month', end:y + '-' + (m < 10 ? '0' + m : m), n:n, unit:'month'};
     }
-    const y=document.getElementById('year-sel').value;
-    return {grain:'month', end:y+'-12', n:12, unit:'month'};
+    return {grain:'year', end:document.getElementById('ov-end-year').value, n:n, unit:'year'};
 }
 
 async function loadOverlay(){
@@ -397,10 +436,10 @@ function ovChart(host, rows, opts){
             s+='<text class="ov-axis" x="'+(padL-6)+'" y="'+(yy+4)+'" text-anchor="end">'+ovFmt(v)+'</text>';
     }
     // x labels — thin out when crowded
-    const every = opts.compact ? Math.max(1,n-1) : Math.max(1, Math.ceil(n*48/pw));   // ~48px per label
-    const lastDrawn = Math.floor((n-1)/every)*every;
+    // ~48px per label; the END label always shows and any regular label within 44px of it yields
+    const every = opts.compact ? Math.max(1,n-1) : Math.max(1, Math.ceil(n*48/pw));
     rows.forEach((r,i)=>{
-        const draw = i%every===0 || (i===n-1 && (n-1-lastDrawn) >= every/2);
+        const draw = i===n-1 || (i%every===0 && (x(n-1)-x(i)) >= 44);
         if(draw)
             s+='<text class="ov-axis" x="'+x(i)+'" y="'+(H-6)+'" text-anchor="middle">'+r.label+'</text>';
     });
@@ -487,9 +526,11 @@ function renderOverlay(){
     const d=_ovData; if(!d) return;
     const main=document.getElementById('ov-main'); main.style.opacity='1';
     const C=ovColors();
-    const periods=(d.periods||[]).filter(p=>!p.future);   // nothing to plot for a period that hasn't started
-    const unitWord = d.unit==='month' ? 'month' : 'week';
-    const titleOf=p=>(d.unit==='month'?p.label:'Week of '+p.label)+(p.partial?' (so far)':'');
+    let periods=(d.periods||[]).filter(p=>!p.future);   // nothing to plot for a period that hasn't started
+    // drop leading periods from before the records begin (a 5-year view on 2 years of data), keep ≥2 points
+    while(periods.length>2 && !periods[0].produced_total && !periods[0].sold_total) periods=periods.slice(1);
+    const unitWord = d.unit || 'week';
+    const titleOf=p=>(unitWord==='week'?'Week of '+p.label:p.label)+(p.partial?' (so far)':'');
     const rows=periods.map(p=>({label:p.label, title:titleOf(p), produced:p.produced_total, sold:p.sold_total}));
     const totalP=rows.reduce((a,r)=>a+r.produced,0), totalS=rows.reduce((a,r)=>a+r.sold,0);
     if(!rows.length || (!totalP && !totalS)){
@@ -531,7 +572,7 @@ function renderOverlay(){
 
     // table view — every value reachable without hovering
     const tbl=document.getElementById('ov-table');
-    let h='<table><thead><tr><th>'+(unitWord==='month'?'Month':'Week of')+'</th><th>Produced</th><th>Sold</th><th>Net</th>';
+    let h='<table><thead><tr><th>'+(unitWord==='week'?'Week of':unitWord==='month'?'Month':'Year')+'</th><th>Produced</th><th>Sold</th><th>Net</th>';
     d.buckets.forEach(b=>{ h+='<th>'+(OV_LABELS[b]||b)+' made</th><th>'+(OV_LABELS[b]||b)+' sold</th>'; });
     h+='</tr></thead><tbody>';
     periods.forEach(p=>{
@@ -549,7 +590,7 @@ function renderOverlay(){
 let _ovResizeT=null;
 window.addEventListener('resize',function(){ clearTimeout(_ovResizeT); _ovResizeT=setTimeout(renderOverlay,150); });
 
-document.addEventListener('DOMContentLoaded',function(){buildPicker();loadData();});
+document.addEventListener('DOMContentLoaded',function(){buildPicker();loadData();ovBuildPicker();loadOverlay();});
 </script>
 <script>
 (function(){

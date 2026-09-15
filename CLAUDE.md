@@ -83,10 +83,15 @@ production.py       — Flask Blueprint (771 lines, extracted 2026-06-03): the F
                       and a "Show the numbers" table. Produced reuses `app._day_buckets` (same
                       day-after attribution as the bars); sold buckets sales by `format` via
                       `_classify_format` on the day stock LEFT (`deducted_at` → `sale_date` →
-                      `created_at`, the mass-balance key). Window follows the view: week → 12
-                      weeks ending on the picked week, month → 26 weeks, year → that year's
-                      months. Periods that haven't started are `future` (the chart drops them);
-                      the running one is `partial` ("so far"). Monthly sums are exact by
+                      `created_at`, the mass-balance key). The card has its OWN Week/Month/Year
+                      bucket toggle + "Show last N" + "ending" picker (added the same day at
+                      Jeremy's request), independent of the bars above: week = one point per
+                      Mon–Sun week (12/26/52), month = one per calendar month (6/12/24), year
+                      = one per calendar year (3/5/10, `grain=year&end=YYYY`). Periods that
+                      haven't started are `future` (the chart drops them); the running one is
+                      `partial` ("so far"); leading all-zero periods are trimmed client-side
+                      (keeps ≥2 points) so a 5-year view on 2 years of data doesn't plot a
+                      flat zero run-up. Monthly sums are exact by
                       calendar day, and since 2026-09-15 so are the YEAR bars
                       (`get_production_tracker_year` walks the whole year once through
                       `_daily_buckets_between` and attributes each day to its month) — before
