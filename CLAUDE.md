@@ -84,8 +84,14 @@ production.py       — Flask Blueprint (771 lines, extracted 2026-06-03): the F
                       weeks ending on the picked week, month → 26 weeks, year → that year's
                       months. Periods that haven't started are `future` (the chart drops them);
                       the running one is `partial` ("so far"). Monthly sums are exact by
-                      calendar day — NOTE the existing year bars credit a boundary week to BOTH
-                      months it touches, so the two totals differ on purpose. Hand-drawn inline
+                      calendar day, and since 2026-09-15 so are the YEAR bars
+                      (`get_production_tracker_year` walks the whole year once through
+                      `_daily_buckets_between` and attributes each day to its month) — before
+                      that the year view summed whole Mon–Sun weeks per month, so a boundary
+                      week was credited to BOTH months and the twelve bars over-counted. The
+                      month view's bars are still whole weeks by design (each bar IS a week,
+                      so a straddling week is a labelling ambiguity, not an overcount).
+                      Hand-drawn inline
                       SVG, no library; colours are `--action-green` / `--indigo` (the brand
                       `--accent` reads grey at 2px — validated, don't swap it back). New JS in
                       `let`/`const` per the forward-only policy.

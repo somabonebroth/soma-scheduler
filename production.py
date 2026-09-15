@@ -288,38 +288,31 @@ def get_production_tracker_month(year_month):
 @production_bp.route("/api/production-tracker/year/<int:year>", methods=["GET"])
 @manager_required
 def get_production_tracker_year(year):
-    """Return monthly totals for a given year."""
+    """Return monthly totals for a given year, summed by CALENDAR DAY.
+
+    Each day is attributed to the month it falls in (same day-after
+    attribution as the week bars via app._day_buckets). This used to sum
+    whole Mon-Sun weeks per month, which credited a boundary week (e.g.
+    Aug 31 - Sep 6) to BOTH months and made the twelve bars add up to more
+    than was produced."""
     if year < 2020 or year > 2099:
         return jsonify({"error": "Invalid year"}), 400
-    months = []
     month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    by_day = _daily_buckets_between(datetime(year, 1, 1).date(),
+                                    datetime(year, 12, 31).date())
+    month_buckets = {m: app._empty_buckets() for m in range(1, 13)}
+    for day, buckets in by_day.items():
+        app._sum_buckets(month_buckets[day.month], buckets)
+    months = []
     for m in range(1, 13):
-        from calendar import monthrange
-        _, days_in_month = monthrange(year, m)
-        first_day = datetime(year, m, 1)
-        last_day = datetime(year, m, days_in_month)
-        start_monday = first_day - timedelta(days=first_day.weekday())
-
-        month_buckets = app._empty_buckets()
-        current = start_monday
-        seen_weeks = set()
-        while current <= last_day:
-            wid = current.strftime("%Y-%m-%d")
-            if wid not in seen_weeks:
-                seen_weeks.add(wid)
-                wt = app._week_totals(wid)
-                for bucket in app.TRACKER_BUCKETS:
-                    month_buckets[bucket] += wt.get(bucket, 0)
-            current += timedelta(days=7)
-
-        month_total = {
-            "buckets": dict(month_buckets),
-            "total": app._bucket_total(month_buckets),
+        mb = month_buckets[m]
+        months.append({
+            "buckets": {b: mb.get(b, 0) for b in app.TRACKER_BUCKETS},
+            "total": app._bucket_total(mb),
             "month": m,
             "label": month_names[m - 1],
-        }
-        months.append(month_total)
+        })
     return jsonify(months)
 
 
@@ -392,8 +385,8 @@ def get_production_tracker_overlay():
 
     Only the four jar buckets (SS 876/750/473 + frozen) are compared: BB and
     Kettle's End are production-only and nothing sells as "Other". Monthly
-    figures are exact calendar-month sums by day (unlike the year bars, which
-    credit a boundary week to both months it touches)."""
+    figures are exact calendar-month sums by day, the same rule the year
+    bars use since 2026-09-15."""
     grain = (request.args.get("grain") or "week").lower()
     try:
         n = max(1, min(int(request.args.get("n") or 12), 60))
