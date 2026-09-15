@@ -72,6 +72,23 @@ production.py       — Flask Blueprint (771 lines, extracted 2026-06-03): the F
                       Local verbatim copies of login_required + require_valid_week +
                       require_valid_day (decorators apply at import time → can't be
                       app.-qualified; they call app.validate_week_id/day_idx at request time).
+                      **Produced vs sold overlay (2026-09-15):** `GET /api/production-tracker/
+                      overlay?grain=week|month&end=&n=` feeds the "Produced vs sold" card on
+                      `/production-tracker` — two lines in JARS on one axis (the four jar
+                      buckets only; BB + Kettle's End are never sold), the gap shaded by sign,
+                      four small multiples per format on a shared y-scale, crosshair tooltip,
+                      and a "Show the numbers" table. Produced reuses `app._day_buckets` (same
+                      day-after attribution as the bars); sold buckets sales by `format` via
+                      `_classify_format` on the day stock LEFT (`deducted_at` → `sale_date` →
+                      `created_at`, the mass-balance key). Window follows the view: week → 12
+                      weeks ending on the picked week, month → 26 weeks, year → that year's
+                      months. Periods that haven't started are `future` (the chart drops them);
+                      the running one is `partial` ("so far"). Monthly sums are exact by
+                      calendar day — NOTE the existing year bars credit a boundary week to BOTH
+                      months it touches, so the two totals differ on purpose. Hand-drawn inline
+                      SVG, no library; colours are `--action-green` / `--indigo` (the brand
+                      `--accent` reads grey at 2px — validated, don't swap it back). New JS in
+                      `let`/`const` per the forward-only policy.
 ripe_orders.py      — Flask Blueprint handling Ripe order workflow within Soma
                       (wholesale approve/decline/fulfill + ripe_retail_auto_approve for
                       Stripe-Checkout-paid retail pickup orders + monthly service-fee

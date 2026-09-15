@@ -323,6 +323,142 @@ def get_production_tracker_year(year):
     return jsonify(months)
 
 
+def _daily_buckets_between(start_date, end_date):
+    """Per-calendar-day tracker buckets for every day in [start_date, end_date].
+
+    Same attribution as the tracker bars (app._day_buckets: jars counted on day
+    D belong to the recipe STARTED on D-1), so the overlay and the bars on the
+    same page can never disagree. Recipes are loaded once; each week's schedule
+    once. Returns {date: buckets}."""
+    recipes = app.load_recipes()
+    out = {}
+    monday = start_date - timedelta(days=start_date.weekday())
+    while monday <= end_date:
+        wid = monday.strftime("%Y-%m-%d")
+        sched = app.load_schedule(wid) or {}
+        for d_idx in range(7):
+            day = monday + timedelta(days=d_idx)
+            if start_date <= day <= end_date:
+                buckets, _ = app._day_buckets(wid, d_idx, recipes_cache=recipes,
+                                              schedule_cache=sched)
+                out[day] = buckets
+        monday += timedelta(days=7)
+    return out
+
+
+def _sold_units_between(start_date, end_date):
+    """Units sold per calendar day, bucketed by format like production is.
+
+    The day is when stock actually LEFT finished goods — `deducted_at` (portal
+    orders deduct at approval) else `sale_date` else `created_at` — the same
+    key the mass balance uses; a Ripe order's sale_date is a future delivery
+    date. Returns {date: {bucket: units}}."""
+    sales = _load_json(app.ORGANIC_SALES_PATH, [])
+    out = {}
+    for s in sales:
+        raw = (s.get("deducted_at") or s.get("sale_date") or s.get("created_at") or "")[:10]
+        try:
+            day = datetime.strptime(raw, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        if not (start_date <= day <= end_date):
+            continue
+        fmt = s.get("format") or ""
+        if not fmt and "|" in (s.get("sku_key") or ""):
+            fmt = s["sku_key"].split("|")[-1]
+        bucket = _classify_format(fmt)
+        try:
+            qty = int(s.get("quantity") or 0)
+        except (ValueError, TypeError):
+            continue
+        if qty <= 0:
+            continue
+        day_b = out.setdefault(day, {})
+        day_b[bucket] = day_b.get(bucket, 0) + qty
+    return out
+
+
+OVERLAY_BUCKETS = ["SS-876ML", "SS-750ML", "SS-473ML", "FZ"]
+
+
+@production_bp.route("/api/production-tracker/overlay", methods=["GET"])
+@manager_required
+def get_production_tracker_overlay():
+    """Produced vs sold, in JARS, on one time axis — the feed for the
+    "Produced vs sold" card on the Production Tracker.
+
+    ?grain=week&end=YYYY-MM-DD&n=12  → the n Mon–Sun weeks ending at `end`
+    ?grain=month&end=YYYY-MM&n=12    → the n calendar months ending at `end`
+
+    Only the four jar buckets (SS 876/750/473 + frozen) are compared: BB and
+    Kettle's End are production-only and nothing sells as "Other". Monthly
+    figures are exact calendar-month sums by day (unlike the year bars, which
+    credit a boundary week to both months it touches)."""
+    grain = (request.args.get("grain") or "week").lower()
+    try:
+        n = max(1, min(int(request.args.get("n") or 12), 60))
+    except ValueError:
+        return jsonify({"error": "n must be an integer"}), 400
+    end_raw = request.args.get("end") or ""
+    periods = []
+    if grain == "week":
+        try:
+            end_monday = datetime.strptime(end_raw, "%Y-%m-%d").date()
+        except ValueError:
+            end_monday = datetime.now().date()
+        end_monday -= timedelta(days=end_monday.weekday())
+        for i in range(n - 1, -1, -1):
+            mon = end_monday - timedelta(days=7 * i)
+            periods.append({"key": mon.strftime("%Y-%m-%d"),
+                            "label": mon.strftime("%b %-d"),
+                            "start": mon, "end": mon + timedelta(days=6)})
+    elif grain == "month":
+        m = re.match(r"^(\d{4})-(\d{2})$", end_raw)
+        if m:
+            y, mo = int(m.group(1)), int(m.group(2))
+        else:
+            today = datetime.now().date()
+            y, mo = today.year, today.month
+        from calendar import monthrange
+        for i in range(n - 1, -1, -1):
+            yy, mm = y, mo - i
+            while mm <= 0:
+                mm += 12
+                yy -= 1
+            first = datetime(yy, mm, 1).date()
+            last = datetime(yy, mm, monthrange(yy, mm)[1]).date()
+            periods.append({"key": first.strftime("%Y-%m"),
+                            "label": first.strftime("%b %Y" if mm == 1 or i == n - 1 else "%b"),
+                            "start": first, "end": last})
+    else:
+        return jsonify({"error": "grain must be week or month"}), 400
+
+    start_date, end_date = periods[0]["start"], periods[-1]["end"]
+    produced_by_day = _daily_buckets_between(start_date, end_date)
+    sold_by_day = _sold_units_between(start_date, end_date)
+
+    today = datetime.now().date()
+    out = []
+    for p in periods:
+        produced = {b: 0 for b in OVERLAY_BUCKETS}
+        sold = {b: 0 for b in OVERLAY_BUCKETS}
+        day = p["start"]
+        while day <= p["end"]:
+            for b in OVERLAY_BUCKETS:
+                produced[b] += (produced_by_day.get(day) or {}).get(b, 0)
+                sold[b] += (sold_by_day.get(day) or {}).get(b, 0)
+            day += timedelta(days=1)
+        out.append({
+            "key": p["key"], "label": p["label"],
+            "produced": produced, "sold": sold,
+            "produced_total": sum(produced.values()),
+            "sold_total": sum(sold.values()),
+            "future": p["start"] > today,      # not started yet — the chart drops it
+            "partial": p["start"] <= today < p["end"],   # still running — "so far"
+        })
+    return jsonify({"grain": grain, "buckets": OVERLAY_BUCKETS, "periods": out})
+
+
 # ── Production: daily production + checklists ────────────────────────────────
 
 @production_bp.route("/daily-production/<week_id>/<int:day_idx>")
