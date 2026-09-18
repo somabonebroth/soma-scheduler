@@ -438,10 +438,7 @@ and a mirror check. `_lot_blocks` reads the lots off the **FG rows**, never reco
 the date, so the panel and the inventory record can't disagree; a day whose jars came from
 batches started on different dates gets one block per lot. Each product row has a Generate
 Label button → `/api/label` with the FG lot + the BATCH (start) date, so printed Best
-Before = lot. **Note the tablet disagrees:** `daily_production.html`'s finish-side button
-sends `productionData.lot` (finish+365) while FG stamps start+365, and `production.py`'s
-`prev_lot`/`prev_date` — computed for exactly this — have no reader. Unresolved; fix on the
-tablet, not by bending the review.
+Before = lot. **The tablet agrees since 2026-09-18:** `daily_production.html`'s finish-side label buttons send `productionData.prev_lot` + `prev_date` (start+365, what FG stamps). Before that they sent `lot` (finish+365) and a `date` string `/api/label` could not parse (so Best Before fell back to today+365) — the printed case label ran one day ahead of the Daily Summary's LOT#.
 Section 2 gained **Portal orders** (Ripe + Wholesale Portal sale rows regrouped by order,
 keyed on `deducted_at` — the day stock actually left — NOT `sale_date`, which for wholesale
 is a future delivery date) and **Retail channels**: Shopify + Clover read LIVE for the date

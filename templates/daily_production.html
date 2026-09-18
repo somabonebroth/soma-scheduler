@@ -312,9 +312,13 @@ function autoSave(){
     },800);
 }
 
+// The label buttons sit on the FINISH side: these jars come from the batch
+// STARTED yesterday, and the inventory record stamps LOT# = start date + 365.
+// So send prev_lot + prev_date (DD/MM/YYYY, the format /api/label parses) —
+// the same LOT# the Daily Summary shows and the Best Before that matches it.
 async function generateLabel(recipeName,brandName,format){
     try{
-        var res=await fetch('/api/label',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({brand_name:brandName,recipe_name:recipeName,recipe_format:format,lot:productionData.lot,production_date:productionData.date})});
+        var res=await fetch('/api/label',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({brand_name:brandName,recipe_name:recipeName,recipe_format:format,lot:productionData.prev_lot,production_date:productionData.prev_date})});
         if(res.ok){var blob=await res.blob();var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='Label_'+recipeName.replace(/[^a-zA-Z0-9]/g,'_')+'.pdf';a.click();URL.revokeObjectURL(url);}
         else{var err=await res.json();alert(err.error||'Label generation failed');}
     }catch(e){alert('Label generation failed');}
