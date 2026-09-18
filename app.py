@@ -1488,20 +1488,26 @@ def generate_pdfs():
 
         filename = "Weekly_Schedule.pdf"
         filepath = os.path.join(week_pdf_dir, filename)
-        generate_weekly_schedule_pdf(filepath, week_start, schedule, recipes, notes, logo_path)
+        # A stored schedule is {"<day>": {vessel: recipe-name}}; pdf_engine reads
+        # {day_int: [{"vessel", "recipe"}]} — the same list shape
+        # production.file_checklist builds. Convert here, once, for both PDFs.
+        days_map = {}
+        for day_idx in range(7):
+            day_schedule = schedule.get(str(day_idx)) or schedule.get(day_idx) or {}
+            days_map[day_idx] = [{"vessel": v, "recipe": day_schedule.get(v)}
+                                 for v in VESSELS if day_schedule.get(v)]
+
+        generate_weekly_schedule_pdf(filepath, week_start, days_map, recipes, notes, logo_path)
         generated.append(filename)
 
         for day_idx in range(7):
-            day_key = str(day_idx)
-            day_schedule = schedule.get(day_key, {})
-            has_production = any(day_schedule.get(v) for v in VESSELS)
-            if not has_production:
+            if not days_map[day_idx]:
                 continue
 
             date = week_start + timedelta(days=day_idx)
             filename = DAYS[day_idx] + "_Production.pdf"
             filepath = os.path.join(week_pdf_dir, filename)
-            generate_daily_package_pdf(filepath, date, day_schedule, recipes, logo_path,
+            generate_daily_package_pdf(filepath, date, days_map[day_idx], recipes, logo_path,
                                        sections=load_ccp_master())
             generated.append(filename)
 
