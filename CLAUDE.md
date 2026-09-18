@@ -113,6 +113,22 @@ production.py       — Flask Blueprint (771 lines, extracted 2026-06-03): the F
                       strip (produced / sold / net + span), not a sentence; the "jars only,
                       Kettle's End excluded" note is a footnote inside "Show the numbers".
                       Edit the partial, never fork it (same rule as `_labelling_panel.html`).
+                      **Sales by channel replaced it on the dashboard (2026-09-18, Jeremy's
+                      call):** the manager dashboard now includes `templates/_sales_by_channel.html`
+                      (`sc*` namespace) instead; the produced-vs-sold card stays on the tracker
+                      (its `ov_compact` mode currently has no caller). Feed is `GET
+                      /api/analytics/sales-by-channel` (here in production.py, because it shares
+                      `_periods_from_request` with the overlay so the two can never bucket time
+                      differently). Seven fixed lines via `_sales_channel`: Soma Retail (Shopify),
+                      Soma Clover, Soma Wholesale (= buyer `SOMA (QBO)`, processed through
+                      QuickBooks), Ripe (`ripe_order_id`), Nature's Emporium + Healthy Planet
+                      (buyer name after `_buyer_resolver` roll-up, apostrophe-insensitive
+                      prefix match), All other wholesale (everything else, incl. SBBC portal
+                      orders from other buyers). Cases (jars/12) / $ toggle + Week/Month/Year;
+                      legend entries are buttons that hide/show a line; same `deducted_at` →
+                      `sale_date` → `created_at` day key; revenue = `line_total` else qty×price.
+                      Colours are a fixed categorical palette literal in the JS (colour follows
+                      the channel; "other" is grey).
 ripe_orders.py      — Flask Blueprint handling Ripe order workflow within Soma
                       (wholesale approve/decline/fulfill + ripe_retail_auto_approve for
                       Stripe-Checkout-paid retail pickup orders + monthly service-fee
@@ -244,7 +260,7 @@ pdf_engine.py       — PDF generation (labels, checklists, schedules)
 default_recipes.py  — Seed data
 add_pwa_tags.py     — PWA manifest support
 templates/          — Jinja2 HTML templates (one per page; `_*.html` are shared partials:
-                      `_portal_tiles`, `_labelling_panel`, `_produced_vs_sold`)
+                      `_portal_tiles`, `_labelling_panel`, `_produced_vs_sold`, `_sales_by_channel`)
 static/             — CSS, JS, images
 ```
 

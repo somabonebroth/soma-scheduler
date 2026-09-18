@@ -385,25 +385,15 @@ def _overlay_bucket(fmt):
     return _classify_format(fmt)
 
 
-@production_bp.route("/api/production-tracker/overlay", methods=["GET"])
-@manager_required
-def get_production_tracker_overlay():
-    """Produced vs sold, in JARS, on one time axis — the feed for the
-    "Produced vs sold" card on the Production Tracker.
-
-    ?grain=week&end=YYYY-MM-DD&n=12  → the n Mon–Sun weeks ending at `end`
-    ?grain=month&end=YYYY-MM&n=12    → the n calendar months ending at `end`
-    ?grain=year&end=YYYY&n=5         → the n calendar years ending at `end`
-
-    Five jar buckets are compared (SS 876/750/473, frozen, Back Bar); Kettle's
-    End is not a product and nothing sells as "Other", so both are left out. Monthly
-    figures are exact calendar-month sums by day, the same rule the year
-    bars use since 2026-09-15."""
+def _periods_from_request():
+    """Parse ?grain=&end=&n= into the list of periods both time-series cards
+    chart (produced-vs-sold and sales-by-channel), so the two can never bucket
+    time differently. Returns (grain, periods, error)."""
     grain = (request.args.get("grain") or "week").lower()
     try:
         n = max(1, min(int(request.args.get("n") or 12), 104))
     except ValueError:
-        return jsonify({"error": "n must be an integer"}), 400
+        return grain, None, "n must be an integer"
     end_raw = request.args.get("end") or ""
     periods = []
     if grain == "week":
@@ -439,14 +429,35 @@ def get_production_tracker_overlay():
         m = re.match(r"^(\d{4})$", end_raw)
         y = int(m.group(1)) if m else datetime.now().year
         if not 2020 <= y <= 2099:
-            return jsonify({"error": "Invalid year"}), 400
+            return grain, None, "Invalid year"
         for i in range(n - 1, -1, -1):
             yy = y - i
             periods.append({"key": str(yy), "label": str(yy),
                             "start": datetime(yy, 1, 1).date(),
                             "end": datetime(yy, 12, 31).date()})
     else:
-        return jsonify({"error": "grain must be week, month or year"}), 400
+        return grain, None, "grain must be week, month or year"
+
+    return grain, periods, None
+
+
+@production_bp.route("/api/production-tracker/overlay", methods=["GET"])
+@manager_required
+def get_production_tracker_overlay():
+    """Produced vs sold, in JARS, on one time axis — the feed for the
+    "Produced vs sold" card on the Production Tracker.
+
+    ?grain=week&end=YYYY-MM-DD&n=12  → the n Mon–Sun weeks ending at `end`
+    ?grain=month&end=YYYY-MM&n=12    → the n calendar months ending at `end`
+    ?grain=year&end=YYYY&n=5         → the n calendar years ending at `end`
+
+    Five jar buckets are compared (SS 876/750/473, frozen, Back Bar); Kettle's
+    End is not a product and nothing sells as "Other", so both are left out. Monthly
+    figures are exact calendar-month sums by day, the same rule the year
+    bars use since 2026-09-15."""
+    grain, periods, err = _periods_from_request()
+    if err:
+        return jsonify({"error": err}), 400
 
     start_date, end_date = periods[0]["start"], periods[-1]["end"]
     produced_by_day = _daily_buckets_between(start_date, end_date)
@@ -472,6 +483,106 @@ def get_production_tracker_overlay():
             "partial": p["start"] <= today < p["end"],   # still running — "so far"
         })
     return jsonify({"grain": grain, "buckets": OVERLAY_BUCKETS, "periods": out})
+
+
+SALES_CHANNELS = [
+    ("soma_retail", "Soma Retail"),
+    ("soma_clover", "Soma Clover"),
+    ("soma_wholesale", "Soma Wholesale"),
+    ("ripe", "Ripe"),
+    ("natures_emporium", "Nature's Emporium"),
+    ("healthy_planet", "Healthy Planet"),
+    ("other_wholesale", "All other wholesale"),
+]
+
+
+def _sales_channel(sale, resolve):
+    """Which of the seven dashboard channels a sale row belongs to.
+
+    Shopify / Clover by the import's `channel` (buyer name as fallback); Ripe
+    by `ripe_order_id`; Soma Wholesale is the buyer "SOMA (QBO)" (processed
+    through QuickBooks); Nature's Emporium and Healthy Planet by buyer name
+    after the location roll-up, apostrophe-insensitive, so "Natures Emporium
+    (Woodbridge)" lands with its parent; everything else is other wholesale."""
+    channel = (sale.get("channel") or "").lower()
+    raw = (sale.get("buyer") or "").strip()
+    buyer, _ = resolve(raw, sale.get("location_name"))
+    name = (buyer or raw).lower().replace("’", "").replace("'", "").strip()
+    if channel == "shopify" or name == "soma (shopify)":
+        return "soma_retail"
+    if channel == "clover" or name == "soma (clover)":
+        return "soma_clover"
+    if sale.get("ripe_order_id") or name == "ripe":
+        return "ripe"
+    if name == "soma (qbo)":
+        return "soma_wholesale"
+    if name.startswith("natures emporium"):
+        return "natures_emporium"
+    if name.startswith("healthy planet"):
+        return "healthy_planet"
+    return "other_wholesale"
+
+
+@production_bp.route("/api/analytics/sales-by-channel", methods=["GET"])
+@manager_required
+def get_sales_by_channel():
+    """Units and revenue sold per channel per period — the feed for the
+    "Sales by channel" card on the manager dashboard. Same ?grain=&end=&n=
+    contract as the produced-vs-sold overlay (shared _periods_from_request).
+
+    A sale is dated the day stock LEFT (`deducted_at` → `sale_date` →
+    `created_at`), the overlay's and the mass balance's key — a Ripe order's
+    sale_date is a future delivery date. Revenue is the stored `line_total`,
+    else quantity × unit_price (the api_sales_by_buyer rule). The client turns
+    units into cases (÷12)."""
+    grain, periods, err = _periods_from_request()
+    if err:
+        return jsonify({"error": err}), 400
+    start_date, end_date = periods[0]["start"], periods[-1]["end"]
+    resolve = app._buyer_resolver(app._load_buyers())
+    keys = [k for k, _ in SALES_CHANNELS]
+    by_day = {}
+    for s in _load_json(app.ORGANIC_SALES_PATH, []):
+        raw = (s.get("deducted_at") or s.get("sale_date") or s.get("created_at") or "")[:10]
+        try:
+            day = datetime.strptime(raw, "%Y-%m-%d").date()
+            qty = int(s.get("quantity") or 0)
+        except (ValueError, TypeError):
+            continue
+        if qty <= 0 or not (start_date <= day <= end_date):
+            continue
+        try:
+            if s.get("line_total") is not None:
+                revenue = float(s["line_total"])
+            else:
+                revenue = qty * float(s.get("unit_price") or s.get("price") or 0)
+        except (ValueError, TypeError):
+            revenue = 0.0
+        cell = by_day.setdefault(day, {}).setdefault(_sales_channel(s, resolve), [0, 0.0])
+        cell[0] += qty
+        cell[1] += revenue
+
+    today = datetime.now().date()
+    out = []
+    for p in periods:
+        units = {k: 0 for k in keys}
+        revenue = {k: 0.0 for k in keys}
+        day = p["start"]
+        while day <= p["end"]:
+            for k, (u, r) in (by_day.get(day) or {}).items():
+                units[k] += u
+                revenue[k] += r
+            day += timedelta(days=1)
+        out.append({
+            "key": p["key"], "label": p["label"],
+            "units": units,
+            "revenue": {k: round(v, 2) for k, v in revenue.items()},
+            "future": p["start"] > today,
+            "partial": p["start"] <= today < p["end"],
+        })
+    return jsonify({"grain": grain,
+                    "channels": [{"key": k, "label": l} for k, l in SALES_CHANNELS],
+                    "periods": out})
 
 
 # ── Production: daily production + checklists ────────────────────────────────

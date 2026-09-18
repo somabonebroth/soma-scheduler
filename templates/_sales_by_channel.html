@@ -1,0 +1,268 @@
+{# Sales by channel — seven coloured lines on one time axis, in CASES (jars / 12)
+   or DOLLARS, fed by GET /api/analytics/sales-by-channel (manager-only). Lives on
+   the manager dashboard below the Daily Summary button (it replaced the compact
+   produced-vs-sold card there 2026-09-18; that card stays on the Production
+   Tracker). Self-contained: own CSS + JS (sc* namespace), borrows nothing from
+   _produced_vs_sold.html so the two can sit on one page. Legend entries are
+   buttons — click one to hide/show its line; the y-scale follows. #}
+<style>
+.sc-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 20px 24px; margin-bottom: 16px; }
+.sc-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.sc-title { font-size: 16px; font-weight: 600; color: var(--dark); }
+.sc-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.sc-toggle { display: flex; }
+.sc-toggle button { padding: 7px 16px; border: 1px solid var(--border); font-size: 13px; font-weight: 600; cursor: pointer; background: var(--card-bg); color: var(--text); margin-left: -1px; }
+.sc-toggle button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.sc-toggle button:last-child { border-radius: 0 6px 6px 0; }
+.sc-toggle button.active { background: var(--accent); color: var(--white); border-color: var(--accent); position: relative; z-index: 1; }
+.sc-stats { display: flex; align-items: baseline; gap: 22px; flex-wrap: wrap; margin: 2px 0 10px; }
+.sc-stat b { font-size: 22px; font-weight: 700; color: var(--dark); letter-spacing: -.01em; }
+.sc-stat span { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-light); margin-left: 6px; }
+.sc-span { font-size: 12px; color: var(--text-light); margin-left: auto; }
+.sc-legend { display: flex; gap: 6px 14px; flex-wrap: wrap; margin-bottom: 8px; }
+.sc-legend button { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12px; color: var(--text); background: none; border: 0; padding: 2px 0; cursor: pointer; }
+.sc-legend button small { color: var(--text-light); font-size: 11px; font-variant-numeric: tabular-nums; }
+.sc-legend button.off { opacity: .4; text-decoration: line-through; }
+.sc-key { display: inline-block; width: 16px; height: 0; border-top: 3px solid; border-radius: 2px; }
+.sc-wrap { position: relative; }
+.sc-wrap svg { display: block; width: 100%; height: auto; overflow: visible; font-family: inherit; }
+.sc-axis { font-size: 11px; fill: var(--text-light); }
+.sc-grid { stroke: var(--border); stroke-width: 1; }
+.sc-hair { stroke: var(--text-muted); stroke-width: 1; pointer-events: none; }
+.sc-tip { position: absolute; display: none; background: var(--dark); color: var(--white); font-size: 11px; line-height: 1.6; padding: 6px 10px; border-radius: 4px; pointer-events: none; z-index: 5; white-space: nowrap; }
+.sc-tip .t-date { font-weight: 600; margin-bottom: 2px; }
+.sc-tip .t-row { display: flex; align-items: center; gap: 6px; }
+.sc-tip .t-row b { font-weight: 700; min-width: 4.5em; text-align: right; font-variant-numeric: tabular-nums; }
+.sc-tip .t-key { display: inline-block; width: 12px; border-top: 3px solid; }
+.sc-tip .t-total { border-top: 1px solid rgba(255,255,255,.25); margin-top: 3px; padding-top: 2px; }
+.sc-table { margin-top: 14px; font-size: 12px; }
+.sc-table summary { cursor: pointer; color: var(--text-light); }
+.sc-table .sc-scroll { overflow-x: auto; }
+.sc-table table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+.sc-table th, .sc-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sc-table th:first-child, .sc-table td:first-child { text-align: left; }
+.sc-table th { font-size: 11px; color: var(--text-light); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.sc-foot { font-size: 11px; color: var(--text-light); margin-top: 8px; }
+.sc-status { font-size: 13px; color: var(--text-light); padding: 24px 0; text-align: center; }
+</style>
+<div class="sc-card" id="sc-card">
+    <div class="sc-head">
+        <div class="sc-title">Sales by channel</div>
+        <div class="sc-controls">
+            <div class="sc-toggle" id="sc-measure">
+                <button class="active" data-measure="cases" onclick="scSetMeasure('cases')">Cases</button>
+                <button data-measure="dollars" onclick="scSetMeasure('dollars')">$</button>
+            </div>
+            <div class="sc-toggle" id="sc-bucket">
+                <button class="active" data-grain="week" onclick="scSetGrain('week')">Week</button>
+                <button data-grain="month" onclick="scSetGrain('month')">Month</button>
+                <button data-grain="year" onclick="scSetGrain('year')">Year</button>
+            </div>
+        </div>
+    </div>
+    <div class="sc-stats" id="sc-stats"></div>
+    <div class="sc-legend" id="sc-legend"></div>
+    <div id="sc-main"><div class="sc-status">Loading…</div></div>
+    <details class="sc-table"><summary>Show the numbers</summary><div class="sc-scroll" id="sc-table"></div>
+        <div class="sc-foot">A case is 12 jars. Dated the day stock left. Shopify and Clover arrive with the weekly import, so the running week shows none yet.</div>
+    </details>
+</div>
+<script>
+// ── Sales by channel ─────────────────────────────────────────────────────
+// Categorical palette: fixed slot per channel (colour follows the channel,
+// never its rank); "All other wholesale" is the neutral. Literal on purpose —
+// a categorical chart palette, not a theme colour.
+const SC_COLORS = {
+    soma_retail:'#2a78d6', soma_clover:'#eb6834', soma_wholesale:'#1baf7a', ripe:'#eda100',
+    natures_emporium:'#e87ba4', healthy_planet:'#4a3aa7', other_wholesale:'#898781'
+};
+const SC_N = { week: 12, month: 12, year: 5 };
+let _scData = null, _scGrain = 'week', _scMeasure = 'cases';
+const _scHidden = new Set();
+
+function scMondayIso(){
+    const t = new Date(); const d = t.getDay(); const m = new Date(t);
+    m.setDate(t.getDate() + (d === 0 ? -6 : 1 - d));
+    return m.toISOString().split('T')[0];
+}
+function scSetGrain(g){
+    _scGrain = g;
+    document.querySelectorAll('#sc-bucket button').forEach(b => b.classList.toggle('active', b.dataset.grain === g));
+    loadSalesByChannel();
+}
+function scSetMeasure(m){
+    _scMeasure = m;
+    document.querySelectorAll('#sc-measure button').forEach(b => b.classList.toggle('active', b.dataset.measure === m));
+    renderSalesByChannel();
+}
+function scToggle(key){
+    if (_scHidden.has(key)) _scHidden.delete(key); else _scHidden.add(key);
+    renderSalesByChannel();
+}
+
+async function loadSalesByChannel(){
+    const main = document.getElementById('sc-main');
+    const now = new Date();
+    const end = _scGrain === 'week' ? scMondayIso()
+              : _scGrain === 'month' ? now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0')
+              : String(now.getFullYear());
+    main.style.opacity = _scData ? '.5' : '1';
+    try {
+        const res = await fetch('/api/analytics/sales-by-channel?grain=' + _scGrain + '&end=' + encodeURIComponent(end) + '&n=' + SC_N[_scGrain]);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        _scData = await res.json();
+        renderSalesByChannel();
+    } catch (e) {
+        main.style.opacity = '1';
+        main.innerHTML = '<div class="sc-status">Could not load: ' + e.message + '</div>';
+    }
+}
+
+function scNiceStep(max){
+    if (max <= 0) return 1;
+    const raw = max / 5, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const norm = raw / mag;
+    return (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10) * mag;
+}
+function scCases(units){ return units / 12; }
+function scFmtCases(v){ return (Math.round(v * 10) / 10).toLocaleString(undefined, {maximumFractionDigits: 1}); }
+function scFmtMoney(v){ return '$' + Math.round(v).toLocaleString(); }
+function scFmt(v){ return _scMeasure === 'cases' ? scFmtCases(v) : scFmtMoney(v); }
+function scVal(p, key){ return _scMeasure === 'cases' ? scCases(p.units[key] || 0) : (p.revenue[key] || 0); }
+
+function renderSalesByChannel(){
+    const d = _scData; if (!d) return;
+    const main = document.getElementById('sc-main'); main.style.opacity = '1';
+    const stats = document.getElementById('sc-stats'), legend = document.getElementById('sc-legend'), tbl = document.getElementById('sc-table');
+    const channels = d.channels || [];
+    let periods = (d.periods || []).filter(p => !p.future);
+    const unitsOf = p => channels.reduce((a, c) => a + (p.units[c.key] || 0), 0);
+    while (periods.length > 2 && !unitsOf(periods[0])) periods = periods.slice(1);   // before the records begin
+    stats.textContent = ''; legend.textContent = '';
+    if (!periods.length || !periods.some(unitsOf)) {
+        main.innerHTML = '<div class="sc-status">No sales in this window.</div>';
+        tbl.innerHTML = '';
+        return;
+    }
+    const unitWord = _scGrain;
+    const titleOf = p => (unitWord === 'week' ? 'Week of ' + p.label : p.label) + (p.partial ? ' (so far)' : '');
+
+    // stat strip — both measures, always, whatever the chart is showing
+    const totUnits = periods.reduce((a, p) => a + unitsOf(p), 0);
+    const totRev = periods.reduce((a, p) => a + channels.reduce((b, c) => b + (p.revenue[c.key] || 0), 0), 0);
+    [[scFmtCases(scCases(totUnits)), 'cases'], [scFmtMoney(totRev), 'sales']].forEach(([v, l]) => {
+        const st = document.createElement('div'); st.className = 'sc-stat';
+        const b = document.createElement('b'); b.textContent = v; const sm = document.createElement('span'); sm.textContent = l;
+        st.appendChild(b); st.appendChild(sm); stats.appendChild(st);
+    });
+    const sp = document.createElement('div'); sp.className = 'sc-span';
+    sp.textContent = periods[0].label + ' – ' + periods[periods.length - 1].label + ' · ' + periods.length + ' ' + unitWord + (periods.length === 1 ? '' : 's') + (periods[periods.length - 1].partial ? ' · last one so far' : '');
+    stats.appendChild(sp);
+
+    // legend = the on/off switches, each with its window total
+    channels.forEach(c => {
+        const btn = document.createElement('button'); btn.type = 'button';
+        btn.className = _scHidden.has(c.key) ? 'off' : '';
+        btn.setAttribute('aria-pressed', _scHidden.has(c.key) ? 'false' : 'true');
+        btn.title = 'Show / hide this line';
+        btn.onclick = () => scToggle(c.key);
+        const k = document.createElement('i'); k.className = 'sc-key'; k.style.borderColor = SC_COLORS[c.key];
+        const n = document.createElement('span'); n.textContent = c.label;
+        const t = document.createElement('small'); t.textContent = scFmt(periods.reduce((a, p) => a + scVal(p, c.key), 0));
+        btn.appendChild(k); btn.appendChild(n); btn.appendChild(t); legend.appendChild(btn);
+    });
+
+    const shown = channels.filter(c => !_scHidden.has(c.key));
+    scChart(main, periods, shown, titleOf);
+
+    // table view — every value reachable without hovering, both measures
+    let h = '<table><thead><tr><th>' + (unitWord === 'week' ? 'Week of' : unitWord === 'month' ? 'Month' : 'Year') + '</th>';
+    channels.forEach(c => { h += '<th>' + c.label + '</th>'; });
+    h += '<th>Total</th></tr></thead><tbody>';
+    const cell = (u, r) => scFmtCases(scCases(u)) + ' · ' + scFmtMoney(r);
+    periods.forEach(p => {
+        h += '<tr><td>' + p.label + (p.partial ? ' <span style="color:var(--text-light)">(so far)</span>' : '') + '</td>';
+        let ru = 0, rr = 0;
+        channels.forEach(c => { const u = p.units[c.key] || 0, r = p.revenue[c.key] || 0; ru += u; rr += r; h += '<td>' + cell(u, r) + '</td>'; });
+        h += '<td>' + cell(ru, rr) + '</td></tr>';
+    });
+    h += '<tr><td><strong>Total</strong></td>';
+    channels.forEach(c => { h += '<td><strong>' + cell(periods.reduce((a, p) => a + (p.units[c.key] || 0), 0), periods.reduce((a, p) => a + (p.revenue[c.key] || 0), 0)) + '</strong></td>'; });
+    h += '<td><strong>' + cell(totUnits, totRev) + '</strong></td></tr></tbody></table>';
+    tbl.innerHTML = h;
+}
+
+function scChart(host, periods, shown, titleOf){
+    const surface = getComputedStyle(document.documentElement).getPropertyValue('--card-bg').trim() || '#ffffff';
+    const W = Math.max(host.clientWidth || 600, 240), H = 280;
+    const padL = 56, padR = 16, padT = 12, padB = 26;
+    const pw = W - padL - padR, ph = H - padT - padB, n = periods.length;
+    let max = 0;
+    shown.forEach(c => periods.forEach(p => { max = Math.max(max, scVal(p, c.key)); }));
+    const step = scNiceStep(max || 1);
+    const yMax = Math.max(step * Math.ceil((max || 1) / step), step);
+    const x = i => padL + (n === 1 ? pw / 2 : i * pw / (n - 1));
+    const y = v => padT + ph - (v / yMax) * ph;
+    const tick = v => _scMeasure === 'cases' ? scFmtCases(v) : scFmtMoney(v);
+
+    let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" role="img" aria-label="Sales by channel, ' + (_scMeasure === 'cases' ? 'cases' : 'dollars') + '">';
+    for (let v = 0; v <= yMax + 1e-9; v += step) {
+        const yy = y(v);
+        s += '<line class="sc-grid" x1="' + padL + '" x2="' + (W - padR) + '" y1="' + yy + '" y2="' + yy + '"/>';
+        s += '<text class="sc-axis" x="' + (padL - 6) + '" y="' + (yy + 4) + '" text-anchor="end">' + tick(v) + '</text>';
+    }
+    const every = Math.max(1, Math.ceil(n * 48 / pw));
+    periods.forEach((p, i) => {
+        if (i === n - 1 || (i % every === 0 && (x(n - 1) - x(i)) >= 44))
+            s += '<text class="sc-axis" x="' + x(i) + '" y="' + (H - 6) + '" text-anchor="middle">' + p.label + '</text>';
+    });
+    shown.forEach(c => {
+        const col = SC_COLORS[c.key];
+        s += '<polyline points="' + periods.map((p, i) => x(i) + ',' + y(scVal(p, c.key))).join(' ') + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+        if (n <= 26) periods.forEach((p, i) => {
+            s += '<circle cx="' + x(i) + '" cy="' + y(scVal(p, c.key)) + '" r="3.5" fill="' + col + '" stroke="' + surface + '" stroke-width="1.5"/>';
+        });
+    });
+    s += '<line class="sc-hair" id="sc-hair" x1="0" x2="0" y1="' + padT + '" y2="' + (padT + ph) + '" style="display:none"/>';
+    s += '<rect x="' + padL + '" y="' + padT + '" width="' + pw + '" height="' + ph + '" fill="transparent" id="sc-hit"/>';
+    s += '</svg><div class="sc-tip" id="sc-tip"></div>';
+    host.innerHTML = '<div class="sc-wrap">' + s + '</div>';
+    if (!shown.length) { host.insertAdjacentHTML('beforeend', '<div class="sc-status" style="padding:6px 0 0">Every line is hidden — click a channel above.</div>'); }
+
+    const wrap = host.firstChild, svg = wrap.querySelector('svg');
+    const hit = svg.querySelector('#sc-hit'), hair = svg.querySelector('#sc-hair'), tip = wrap.querySelector('#sc-tip');
+    const show = i => {
+        const p = periods[i], xx = x(i);
+        hair.setAttribute('x1', xx); hair.setAttribute('x2', xx); hair.style.display = '';
+        tip.textContent = '';
+        const dt = document.createElement('div'); dt.className = 't-date'; dt.textContent = titleOf(p); tip.appendChild(dt);
+        let total = 0;
+        const line = (name, val, col, cls) => {
+            const row = document.createElement('div'); row.className = 't-row' + (cls ? ' ' + cls : '');
+            const k = document.createElement('span'); k.className = 't-key'; k.style.borderColor = col || 'transparent';
+            const b = document.createElement('b'); b.textContent = scFmt(val);
+            const l = document.createElement('span'); l.textContent = name;
+            row.appendChild(k); row.appendChild(b); row.appendChild(l); tip.appendChild(row);
+        };
+        shown.forEach(c => { const v = scVal(p, c.key); total += v; line(c.label, v, SC_COLORS[c.key]); });
+        if (shown.length > 1) line('Total shown', total, null, 't-total');
+        tip.style.display = 'block';
+        const scale = wrap.clientWidth / W, px = xx * scale;
+        tip.style.top = (padT * scale) + 'px';
+        if (px > wrap.clientWidth / 2) { tip.style.right = (wrap.clientWidth - px + 10) + 'px'; tip.style.left = 'auto'; }
+        else { tip.style.left = (px + 10) + 'px'; tip.style.right = 'auto'; }
+    };
+    hit.addEventListener('pointermove', ev => {
+        const rect = svg.getBoundingClientRect();
+        const mx = (ev.clientX - rect.left) * (W / rect.width);
+        let best = 0, bd = Infinity;
+        for (let i = 0; i < n; i++) { const dd = Math.abs(x(i) - mx); if (dd < bd) { bd = dd; best = i; } }
+        show(best);
+    });
+    hit.addEventListener('pointerleave', () => { hair.style.display = 'none'; tip.style.display = 'none'; });
+}
+
+let _scResizeT = null;
+window.addEventListener('resize', function(){ clearTimeout(_scResizeT); _scResizeT = setTimeout(renderSalesByChannel, 150); });
+document.addEventListener('DOMContentLoaded', loadSalesByChannel);
+</script>
