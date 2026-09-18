@@ -173,6 +173,20 @@ retail_orders.py    — Flask Blueprint (added 2026-07-02): SBBC Wholesale Porta
                       not opened from a click. `closeApproveModal` reloads the page when
                       the print row is showing so the list is never stale. Not on Ripe
                       retail pickup orders — those auto-approve, nobody clicks.
+                      **Packing slips are 4×6 THERMAL (2026-09-18).** All four slips
+                      print on 4in × 6in thermal labels. They were laid out for letter
+                      and the label printer shrank them to fit (~47%) — unreadable. The
+                      three HTML slips (ripe / ripe-retail / SBBC retail) now share
+                      `templates/_packing_slip_head.html` (CSS + the `?print=1` script):
+                      `@page{size:4in 6in}`, sheet drawn AT 4in on screen too, sizes in
+                      pt, pure black on white (thermal can't do grey or tints — weight
+                      and rules carry hierarchy), SKU folded under the product name (no
+                      SKU column), rows never split and the `thead` (with the order
+                      number) repeats, so a long order runs onto a second label. Edit
+                      the partial, never fork it. The fourth slip is the ReportLab PDF
+                      in `sales.get_packing_slip` (manual/organic sales, carries LOT#s):
+                      same page size + rules; FORMAT sits under the product; note the
+                      frame's 6pt inner padding when sizing tables (`WIDTH`).
 end_of_day.py       — Flask Blueprint (added 2026-08-19): the floor's one end-of-shift
                       flow at /end-of-day. Owns NO data — it joins production
                       (file_checklist) and cleaning (closing record, rotation) and is

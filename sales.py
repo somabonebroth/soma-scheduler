@@ -610,7 +610,6 @@ def get_packing_slip(sale_id):
     buyer_phone = buyer_rec.get("phone") or ""
     buyer_email = buyer_rec.get("email") or ""
 
-    from reportlab.lib.pagesizes import letter
     from reportlab.lib import colors
     from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
                                     Paragraph, Spacer, HRFlowable, Image)
@@ -619,21 +618,26 @@ def get_packing_slip(sale_id):
     from reportlab.lib.enums import TA_RIGHT, TA_LEFT, TA_CENTER
     import io as _io
 
-    DARK_GREEN  = colors.HexColor("#1b5e20")
-    MID_GREEN   = colors.HexColor("#2e7d32")
-    LIGHT_GREEN = colors.HexColor("#e8f5e9")
-    BORDER      = colors.HexColor("#c8d8c8")
-    GREY_TEXT   = colors.HexColor("#555555")
-    LIGHT_ROW   = colors.HexColor("#f5f9f5")
+    # Sized for the 4in x 6in THERMAL label printer, not letter: a letter page
+    # shrunk to fit a label prints at ~47% and is unreadable. Thermal heads
+    # print black or nothing, so there is no grey text and no tinted fill —
+    # weight and rules carry the hierarchy. A long order runs onto a second
+    # label (the column header repeats; rows never split).
+    BLACK   = colors.black
+    # SimpleDocTemplate's frame pads 6pt inside the margin, so the paper
+    # margin is MARGIN + 6pt (~0.16in) and tables must fit the INNER width.
+    MARGIN  = 0.08 * inch
+    WIDTH   = 4 * inch - 2 * (MARGIN + 6)
 
     buf = _io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=letter,
-                            rightMargin=0.65*inch, leftMargin=0.65*inch,
-                            topMargin=0.55*inch, bottomMargin=0.65*inch)
+    doc = SimpleDocTemplate(buf, pagesize=(4 * inch, 6 * inch),
+                            rightMargin=MARGIN, leftMargin=MARGIN,
+                            topMargin=MARGIN, bottomMargin=MARGIN)
     styles = getSampleStyleSheet()
 
     def _ps(name, **kw):
         base = styles.get(name, styles["Normal"])
+        kw.setdefault("textColor", BLACK)
         return ParagraphStyle("_"+name+"_"+str(abs(hash(str(kw)))), parent=base, **kw)
 
     story = []
@@ -642,124 +646,120 @@ def get_packing_slip(sale_id):
     if not os.path.exists(logo_path):
         logo_path = os.path.join(os.path.dirname(__file__), "static", "logo.png")
 
-    company_lines = [company.get("name") or "Soma Bone Broth"]
+    company_name = company.get("name") or "Soma Bone Broth"
+    company_lines = [f"<b>{company_name}</b>"]
     for fld in ("address", "city", "phone", "email", "website"):
         if company.get(fld): company_lines.append(company[fld])
-
-    company_para = Paragraph(
-        "<br/>".join(company_lines),
-        _ps("Normal", fontSize=8, textColor=GREY_TEXT, alignment=TA_RIGHT, leading=12)
-    )
+    company_para = Paragraph("<br/>".join(company_lines),
+                             _ps("Normal", fontSize=7.5, alignment=TA_RIGHT, leading=9.5))
 
     if os.path.exists(logo_path):
-        logo_img = Image(logo_path, width=1.4*inch, height=1.4*inch, kind="proportional")
-        header_tbl = Table([[logo_img, company_para]], colWidths=[2.5*inch, 5.0*inch])
-        header_tbl.setStyle(TableStyle([
-            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-            ("ALIGN",  (1,0), (1,0),  "RIGHT"),
-        ]))
+        left = Image(logo_path, width=0.85*inch, height=0.6*inch, kind="proportional")
+        left.hAlign = "LEFT"
     else:
-        header_tbl = Table(
-            [[Paragraph(company.get("name") or "Soma Bone Broth",
-                        _ps("Normal", fontSize=18, textColor=DARK_GREEN, fontName="Helvetica-Bold")),
-              company_para]],
-            colWidths=[3.0*inch, 4.5*inch]
-        )
+        left = Paragraph(company_name, _ps("Normal", fontSize=13, fontName="Helvetica-Bold"))
+    header_tbl = Table([[left, company_para]], colWidths=[1.1*inch, WIDTH - 1.1*inch])
+    header_tbl.setStyle(TableStyle([
+        ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
+        ("ALIGN",        (0,0), (0,0),  "LEFT"),
+        ("LEFTPADDING",  (0,0), (-1,-1), 0),
+        ("RIGHTPADDING", (0,0), (-1,-1), 0),
+        ("TOPPADDING",   (0,0), (-1,-1), 0),
+        ("BOTTOMPADDING",(0,0), (-1,-1), 2),
+    ]))
     story.append(header_tbl)
-    story.append(Spacer(1, 0.1*inch))
-    story.append(HRFlowable(width="100%", thickness=2, color=MID_GREEN, spaceAfter=6))
+    story.append(HRFlowable(width="100%", thickness=2, color=BLACK, spaceBefore=2, spaceAfter=3))
     story.append(Paragraph("PACKING SLIP",
-        _ps("Normal", fontSize=20, fontName="Helvetica-Bold", textColor=DARK_GREEN, spaceAfter=2)))
+        _ps("Normal", fontSize=14, fontName="Helvetica-Bold", leading=16, spaceAfter=3)))
 
-    # Ship To / Order Info block
+    # Ship To, then Date / Ref / PO on one row beneath it
     sale_date = sale.get("sale_date") or "—"
     po        = sale.get("po_number") or sale.get("case_lot") or "—"
     ref       = sale_id[-10:]
 
-    lbl   = _ps("Normal", fontSize=8, textColor=GREY_TEXT, fontName="Helvetica-Bold", leading=11, spaceBefore=2)
-    val   = _ps("Normal", fontSize=10, leading=13)
-    val_s = _ps("Normal", fontSize=9, textColor=GREY_TEXT, leading=12)
+    lbl = _ps("Normal", fontSize=7, fontName="Helvetica-Bold", leading=9)
+    val = _ps("Normal", fontSize=10, leading=12)
 
-    ship_lines = [f"<b>{buyer_name}</b>"]
+    ship_lines = [f'<font size="12"><b>{buyer_name}</b></font>']
     if buyer_contact: ship_lines.append(buyer_contact)
     if buyer_address: ship_lines.append(buyer_address)
     if buyer_phone:   ship_lines.append(buyer_phone)
     if buyer_email:   ship_lines.append(buyer_email)
-    ship_para = Paragraph("<br/>".join(ship_lines), val)
 
     order_info = Table([
-        [Paragraph("SHIP TO", lbl), ship_para,
-         Paragraph("DATE",      lbl), Paragraph(sale_date, val)],
-        ["", "", Paragraph("ORDER REF", lbl), Paragraph(ref, val_s)],
-        ["", "", Paragraph("PO #",      lbl), Paragraph(po,  val_s)],
-    ], colWidths=[0.9*inch, 3.6*inch, 1.0*inch, 2.0*inch])
+        [Paragraph("SHIP TO", lbl), "", ""],
+        [Paragraph("<br/>".join(ship_lines), _ps("Normal", fontSize=10, leading=13)), "", ""],
+        [Paragraph("DATE", lbl), Paragraph("ORDER REF", lbl), Paragraph("PO #", lbl)],
+        [Paragraph(sale_date, val), Paragraph(ref, val), Paragraph(po, val)],
+    ], colWidths=[1.15*inch, 1.35*inch, WIDTH - 2.5*inch])
     order_info.setStyle(TableStyle([
         ("VALIGN",        (0,0), (-1,-1), "TOP"),
-        ("SPAN",          (0,0), (0,2)),
-        ("SPAN",          (1,0), (1,2)),
-        ("BACKGROUND",    (0,0), (1,2),  LIGHT_GREEN),
-        ("BOX",           (0,0), (1,2),  0.5, BORDER),
-        ("BOX",           (2,0), (3,2),  0.5, BORDER),
-        ("TOPPADDING",    (0,0), (-1,-1), 7),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 7),
-        ("LEFTPADDING",   (0,0), (-1,-1), 8),
-        ("RIGHTPADDING",  (0,0), (-1,-1), 8),
+        ("SPAN",          (0,0), (2,0)),
+        ("SPAN",          (0,1), (2,1)),
+        ("BOX",           (0,0), (-1,-1), 1, BLACK),
+        ("LINEABOVE",     (0,2), (-1,2),  1, BLACK),
+        ("LINEBEFORE",    (1,2), (2,3),   0.5, BLACK),
+        ("TOPPADDING",    (0,0), (-1,-1), 2),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+        ("BOTTOMPADDING", (0,1), (-1,1),  4),
+        ("LEFTPADDING",   (0,0), (-1,-1), 4),
+        ("RIGHTPADDING",  (0,0), (-1,-1), 4),
     ]))
-    story.append(Spacer(1, 0.15*inch))
     story.append(order_info)
-    story.append(Spacer(1, 0.2*inch))
+    story.append(Spacer(1, 0.08*inch))
 
-    hdr_s  = _ps("Normal", fontSize=9, fontName="Helvetica-Bold", textColor=colors.white, alignment=TA_CENTER)
-    cell_l = _ps("Normal", fontSize=10, alignment=TA_LEFT)
-    cell_c = _ps("Normal", fontSize=10, alignment=TA_CENTER)
-    tot_s  = _ps("Normal", fontSize=10, fontName="Helvetica-Bold", alignment=TA_CENTER)
+    hdr_l  = _ps("Normal", fontSize=7.5, fontName="Helvetica-Bold", alignment=TA_LEFT)
+    hdr_c  = _ps("Normal", fontSize=7.5, fontName="Helvetica-Bold", alignment=TA_CENTER)
+    cell_l = _ps("Normal", fontSize=10.5, leading=12.5, alignment=TA_LEFT)
+    cell_c = _ps("Normal", fontSize=10.5, leading=12.5, alignment=TA_CENTER)
+    qty_s  = _ps("Normal", fontSize=13, leading=15, fontName="Helvetica-Bold", alignment=TA_CENTER)
+    tot_s  = _ps("Normal", fontSize=11, leading=13, fontName="Helvetica-Bold", alignment=TA_RIGHT)
 
-    rows = [[Paragraph("PRODUCT", hdr_s), Paragraph("FORMAT", hdr_s),
-             Paragraph("LOT #", hdr_s),   Paragraph("QTY (units)", hdr_s)]]
+    # FORMAT sits under the product name — a fourth column does not fit 4in.
+    rows = [[Paragraph("PRODUCT", hdr_l), Paragraph("LOT #", hdr_c), Paragraph("QTY", hdr_c)]]
     total_units = 0
 
+    def _product_cell(line):
+        lp = ((line.get("brand","")+" " if line.get("brand") else "") + (line.get("recipe") or "")).strip()
+        lf = line.get("format") or ""
+        return Paragraph(f'<b>{lp}</b>' + (f'<br/><font size="8.5">{lf}</font>' if lf else ""), cell_l)
+
     for line in order_lines:
-        lp  = ((line.get("brand","")+" " if line.get("brand") else "") + (line.get("recipe") or "")).strip()
-        lf  = line.get("format") or ""
         ll  = line.get("lots") or []
         if ll:
             for lot in ll:
                 qty = int(lot.get("quantity") or 0)
                 total_units += qty
-                rows.append([Paragraph(lp, cell_l), Paragraph(lf, cell_c),
-                             Paragraph(lot.get("lot") or "—", cell_c), Paragraph(str(qty), cell_c)])
+                rows.append([_product_cell(line),
+                             Paragraph(lot.get("lot") or "—", cell_c), Paragraph(str(qty), qty_s)])
         else:
             qty = int(line.get("quantity") or 0)
             total_units += qty
-            rows.append([Paragraph(lp, cell_l), Paragraph(lf, cell_c),
-                         Paragraph(line.get("fg_lot") or "—", cell_c), Paragraph(str(qty), cell_c)])
+            rows.append([_product_cell(line),
+                         Paragraph(line.get("fg_lot") or "—", cell_c), Paragraph(str(qty), qty_s)])
     total_cases = total_units // 12
-    rows.append(["", "", Paragraph("TOTAL", tot_s),
-                 Paragraph(f"{total_units} units  ({total_cases} cases)", tot_s)])
+    rows.append([Paragraph(f"TOTAL&nbsp;&nbsp;{total_units} units  ({total_cases} cases)", tot_s), "", ""])
 
     rc = len(rows)
-    items_tbl = Table(rows, colWidths=[3.2*inch, 1.1*inch, 1.4*inch, 1.8*inch])
+    items_tbl = Table(rows, colWidths=[WIDTH - 1.75*inch, 1.1*inch, 0.65*inch], repeatRows=1)
     items_tbl.setStyle(TableStyle([
-        ("BACKGROUND",    (0,0),  (-1,0),    MID_GREEN),
-        ("TEXTCOLOR",     (0,0),  (-1,0),    colors.white),
-        ("ROWBACKGROUNDS",(0,1),  (-1,rc-2), [colors.white, LIGHT_ROW]),
-        ("BACKGROUND",    (0,-1), (-1,-1),   LIGHT_GREEN),
-        ("GRID",          (0,0),  (-1,rc-2), 0.5, BORDER),
-        ("LINEABOVE",     (0,-1), (-1,-1),   1.0, MID_GREEN),
-        ("TOPPADDING",    (0,0),  (-1,-1),   8),
-        ("BOTTOMPADDING", (0,0),  (-1,-1),   8),
-        ("LEFTPADDING",   (0,0),  (-1,-1),   8),
-        ("RIGHTPADDING",  (0,0),  (-1,-1),   8),
+        ("LINEBELOW",     (0,0),  (-1,0),    1.5, BLACK),
+        ("LINEBELOW",     (0,1),  (-1,rc-2), 0.5, BLACK),
+        ("SPAN",          (0,-1), (-1,-1)),
+        ("LINEABOVE",     (0,-1), (-1,-1),   2, BLACK),
+        ("TOPPADDING",    (0,0),  (-1,-1),   3),
+        ("BOTTOMPADDING", (0,0),  (-1,-1),   3),
+        ("LEFTPADDING",   (0,0),  (-1,-1),   2),
+        ("RIGHTPADDING",  (0,0),  (-1,-1),   2),
         ("VALIGN",        (0,0),  (-1,-1),   "MIDDLE"),
     ]))
     story.append(items_tbl)
-    story.append(Spacer(1, 0.3*inch))
+    story.append(Spacer(1, 0.1*inch))
 
-    story.append(HRFlowable(width="100%", thickness=0.5, color=BORDER, spaceAfter=8))
     footer = ["Thank you for your business."]
     if company.get("registration"): footer.append(f"Reg: {company['registration']}")
     story.append(Paragraph("  |  ".join(footer),
-                            _ps("Normal", fontSize=8, textColor=GREY_TEXT, alignment=TA_CENTER)))
+                            _ps("Normal", fontSize=7.5, alignment=TA_CENTER)))
 
     doc.build(story)
     buf.seek(0)

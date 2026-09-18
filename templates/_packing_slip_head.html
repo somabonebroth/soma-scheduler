@@ -1,0 +1,68 @@
+{# Shared <head> block for the three HTML packing slips (ripe / ripe-retail /
+   SBBC retail). Edit here, never fork it per slip.
+
+   The slips print on 4in x 6in THERMAL labels. Two consequences drive every
+   rule below:
+   1. The sheet is laid out AT 4in wide, on screen and on paper. The old slips
+      were designed 800px wide for letter and the label printer shrank them to
+      fit (~47%), which is what made the type unreadable.
+   2. Thermal heads print black or nothing (~203dpi). Grey text and tinted
+      fills dither into mush, so everything is pure black on white: weight and
+      rules carry the hierarchy, not colour.
+   Sizes are in pt/in so they mean the same thing on paper as they say here.
+   A long order simply runs onto a second label: rows never split, and the
+   table head (which carries the order number) repeats on every label. #}
+<style>
+body { background:#f0eee8; color:#000; }
+main { width:4in; margin:16px auto; padding:.15in; background:#fff; color:#000; box-shadow:0 1px 6px rgba(0,0,0,.18); font-size:10pt; line-height:1.3; }
+.ps-ctrl { width:4in; margin:16px auto 0; display:flex; gap:8px; flex-wrap:wrap; }
+.ps-head { display:flex; justify-content:space-between; align-items:flex-start; gap:.1in; }
+.ps-head img { height:.42in; width:auto; display:block; margin-bottom:3pt; filter:grayscale(1) contrast(1.4); }
+.ps-co { font-size:8pt; line-height:1.3; }
+.ps-co strong { font-size:9pt; }
+.ps-title { font-size:11pt; font-weight:800; text-transform:uppercase; letter-spacing:.06em; text-align:right; white-space:nowrap; }
+.ps-printed { font-size:7.5pt; text-align:right; margin-top:2pt; white-space:nowrap; }
+.ps-order { border-top:2pt solid #000; border-bottom:2pt solid #000; margin:6pt 0; padding:4pt 0; }
+.ps-order .lbl + .val + .lbl { margin-top:3pt; }
+.lbl { font-size:7.5pt; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+.ps-order .val { font-family:ui-monospace,Menlo,monospace; font-size:14pt; font-weight:800; line-height:1.15; word-break:break-all; }
+.ps-order .val.sm { font-size:10pt; }
+.ps-info { display:grid; grid-template-columns:1fr 1fr; gap:5pt 8pt; margin-bottom:6pt; }
+.ps-info .wide { grid-column:1 / -1; }
+.ps-info .val { font-size:10.5pt; line-height:1.3; }
+.ps-info .val strong { font-size:12pt; }
+.ps-info .val .sub { font-size:9pt; }
+.ps-notes { border:1.5pt solid #000; padding:4pt 6pt; margin-bottom:6pt; font-size:10pt; }
+table.ps-tbl { width:100%; border-collapse:collapse; }
+table.ps-tbl thead { display:table-header-group; }
+table.ps-tbl tr { break-inside:avoid; page-break-inside:avoid; }
+table.ps-tbl th { text-align:left; padding:3pt 2pt; border-bottom:1.5pt solid #000; font-size:7.5pt; text-transform:uppercase; letter-spacing:.05em; }
+.ps-runhead th { border-bottom:none !important; padding-bottom:0 !important; font-family:ui-monospace,Menlo,monospace; text-transform:none !important; letter-spacing:0 !important; }
+table.ps-tbl td { padding:4pt 2pt; border-bottom:.75pt solid #000; font-size:11pt; vertical-align:top; }
+table.ps-tbl td strong { font-weight:700; }
+table.ps-tbl th.r, table.ps-tbl td.r { text-align:right; white-space:nowrap; }
+table.ps-tbl td.qty { font-size:14pt; font-weight:800; }
+.ps-sub { display:block; font-size:8.5pt; line-height:1.25; }
+.ps-sku { display:block; font-family:ui-monospace,Menlo,monospace; font-size:7.5pt; line-height:1.25; word-break:break-all; }
+table.ps-tbl .grp-hdr td { border-top:2pt solid #000; border-bottom:1.5pt solid #000; font-weight:800; font-size:9.5pt; text-transform:uppercase; letter-spacing:.05em; padding:3pt 2pt; }
+table.ps-tbl .extra-row td { border-top:2pt solid #000; border-bottom:2pt solid #000; }
+table.ps-tbl .totals td { border-bottom:none; border-top:2pt solid #000; font-weight:800; font-size:12pt; padding-top:5pt; }
+.sig { display:grid; grid-template-columns:1fr 1fr; gap:.2in; margin-top:.1in; break-inside:avoid; page-break-inside:avoid; }
+.sig-space { height:.42in; }
+.sig-block { border-top:1pt solid #000; padding-top:2pt; font-size:6.5pt; text-transform:uppercase; white-space:nowrap; }
+.ps-foot { margin-top:8pt; font-size:7.5pt; text-align:center; line-height:1.35; break-inside:avoid; page-break-inside:avoid; }
+.thanks { margin-top:10pt; padding-top:6pt; border-top:.75pt solid #000; text-align:center; font-size:10pt; line-height:1.4; break-inside:avoid; page-break-inside:avoid; }
+@media print {
+  @page { size:4in 6in; margin:.15in; }
+  html, body { background:#fff !important; }
+  main { width:auto; margin:0; padding:0; box-shadow:none; }
+  .ps-ctrl, .topbar, .nav, .flash { display:none !important; }
+}
+</style>
+<script>
+// ?print=1 (from the approve modal's "Print packing slip" button) opens the
+// browser's print dialog as soon as the slip has rendered.
+if (new URLSearchParams(location.search).get('print') === '1') {
+  window.addEventListener('load', function () { window.print(); });
+}
+</script>
