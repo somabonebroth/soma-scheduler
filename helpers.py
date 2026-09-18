@@ -340,7 +340,7 @@ def _aggregate_lots_for_sku(fg, sku_key):
                 "lot": lot,
                 "produced": 0,
                 "remaining": 0,
-                "production_date": None,    # finish date string YYYY-MM-DD
+                "production_date": None,    # batch START date, YYYY-MM-DD
                 "best_before": "",            # parsed ddmmyy → dd/mm/yyyy
                 "vessels": set(),
                 "fg_ids": [],
@@ -355,10 +355,16 @@ def _aggregate_lots_for_sku(fg, sku_key):
             r["vessels"].add(entry["vessel"])
         r["fg_ids"].append(entry.get("id"))
 
-        # falling back to created_at
+        # Production date = the day the batch STARTED — the date the LOT# (and so
+        # Best Before) is derived from. week_id/day_idx on an FG row are the
+        # FINISH (count) day, one day later, so prefer the start coords; rows
+        # without them fall back to the finish day, then created_at.
         prod_date = None
-        wid = entry.get("week_id")
-        d_idx = entry.get("day_idx")
+        wid = entry.get("start_week_id")
+        d_idx = entry.get("start_day_idx")
+        if wid is None or d_idx is None:
+            wid = entry.get("week_id")
+            d_idx = entry.get("day_idx")
         if wid is not None and d_idx is not None:
             try:
                 pd = datetime.strptime(wid, "%Y-%m-%d") + timedelta(days=int(d_idx))

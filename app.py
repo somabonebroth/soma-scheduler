@@ -1601,12 +1601,20 @@ def generate_label():
     if not recipe_name:
         return jsonify({"error": "Missing recipe name"}), 400
 
+    # A production LOT# IS the Best Before date (batch start + 365, ddmmyy), so
+    # read Best Before straight off the lot: the two lines of a printed label
+    # can then never disagree, whatever date the caller sent. production_date
+    # only decides it for a lot that is not a date (BL-/MAN-/RESET- or blank).
     try:
-        prod_date = datetime.strptime(production_date, "%d/%m/%Y")
-    except Exception:
-        prod_date = datetime.today()
-
-    best_before = prod_date + timedelta(days=365)
+        if not (isinstance(lot, str) and len(lot) == 6 and lot.isdigit()):
+            raise ValueError("lot is not a ddmmyy date")
+        best_before = datetime.strptime(lot, "%d%m%y")
+    except (ValueError, TypeError):
+        try:
+            prod_date = datetime.strptime(production_date, "%d/%m/%Y")
+        except Exception:
+            prod_date = datetime.today()
+        best_before = prod_date + timedelta(days=365)
 
     # Brand is passed as a separate field to the label PDF (own line above).
     recipe_format_display = build_display_name(
