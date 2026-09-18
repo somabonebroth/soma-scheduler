@@ -603,6 +603,23 @@ finished_goods+events from a snapshot (`restore_reset_archive`, re-archives curr
 label which `/api/label` prints as production+365. (Was finish+365, which put the system
 one day ahead of the case on any batch produced one day / packaged the next.)
 
+**ONE LOT# rule, one function (audited 2026-09-18): `helpers._lot_for_batch_date(batch_start_date)`
+= start date + 365 days, ddmmyy.** The LOT# IS the Best Before date and is the number on the jar
+stamp and case label. Every production-lot surface goes through it: FG (`_complete_organic_run`),
+production runs (`_check_organic_schedule`), the tablet (`prev_lot` = jars filled today, `today_lot`
+= batches started today — the info bar names both), the schedule/recipe-card/CCP-checklist PDFs
+(`pdf_engine`; the checklist prints both lots), and in JS the Weekly/Create Schedule day headers
+(`lotDate` = d + 365 — the only non-Python copy; keep in step). Before the audit the schedule
+pages, all three PDFs and `run["lot"]` printed the bare production date as "LOT#" — a number that
+is on no jar and that the trace cannot find. Runs scheduled before the fix still STORE the old
+number, so never read `run["lot"]`: use `app._run_lot(run)`, which derives it (the runs API and
+stock-exceptions do). `/api/label` reads Best Before straight OFF a ddmmyy lot, so the two lines of
+a label cannot disagree whatever date the caller sends (`production_date` only matters for
+BL-/MAN-/RESET- lots). `_aggregate_lots_for_sku`'s `production_date` is the batch START day (was
+the count day, so inventory showed a 364-day shelf life). A caller holding a finish/count date must
+step back one day before calling the helper. Tests: `python3 -m unittest tests.test_lot_rule`.
+Not production lots, unchanged: `BL-`/`MAN-`/`ADJ-`/`RESET-` + server-clock ddmmyy.
+
 **Known caveat (R3, unfixed):** `delete_traceability_record` on a *pre-cutover* (frozen)
 run restores raw against current lots while the baseline stands → raw inflation. Avoid
 deleting pre-cutover production days; harden later if needed. RAW materials have no

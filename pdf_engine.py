@@ -10,6 +10,8 @@ from reportlab.lib.utils import ImageReader
 from reportlab.lib.units import inch
 from datetime import datetime, timedelta
 
+from helpers import _lot_for_batch_date
+
 DARK = HexColor("#1a1a2e")
 ACCENT = HexColor("#4a6741")
 LIGHT_BG = HexColor("#f5f5f0")
@@ -255,7 +257,10 @@ def _sections_from_master(master):
 def _draw_checklist_content(c, w, h, date, active_vessels, logo_path=None, filled_data=None, sections=None):
     """Draw the checklist body content on the canvas."""
     day_name = date.strftime("%A").upper()
-    lot = date.strftime("%d%m%y")
+    # Jars filled/counted today come from the batch STARTED yesterday, so a
+    # checklist day touches two lots. Name both rather than print one bare LOT#.
+    lot_filled = _lot_for_batch_date(date - timedelta(days=1))
+    lot_started = _lot_for_batch_date(date)
     checks = filled_data.get("checks", {}) if filled_data else {}
     is_filled = filled_data is not None
 
@@ -268,7 +273,9 @@ def _draw_checklist_content(c, w, h, date, active_vessels, logo_path=None, fille
     c.rect(30, y - 22, w - 60, 22, fill=1, stroke=0)
     c.setFillColor(black)
     c.setFont(FONT_BOLD, 8)
-    c.drawString(40, y - 15, "DATE: " + date.strftime("%d/%m/%Y") + "    LOT#: " + lot)
+    c.drawString(40, y - 15, "DATE: " + date.strftime("%d/%m/%Y")
+                 + "    LOT# ON JARS FILLED TODAY: " + lot_filled
+                 + "    LOT# FOR BATCHES STARTED TODAY: " + lot_started)
     info = "    ".join([v["vessel"] + ": " + v["recipe"] for v in active_vessels])
     c.setFont(FONT, 7)
     c.drawString(220, y - 15, info)
@@ -411,7 +418,7 @@ def generate_weekly_schedule_pdf(output_path, week_start, days_map, recipes, not
     c.setFillColor(black)
     c.setFont(FONT_BOLD, 9)
     c.drawString(40, y - 18, "WEEK START: " + week_start.strftime("%d/%m/%Y"))
-    c.drawString(230, y - 18, "LOT# FORMAT: DDMMYY (auto)")
+    c.drawString(230, y - 18, "LOT# = START DATE + 365 (DDMMYY)")
     c.drawRightString(w - 40, y - 18, "Prepared by: ____________________")
     y = y - 45
 
@@ -427,7 +434,7 @@ def generate_weekly_schedule_pdf(output_path, week_start, days_map, recipes, not
 
     for d_idx, day in enumerate(day_names):
         date = week_start + timedelta(days=d_idx)
-        lot = date.strftime("%d%m%y")
+        lot = _lot_for_batch_date(date)
         block_h = hdr_h + row_h * len(VESSELS) + 8
         if y - block_h < 55:
             c.showPage()
@@ -566,7 +573,7 @@ def generate_daily_package_pdf(output_path, date, vessel_assignments, recipes, l
     w, h = letter
     c = canvas.Canvas(output_path, pagesize=letter)
     day_name = date.strftime("%A").upper()
-    lot = date.strftime("%d%m%y")
+    lot = _lot_for_batch_date(date)
     active = [v for v in vessel_assignments if v.get("recipe") and v["recipe"] in recipes]
     draw_header(c, w, h, "RECIPE CARDS - " + day_name, date.strftime("%d/%m/%Y") + "  |  LOT#: " + lot, logo_path)
     if not active:

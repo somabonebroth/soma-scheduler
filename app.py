@@ -67,6 +67,7 @@ from helpers import (
     _ingredient_section_key,
     _jar_volume_liters,
     _load_company_info,
+    _lot_for_batch_date,
     _sanitize_ripe_credits,
     _active_ripe_credits,
     _load_json,
@@ -2215,6 +2216,20 @@ def _run_start_date_str(week_id, day_idx):
         return None
 
 
+def _run_lot(run):
+    """A production run's LOT#, derived from its START date by the one shared
+    rule (helpers._lot_for_batch_date), so it always equals the lot on the
+    finished goods the run produces. Read this instead of the stored
+    run["lot"]: runs scheduled before 2026-09-18 stored the bare production
+    date there. Falls back to the stored value if the run's date is malformed.
+    """
+    try:
+        start = datetime.strptime(run.get("week_id"), "%Y-%m-%d") + timedelta(days=int(run.get("day_idx")))
+    except (ValueError, TypeError):
+        return run.get("lot", "")
+    return _lot_for_batch_date(start)
+
+
 def _eligible_lots_for_date(materials, run_start_date):
     """Lots a run may consume: received on or before run_start_date (undated
     lots are always eligible so stock is never stranded), oldest-first (FIFO).
@@ -2402,7 +2417,7 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
         start_date = datetime.strptime(start_week_id, "%Y-%m-%d") + timedelta(days=int(start_day_idx))
     except (ValueError, TypeError):
         start_date = finish_date
-    expiry_lot = (start_date + timedelta(days=365)).strftime("%d%m%y")
+    expiry_lot = _lot_for_batch_date(start_date)
 
     produced = (produced_data or {}).get("produced") or {}
 
@@ -3939,7 +3954,7 @@ def _check_organic_schedule(week_id, schedule):
                 run["brand"] = rdata.get("brand", "")
                 try:
                     date = week_start + timedelta(days=key[0])
-                    run["lot"] = date.strftime("%d%m%y")
+                    run["lot"] = _lot_for_batch_date(date)
                 except Exception:
                     pass
             seen_keys.add(key)
@@ -3954,7 +3969,7 @@ def _check_organic_schedule(week_id, schedule):
                and r.get("vessel") == vessel for r in out):
             continue
         date = week_start + timedelta(days=day_idx)
-        lot = date.strftime("%d%m%y")
+        lot = _lot_for_batch_date(date)
         rdata = recipes.get(recipe_name) or {}
         run = {
             "id": f"{week_id}_{day_idx}_{vessel}",

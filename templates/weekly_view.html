@@ -198,11 +198,14 @@ async function loadWeek(weekId) {
             var d = new Date(weekId + 'T00:00:00');
             d.setDate(d.getDate() + idx);
             var ds = d.toLocaleDateString('en-GB', {day:'2-digit', month:'2-digit', year:'numeric'});
-            var lot = d.toLocaleDateString('en-GB', {day:'2-digit', month:'2-digit', year:'2-digit'}).replace(/\//g, '');
+            // LOT# = batch start date + 365 days (ddmmyy) — the same rule as
+            // helpers._lot_for_batch_date; it is the number stamped on the jar and case.
+            const lotDate = new Date(d); lotDate.setDate(lotDate.getDate() + 365);
+            var lot = lotDate.toLocaleDateString('en-GB', {day:'2-digit', month:'2-digit', year:'2-digit'}).replace(/\//g, '');
 
             var hasStart = false;
             var hasFinish = false;
-            html += '<div class="day-block"><div class="day-header"><span>' + DAYS[idx] + ' — ' + ds + '</span><span class="lot">LOT# ' + lot + '</span></div>';
+            html += '<div class="day-block"><div class="day-header"><span>' + DAYS[idx] + ' — ' + ds + '</span><span class="lot" title="LOT# for batches started this day (start date + 365)">LOT# ' + lot + '</span></div>';
 
             for (var v = 0; v < VESSELS.length; v++) {
                 var vessel = VESSELS[v];

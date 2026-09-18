@@ -437,6 +437,23 @@ def _active_ripe_credits(company):
     return [{"id": "legacy", "name": "Credit", "amount": legacy}] if legacy > 0 else []
 
 
+LOT_SHELF_LIFE_DAYS = 365
+
+
+def _lot_for_batch_date(batch_date):
+    """THE rule for a production LOT#: the date the batch STARTED + 365 days,
+    as ddmmyy. The LOT# is therefore also the Best Before date, and it is the
+    number hot-stamped on the jar and printed on the case label.
+
+    Every surface that shows a production LOT# (FG record, production run,
+    tablet, schedule pages, schedule/recipe-card/checklist PDFs, case label)
+    must come through here — never re-derive it locally. Jars are counted the
+    day AFTER the batch starts, so a caller holding a finish/count date must
+    step back one day first. `batch_date` is a date or datetime.
+    """
+    return (batch_date + timedelta(days=LOT_SHELF_LIFE_DAYS)).strftime("%d%m%y")
+
+
 def _prod_date(e):
     """FIFO sort key: production date for a finished-goods entry.
     Derives YYYY-MM-DD from week_id + day_idx; falls back to created_at."""

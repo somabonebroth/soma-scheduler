@@ -29,7 +29,7 @@ from flask import (
     Blueprint, request, jsonify, session, redirect, url_for, render_template,
 )
 
-from helpers import ORGANIC_RUNS_PATH, _load_json, _save_json, _in_date_window, _classify_format, FORMAT_RE
+from helpers import _lot_for_batch_date, ORGANIC_RUNS_PATH, _load_json, _save_json, _in_date_window, _classify_format, FORMAT_RE
 
 from pdf_engine import generate_filled_checklist_pdf
 
@@ -674,16 +674,16 @@ def get_daily_production(week_id, day_idx):
     # LOT# = expiry date (production date + 365 days) in ddmmyy format.
     # prev_lot is used when generating labels for the recipe being finished today,
     # which was started yesterday → expiry = yesterday + 365 days.
-    prev_expiry = prev_date + timedelta(days=365)
-    today_expiry = date + timedelta(days=365)
+    prev_lot = _lot_for_batch_date(prev_date)
+    today_lot = _lot_for_batch_date(date)
 
     return jsonify({
         "date": date.strftime("%A, %d/%m/%Y"),
         "day_name": app.DAYS[day_idx],
         "prev_date": prev_date.strftime("%d/%m/%Y"),
-        "prev_lot": prev_expiry.strftime("%d%m%y"),
-        "lot": today_expiry.strftime("%d%m%y"),
-        "today_lot": today_expiry.strftime("%d%m%y"),
+        "prev_lot": prev_lot,
+        "lot": today_lot,
+        "today_lot": today_lot,
         "finish": finish_kettles,
         "start": start_kettles,
         "checklist": checklist,
@@ -1228,4 +1228,5 @@ def get_organic_runs():
                 if _in_date_window(
                     app._run_start_date_str(r.get("week_id"), r.get("day_idx")),
                     date_from, date_to)]
-    return jsonify(runs)
+    # LOT# is derived, never trusted from storage — see app._run_lot.
+    return jsonify([dict(r, lot=app._run_lot(r)) for r in runs])

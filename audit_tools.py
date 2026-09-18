@@ -245,7 +245,7 @@ def organic_stock_exceptions():
                 "vessel": run.get("vessel", ""),
                 "recipe": run.get("recipe", ""),
                 "brand": run.get("brand", ""),
-                "batch_lot": run.get("lot", ""),
+                "batch_lot": app._run_lot(run),
                 "ingredient": used.get("item", ""),
                 "shortfall": used.get("quantity_used"),
                 "unit": used.get("unit", ""),
