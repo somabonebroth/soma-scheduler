@@ -771,7 +771,7 @@ Rules for any new or edited template:
 Unification is essentially complete (the history below is kept as the method record). The hex→token sweep was provably no-op (each swap value-identical), so small templates were batched per deploy; anything visual (de-forking a `:root`, converging near-dupe colours) stayed its own eyes-on deploy. Status:
 - **Done:** deleted dead `cogs.html`; linked `mass_balance.html` + `reconcile_raw.html` to the shared sheet.
 - **Done:** extended the token set with the most-duplicated orphan literals — `--white`/`--black`/`--text-muted`, `--info`/`--indigo`, the material-amber family (`--amber-bg/-border/-text/-text-dark`, `--orange`), `--green-light`/`--green-tint`. These match values already in the templates, so collapsing to them is a no-op visually.
-- **Done (hex→token swept):** `dashboard`, `weekly_view`, `production_tracker`, plus a batch of 12 small templates (`recipes`, `ripe_sku_audit`, `certifications`, `analytics`, `reconcile_raw`, `ripe_packing_slip`, `create_schedule`, `master_ccp`, `important_documents`, `company_settings`, `ripe_analytics`, `organic_certification`); then `organic` (730 lines, audit-critical — own deploy, 122 swaps); then a batch of the 9 remaining small templates (`audit`, `contacts`, `buyer_analytics`, `ripe_products`, `audits`, `daily_production`, `buyer_edit`, `ripe_orders`, `traceability` — 190 swaps). Method: replace exact-value hex matches in CSS position **only outside `<script>`**, leaving JS logic palettes and arbitrary categorical palettes (chart bucket colours, packing-slip group borders) literal.
+- **Done (hex→token swept):** `dashboard`, `weekly_view`, `production_tracker`, plus a batch of 12 small templates (`recipes`, `certifications`, `analytics`, `reconcile_raw`, `ripe_packing_slip`, `create_schedule`, `master_ccp`, `important_documents`, `company_settings`, `ripe_analytics`, `organic_certification`); then `organic` (730 lines, audit-critical — own deploy, 122 swaps); then a batch of the 9 remaining small templates (`audit`, `contacts`, `buyer_analytics`, `ripe_products`, `audits`, `daily_production`, `buyer_edit`, `ripe_orders`, `traceability` — 190 swaps). Method: replace exact-value hex matches in CSS position **only outside `<script>`**, leaving JS logic palettes and arbitrary categorical palettes (chart bucket colours, packing-slip group borders) literal.
 - **Not yet swept:** none — all non-standalone templates are swept. `login.html` is intentionally standalone — leave it.
 - **mass_balance.html** — DONE: de-forked onto the shared palette (removed the local `:root` that overrode `--accent`/#3d5a3d, `--border`, `--text`, `--text-light`); now inherits canonical tokens. (Its remaining page-local literals — `#fff`, `#2e7d32`, `#c62828`, off-whites — were left for a later no-op hex→token pass.)
 - **Token round-2 — DONE (hybrid).** Promoted 8 token-less literals at exact value (no-op): `--info-dark` #1565c0, `--info-border` #1976d2, `--warning-text` #856404, `--success-text` #155724, and a cool neutral grey ramp `--grey-dark` #666 / `--grey` #888 / `--grey-light` #ccc / `--grey-border` #ddd (distinct from the warm `--text`/`--border` family). Then converged only the two *imperceptible* near-dupes (own eyes-on deploy): `--action-blue` now aliases `var(--info)` (#0277bd→#0288d1); `#333`→`var(--text)`. **Deliberately left exact:** the amber (`#8a6900`/`#856404`) and orange (`#e67e22`/`#e65100`) merges — they touch audit-critical warning banners, so a visible shift there wasn't worth it. `#aaa` (1 use) left literal.
@@ -835,9 +835,15 @@ Certification, Buyers & Suppliers, Recipe Cards, Cleaning Records [placeholder],
 Settings, Data & Imports). **The "Settings & Other" junk drawer was split 2026-08-19** — it had
 grown to nine unrelated links. Now: **Settings** (Company Settings, Ripe buffer & credits →
 `/company-settings#ripe`, CCP Master) and **Data & Imports** (Data Backup, Shopify Import,
-Clover Import, Channel Prices). The two Ripe tools (`/ripe-sku-audit`, `/ripe-analytics`) moved
-OUT of Administration into a `.portal-tools` strip under the Buyer Portals tiles, where their
-domain already lives. Don't let a catch-all row re-form: a new orphan belongs in whichever of
+Clover Import, Channel Prices). The Ripe tool (`/ripe-analytics`) moved
+OUT of Administration into a `.portal-tools` strip under the Buyer Portals tiles, where its
+domain already lives. **`/ripe-sku-audit` was DELETED 2026-09-18** (page, template, and
+`/api/internal/sku-audit`): it audited Ripe's `products.json`, which has been a legacy
+read-only seed since Ripe began taking its catalogue — sku_keys included — from Soma's buyer
+record via `/api/internal/catalogue`. The link it checked can no longer break, and the page
+showed a permanent false "14 broken" (the seed's placeholder `Soma|…` keys). Same day:
+Ripe Analytics had been 401ing with "Your session expired" — Ripe's `internal_analytics`
+called the `login_required`-wrapped `api_dashboard()`; fixed in the Ripe repo (`__wrapped__`). Don't let a catch-all row re-form: a new orphan belongs in whichever of
 those two rows fits, or gets its own. The current manager gate
 (`/api/verify-manager` + sessionStorage on the dashboard's Administration `<details>`)
 is client-side only and gets deleted; recipe write routes become truly manager-only.
