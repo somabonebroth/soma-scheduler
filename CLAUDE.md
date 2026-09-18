@@ -119,12 +119,12 @@ production.py       — Flask Blueprint (771 lines, extracted 2026-06-03): the F
                       (its `ov_compact` mode currently has no caller). Feed is `GET
                       /api/analytics/sales-by-channel` (here in production.py, because it shares
                       `_periods_from_request` with the overlay so the two can never bucket time
-                      differently). Seven fixed lines via `_sales_channel`: Soma Retail (Shopify),
-                      Soma Clover, Soma Wholesale (= buyer `SOMA (QBO)`, processed through
-                      QuickBooks), Ripe (`ripe_order_id`), Nature's Emporium + Healthy Planet
+                      differently). Five fixed lines via `_sales_channel`: Soma (ONE line — Shopify + Clover +
+                      buyer `SOMA (QBO)`, i.e. Soma wholesale processed through QuickBooks;
+                      built as three lines, merged same day at Jeremy's request), Ripe (`ripe_order_id`), Nature's Emporium + Healthy Planet
                       (buyer name after `_buyer_resolver` roll-up, apostrophe-insensitive
                       prefix match), All other wholesale (everything else, incl. SBBC portal
-                      orders from other buyers). Cases (jars/12) / $ toggle + Week/Month/Year;
+                      orders from other buyers). $ (default) / Cases (jars/12) toggle + Week/Month/Year;
                       legend entries are buttons that hide/show a line; same `deducted_at` →
                       `sale_date` → `created_at` day key; revenue = `line_total` else qty×price.
                       Colours are a fixed categorical palette literal in the JS (colour follows

@@ -1,4 +1,4 @@
-{# Sales by channel — seven coloured lines on one time axis, in CASES (jars / 12)
+{# Sales by channel — five coloured lines on one time axis, in CASES (jars / 12)
    or DOLLARS, fed by GET /api/analytics/sales-by-channel (manager-only). Lives on
    the manager dashboard below the Daily Summary button (it replaced the compact
    produced-vs-sold card there 2026-09-18; that card stays on the Production
@@ -50,8 +50,8 @@
         <div class="sc-title">Sales by channel</div>
         <div class="sc-controls">
             <div class="sc-toggle" id="sc-measure">
-                <button class="active" data-measure="cases" onclick="scSetMeasure('cases')">Cases</button>
-                <button data-measure="dollars" onclick="scSetMeasure('dollars')">$</button>
+                <button class="active" data-measure="dollars" onclick="scSetMeasure('dollars')">$</button>
+                <button data-measure="cases" onclick="scSetMeasure('cases')">Cases</button>
             </div>
             <div class="sc-toggle" id="sc-bucket">
                 <button class="active" data-grain="week" onclick="scSetGrain('week')">Week</button>
@@ -73,11 +73,10 @@
 // never its rank); "All other wholesale" is the neutral. Literal on purpose —
 // a categorical chart palette, not a theme colour.
 const SC_COLORS = {
-    soma_retail:'#2a78d6', soma_clover:'#eb6834', soma_wholesale:'#1baf7a', ripe:'#eda100',
-    natures_emporium:'#e87ba4', healthy_planet:'#4a3aa7', other_wholesale:'#898781'
+    soma:'#2a78d6', ripe:'#eb6834', natures_emporium:'#1baf7a', healthy_planet:'#4a3aa7', other_wholesale:'#898781'
 };
 const SC_N = { week: 12, month: 12, year: 5 };
-let _scData = null, _scGrain = 'week', _scMeasure = 'cases';
+let _scData = null, _scGrain = 'week', _scMeasure = 'dollars';
 const _scHidden = new Set();
 
 function scMondayIso(){
@@ -150,7 +149,7 @@ function renderSalesByChannel(){
     // stat strip — both measures, always, whatever the chart is showing
     const totUnits = periods.reduce((a, p) => a + unitsOf(p), 0);
     const totRev = periods.reduce((a, p) => a + channels.reduce((b, c) => b + (p.revenue[c.key] || 0), 0), 0);
-    [[scFmtCases(scCases(totUnits)), 'cases'], [scFmtMoney(totRev), 'sales']].forEach(([v, l]) => {
+    [[scFmtMoney(totRev), 'sales'], [scFmtCases(scCases(totUnits)), 'cases']].forEach(([v, l]) => {
         const st = document.createElement('div'); st.className = 'sc-stat';
         const b = document.createElement('b'); b.textContent = v; const sm = document.createElement('span'); sm.textContent = l;
         st.appendChild(b); st.appendChild(sm); stats.appendChild(st);

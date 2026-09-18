@@ -486,9 +486,7 @@ def get_production_tracker_overlay():
 
 
 SALES_CHANNELS = [
-    ("soma_retail", "Soma Retail"),
-    ("soma_clover", "Soma Clover"),
-    ("soma_wholesale", "Soma Wholesale"),
+    ("soma", "Soma"),
     ("ripe", "Ripe"),
     ("natures_emporium", "Nature's Emporium"),
     ("healthy_planet", "Healthy Planet"),
@@ -497,11 +495,11 @@ SALES_CHANNELS = [
 
 
 def _sales_channel(sale, resolve):
-    """Which of the seven dashboard channels a sale row belongs to.
+    """Which of the five dashboard channels a sale row belongs to.
 
-    Shopify / Clover by the import's `channel` (buyer name as fallback); Ripe
-    by `ripe_order_id`; Soma Wholesale is the buyer "SOMA (QBO)" (processed
-    through QuickBooks); Nature's Emporium and Healthy Planet by buyer name
+    Soma is ONE line (merged 2026-09-18 at Jeremy's request): Shopify + Clover
+    by the import's `channel` (buyer name as fallback) + the buyer "SOMA (QBO)"
+    (Soma wholesale, processed through QuickBooks); Ripe by `ripe_order_id`; Nature's Emporium and Healthy Planet by buyer name
     after the location roll-up, apostrophe-insensitive, so "Natures Emporium
     (Woodbridge)" lands with its parent; everything else is other wholesale."""
     channel = (sale.get("channel") or "").lower()
@@ -509,13 +507,13 @@ def _sales_channel(sale, resolve):
     buyer, _ = resolve(raw, sale.get("location_name"))
     name = (buyer or raw).lower().replace("’", "").replace("'", "").strip()
     if channel == "shopify" or name == "soma (shopify)":
-        return "soma_retail"
+        return "soma"
     if channel == "clover" or name == "soma (clover)":
-        return "soma_clover"
+        return "soma"
     if sale.get("ripe_order_id") or name == "ripe":
         return "ripe"
     if name == "soma (qbo)":
-        return "soma_wholesale"
+        return "soma"
     if name.startswith("natures emporium"):
         return "natures_emporium"
     if name.startswith("healthy planet"):
