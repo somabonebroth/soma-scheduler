@@ -15,7 +15,8 @@ is documented in each repository's `CLAUDE.md` and is unchanged by this.
 ## The arrangement
 
 Ripe keys each retail order into the Ripe portal by hand, attaches a shipping label it
-generated and paid for, and settles a batch of them with one credit-card payment. Soma
+generated and paid for, and settles a batch of them with one payment — credit card or
+e-transfer (added 2026-09-18). Soma
 packs each parcel at the factory, affixes Ripe's label, and hands it to Ripe's carrier
 (Trexity, Canpar, or Canada Post).
 
@@ -43,9 +44,9 @@ Ripe-internal and Soma must not depend on it.
 | `payment_status` | Ripe | Soma must treat anything other than `"paid"` as invisible. |
 | `items[]` | Ripe | See below. |
 | `subtotal` | Ripe | Sum of `line_total`. |
-| `total` | Ripe | `subtotal` + surcharge. |
-| `payment_key` | Ripe | Always `"stripe_checkout"`. |
-| `payment_label` | Ripe | Always `"Card (Stripe Checkout)"`. |
+| `total` | Ripe | `subtotal` + `surcharge` (negative for e-transfer). |
+| `payment_key` | Ripe | `"stripe_checkout"` or `"etransfer"`. Set per batch at settle. |
+| `payment_label` | Ripe | `"Card (Stripe Checkout)"` or `"E-Transfer (−2%)"`. |
 | `delivery_label` | Ripe | **See "Sales ledger" below — this is not display-only.** |
 | `delivery_address` | Ripe | Empty string for direct ship. Never the customer's address. |
 | `requested_date` | Ripe | Unused for direct ship. Soma must not read it. |
@@ -53,7 +54,8 @@ Ripe-internal and Soma must not depend on it.
 | `customer_name` | Ripe | Required. Printed on the packing slip. |
 | `order_number` | Ripe | Required. Ripe's own order reference. |
 | `attachment` | Ripe | The shipping label. Required before the order can be settled. |
-| `stripe_checkout_session_id` | Ripe | Shared across every order in the same batch. |
+| `stripe_checkout_session_id` | Ripe | Card batches: shared across every order in the batch. `null` on e-transfer batches. |
+| `retail_batch_id` | Ripe | E-transfer batches: generated `"ET-XXXXXXXX"`, shared across the batch; also the e-transfer message. `null` on card batches. |
 
 ### `items[]`
 
@@ -83,9 +85,12 @@ alone is not enforcement.
 2. **`order_number` and `customer_name` are required** before any item may be added.
 3. **At least one jar.** `units > 0` on at least one line.
 4. **A label must be attached** before the order can join a batch.
-5. **Surcharge is 2.9%**, carried as its own line on the Checkout session — never folded
-   into unit prices. This is a Canadian surcharge-disclosure requirement and matches how
-   the wholesale invoice discloses it.
+5. **Card surcharge is 2.9%**, carried as its own line on the Checkout session — never
+   folded into unit prices. This is a Canadian surcharge-disclosure requirement and matches
+   how the wholesale invoice discloses it.
+6. **E-transfer discount is 2%**, the same spread as wholesale, stored as a negative
+   `surcharge` on each order. The method is chosen per batch at settle, so every order is
+   re-priced then; until then it carries card pricing.
 
 ---
 
@@ -103,8 +108,33 @@ Orders are created unpaid and accumulate in a queue. Ripe settles them together.
 6. On `checkout.session.completed`, the webhook marks **every order carrying that session
    id** as paid.
 
-There is no batch entity, no `batch_id`, and no batch file. The shared session id *is*
-the batch.
+There is no batch entity and no batch file. The shared id *is* the batch — the checkout
+session id for card, `retail_batch_id` for e-transfer. The batch key is
+`retail_batch_id or stripe_checkout_session_id`.
+
+### E-transfer batches
+
+An e-transfer has no webhook, and Soma is the only party that can see the money land —
+the same division of labour as wholesale e-transfer and the monthly service fee.
+
+4a. Ripe settles by e-transfer: every queued order is stamped with a fresh
+    `retail_batch_id`, priced at −2%, set to `payment_status: "awaiting_etransfer"`, and
+    its `stripe_checkout_session_id` cleared (any open checkout is expired). The orders
+    leave the queue. Ripe sends one e-transfer for the batch total with the batch id as
+    the message.
+5a. Soma sees a **batch summary only** — id, total, parcel count, order numbers — via
+    `GET /api/internal/retail-etransfer-batches`. This is the one deliberate window onto
+    unpaid retail. The orders themselves stay behind `_is_unpaid_retail` and cannot be
+    packed.
+6a. Soma confirms receipt: `POST /api/internal/retail-etransfer-batches/<id>/confirm`
+    marks every order in the batch `paid` (409 if already confirmed). This is the
+    e-transfer twin of `checkout.session.completed`, and is what releases the parcels to
+    the pack queue.
+
+Until Soma confirms, Ripe may return the batch to the queue (to pay by card instead, or
+fix an order). An order in an awaiting-e-transfer batch cannot be removed individually —
+Soma is matching a deposit against the batch total. After confirmation the batch is
+exactly like a paid card batch: a cancel issues a hand credit, never a refund.
 
 **Rules.**
 
@@ -112,10 +142,10 @@ the batch.
 - An abandoned checkout leaves orders pending and re-settleable. Re-settling **re-stamps**
   the session id; a stale one must never be left in place.
 - A pending unpaid order may be removed from the queue outright.
-- Payment always lands before Soma sees anything. There is no credit exposure and
-  `_is_unpaid_retail` requires no change.
-- Because the Checkout is summarized, Ripe's order history must group by
-  `stripe_checkout_session_id` — that is the only record of batch composition.
+- Payment always lands before Soma can pack anything. There is no credit exposure and
+  `_is_unpaid_retail` requires no change — for e-transfer, "landed" means Soma confirmed it.
+- Because the payment is summarized, Ripe's order history must group by the batch key —
+  that is the only record of batch composition.
 
 ---
 
@@ -213,7 +243,8 @@ the label together with Ripe's order number visible on both.
 - **Never accept `FZ` or `BB` in a retail order.** Not by override, not by admin, not by
   direct API call. Frozen product moving by parcel carrier is a cold-chain failure.
 - **Never expose an unpaid retail order to a Soma-facing endpoint.** Apply
-  `_is_unpaid_retail()` to any new one.
+  `_is_unpaid_retail()` to any new one. The sole exception is the e-transfer batch
+  *summary*, which carries no items and no label and cannot be acted on except to confirm.
 - **Never refund or void a cancelled retail order.** Money stays with Soma; the credit is
   issued by hand.
 - **Never record a retail sale before Soma clicks.** That timing is what makes cancelling

@@ -732,21 +732,28 @@ def _is_retail_to_pack(o):
             and o.get("status") == "pending")
 
 
-def _group_retail_by_batch(orders):
-    """Group parcels by the checkout session that paid for them.
+def _retail_batch_key(o):
+    """The id of the payment that covered this parcel.
 
-    That shared session id IS the batch — Ripe settles N orders with one payment
-    and stamps the same id across them, so there is no batch record to join to.
+    Ripe settles N orders with one payment and stamps the same id across them —
+    a Stripe checkout session id for card, a generated retail_batch_id ("ET-…")
+    for e-transfer. That shared id IS the batch; there is no batch record.
     """
+    return o.get("retail_batch_id") or o.get("stripe_checkout_session_id") or "unbatched"
+
+
+def _group_retail_by_batch(orders):
+    """Group parcels by the payment that covered them. See _retail_batch_key."""
     batches = {}
     for o in orders:
-        key = o.get("stripe_checkout_session_id") or "unbatched"
+        key = _retail_batch_key(o)
         batches.setdefault(key, []).append(o)
     out = []
     for key, group in batches.items():
         group.sort(key=lambda x: x.get("order_number") or "")
         out.append({
             "session_id": key,
+            "etransfer": any(x.get("payment_key") == "etransfer" for x in group),
             "orders": group,
             "count": len(group),
             "units": sum(int(x.get("total_units") or 0) for x in group),
@@ -765,8 +772,17 @@ def ripe_retail_page():
     done = [o for o in orders
             if o.get("order_mode") == "retail" and o.get("status") in ("fulfilled", "declined")]
     done.sort(key=lambda o: o.get("created_at", ""), reverse=True)
+
+    # Batches Ripe has committed to e-transfer but Soma hasn't confirmed. Summary
+    # only — the parcels stay hidden until confirmed. Non-fatal: a portal that
+    # predates the endpoint just renders the page without the section.
+    et_status, et_data = _ripe_request("GET", "/api/internal/retail-etransfer-batches")
+    etransfer_batches = (et_data.get("batches") or []
+                         if et_status == 200 and isinstance(et_data, dict) else [])
+
     return render_template(
         "ripe_retail.html",
+        etransfer_batches=etransfer_batches,
         batches=_group_retail_by_batch(to_pack),
         pack_count=len(to_pack),
         recent=done[:40],
@@ -839,7 +855,7 @@ def _approve_one_retail_order(order):
     order_id = order["id"]
     today = datetime.now(ZoneInfo("America/Toronto")).date().isoformat()
 
-    ok, err = create_ripe_sale_records(order, today, "stripe_checkout")
+    ok, err = create_ripe_sale_records(order, today, order.get("payment_key") or "stripe_checkout")
     if not ok:
         return False, err or "Could not create sale records"
 
@@ -895,6 +911,27 @@ def ripe_retail_action(order_id):
     return jsonify({"error": f"Unknown action: {action}"}), 400
 
 
+@ripe_orders_bp.route("/api/ripe-retail/etransfer-batches/<batch_id>/confirm", methods=["POST"])
+@_soma_manager_required
+def ripe_retail_confirm_etransfer(batch_id):
+    """Confirm Ripe's e-transfer for a retail batch, releasing it to the pack queue.
+
+    Soma is the only party that can see the money land — same division of labour
+    as wholesale e-transfer and the monthly service fee. The Ripe portal owns the
+    records and enforces idempotency (409 on a second confirm); this just proxies.
+    """
+    body = request.get_json(silent=True) or {}
+    status, data = _ripe_request(
+        "POST", f"/api/internal/retail-etransfer-batches/{batch_id}/confirm", {
+            "reference": (body.get("reference") or "").strip(),
+            "confirmed_by": session.get("user") or "soma",
+        })
+    if status != 200:
+        msg = data.get("error") if isinstance(data, dict) else "Unknown error"
+        return jsonify({"error": msg}), status
+    return jsonify({"ok": True, "order_count": data.get("order_count")})
+
+
 @ripe_orders_bp.route("/api/ripe-retail/batch/<session_id>/approve", methods=["POST"])
 @_soma_manager_required
 def ripe_retail_batch_approve(session_id):
@@ -909,7 +946,7 @@ def ripe_retail_batch_approve(session_id):
         return jsonify({"error": "Could not reach the Ripe portal."}), 502
 
     batch = [o for o in orders
-             if _is_retail_to_pack(o) and (o.get("stripe_checkout_session_id") or "unbatched") == session_id]
+             if _is_retail_to_pack(o) and _retail_batch_key(o) == session_id]
     if not batch:
         return jsonify({"error": "No unpacked orders in this batch."}), 404
 

@@ -112,6 +112,36 @@
   <div class="err-msg"><strong>Could not reach the Ripe portal:</strong> {{ error }}</div>
   {% endif %}
 
+  {% if etransfer_batches %}
+  <div class="queue-head">
+    <h2>Awaiting e-transfer</h2>
+    <span class="queue-count">not packable until the money is confirmed</span>
+  </div>
+  {% for eb in etransfer_batches %}
+  <div class="card batch-card">
+    <div class="batch-head">
+      <div>
+        <div class="batch-title">
+          ${{ "%.2f"|format(eb.total) }} &middot; reference <span style="font-family:ui-monospace,Menlo,monospace;letter-spacing:.06em;">{{ eb.batch_id }}</span>
+        </div>
+        <div class="batch-sub">
+          {{ eb.count }} parcel{{ '' if eb.count == 1 else 's' }} &middot; {{ eb.units }} jar{{ '' if eb.units == 1 else 's' }}
+          &middot; committed {{ eb.committed_at[:10] if eb.committed_at else '—' }}
+          &middot; {% for o in eb.orders %}{{ o.order_number }}{% if not loop.last %}, {% endif %}{% endfor %}
+        </div>
+      </div>
+      <div class="batch-actions">
+        <button class="btn btn-primary btn-mini"
+                onclick="confirmEtransfer(this, '{{ eb.batch_id }}', '{{ "%.2f"|format(eb.total) }}', {{ eb.count }})">
+          Confirm e-transfer received
+        </button>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  <div style="height:12px;"></div>
+  {% endif %}
+
   <div class="queue-head">
     <h2>To pack</h2>
     <span class="queue-count">{{ pack_count }} parcel{{ '' if pack_count == 1 else 's' }} waiting</span>
@@ -135,7 +165,9 @@
         </div>
         <div class="batch-sub">
           Paid {{ b.paid_at[:10] if b.paid_at else '—' }}
-          {% if b.session_id and b.session_id != 'unbatched' %}
+          {% if b.etransfer %}
+          &middot; <span class="mono" title="E-transfer batch reference">e-transfer {{ b.session_id }}</span>
+          {% elif b.session_id and b.session_id != 'unbatched' %}
           &middot; <span class="mono" title="Stripe checkout session — one payment covers the whole batch">{{ b.session_id[:18] }}…</span>
           {% else %}
           &middot; <span class="mono">no batch payment</span>
@@ -307,6 +339,31 @@ async function cancelOne(btn, orderId, orderNumber) {
   } catch (e) {
     unlock();
     showToast('Network error cancelling ' + orderNumber, false);
+  }
+}
+
+// Confirming is what releases the parcels to the pack queue, and the payment is
+// then treated as captured (a later cancel issues a credit, not a refund) — so
+// make the amount explicit before committing.
+async function confirmEtransfer(btn, batchId, total, count) {
+  if (!confirm('Confirm that an e-transfer of $' + total + ' with reference ' + batchId
+             + ' has arrived?\n\nThis releases ' + count + ' parcel' + (count === 1 ? '' : 's')
+             + ' for packing and cannot be undone.')) return;
+  const unlock = lockRow(btn);
+  try {
+    const res = await fetch('/api/ripe-retail/etransfer-batches/' + encodeURIComponent(batchId) + '/confirm',
+                            {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
+    const data = await res.json();
+    if (res.ok) {
+      showToast('E-transfer confirmed — ' + count + ' parcel' + (count === 1 ? '' : 's') + ' released to pack', true);
+      setTimeout(function () { location.reload(); }, 1500);
+    } else {
+      unlock();
+      showToast(data.error || 'Could not confirm the e-transfer', false);
+    }
+  } catch (e) {
+    unlock();
+    showToast('Network error confirming the e-transfer', false);
   }
 }
 

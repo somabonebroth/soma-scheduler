@@ -952,6 +952,15 @@ Ripe's order number visible on both. That pairing is the only defence against a
 mislabelled parcel — because the destination address exists only on Ripe's label, Soma's
 data model never holds it, and a label attached to the wrong order cannot be detected.
 
+**Retail e-transfer batches (2026-09-18).** Ripe may settle a retail batch by e-transfer
+(−2%) instead of card (+2.9%). `/ripe-retail` shows an "Awaiting e-transfer" section fed by
+Ripe's `GET /api/internal/retail-etransfer-batches` — batch summaries only; the parcels are
+NOT packable. **Confirm e-transfer received** proxies through
+`POST /api/ripe-retail/etransfer-batches/<batch_id>/confirm`, which marks the batch paid on
+Ripe and drops the parcels into the pack queue. Batches are keyed by
+`_retail_batch_key()` = `retail_batch_id or stripe_checkout_session_id`. The fetch is
+non-fatal, so an older Ripe just renders no section. See `RETAIL_CONTRACT.md`.
+
 Note that `retail_orders.py` (SBBC) is the closer structural template than the wholesale
 path in `ripe_orders.py`: pre-paid orders, retail units carrying `sku_key` directly, no
 wholesale business rules. The one divergence is auto-approve — SBBC reviews by hand,
