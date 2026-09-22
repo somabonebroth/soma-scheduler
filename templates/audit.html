@@ -433,19 +433,33 @@ function renderFGItem(item, existing, body) {
   var lotInfo = item.lot_count
     ? item.lot_count + ' lot' + (item.lot_count === 1 ? '' : 's') + ' on hand'
     : 'No lots on hand';
+  // Organic SKUs are counted one LOT at a time (lot-tracked tier) — the item
+  // carries the lot and the count applies to that lot only.
+  var perLot = !!item.lot;
+  if (perLot) {
+    lotInfo = 'LOT# ' + item.lot
+      + (item.best_before ? ' · best before ' + item.best_before : '')
+      + (item.production_date ? ' · batch ' + item.production_date : '');
+  } else if (item.organic) {
+    lotInfo += ' · organic, no active LOT — a count here creates a BASELINE lot';
+  }
   var legacyBadge = item.in_recipes === false
     ? '<div class="lot-badge" style="background:#fff3e0;border-color:#ffb74d;color:#e65100;">Not in current recipes</div>'
+    : '';
+  var organicBadge = perLot
+    ? '<div class="lot-badge" style="background:var(--action-green-bg);border-color:var(--green-light);color:var(--action-green);">Organic · counted per LOT</div>'
     : '';
 
   body.innerHTML =
     '<div class="item-meta">'
     +'<div class="item-counter">Finished Goods · '+e(item.brand||'')+'</div>'
-    +'<div class="item-name">'+e(item.recipe)+'</div>'
+    +'<div class="item-name">'+e(item.recipe)+(perLot ? ' <span style="font-weight:400;color:var(--text-light);">· LOT# '+e(item.lot)+'</span>' : '')+'</div>'
     +'<div class="item-detail">'+e(item.format||'')+' · '+e(lotInfo)+'</div>'
+    +organicBadge
     +legacyBadge
     +'</div>'
     +'<div class="system-card">'
-    +'<div class="system-label">System quantity</div>'
+    +'<div class="system-label">'+(perLot ? 'System quantity for this LOT' : 'System quantity')+'</div>'
     +'<div><span class="system-qty">'+sysQty+'</span><span class="system-unit">units</span></div>'
     +'<div style="font-size:13px;color:var(--text-light);margin-top:4px;">'
     +Math.floor(sysQty/12)+' cases + '+(sysQty%12)+' units'
@@ -540,11 +554,15 @@ function updateDiff(kind) {
   } else if (diff > 0) {
     el.className = 'diff-indicator over';
     var unit = (kind === 'fg') ? 'units' : (item.unit || '');
-    el.textContent = '▲ +'+diff+' '+unit+' over system — will create BASELINE lot';
+    el.textContent = item.lot
+      ? '▲ +'+diff+' '+unit+' over system — will add to LOT# '+item.lot
+      : '▲ +'+diff+' '+unit+' over system — will create BASELINE lot';
   } else {
     el.className = 'diff-indicator under';
     var unit2 = (kind === 'fg') ? 'units' : (item.unit || '');
-    el.textContent = '▼ '+diff+' '+unit2+' under system — will FIFO drain oldest lots';
+    el.textContent = item.lot
+      ? '▼ '+diff+' '+unit2+' under system — will reduce LOT# '+item.lot+' only'
+      : '▼ '+diff+' '+unit2+' under system — will FIFO drain oldest lots';
   }
 }
 
@@ -666,7 +684,12 @@ function showComplete(adjCount, audit) {
       var name = a.item || a.recipe || '—';
       var detail;
       var unitSuffix = a.unit ? ' '+a.unit : '';
-      if (a.baseline_lot) {
+      if (a.lot) {
+        // Organic FG counted per LOT — the change landed on that lot only
+        name += ' · LOT# ' + a.lot;
+        detail = 'System: '+a.system_qty+' → Counted: '+a.counted
+               + ' · '+a.format+(diff > 0 ? ' · added to this lot' : ' · reduced this lot only');
+      } else if (a.baseline_lot) {
         // Surplus — new baseline lot was created (RM or FG)
         detail = 'System: '+a.system_qty+unitSuffix+' → Counted: '+a.counted+unitSuffix
                + ' · Created lot '+a.baseline_lot;

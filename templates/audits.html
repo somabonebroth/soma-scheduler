@@ -157,6 +157,9 @@ body.ah { background: var(--bg); }
                     {{ adj.item or '—' }}
                     {% if adj.unit %}<span class="ah-adj-sub">{{ adj.unit }}</span>{% endif %}
                   {% endif %}
+                  {% if adj.lot %}
+                    <span class="ah-adj-sub">LOT# {{ adj.lot }}</span>
+                  {% endif %}
                   {% if adj.baseline_lot %}
                     <span class="ah-baseline">+ created lot {{ adj.baseline_lot }}</span>
                   {% endif %}

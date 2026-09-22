@@ -2906,13 +2906,22 @@ def _build_rm_audit_items(section_name):
 
 
 def _build_fg_audit_items(brand):
-    """Build per-SKU audit items for FG inventory, scoped to a single brand.
+    """Build audit items for FG inventory, scoped to a single brand.
 
     SKU master list = recipes.json filtered by brand, unioned with any FG
     history for the brand (catches legacy SKUs whose recipe card was removed).
-    Each item row represents one SKU (brand|recipe|format) with system_qty
-    summed across matching FG lots. SKUs with zero on hand are included so
-    the auditor can record a baseline-lot surplus if physical stock exists.
+
+    Two tiers, matching the zero-day reset (ledger.py):
+      - ORGANIC-certified SKUs are lot-tracked, so they are counted PER LOT: one
+        item per active LOT (id = 'sku_key@@lot', system_qty = that lot's
+        remaining). A shortage then comes off THAT lot, never the oldest one,
+        so the lot accuracy the Record Sale allocation preserves survives a
+        count. An organic SKU with no active lot falls back to one SKU-level
+        item (a surplus there creates a BASELINE lot, as for any SKU).
+      - Everything else is one item per SKU (brand|recipe|format) with
+        system_qty summed across matching FG lots; per-lot split is FIFO noise.
+    SKUs with zero on hand are included so the auditor can record a
+    baseline-lot surplus if physical stock exists.
     """
     brand_norm = (brand or "").strip()
     recipes = load_recipes()
@@ -2958,15 +2967,49 @@ def _build_fg_audit_items(brand):
         if remaining > 0:
             sku_map[key]["system_qty"] += remaining
             sku_map[key]["lot_count"]  += 1
+        # An organic FG entry marks the SKU organic even if the recipe card
+        # lost its tag (the entry is what the sale and the trace carry).
+        if (f.get("certification") or "").strip().lower() == "organic":
+            sku_map[key]["certification"] = "Organic"
 
     fmt_order = {"SS": 0, "FZ": 1, "BB": 2}
-    items = sorted(
-        sku_map.values(),
-        key=lambda x: (
-            fmt_order.get((x["format"] or "")[:2].upper(), 9),
-            x["recipe"],
-        ),
-    )
+
+    items = []
+    for sku in sku_map.values():
+        is_org = (sku.get("certification") or "").strip().lower() == "organic"
+        sku["organic"] = is_org
+        sku["lot"] = None
+        active_lots = []
+        if is_org:
+            active_lots = [l for l in _aggregate_lots_for_sku(fg, sku["id"])
+                           if int(l.get("remaining") or 0) > 0]
+        if not active_lots:
+            items.append(sku)
+            continue
+        for l in active_lots:          # already FIFO — oldest batch first
+            items.append({
+                "id":              sku["id"] + "@@" + (l.get("lot") or ""),
+                "sku_key":         sku["id"],
+                "recipe":          sku["recipe"],
+                "brand":           sku["brand"],
+                "format":          sku["format"],
+                "certification":   sku["certification"],
+                "organic":         True,
+                "lot":             l.get("lot") or "",
+                "production_date": l.get("production_date"),
+                "best_before":     l.get("best_before") or "",
+                "vessels":         l.get("vessels") or [],
+                "system_qty":      int(l.get("remaining") or 0),
+                "lot_count":       1,
+                "in_recipes":      sku["in_recipes"],
+            })
+
+    items.sort(key=lambda x: (
+        fmt_order.get((x["format"] or "")[:2].upper(), 9),
+        x["recipe"],
+        x.get("production_date") or "",
+        x.get("lot") or "",
+    ))
     return items
 
 
@@ -3167,16 +3210,22 @@ def _apply_rm_audit(audit):
 
 
 def _apply_fg_audit(audit):
-    """Apply FG audit results — per-SKU FIFO drain on shortage, baseline lot
-    creation on surplus.
+    """Apply FG audit results — FIFO drain on shortage, baseline lot creation
+    on surplus; per LOT for organic SKUs, per SKU for everything else.
 
-    Result keys are sku_key strings ('BRAND|RECIPE|FORMAT'). For each SKU:
+    Result keys are either 'BRAND|RECIPE|FORMAT' (SKU-level) or
+    'BRAND|RECIPE|FORMAT@@LOT' (one organic lot — see _build_fg_audit_items).
+      SKU-level:
       - diff < 0  → drain oldest FG lots first (FIFO) until shortfall covered.
       - diff > 0  → create a new FG row with lot 'BASELINE-YYYYMMDD',
                      source='audit_baseline', no production/raw-material links.
+      Per-lot (organic):
+      - diff < 0  → drain THAT lot's entries only (oldest kettle first).
+      - diff > 0  → add a row carrying the SAME lot number (source
+                     'audit_baseline', batch dates copied from the lot) so the
+                     surplus stays traceable and sellable by lot.
       - diff == 0 → no change, no log entry.
-
-    counted == None means the SKU was skipped (not counted) and is ignored.
+    counted == None means the item was skipped (not counted) and is ignored.
     """
     fg = _load_json(ORGANIC_FG_PATH, [])
     recipes = load_recipes()
@@ -3184,7 +3233,7 @@ def _apply_fg_audit(audit):
     new_rows = []
     now_iso = datetime.now().isoformat()
 
-    for sku_key, result in audit["results"].items():
+    for result_key, result in audit["results"].items():
         counted = result.get("counted")
         if counted is None:
             continue  # explicit skip
@@ -3195,16 +3244,25 @@ def _apply_fg_audit(audit):
         if counted < 0:
             continue
 
+        lot_key = None
+        sku_key = result_key
+        if "@@" in result_key:
+            sku_key, lot_key = result_key.split("@@", 1)
         parts = sku_key.split("|")
         if len(parts) != 3:
             continue
         brand, recipe_name, fmt = parts
 
-        matching = [f for f in fg
+        same_sku = [f for f in fg
                     if (f.get("brand") or "").strip() == brand
                     and (f.get("recipe") or "").strip() == recipe_name
-                    and (f.get("format") or "").strip() == fmt
-                    and int(f.get("quantity_remaining") or 0) > 0]
+                    and (f.get("format") or "").strip() == fmt]
+        if lot_key is not None:
+            lot_entries = [f for f in same_sku if (f.get("lot") or "") == lot_key]
+            matching = [f for f in lot_entries if int(f.get("quantity_remaining") or 0) > 0]
+        else:
+            lot_entries = []
+            matching = [f for f in same_sku if int(f.get("quantity_remaining") or 0) > 0]
         matching.sort(key=lambda f: f.get("created_at", ""))
 
         system_total = sum(int(f.get("quantity_remaining") or 0) for f in matching)
@@ -3225,16 +3283,14 @@ def _apply_fg_audit(audit):
                 to_remove -= take
         else:
             recipe_meta = recipes.get(recipe_name, {}) or {}
-            baseline_lot_code = "BASELINE-" + datetime.now().strftime("%Y%m%d")
             new_id = ("fg_baseline_" + datetime.now().strftime("%Y%m%d%H%M%S")
                       + "_" + str(len(new_rows)))
-            new_rows.append({
+            row = {
                 "id":                 new_id,
                 "recipe":             recipe_name,
                 "brand":              brand,
                 "format":             fmt,
                 "certification":      (recipe_meta.get("certification") or "").strip(),
-                "lot":                baseline_lot_code,
                 "quantity_produced":  diff,
                 "quantity_remaining": diff,
                 "vessel":             "Audit baseline",
@@ -3243,13 +3299,30 @@ def _apply_fg_audit(audit):
                 "created_at":         now_iso,
                 "source":             "audit_baseline",
                 "audit_id":           audit["id"],
-            })
+            }
+            if lot_key is not None:
+                # Surplus on a known organic lot: keep the lot number and its
+                # batch dates so the trace, Best Before and the Record Sale
+                # lot picker all still see one lot.
+                row["lot"] = lot_key
+                src = next(iter(sorted(lot_entries, key=lambda f: f.get("created_at", ""))), None)
+                if src is not None:
+                    for k in ("week_id", "day_idx", "start_week_id", "start_day_idx"):
+                        if src.get(k) is not None:
+                            row[k] = src.get(k)
+                    if src.get("certification"):
+                        row["certification"] = src["certification"]
+            else:
+                baseline_lot_code = "BASELINE-" + datetime.now().strftime("%Y%m%d")
+                row["lot"] = baseline_lot_code
+            new_rows.append(row)
 
         adjustments.append({
             "sku_key":      sku_key,
             "brand":        brand,
             "recipe":       recipe_name,
             "format":       fmt,
+            "lot":          lot_key,
             "system_qty":   system_total,
             "counted":      counted,
             "diff":         diff,
@@ -3267,6 +3340,7 @@ def _apply_fg_audit(audit):
             "brand":        adj["brand"],
             "recipe":       adj["recipe"],
             "format":       adj["format"],
+            "lot":          adj["lot"],
             "system_qty":   adj["system_qty"],
             "counted":      adj["counted"],
             "diff":         adj["diff"],
