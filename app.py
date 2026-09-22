@@ -70,6 +70,9 @@ from helpers import (
     _lot_for_batch_date,
     _sanitize_ripe_credits,
     _active_ripe_credits,
+    _sanitize_monthly_promos,
+    _renew_monthly_credits,
+    _promo_month,
     _load_json,
     _load_rm_sections,
     _normalize_format,
@@ -3597,12 +3600,24 @@ def update_company_info():
     _numeric_int_keys = {"ripe_inventory_buffer", "ss_small_order_threshold",
                          "fzbb_small_lead_days", "fzbb_large_lead_days",
                          "fzbb_large_threshold"}
+    promos_changed = False
     for k, v in data.items():
         if k not in allowed:
             continue
         if k == "ripe_credits":
-            info["ripe_credits"] = _sanitize_ripe_credits(v)
+            # The settings page edits ONE-TIME credits only. Monthly instances
+            # are issued by the renewal into the same list, so they are kept
+            # as stored — the page never sends them back.
+            stored = _sanitize_ripe_credits(info.get("ripe_credits")) \
+                if isinstance(info.get("ripe_credits"), list) \
+                else _sanitize_ripe_credits(_active_ripe_credits(info))
+            monthly = [c for c in stored if c["kind"] == "monthly"]
+            once = [c for c in _sanitize_ripe_credits(v) if c["kind"] != "monthly"]
+            info["ripe_credits"] = once + monthly
             info.pop("ripe_credit", None)  # retire the legacy v1 scalar once migrated
+        elif k == "ripe_monthly_promos":
+            info["ripe_monthly_promos"] = _sanitize_monthly_promos(v)
+            promos_changed = True
         elif k in _numeric_int_keys:
             try:
                 info[k] = max(0, int(v))
@@ -3610,6 +3625,18 @@ def update_company_info():
                 pass
         else:
             info[k] = (v or "").strip() if isinstance(v, str) else v
+    if promos_changed:
+        # A removed promo ends NOW: withdraw this month's instance. Then renew,
+        # so a promo added today issues this month's credit straight away and
+        # an edited amount moves this month's balance by the difference.
+        live = {p["id"] for p in info["ripe_monthly_promos"]}
+        month = _promo_month()
+        info["ripe_credits"] = [
+            c for c in _sanitize_ripe_credits(info.get("ripe_credits"))
+            if not (c["kind"] == "monthly" and c.get("month") == month
+                    and c.get("template_id") not in live)
+        ]
+        _renew_monthly_credits(info)
     _save_json(COMPANY_INFO_PATH, info)
     return jsonify({"ok": True, "info": info})
 

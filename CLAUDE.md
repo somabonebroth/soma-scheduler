@@ -155,6 +155,22 @@ ripe_orders.py      — Flask Blueprint handling Ripe order workflow within Soma
                       pending order's draw shown as "reserved" (still inside remaining —
                       don't double count). Read-only; hand-edited balances shift the
                       inferred issued figure by design.
+                      **Monthly promos (2026-09-22).** Company Settings' Ripe card has TWO
+                      lists: one-time credits (as before, `kind:"once"`) and monthly promos
+                      (`company_info.ripe_monthly_promos`, `{id,name,amount}` templates).
+                      `helpers._renew_monthly_credits` issues ONE instance per promo per
+                      calendar month into the SAME `ripe_credits` list (`id` = `<promo>-YYYY-MM`,
+                      name "Marketing — Sep 2026", `kind:"monthly"`, `issued`, `month`); it
+                      runs inside `_load_company_info` (the one read path, write-back on
+                      change) so settings, Ripe's catalogue, approve and the ledger always
+                      agree. A past month's leftover is kept with `expired:true` (the ledger
+                      shows "expired · $X unused"; `_active_ripe_credits` hides it from Ripe),
+                      a spent one is dropped. No rollover. Editing a promo mid-month moves
+                      this month's instance by the difference; removing it withdraws this
+                      month's balance (PATCH route). The page PATCHes one-time rows only —
+                      the route keeps stored monthly instances. Ripe reads id/name/amount
+                      and ignores the extra fields: NO Ripe-side change. Tests:
+                      `python3 -m unittest tests.test_ripe_promos`.
 retail_orders.py    — Flask Blueprint (added 2026-07-02): SBBC Wholesale Portal order
                       ingestion, mirroring ripe_orders.py (which shares a live contract
                       with Ripe and stays untouched). /retail-orders admin page +
@@ -274,7 +290,11 @@ pdf_engine.py       — PDF generation (labels, checklists, schedules)
 default_recipes.py  — Seed data
 add_pwa_tags.py     — PWA manifest support
 templates/          — Jinja2 HTML templates (one per page; `_*.html` are shared partials:
-                      `_portal_tiles`, `_labelling_panel`, `_produced_vs_sold`, `_sales_by_channel`)
+                      `_portal_tiles`, `_labelling_panel`, `_produced_vs_sold`, `_sales_by_channel`,
+                      `_packing_slip_head`, `_anchor_scroll` — include the last one before
+                      `</body>` on any page the dashboard deep-links with a `#hash` whose cards
+                      fill AFTER first paint, else the browser's hash jump lands near the top;
+                      `.card[id]`/`.scard[id]` carry `scroll-margin-top` for the sticky header)
 static/             — CSS, JS, images
 ```
 
@@ -881,8 +901,10 @@ Settings, Data & Imports). **The "Settings & Other" junk drawer was split 2026-0
 grown to nine unrelated links. Now: **Settings** (Company Settings, Ripe buffer & credits →
 `/company-settings#ripe`, CCP Master) and **Data & Imports** (Data Backup, Shopify Import,
 Clover Import, Channel Prices). The Ripe tool (`/ripe-analytics`) moved
-OUT of Administration into a `.portal-tools` strip under the Buyer Portals tiles, where its
-domain already lives. **`/ripe-sku-audit` was DELETED 2026-09-18** (page, template, and
+OUT of Administration into a `.portal-tools` strip under the Buyer Portals tiles — and back
+again 2026-09-22: Administration now has a **Ripe** row (Wholesale Orders, Retail Pack Queue,
+Ripe Analytics, Buffer & Credits) and the strip is gone; the Ripe Retail portal TILE is
+hidden (commented out in `_portal_tiles.html`) at Jeremy's request, the page stays live. **`/ripe-sku-audit` was DELETED 2026-09-18** (page, template, and
 `/api/internal/sku-audit`): it audited Ripe's `products.json`, which has been a legacy
 read-only seed since Ripe began taking its catalogue — sku_keys included — from Soma's buyer
 record via `/api/internal/catalogue`. The link it checked can no longer break, and the page

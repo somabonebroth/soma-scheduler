@@ -44,7 +44,8 @@ _DEFAULT_COMPANY_INFO = {
     "registration": "",
     "notes": "",
     "ripe_inventory_buffer": 12,   # units withheld from Ripe's visible stock
-    "ripe_credits": [],            # list of {id, name, amount} account credits Ripe can apply to e-transfer orders; auto-deplete on Soma approval
+    "ripe_credits": [],            # list of {id, name, amount, kind} account credits Ripe can apply to e-transfer orders; auto-deplete on Soma approval. kind "once" (hand-issued) or "monthly" (an instance issued from ripe_monthly_promos; carries template_id, month, expired)
+    "ripe_monthly_promos": [],     # list of {id, name, amount} standing promos: each issues a fresh credit of `amount` on the 1st of every month; the previous month's leftover expires
     "ss_small_order_threshold":  20,    # SS delivery minimum: below this delivery is rejected; at/above it delivery is free
     "fzbb_small_lead_days":  3,    # min days notice for FZ/BB ≤ threshold
     "fzbb_large_lead_days":  7,    # min days notice for FZ/BB ≥ threshold
@@ -396,8 +397,14 @@ def _record_adjustment(record):
 
 
 def _load_company_info():
-    """Load company info / order-rules JSON, falling back to the default template."""
+    """Company info / order rules with defaults filled in. This is the ONE read
+    path, so the monthly-promo renewal runs here: the first read in a new month
+    issues that month's credits and expires last month's leftovers, and writes
+    the file back — every consumer (settings, Ripe's catalogue, approve, the
+    ledger) then agrees on what Ripe can use."""
     info = _load_json(COMPANY_INFO_PATH, {})
+    if _renew_monthly_credits(info):
+        _save_json(COMPANY_INFO_PATH, info)
     merged = dict(_DEFAULT_COMPANY_INFO)
     merged.update(info)
     return merged
@@ -405,7 +412,10 @@ def _load_company_info():
 
 def _sanitize_ripe_credits(raw):
     """Coerce a raw ripe_credits payload into a clean list for storage.
-    Each entry: {id, name, amount}. Drops fully-blank rows; clamps amount >= 0."""
+    Each entry: {id, name, amount, kind}. Drops fully-blank rows; clamps
+    amount >= 0. A "monthly" entry (an instance issued from a monthly promo)
+    also keeps template_id, month and expired — those are what let the ledger
+    tell "expired with $30 left" from "fully used"."""
     out = []
     if not isinstance(raw, list):
         return out
@@ -420,16 +430,134 @@ def _sanitize_ripe_credits(raw):
         if not name and amt <= 0:
             continue  # fully blank row — drop
         cid = str(c.get("id") or "").strip() or f"c{i}"
-        out.append({"id": cid, "name": name or "Credit", "amount": amt})
+        entry = {"id": cid, "name": name or "Credit", "amount": amt,
+                 "kind": "monthly" if c.get("kind") == "monthly" else "once"}
+        if entry["kind"] == "monthly":
+            entry["template_id"] = str(c.get("template_id") or "")
+            entry["month"] = str(c.get("month") or "")
+            entry["expired"] = bool(c.get("expired"))
+            try:
+                entry["issued"] = max(0.0, round(float(c.get("issued")), 2))
+            except (TypeError, ValueError):
+                entry["issued"] = amt
+        out.append(entry)
     return out
 
 
+def _sanitize_monthly_promos(raw):
+    """Coerce a raw ripe_monthly_promos payload: {id, name, amount}. Drops
+    blank rows (a $0 monthly promo is kept but issues nothing)."""
+    out = []
+    if not isinstance(raw, list):
+        return out
+    for i, p in enumerate(raw):
+        if not isinstance(p, dict):
+            continue
+        name = str(p.get("name") or "").strip()
+        try:
+            amt = max(0.0, round(float(p.get("amount") or 0), 2))
+        except (TypeError, ValueError):
+            amt = 0.0
+        if not name and amt <= 0:
+            continue
+        pid = str(p.get("id") or "").strip() or f"p{i}"
+        out.append({"id": pid, "name": name or "Monthly promo", "amount": amt})
+    return out
+
+
+def _promo_month(today=None):
+    """Current month as YYYY-MM in Toronto time (the business's calendar)."""
+    if today is None:
+        from zoneinfo import ZoneInfo
+        today = datetime.now(ZoneInfo("America/Toronto"))
+    return today.strftime("%Y-%m")
+
+
+def _monthly_credit_name(template_name, month):
+    """'Marketing credit — Sep 2026': what Ripe sees at checkout."""
+    label = datetime.strptime(month, "%Y-%m").strftime("%b %Y")
+    return f"{template_name} — {label}"
+
+
+def _renew_monthly_credits(info, today=None):
+    """Bring `info["ripe_credits"]` up to date with `info["ripe_monthly_promos"]`
+    for the current month. Mutates `info`; returns True when anything changed.
+
+    - Every promo gets ONE instance per month, id `<promo id>-<YYYY-MM>`, for
+      the promo's full amount (`issued`). Editing the promo mid-month moves
+      this month's instance by the difference (issued 50 → 75 adds 25 to
+      whatever is left, floored at 0) and renames it, so a correction takes
+      effect now rather than next month.
+    - An instance from an earlier month with balance left is marked expired
+      (kept, so the ledger can say "expired with $30 left"); one at zero is
+      dropped — it was fully used and the ledger rebuilds it from the draws.
+    - Removing a promo does not touch old months; the PATCH route withdraws
+      the CURRENT month's instance so the promo really ends when it is removed.
+    """
+    promos = _sanitize_monthly_promos(info.get("ripe_monthly_promos"))
+    raw = info.get("ripe_credits")
+    monthly_present = isinstance(raw, list) and any(
+        isinstance(c, dict) and c.get("kind") == "monthly" for c in raw)
+    if not promos and not monthly_present:
+        return False
+    month = _promo_month(today)
+    if isinstance(raw, list):
+        credits = _sanitize_ripe_credits(raw)
+    else:
+        credits = _sanitize_ripe_credits(_active_ripe_credits(info))  # migrate the legacy scalar first
+    changed = not isinstance(raw, list)
+
+    kept = []
+    for c in credits:
+        if c["kind"] == "monthly" and c.get("month") != month and not c.get("expired"):
+            changed = True
+            if c["amount"] <= 0.005:
+                continue
+            c["expired"] = True
+        kept.append(c)
+    credits = kept
+
+    this_month = {c["template_id"]: c for c in credits
+                  if c["kind"] == "monthly" and c.get("month") == month}
+    for p in promos:
+        inst = this_month.get(p["id"])
+        name = _monthly_credit_name(p["name"], month)
+        if inst is None:
+            if p["amount"] <= 0:
+                continue
+            credits.append({
+                "id": f"{p['id']}-{month}",
+                "name": name,
+                "amount": p["amount"],
+                "issued": p["amount"],
+                "kind": "monthly",
+                "template_id": p["id"],
+                "month": month,
+                "expired": False,
+            })
+            changed = True
+            continue
+        if abs(inst["issued"] - p["amount"]) > 0.005:
+            inst["amount"] = max(0.0, round(inst["amount"] + p["amount"] - inst["issued"], 2))
+            inst["issued"] = p["amount"]
+            changed = True
+        if inst["name"] != name:
+            inst["name"] = name
+            changed = True
+
+    if changed:
+        info["ripe_credits"] = credits
+        info.pop("ripe_credit", None)
+    return changed
+
+
 def _active_ripe_credits(company):
-    """Usable credits Ripe should see: only amount > 0. Migrates a legacy
-    scalar `ripe_credit` (v1) into a single named credit when no list exists."""
+    """Usable credits Ripe should see: amount > 0 and not expired. Migrates a
+    legacy scalar `ripe_credit` (v1) into a single named credit when no list
+    exists."""
     raw = company.get("ripe_credits")
     if isinstance(raw, list):
-        return [c for c in _sanitize_ripe_credits(raw) if c["amount"] > 0]
+        return [c for c in _sanitize_ripe_credits(raw) if c["amount"] > 0 and not c.get("expired")]
     try:
         legacy = round(float(company.get("ripe_credit") or 0), 2)
     except (TypeError, ValueError):

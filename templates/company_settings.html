@@ -15,6 +15,11 @@
 .ff input:focus, .ff textarea:focus { border-color:var(--accent); }
 .ff-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .save-indicator { font-size:12px; color:var(--accent); display:none; margin-left:10px; }
+.credit-status { font-size:12px; font-weight:600; color:var(--action-green); min-height:16px; }
+.credit-status.pending { color:var(--text-light); font-weight:500; }
+.credit-status.err { color:var(--action-red); }
+.hint { font-size:11px; color:var(--text-light); margin-top:6px; line-height:1.45; }
+.credit-row.flash input { border-color:var(--action-green); background:var(--action-green-bg); transition:background .6s, border-color .6s; }
 .rule-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; max-width:480px; }
 .tog { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--bg); border-radius:8px; cursor:pointer; }
 .tog-knob { width:38px; height:22px; border-radius:11px; background:var(--grey-light); position:relative; transition:background .2s; flex-shrink:0; }
@@ -69,11 +74,24 @@
         <span style="font-size:13px;color:var(--text-light);line-height:1.4;">units per SKU<br><span style="font-size:11px;">Keeps a safety buffer so Ripe can't order your last cases</span></span>
       </div>
     </div>
-    <div class="ff" style="max-width:480px;margin-bottom:18px;">
-      <label>Account Credits — Ripe can apply these to e-transfer orders</label>
+    <div class="ff" style="max-width:520px;margin-bottom:18px;">
+      <label>One-time credits — Ripe can apply these to e-transfer orders</label>
       <div id="credits-list" style="margin-top:8px;display:flex;flex-direction:column;gap:8px;"></div>
-      <button type="button" id="add-credit-btn" class="btn btn-secondary" style="margin-top:10px;">+ Add credit</button>
-      <div style="font-size:11px;color:var(--text-light);margin-top:6px;">Give each credit a name and amount. Ripe can apply any portion of each to an e-transfer order; the balance auto-depletes when you approve.</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap;">
+        <button type="button" id="add-credit-btn" class="btn btn-secondary">+ Add one-time credit</button>
+        <span class="credit-status" id="credit-status" aria-live="polite"></span>
+      </div>
+      <div class="hint">Name it and enter the amount — it saves as you type. Ripe can apply any portion to an e-transfer order; the balance depletes when you approve, and a credit that reaches $0 is removed.</div>
+    </div>
+    <div class="ff" style="max-width:520px;margin-bottom:18px;">
+      <label>Monthly promos — a fresh credit on the 1st of every month</label>
+      <div id="promos-list" style="margin-top:8px;display:flex;flex-direction:column;gap:8px;"></div>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap;">
+        <button type="button" id="add-promo-btn" class="btn btn-secondary">+ Add monthly promo</button>
+        <span class="credit-status" id="promo-status" aria-live="polite"></span>
+      </div>
+      <div id="promo-month" class="hint" style="font-weight:600;color:var(--text);"></div>
+      <div class="hint">Each promo issues its full amount on the 1st; whatever is left at month end expires (no rollover). Adding a promo issues this month's credit right away, editing the amount moves this month's balance by the difference, and removing it withdraws this month's balance.</div>
     </div>
     <div id="credit-history" hidden style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:18px;">
       <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
@@ -123,13 +141,27 @@ async function loadCI() {
   G('ci-notes').value   = d.notes   || '';
   G('ci-buf').value     = d.ripe_inventory_buffer !== undefined ? d.ripe_inventory_buffer : 12;
   renderCredits(Array.isArray(d.ripe_credits) ? d.ripe_credits : []);
+  renderPromos(Array.isArray(d.ripe_monthly_promos) ? d.ripe_monthly_promos : []);
+  renderPromoMonth(Array.isArray(d.ripe_credits) ? d.ripe_credits : []);
   G('ci-ss-small-thresh').value= d.ss_small_order_threshold !== undefined ? d.ss_small_order_threshold : 20;
   G('ci-fzbb-thresh').value    = d.fzbb_large_threshold     !== undefined ? d.fzbb_large_threshold     : 8;
   G('ci-fzbb-small').value     = d.fzbb_small_lead_days     !== undefined ? d.fzbb_small_lead_days     : 3;
   G('ci-fzbb-large').value     = d.fzbb_large_lead_days     !== undefined ? d.fzbb_large_lead_days     : 7;
 }
 
-function dCI() { clearTimeout(_ciT); _ciT = setTimeout(saveCI, 800); }
+var _ciSection = null;   // 'credits' | 'promos' | null — where the last edit happened
+function dCI(section) {
+  _ciSection = section || null;
+  if (_ciSection) creditStatus(_ciSection, 'Saving…', 'pending');
+  clearTimeout(_ciT); _ciT = setTimeout(saveCI, 800);
+}
+function creditStatus(section, text, cls) {
+  var el = G(section === 'promos' ? 'promo-status' : 'credit-status');
+  if (!el) return;
+  el.textContent = text; el.className = 'credit-status' + (cls ? ' ' + cls : '');
+  clearTimeout(el._t);
+  if (cls !== 'pending') el._t = setTimeout(function(){ el.textContent=''; el.className='credit-status'; }, 3500);
+}
 
 async function saveCI() {
   var p = {
@@ -139,17 +171,39 @@ async function saveCI() {
     registration: G('ci-reg').value, notes: G('ci-notes').value,
     ripe_inventory_buffer:       parseInt(G('ci-buf').value)            || 0,
     ripe_credits:                scrapeCredits(),
+    ripe_monthly_promos:         scrapePromos(),
     ss_small_order_threshold:    parseInt(G('ci-ss-small-thresh').value) || 20,
     fzbb_large_threshold:        parseInt(G('ci-fzbb-thresh').value)    || 8,
     fzbb_small_lead_days:        parseInt(G('ci-fzbb-small').value)     || 3,
     fzbb_large_lead_days:        parseInt(G('ci-fzbb-large').value)     || 7,
   };
-  var res = await fetch('/api/company-info', {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(p)});
-  if (res.ok) {
+  var section = _ciSection;
+  var res;
+  try {
+    res = await fetch('/api/company-info', {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(p)});
+  } catch (e) { res = null; }
+  if (res && res.ok) {
     var ind = G('save-indicator');
     ind.style.display = 'inline';
     setTimeout(function(){ ind.style.display='none'; }, 2000);
+    if (section) {
+      creditStatus(section, section === 'promos' ? '✓ Saved — Ripe sees it on its next order' : '✓ Saved — Ripe sees it on its next order');
+      flashRows(section === 'promos' ? '#promos-list .credit-row' : '#credits-list .credit-row');
+    }
+    try {
+      var info = (await res.json()).info || {};
+      renderPromoMonth(Array.isArray(info.ripe_credits) ? info.ripe_credits : []);
+    } catch (e) {}
+    if (section) loadCreditHistory();
+  } else if (section) {
+    creditStatus(section, '✗ Not saved — check the connection and try again', 'err');
   }
+}
+function flashRows(sel) {
+  document.querySelectorAll(sel).forEach(function (r) {
+    r.classList.add('flash');
+    setTimeout(function(){ r.classList.remove('flash'); }, 1200);
+  });
 }
 
 // ─── Account credits manager ─────────────────────────────────────────────
@@ -157,20 +211,42 @@ function genCreditId() {
   return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 function escAttr(s) { return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
-function creditRowHTML(c) {
+// One row shape serves both lists; `section` decides which list it saves to
+// and where the "Saved" feedback shows.
+function creditRowHTML(c, section) {
+  var ph = section === 'promos' ? 'Promo name (e.g. Marketing)' : 'Credit name';
+  var amtTitle = section === 'promos' ? 'Amount issued on the 1st of every month' : 'Balance Ripe can still apply';
   return '<div class="credit-row" data-id="' + escAttr(c.id) + '" style="display:flex;gap:8px;align-items:center;">'
-    + '<input class="cr-name" type="text" placeholder="Credit name" value="' + escAttr(c.name) + '" oninput="dCI()" style="flex:1;padding:7px 9px;">'
+    + '<input class="cr-name" type="text" placeholder="' + ph + '" value="' + escAttr(c.name) + '" oninput="dCI(\'' + section + '\')" style="flex:1;padding:7px 9px;">'
     + '<span style="font-weight:600;">$</span>'
-    + '<input class="cr-amt" type="number" min="0" step="0.01" placeholder="0.00" value="' + (c.amount || 0) + '" oninput="dCI()" style="width:100px;padding:7px 9px;text-align:right;">'
-    + '<button type="button" class="btn btn-secondary" onclick="removeCredit(this)" title="Remove credit" style="padding:6px 11px;">✕</button>'
+    + '<input class="cr-amt" type="number" min="0" step="0.01" placeholder="0.00" title="' + amtTitle + '" value="' + (c.amount || 0) + '" oninput="dCI(\'' + section + '\')" style="width:100px;padding:7px 9px;text-align:right;">'
+    + (section === 'promos' ? '<span style="font-size:12px;color:var(--text-light);white-space:nowrap;">/ month</span>' : '')
+    + '<button type="button" class="btn btn-secondary" onclick="removeRow(this, \'' + section + '\')" title="Remove" style="padding:6px 11px;">✕</button>'
     + '</div>';
 }
 function renderCredits(list) {
-  G('credits-list').innerHTML = (list || []).map(creditRowHTML).join('');
+  // Only hand-issued (one-time) credits are editable here; monthly instances
+  // are issued by the server from the promos below and shown read-only.
+  var once = (list || []).filter(function (c) { return c.kind !== 'monthly'; });
+  G('credits-list').innerHTML = once.map(function (c) { return creditRowHTML(c, 'credits'); }).join('');
 }
-function removeCredit(btn) { btn.closest('.credit-row').remove(); dCI(); }
-function scrapeCredits() {
-  return Array.from(document.querySelectorAll('#credits-list .credit-row')).map(function (r) {
+function renderPromos(list) {
+  G('promos-list').innerHTML = (list || []).map(function (p) { return creditRowHTML(p, 'promos'); }).join('');
+}
+function renderPromoMonth(credits) {
+  var live = (credits || []).filter(function (c) { return c.kind === 'monthly' && !c.expired; });
+  G('promo-month').textContent = live.length
+    ? 'This month: ' + live.map(function (c) { return c.name + ' · ' + money(c.amount) + ' of ' + money(c.issued != null ? c.issued : c.amount) + ' left'; }).join('  ·  ')
+    : '';
+}
+function removeRow(btn, section) {
+  var row = btn.closest('.credit-row');
+  var name = row.querySelector('.cr-name').value.trim();
+  if (section === 'promos' && name && !confirm('Remove the monthly promo "' + name + '"? This month\'s remaining balance is withdrawn from Ripe.')) return;
+  row.remove(); dCI(section);
+}
+function scrapeRows(sel) {
+  return Array.from(document.querySelectorAll(sel)).map(function (r) {
     return {
       id: r.dataset.id,
       name: r.querySelector('.cr-name').value.trim(),
@@ -178,15 +254,24 @@ function scrapeCredits() {
     };
   });
 }
-document.getElementById('add-credit-btn').addEventListener('click', function () {
-  G('credits-list').insertAdjacentHTML('beforeend', creditRowHTML({ id: genCreditId(), name: '', amount: '' }));
-});
+function scrapeCredits() { return scrapeRows('#credits-list .credit-row').map(function (c) { c.kind = 'once'; return c; }); }
+function scrapePromos()  { return scrapeRows('#promos-list .credit-row'); }
+function addRow(section) {
+  var listId = section === 'promos' ? 'promos-list' : 'credits-list';
+  G(listId).insertAdjacentHTML('beforeend', creditRowHTML({ id: genCreditId(), name: '', amount: '' }, section));
+  var rows = G(listId).querySelectorAll('.credit-row');
+  rows[rows.length - 1].querySelector('.cr-name').focus();
+  creditStatus(section, 'New row added — type a name and amount, it saves as you type', 'pending');
+}
+document.getElementById('add-credit-btn').addEventListener('click', function () { addRow('credits'); });
+document.getElementById('add-promo-btn').addEventListener('click', function () { addRow('promos'); });
 
 // ─── Credit history — issued/used/remaining, joined from Ripe's orders ───
 // Loaded async so the settings page never waits on the Ripe portal.
 function money(n) { return '$' + Number(n || 0).toFixed(2); }
 function creditHistoryHTML(c) {
   const spent = c.remaining <= 0.005;
+  const expired = (c.expired || 0) > 0.005;
   const uses = (c.uses || []).map(u =>
     '<span style="font-variant-numeric:tabular-nums;">' + escAttr(u.date) + ' · '
     + (u.order_number ? '#' + escAttr(u.order_number) : escAttr(u.order_id))
@@ -195,7 +280,8 @@ function creditHistoryHTML(c) {
   return '<div' + (spent ? ' style="opacity:.65;"' : '') + '>'
     + '<div style="display:flex;align-items:baseline;gap:8px;font-size:13px;">'
     + '<strong>' + escAttr(c.name) + '</strong>'
-    + (spent ? '<span style="background:var(--bg);color:var(--text-light);font-size:10px;padding:1px 7px;border-radius:10px;">fully used</span>' : '')
+    + (expired ? '<span style="background:var(--amber-bg);color:var(--amber-text-dark);font-size:10px;padding:1px 7px;border-radius:10px;">expired · ' + money(c.expired) + ' unused</span>'
+       : spent ? '<span style="background:var(--bg);color:var(--text-light);font-size:10px;padding:1px 7px;border-radius:10px;">fully used</span>' : '')
     + '<span style="margin-left:auto;font-size:12px;color:var(--text-light);font-variant-numeric:tabular-nums;">'
     + (c.used > 0 ? money(c.used) + ' used · ' : '')
     + '<strong style="color:' + (spent ? 'var(--text-light)' : 'var(--action-green)') + ';">' + money(c.remaining) + '</strong> of ' + money(c.issued) + ' left</span>'
@@ -216,7 +302,8 @@ async function loadCreditHistory() {
     if (!d.credits || !d.credits.length) return; // nothing issued yet — stay hidden
     G('credit-history-totals').innerHTML =
       money(d.totals.issued) + ' issued · ' + money(d.totals.used) + ' used · '
-      + '<strong style="color:var(--action-green);">' + money(d.totals.remaining) + ' remaining</strong>';
+      + '<strong style="color:var(--action-green);">' + money(d.totals.remaining) + ' remaining</strong>'
+      + ((d.totals.expired || 0) > 0.005 ? ' · ' + money(d.totals.expired) + ' expired' : '');
     G('credit-history-body').innerHTML = d.credits.map(creditHistoryHTML).join('');
     wrap.hidden = false;
   } catch (e) {
