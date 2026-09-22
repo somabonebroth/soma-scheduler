@@ -52,10 +52,10 @@ raw_materials.py    — Flask Blueprint (771 lines, extracted 2026-06-03): the 2
                       RM-private invoice helpers — invoice cluster kept together);
                       foundation IO from helpers. No consumption-chain code touched
                       (only delete's 409 guard via helpers._runs_using_raw_material).
-audit_tools.py      — Flask Blueprint (256 lines, extracted 2026-06-03): the 6
-                      audit/traceability routes — reconcile-raw (page + run preview/
-                      apply), organic trace, stock-exceptions, mass-balance (api +
-                      page). Third inventory slice. PURE routes-move: the audit-critical
+audit_tools.py      — Flask Blueprint (extracted 2026-06-03): the audit/traceability
+                      routes — reconcile-raw (page + run preview/apply), organic trace,
+                      organic recipe-check (2026-09-22), mass-balance (api + page).
+                      stock-exceptions removed 2026-09-22. Third inventory slice. PURE routes-move: the audit-critical
                       engines (_rebuild_raw_material_consumption, _compute_mass_balance,
                       _sale_touches_fg) + path consts stay in app.py (8 app.-qualified);
                       ORGANIC_RUNS_PATH + IO from helpers.
@@ -543,7 +543,7 @@ This is the audit-critical chain: supplier lot → production run → finished g
 
 **Trace & audit endpoints (read-only):**
 - `GET /api/organic/trace?type=raw_lot|fg_lot&q=` — `raw_lot` resolves the lot string to raw-material entries and traces each by `raw_material_id` (grouped per physical lot, with a legacy string-match fallback).
-- `GET /api/organic/stock-exceptions` — completed batches made with insufficient raw material (the `INSUFFICIENT_STOCK` markers). The banner on Completed Production was REMOVED 2026-06-10 (commit `9d60cf3`): these are frozen historical markers, not a live check, so it never cleared and read as a standing error. The all-time list now lives in a collapsed "Stock Exceptions" card on **Organic Certification** (loaded on demand, framed as a record you consult — do NOT reinstate it as a banner). Per-DAY, the same markers surface as an issue on the Management Report via `daily_brief._stock_exceptions_section`.
+- Stock exceptions (completed batches made with insufficient raw material — the `INSUFFICIENT_STOCK` markers on `ingredients_used`) surface ONLY per-day on the Management Report via `daily_brief._stock_exceptions_section`. The all-time list (`GET /api/organic/stock-exceptions` + a card on Organic Certification) was removed 2026-09-22; the banner on Completed Production before it was removed 2026-06-10 (`9d60cf3`). They are frozen historical markers, not a live check — do NOT reinstate either as a banner.
 - `GET /api/organic/mass-balance?from=&to=&organic_only=` + page `/mass-balance` (`_compute_mass_balance`): Opening+Received−Consumed=Expected vs current stock (raw), Opening+Produced−Sold=Expected vs current (FG). Discrepancy = adjustments/loss/breakage, exact when `to`=today. Client-side CSV export. Linked from the Inventory and Organic Certification pages and the dashboard (NOT from Completed Production, despite an earlier note here).
 - `get_traceability` reports certification **per vessel** (`cert_by_vessel`, `certifications[]`) — a day can run mixed certs; never collapse to one label. The All/Organic/Non-Organic filter tabs were **removed** (2026-06-03): `get_traceability` never honored the `?filter=` param, and the per-vessel cert tags already convey cert status, so the tabs were dead UI. The route still harmlessly ignores a stray `?filter=`.
 
@@ -581,6 +581,21 @@ active lot keeps the SKU-level item. Not built (deliberate, Jeremy to decide con
 dated audit-pack PDF; a Mass Balance raw-side organic filter (organic ingredients are already
 separable by name).
 
+**Second pass the same day — "keep it as simple as possible, we are a tiny company" (Jeremy).**
+The hub is now a **four-question checklist** (383 → 144 lines): (1) suppliers' certificates
+current → the Supplier Certificates card, (2) receiving records with lot numbers →
+`/sales-receiving#receiving`, (3) trace one lot → `/sales-receiving#trace`, (4) organic in =
+organic out → Mass Balance. Then "Keep the numbers honest": Count FG, Count Raw, Stock Count
+History, Documents. Rebuild Raw / Check FG for Drift are a one-line "Repair tools, only if the
+numbers look wrong" footer, NOT audit steps. REMOVED: the Organic FG snapshot card (Manage
+Inventory filtered to organic), the Stock Exceptions card AND `GET /api/organic/stock-exceptions`
+(the Daily Summary has its own per-day read in `daily_brief._stock_exceptions_section`; the
+all-time list had no other reader), the Organic Recipe Check CARD (the endpoint stays for the
+recipe-card badge), and the dormant event-model half of `ledger.py` (`backfill_fg_events`,
+`project_fg`, `verify_fg_projection`, `/api/organic/ledger/verify`, the self-check banner on
+`fg_reconcile.html`; 814 → 682 lines). `inventory_events.json` remains ONLY as the home of the
+RESET marker (cutover + frozen run ids). The drift check and the reset are untouched.
+
 **Search & Trace is implemented ONCE** (`sales_receiving.html`, `doTrace`/`doTraceDebounced`) since 2026-09-22 — the second copy on `organic_certification.html` was deleted; the hub links to `/sales-receiving#trace`. Keep it that way.
 
 ---
@@ -612,8 +627,9 @@ totals are trustworthy. Plus several paths mutate FG with no ledger record
   gaps, pending Ripe. SKU rollup carries `tier` (organic = judge per-lot; sku = judge at
   SKU total, per-lot split is FIFO noise). Catches SKU-internal offsetting errors the
   mass balance hides.
-- Event model: append-only `inventory_events.json`, `backfill_fg_events()`,
-  `project_fg()`, `verify_fg_projection()` + a self-check banner.
+- (The append-only event model — `backfill_fg_events()`/`project_fg()`/`verify_fg_projection()`
+  + self-check banner — was REMOVED 2026-09-22 as a never-written embryo. `inventory_events.json`
+  now holds only the RESET marker.)
 
 **Zero-day reset (`/admin/fg-reset`, `apply_reset` — the only WRITE path here):**
 counts at two-tier grain (organic per LOT, others one SKU total), archives the 5
@@ -705,9 +721,9 @@ bugs were found and **fixed**:
 
 **Two systemic gaps left UNFIXED (by design — deliberate conversations, not squeeze-ins):**
 1. **No FG write path emits an inventory ledger event.** All ~18 mutating sites write
-   `finished_goods.json` directly; `ledger.py` is read-only + the reset. The ledger
-   reconstructs history by re-projecting from FG/sales records (`backfill_fg_events`), not
-   a write-through log. This is the known architecture, not a regression.
+   `finished_goods.json` directly; `ledger.py` is the read-only drift check + the reset. The
+   re-projecting event model that once shadowed this was removed 2026-09-22 (never gained a
+   writer). This is the known architecture, not a regression; the real answer is the database.
 2. **The two-tier organic boundary is now enforced on every AUTOMATED subtract path
    (2026-09-22), convention-only on the manual one.** SBBC retail refused organic SKUs since
    2026-07-02; Ripe approve + retail auto-approve now refuse BEFORE any stock moves

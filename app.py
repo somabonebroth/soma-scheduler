@@ -2068,7 +2068,7 @@ def _rebuild_raw_material_consumption(materials, runs, recipes):
 
     return {"runs_replayed": replayed, "warnings": all_warnings}
 
-# Audit/traceability ROUTES (reconcile-raw, trace, stock-exceptions, mass-balance)
+# Audit/traceability ROUTES (reconcile-raw, trace, recipe-check, mass-balance)
 # now live in audit_tools.py (audit_tools_bp); the helpers above + below stay here.
 
 

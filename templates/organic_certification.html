@@ -14,35 +14,24 @@
 .dash-btn .icon { font-size: 28px; }
 .dash-btn .label { font-size: 14px; font-weight: 600; color: var(--dark); }
 .dash-btn .sublabel { font-size: 11px; color: var(--text-light); }
-.dash-btn.highlight { border-color: var(--accent); background: linear-gradient(135deg, var(--bg), #e8efe5); }
 .dash-btn { position: relative; }
 .dash-btn .step { position: absolute; top: 8px; left: 8px; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; line-height: 1; }
+.empty-state { text-align: center; padding: 28px 20px; color: var(--text-light); font-size: 14px; line-height: 1.6; }
+.repair { font-size: 13px; color: var(--text-light); line-height: 1.6; margin: 8px 0 0; }
+.repair a { color: var(--dark); }
 .section-label { font-size: 11px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 1px; margin-top: 16px; margin-bottom: 6px; border-left: 3px solid var(--accent); padding-left: 8px; }
 .section-note { font-size: 12px; color: var(--text-light); margin: 0 0 8px; }
-/* Separate the inventory/trace block from the dashboard grid above it, matching
-   the rhythm between the two dashboard sections. */
-.oc-trace-label { margin-top: 32px; }
 /* Card descriptions — same size/colour as .oc-intro for a consistent type scale. */
 .card-desc { font-size: 13px; line-height: 1.5; color: var(--text-light); margin: 0 0 14px; }
 .oc-intro { margin: 0 0 4px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
 .oc-intro strong { color: var(--dark); }
-/* Page-local layout for the inventory + trace section (mirrored from organic.html
-   so this page stays self-contained — these classes are page-local there, not in style.css). */
+/* Page-local table + badge (mirrored from organic.html so this page stays self-contained). */
 .count-badge { font-size: 12px; font-weight: 500; color: var(--text-light); background: var(--row-alt); padding: 3px 10px; border-radius: 10px; margin-left: 6px; }
-.empty-state { text-align: center; padding: 40px 20px; color: var(--text-light); font-size: 14px; line-height: 1.6; }
 .inv-table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .inv-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
 .inv-table th { text-align: left; padding: 10px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-light); background: var(--row-alt); border-bottom: 1px solid var(--border); }
 .inv-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
 .inv-table tr:nth-child(even) { background: var(--row-alt); }
-/* Organic FG quick-view rows */
-.oc-fg-row { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--border); cursor: pointer; }
-.oc-fg-row:hover { background: #f5f7f0; }
-.oc-fg-row .oc-fg-name { flex: 1; min-width: 160px; font-size: 14px; font-weight: 600; color: var(--dark); }
-.oc-fg-row .oc-fg-sub { font-size: 11px; color: var(--text-light); font-weight: 400; margin-top: 3px; }
-.oc-fg-row .oc-fg-stock { font-size: 16px; font-weight: 700; min-width: 64px; text-align: right; }
-.oc-fg-row .oc-fg-stock.zero { color: var(--text-light); }
-.oc-fg-detail { background: #fafaf5; padding: 10px 18px; border-left: 3px solid var(--accent); margin-bottom: 4px; }
 </style>
 </head>
 <body>
@@ -56,88 +45,36 @@
 </div>
 <div class="main">
     <div class="dashboard-grid">
-        <p class="oc-intro">Everything needed for the organic certification chain in one place. <strong>Getting ready for an audit?</strong> Work through steps 1–3 in order to get your inventory accurate and proven, then have your records and documents ready to show.</p>
-        <div class="section-label">Before an audit — work through in order</div>
-        <p class="section-note">Each step builds on the one before it. Steps 1 and 3 have a
-        raw-material side and a finished-goods side — do both. Step 1 is not symmetric: the raw
-        side rewrites the books, the finished-goods side only reports. Finished goods are the certified
-        product that actually leaves the building, so an audit that only proves the raw side
-        proves half the chain.</p>
+        <p class="oc-intro">An organic audit asks four things. Each one has a page that answers it.</p>
+        <div class="section-label">The four questions</div>
         <div class="dash-row">
-            <a href="/admin/reconcile-raw" class="dash-btn"><span class="step">1</span><span class="icon">&#9851;</span><span class="label">Rebuild Raw Balances</span><span class="sublabel">Rewrites the books: resets every lot to its received quantity and replays every completed run, so raw-material balances match what was actually used.</span></a>
-            <a href="/admin/fg-reconcile" class="dash-btn"><span class="step">1</span><span class="icon">&#9851;</span><span class="label">Check Finished Goods for Drift</span><span class="sublabel">Read-only: shows where recorded stock has drifted from produced minus sold, lot by lot, and what explains each gap. Fix drift with a count (step 3).</span></a>
+            <a href="#supplier-certs" class="dash-btn"><span class="step">1</span><span class="icon">&#128203;</span><span class="label">Are your suppliers' certificates current?</span><span class="sublabel">The card below. Expiry dates and certificates are kept on Buyers &amp; Suppliers.</span></a>
+            <a href="/sales-receiving#receiving" class="dash-btn"><span class="step">2</span><span class="icon">&#128230;</span><span class="label">Show me receiving records with lot numbers</span><span class="sublabel">Every delivery with supplier, LOT# and invoice, on the Sales &amp; Receiving Record.</span></a>
         </div>
         <div class="dash-row" style="margin-top:12px;">
-            <a href="/mass-balance" class="dash-btn"><span class="step">2</span><span class="icon">&#128202;</span><span class="label">Mass Balance</span><span class="sublabel">Check the numbers add up, both sides at once — Opening + Received &minus; Consumed should equal what's on the shelf. Investigate any gap.</span></a>
+            <a href="/sales-receiving#trace" class="dash-btn"><span class="step">3</span><span class="icon">&#128270;</span><span class="label">Trace one lot, forward or back</span><span class="sublabel">A supplier LOT# forward to batches, finished goods and sales, or an FG LOT# back to its raw lots.</span></a>
+            <a href="/mass-balance" class="dash-btn"><span class="step">4</span><span class="icon">&#128202;</span><span class="label">Does organic in equal organic out?</span><span class="sublabel">Mass Balance: Opening + Received &minus; Consumed against what is on the shelf, for the year.</span></a>
         </div>
-        <div class="dash-row" style="margin-top:12px;">
-            <a href="/audit/rm" class="dash-btn"><span class="step">3</span><span class="icon">&#128269;</span><span class="label">Count Raw Materials</span><span class="sublabel">Confirm it for real — physically count raw materials and compare them to the books.</span></a>
-            <a href="/audit/fg" class="dash-btn"><span class="step">3</span><span class="icon">&#128269;</span><span class="label">Count Finished Goods</span><span class="sublabel">Physically count finished goods and compare them to the books. This is the count that covers your certified product.</span></a>
-        </div>
-        <div class="section-label">Records &amp; documents — keep these ready</div>
-        <p class="section-note">Reference material an auditor may ask to see at any time.</p>
+        <div class="section-label">Keep the numbers honest</div>
+        <p class="section-note">Mass Balance is only as good as the stock figures behind it. Count now and then; organic finished goods are counted one LOT at a time.</p>
         <div class="dash-row">
-            <a href="/audits" class="dash-btn"><span class="icon">&#128220;</span><span class="label">Stock Count History</span><span class="sublabel">Your past raw-material and finished-goods counts, with dates.</span></a>
-            <a href="/certifications" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Documents</span><span class="sublabel">Organic certificates and compliance paperwork.</span></a>
+            <a href="/audit/fg" class="dash-btn"><span class="icon">&#128269;</span><span class="label">Count Finished Goods</span><span class="sublabel">Physical count against the books. This is the count that covers your certified product.</span></a>
+            <a href="/audit/rm" class="dash-btn"><span class="icon">&#128269;</span><span class="label">Count Raw Materials</span><span class="sublabel">Physical count of raw materials against the books.</span></a>
+            <a href="/audits" class="dash-btn"><span class="icon">&#128220;</span><span class="label">Stock Count History</span><span class="sublabel">Past counts, with dates and what changed.</span></a>
+            <a href="/certifications" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Documents</span><span class="sublabel">Your own organic certificate and compliance paperwork.</span></a>
         </div>
-    </div>
-
-    <div class="section-label oc-trace-label">Current organic inventory &amp; trace</div>
-    <p class="section-note">A read-only snapshot of organic finished goods. To trace a LOT end-to-end, use Search &amp; Trace on the Sales &amp; Receiving Record.</p>
-
-    <!-- Organic FG quick view (read-only) -->
-    <div class="card" style="margin-top:12px;">
-        <h2>Organic Finished Goods <span class="count-badge" id="oc-fg-count">—</span></h2>
-        <p class="card-desc">Organic-certified SKUs currently in finished-goods inventory. Read-only — click a row to see its active LOTs. To record sales or adjust stock, use Manage Inventory.</p>
-        <div id="oc-fg-container"><div class="empty-state">Loading…</div></div>
+        <p class="repair"><strong>Repair tools, only if the numbers look wrong:</strong>
+            <a href="/admin/reconcile-raw">Rebuild raw balances</a> (replays every completed batch; rewrites the raw books) &middot;
+            <a href="/admin/fg-reconcile">Check finished goods for drift</a> (read-only, lot by lot; the zero-day reset is behind it).</p>
     </div>
 
     <!-- Supplier certificates — read-only view of suppliers' cert_expiry /
          cert_doc_id (edited on Buyers & Suppliers). Status comes from the
          server (suppliers._cert_status) so both pages agree. -->
-    <div class="card">
+    <div class="card" id="supplier-certs" style="margin-top:24px;">
         <h2>Supplier Certificates <span class="count-badge" id="sc-count">—</span></h2>
-        <p class="card-desc">An auditor's first question is whether each supplier's organic certificate is
-        current. Record the expiry date and attach the certificate on Buyers &amp; Suppliers; this
-        card shows what is expired, expiring within 60 days, or not recorded at all.</p>
+        <p class="card-desc">Expired, expiring within 60 days, or not recorded. Record the expiry date and attach the certificate on Buyers &amp; Suppliers.</p>
         <div id="sc-container"><div class="empty-state">Loading…</div></div>
-    </div>
-
-    <!-- Organic recipe check — read-only. The raw side of "organic" is a naming
-         convention (deduction matches lot item names to recipe ingredient names
-         exactly), so an organic recipe that names a non-organic ingredient is
-         the one thing that convention cannot catch. -->
-    <div class="card">
-        <h2>Organic Recipe Check <span class="count-badge" id="rc-count">—</span></h2>
-        <p class="card-desc">Every active recipe certified Organic should list only organic-named
-        ingredients (salt and water excepted). Production deducts a raw lot only when its name
-        matches the recipe line exactly, so a line named without "organic" is one that would
-        consume a non-organic lot. Fix it on the recipe card.</p>
-        <div id="rc-container"><div class="empty-state">Loading…</div></div>
-    </div>
-
-    <!-- Search & Trace lives on /sales-receiving (one implementation, not two). -->
-    <div class="card">
-        <h2>Search &amp; Trace</h2>
-        <p class="card-desc">Follow any supplier LOT# forward to the batches, finished goods and sales it reached, or any FG LOT# back to its batch and raw lots. One search across all receiving and sales, on the Sales &amp; Receiving Record.</p>
-        <a href="/sales-receiving#trace" class="btn btn-primary" style="text-decoration:none;">Open Search &amp; Trace &rarr;</a>
-    </div>
-
-    <!-- Stock exceptions — historical audit list.
-         Deliberately NOT a banner: these are frozen INSUFFICIENT_STOCK markers
-         from past completed runs, not a live check, so they never clear on
-         their own. A banner on Completed Production read as a standing error
-         and was removed 2026-06-10; this is the same data presented as what it
-         is — a record you consult, collapsed until you open it. -->
-    <div class="card">
-        <h2>Stock Exceptions <span class="count-badge" id="se-count">—</span></h2>
-        <p class="card-desc">Completed batches recorded as produced with less raw material on file
-        than the recipe required. These are historical markers, not open problems — they do not
-        clear, and a non-zero count is not itself a fault. The day each one happened also raises
-        it on that day's Daily Summary.</p>
-        <button class="btn btn-outline" style="font-size:13px;" onclick="toggleStockExceptions()"
-                id="se-toggle">Show exceptions</button>
-        <div id="se-container" style="margin-top:12px;display:none;"></div>
     </div>
 </div>
 <script>
@@ -151,50 +88,6 @@
     if(back) back.disabled = (window.history.length <= 1);
   });
 })();
-
-// ── Stock exceptions (historical audit list, loaded on demand) ──
-let _seLoaded = false;
-
-async function toggleStockExceptions() {
-  const box = document.getElementById('se-container');
-  const btn = document.getElementById('se-toggle');
-  const open = box.style.display !== 'none';
-  if (open) { box.style.display = 'none'; btn.textContent = 'Show exceptions'; return; }
-  box.style.display = 'block';
-  btn.textContent = 'Hide exceptions';
-  if (_seLoaded) return;
-  box.innerHTML = '<div class="empty-state">Loading…</div>';
-  try {
-    const rows = await (await fetch('/api/organic/stock-exceptions')).json();
-    _seLoaded = true;
-    if (!rows.length) {
-      box.innerHTML = '<div class="empty-state">No stock exceptions on record.</div>';
-      return;
-    }
-    box.innerHTML = '<div class="inv-table-wrap"><table class="inv-table"><thead><tr><th>Production date</th><th>Recipe</th>'
-      + '<th>Vessel</th><th>Batch LOT</th><th>Ingredient</th><th style="text-align:right;">Short by</th>'
-      + '</tr></thead><tbody>'
-      + rows.map(function (r) {
-          return '<tr><td>' + escHtml(r.production_date || '—') + '</td>'
-            + '<td>' + escHtml(r.recipe) + '</td>'
-            + '<td>' + escHtml(r.vessel) + '</td>'
-            + '<td>' + escHtml(r.batch_lot || '—') + '</td>'
-            + '<td>' + escHtml(r.ingredient) + '</td>'
-            + '<td style="text-align:right;">' + escHtml(r.shortfall) + ' ' + escHtml(r.unit) + '</td></tr>';
-        }).join('')
-      + '</tbody></table></div>';
-  } catch (e) {
-    box.innerHTML = '<div class="empty-state">Could not load: ' + escHtml(e.message) + '</div>';
-  }
-}
-
-async function loadStockExceptionCount() {
-  try {
-    const rows = await (await fetch('/api/organic/stock-exceptions')).json();
-    document.getElementById('se-count').textContent = rows.length;
-  } catch (e) { document.getElementById('se-count').textContent = '—'; }
-}
-loadStockExceptionCount();
 
 // ── Supplier certificates (read-only; status computed by the server) ──
 async function loadSupplierCerts() {
@@ -242,142 +135,10 @@ async function loadSupplierCerts() {
 }
 loadSupplierCerts();
 
-// ── Organic recipe check (read-only) ──
-async function loadRecipeCheck() {
-  const box = document.getElementById('rc-container');
-  const badge = document.getElementById('rc-count');
-  try {
-    const d = await (await fetch('/api/organic/recipe-check')).json();
-    const issues = d.issues || [];
-    badge.textContent = issues.length ? issues.length + ' to review' : 'all clear';
-    if (!d.checked) {
-      box.innerHTML = '<div class="empty-state">No active recipes are certified Organic.</div>';
-      return;
-    }
-    if (!issues.length) {
-      box.innerHTML = '<div class="empty-state">All ' + d.checked + ' organic recipe' + (d.checked === 1 ? '' : 's')
-        + ' use organic-named ingredients.</div>';
-      return;
-    }
-    box.innerHTML = '<div class="inv-table-wrap"><table class="inv-table"><thead><tr><th>Recipe</th>'
-      + '<th>Ingredients to review</th></tr></thead><tbody>'
-      + issues.map(function (i) {
-          const name = (i.brand ? i.brand + '-' : '') + i.recipe + (i.format ? ' ' + i.format : '');
-          return '<tr><td><strong>' + escHtml(name) + '</strong></td><td>' + escHtml(i.ingredients.join(', ')) + '</td></tr>';
-        }).join('')
-      + '</tbody></table></div>'
-      + '<div style="margin-top:10px;"><a href="/recipes" class="btn btn-outline" style="font-size:13px;text-decoration:none;">Open recipe cards &rarr;</a></div>';
-  } catch (e) {
-    badge.textContent = '—';
-    box.innerHTML = '<div class="empty-state">Could not run the recipe check.</div>';
-  }
-}
-loadRecipeCheck();
-
 // ── Shared escaping (mirrored from organic.html) ──
 function escSku(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function escHtml(s){return escSku(s);}
 
-// ── Organic finished-goods quick view (read-only) ──────────────────────────
-var _ocFgExpanded = null;   // sku_key of the currently expanded row
-
-async function loadOrganicFg(){
-    var container = document.getElementById('oc-fg-container');
-    var countEl = document.getElementById('oc-fg-count');
-    try {
-        var res = await fetch('/api/organic/finished-goods/grouped?certification=Organic');
-        var skus = await res.json();
-        if(!Array.isArray(skus) || !skus.length){
-            if(countEl) countEl.textContent = '0';
-            container.innerHTML = '<div class="empty-state">No organic-certified SKUs in inventory.</div>';
-            return;
-        }
-        // Stock first, then alphabetical by display name.
-        skus.sort(function(a,b){
-            var sa=(a.total_remaining||0)>0?0:1, sb=(b.total_remaining||0)>0?0:1;
-            if(sa!==sb) return sa-sb;
-            return String(a.display||'').localeCompare(String(b.display||''));
-        });
-        if(countEl){
-            var inStock = skus.filter(function(s){return (s.total_remaining||0)>0;}).length;
-            var totalUnits = skus.reduce(function(a,s){return a+(s.total_remaining||0);},0);
-            countEl.textContent = inStock+' in stock / '+skus.length+' SKUs • '+totalUnits+' units';
-        }
-        var html='';
-        skus.forEach(function(s){
-            var keyAttr = encodeURIComponent(s.sku_key);
-            var zero = (s.total_remaining||0)<=0;
-            var hasHistory = (s.lot_count||0)>0;
-            var lotNote='';
-            if(s.active_lot_count>0){
-                lotNote = s.active_lot_count+' active LOT'+(s.active_lot_count===1?'':'s');
-                if(s.lot_count>s.active_lot_count){ lotNote += ' • '+(s.lot_count-s.active_lot_count)+' depleted'; }
-            } else if(hasHistory){
-                lotNote = s.lot_count+' LOT'+(s.lot_count===1?'':'s')+' (all depleted)';
-            } else {
-                lotNote = 'No production history yet';
-            }
-            var caret = hasHistory ? (_ocFgExpanded===s.sku_key?'▲':'▼') : '';
-            html += '<div class="oc-fg-row" data-sku-key="'+keyAttr+'"'+(hasHistory?'':' style="cursor:default;"')+'>';
-            html += '<div style="width:16px;color:var(--text-light);font-size:11px;">'+caret+'</div>';
-            html += '<div class="oc-fg-name">'+escSku(s.display)+'<div class="oc-fg-sub">'+escHtml(lotNote)+(s.total_produced?' • '+s.total_produced+' produced lifetime':'')+'</div></div>';
-            html += '<div class="oc-fg-stock'+(zero?' zero':'')+'">'+(s.total_remaining||0)+'<div style="font-size:10px;font-weight:400;color:var(--text-light);">units</div></div>';
-            html += '</div>';
-            if(_ocFgExpanded===s.sku_key && hasHistory){
-                html += '<div class="oc-fg-detail" id="oc-fg-detail-'+keyAttr+'">Loading…</div>';
-            }
-        });
-        container.innerHTML = html;
-        if(_ocFgExpanded){ renderOcFgDetail(_ocFgExpanded); }
-    } catch(e){
-        container.innerHTML = '<div class="empty-state">Could not load organic inventory.</div>';
-    }
-}
-
-async function renderOcFgDetail(skuKey){
-    var keyAttr = encodeURIComponent(skuKey);
-    var el = document.getElementById('oc-fg-detail-'+keyAttr);
-    if(!el) return;
-    try {
-        var res = await fetch('/api/organic/finished-goods/sku/'+encodeURIComponent(skuKey));
-        var data = await res.json();
-        if(!data.lots || !data.lots.length){
-            el.innerHTML = '<span style="color:var(--text-light);font-size:12px;">No LOTs.</span>';
-            return;
-        }
-        var html = '<div class="inv-table-wrap"><table class="inv-table" style="margin:0;font-size:12px;"><tr>'+
-                   '<th>LOT#</th><th>Production Date</th><th>Best Before</th><th>Vessels</th><th>Produced</th><th>Remaining</th></tr>';
-        data.lots.forEach(function(l){
-            var rowStyle = l.remaining<=0 ? ' style="opacity:0.45;"' : '';
-            var vessels = (l.vessels||[]).join(', ') || '—';
-            html += '<tr'+rowStyle+'>'+
-                    '<td><strong>'+escSku(l.lot)+'</strong></td>'+
-                    '<td>'+escSku(l.production_date||'—')+'</td>'+
-                    '<td>'+escSku(l.best_before||'—')+'</td>'+
-                    '<td>'+escSku(vessels)+'</td>'+
-                    '<td>'+l.produced+'</td>'+
-                    '<td>'+l.remaining+(l.remaining<=0?' <span style="font-size:10px;color:var(--text-light);">(depleted)</span>':'')+'</td>'+
-                    '</tr>';
-        });
-        html += '</table></div>';
-        el.innerHTML = html;
-    } catch(e){
-        el.innerHTML = '<span style="color:var(--text-light);font-size:12px;">Could not load LOT detail.</span>';
-    }
-}
-
-// Click delegation — toggle LOT detail on row click (only rows with history).
-document.getElementById('oc-fg-container').addEventListener('click', function(e){
-    var row = e.target.closest('.oc-fg-row');
-    if(!row) return;
-    var rawKey = row.getAttribute('data-sku-key');
-    if(!rawKey) return;
-    var skuKey = decodeURIComponent(rawKey);
-    _ocFgExpanded = (_ocFgExpanded===skuKey) ? null : skuKey;
-    loadOrganicFg();
-});
-
-loadOrganicFg();
 </script>
 </body>
 </html>

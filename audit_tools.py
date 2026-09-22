@@ -1,9 +1,11 @@
 """audit_tools.py — Inventory audit/traceability blueprint extracted from app.py.
 
 Eighth step of the app.py split (CLAUDE.md "Pending architectural work"), third
-inventory slice. Scope: the 6 read-mostly audit/traceability routes —
-reconcile-raw (page + run preview/apply), organic trace, stock-exceptions, and
-mass-balance (api + page).
+inventory slice. Scope: the read-mostly audit/traceability routes —
+reconcile-raw (page + run preview/apply), organic trace, the organic recipe
+check, and mass-balance (api + page). (stock-exceptions was removed 2026-09-22:
+the Daily Summary raises each exception on its own day with its own read, and
+the all-time list had no other reader.)
 
 Pattern (matches buyers/recipes/sales/finished_goods/raw_materials): PURE
 routes-move — every helper and constant stays in app.py, reached via `import app`
@@ -286,39 +288,6 @@ def organic_recipe_check():
     """GET /api/organic/recipe-check - organic recipes naming a non-organic
     ingredient (see organic_recipe_issues). Read-only."""
     return jsonify(organic_recipe_issues(app.load_recipes()))
-
-
-@audit_tools_bp.route("/api/organic/stock-exceptions", methods=["GET"])
-@manager_required
-def organic_stock_exceptions():
-    """Completed batches recorded as produced with LESS raw material on file than
-    the recipe required — the INSUFFICIENT_STOCK markers written during deduction.
-    Surfaced as an explicit, explainable list for audit rather than left buried in
-    the run data. One row per short ingredient per batch. Read-only."""
-    runs = _load_json(ORGANIC_RUNS_PATH, [])
-    out = []
-    for run in runs:
-        if run.get("status") != "completed":
-            continue
-        for used in (run.get("ingredients_used") or []):
-            if not used.get("negative"):
-                continue
-            out.append({
-                "run_id": run.get("id"),
-                "week_id": run.get("week_id"),
-                "day_idx": run.get("day_idx"),
-                "day_name": run.get("day_name", ""),
-                "production_date": app._run_start_date_str(run.get("week_id"), run.get("day_idx")),
-                "vessel": run.get("vessel", ""),
-                "recipe": run.get("recipe", ""),
-                "brand": run.get("brand", ""),
-                "batch_lot": app._run_lot(run),
-                "ingredient": used.get("item", ""),
-                "shortfall": used.get("quantity_used"),
-                "unit": used.get("unit", ""),
-            })
-    out.sort(key=lambda r: (r.get("production_date") or ""), reverse=True)
-    return jsonify(out)
 
 
 @audit_tools_bp.route("/api/organic/mass-balance", methods=["GET"])
