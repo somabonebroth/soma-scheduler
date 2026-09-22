@@ -44,6 +44,42 @@ def _load_suppliers():
     return _load_json(SUPPLIERS_PATH, [])
 
 
+CERT_EXPIRING_DAYS = 60   # "expiring" window for a supplier certificate
+
+
+def _cert_status(expiry):
+    """Classify a supplier certificate by its expiry date (YYYY-MM-DD or blank).
+    Returns (status, days_left): 'none' (no date recorded), 'expired',
+    'expiring' (within CERT_EXPIRING_DAYS), or 'current'. One rule, computed on
+    the server, so the Buyers & Suppliers page and the Organic Certification
+    page can never disagree."""
+    expiry = (expiry or "").strip()
+    if not expiry:
+        return "none", None
+    try:
+        d = datetime.strptime(expiry, "%Y-%m-%d").date()
+    except ValueError:
+        return "none", None
+    days = (d - datetime.now().date()).days
+    if days < 0:
+        return "expired", days
+    if days <= CERT_EXPIRING_DAYS:
+        return "expiring", days
+    return "current", days
+
+
+def _valid_expiry(value):
+    """A cert_expiry is blank or a real YYYY-MM-DD date."""
+    value = (value or "").strip()
+    if not value:
+        return True
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
+
+
 def _save_suppliers(data):
     """Persist the suppliers list to disk."""
     _save_json(SUPPLIERS_PATH, data)
@@ -52,8 +88,14 @@ def _save_suppliers(data):
 @suppliers_bp.route("/api/suppliers", methods=["GET"])
 @manager_required
 def get_suppliers():
-    """GET /api/suppliers - return all suppliers."""
-    return jsonify(_load_suppliers())
+    """GET /api/suppliers - return all suppliers, each annotated (not stored)
+    with cert_status / cert_days_left from its cert_expiry — see _cert_status."""
+    out = []
+    for sup in _load_suppliers():
+        sup = dict(sup)
+        sup["cert_status"], sup["cert_days_left"] = _cert_status(sup.get("cert_expiry"))
+        out.append(sup)
+    return jsonify(out)
 
 
 @suppliers_bp.route("/api/suppliers", methods=["POST"])
@@ -72,7 +114,10 @@ def create_supplier():
         "name": name,
         "ingredients": data.get("ingredients") or [],
     }
-    for field in ("contact_name","phone","email","address","website","certifications","notes"):
+    if not _valid_expiry(data.get("cert_expiry")):
+        return jsonify({"error": "cert_expiry must be YYYY-MM-DD or blank"}), 400
+    for field in ("contact_name","phone","email","address","website","certifications","notes",
+                  "cert_expiry","cert_doc_id"):
         if field in data:
             supplier[field] = (data[field] or "").strip()
     suppliers.append(supplier)
@@ -98,7 +143,10 @@ def update_supplier(sid):
         suppliers[idx]["name"] = name
     if "ingredients" in data:
         suppliers[idx]["ingredients"] = data["ingredients"]
-    for field in ("contact_name","phone","email","address","website","certifications","notes"):
+    if not _valid_expiry(data.get("cert_expiry")):
+        return jsonify({"error": "cert_expiry must be YYYY-MM-DD or blank"}), 400
+    for field in ("contact_name","phone","email","address","website","certifications","notes",
+                  "cert_expiry","cert_doc_id"):
         if field in data:
             suppliers[idx][field] = (data[field] or "").strip()
     _save_suppliers(suppliers)

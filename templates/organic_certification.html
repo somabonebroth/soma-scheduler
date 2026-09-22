@@ -92,6 +92,17 @@
         <div id="oc-fg-container"><div class="empty-state">Loading…</div></div>
     </div>
 
+    <!-- Supplier certificates — read-only view of suppliers' cert_expiry /
+         cert_doc_id (edited on Buyers & Suppliers). Status comes from the
+         server (suppliers._cert_status) so both pages agree. -->
+    <div class="card">
+        <h2>Supplier Certificates <span class="count-badge" id="sc-count">—</span></h2>
+        <p class="card-desc">An auditor's first question is whether each supplier's organic certificate is
+        current. Record the expiry date and attach the certificate on Buyers &amp; Suppliers; this
+        card shows what is expired, expiring within 60 days, or not recorded at all.</p>
+        <div id="sc-container"><div class="empty-state">Loading…</div></div>
+    </div>
+
     <!-- Organic recipe check — read-only. The raw side of "organic" is a naming
          convention (deduction matches lot item names to recipe ingredient names
          exactly), so an organic recipe that names a non-organic ingredient is
@@ -184,6 +195,52 @@ async function loadStockExceptionCount() {
   } catch (e) { document.getElementById('se-count').textContent = '—'; }
 }
 loadStockExceptionCount();
+
+// ── Supplier certificates (read-only; status computed by the server) ──
+async function loadSupplierCerts() {
+  const box = document.getElementById('sc-container');
+  const badge = document.getElementById('sc-count');
+  try {
+    const sups = await (await fetch('/api/suppliers')).json();
+    if (!Array.isArray(sups) || !sups.length) {
+      badge.textContent = '0';
+      box.innerHTML = '<div class="empty-state">No suppliers yet.</div>';
+      return;
+    }
+    const order = { expired: 0, expiring: 1, none: 2, current: 3 };
+    sups.sort(function (a, b) {
+      const d = (order[a.cert_status] ?? 9) - (order[b.cert_status] ?? 9);
+      return d || String(a.name || '').localeCompare(String(b.name || ''));
+    });
+    const n = function (st) { return sups.filter(function (s) { return s.cert_status === st; }).length; };
+    const parts = [];
+    if (n('expired')) parts.push(n('expired') + ' expired');
+    if (n('expiring')) parts.push(n('expiring') + ' expiring');
+    if (n('none')) parts.push(n('none') + ' not recorded');
+    badge.textContent = parts.length ? parts.join(' · ') : 'all current';
+    const label = { expired: 'Expired', expiring: 'Expiring', current: 'Current', none: 'No expiry recorded' };
+    const colour = { expired: 'var(--action-red)', expiring: 'var(--amber-text-dark)', current: 'var(--action-green)', none: 'var(--text-light)' };
+    box.innerHTML = '<div class="inv-table-wrap"><table class="inv-table"><thead><tr><th>Supplier</th>'
+      + '<th>Certifications</th><th>Expiry</th><th>Status</th><th>Document</th></tr></thead><tbody>'
+      + sups.map(function (s) {
+          const st = s.cert_status || 'none';
+          const doc = s.cert_doc_id
+            ? '<a href="/api/certifications/' + encodeURIComponent(s.cert_doc_id) + '/download" target="_blank">&#128206; open</a>'
+            : '<span style="color:var(--text-light);">—</span>';
+          return '<tr><td><strong>' + escHtml(s.name) + '</strong></td>'
+            + '<td>' + escHtml(s.certifications || '—') + '</td>'
+            + '<td>' + escHtml(s.cert_expiry || '—') + '</td>'
+            + '<td style="color:' + colour[st] + ';font-weight:600;">' + label[st] + '</td>'
+            + '<td>' + doc + '</td></tr>';
+        }).join('')
+      + '</tbody></table></div>'
+      + '<div style="margin-top:10px;"><a href="/contacts?tab=suppliers" class="btn btn-outline" style="font-size:13px;text-decoration:none;">Edit suppliers &rarr;</a></div>';
+  } catch (e) {
+    badge.textContent = '—';
+    box.innerHTML = '<div class="empty-state">Could not load suppliers.</div>';
+  }
+}
+loadSupplierCerts();
 
 // ── Organic recipe check (read-only) ──
 async function loadRecipeCheck() {

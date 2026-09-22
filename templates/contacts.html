@@ -29,6 +29,8 @@ body.cp { background: var(--bg); }
 .cc-badge { display:inline-block; padding:2px 9px; border-radius:20px; font-size:10px; font-weight:600; margin-top:5px; margin-right:4px; }
 .bg-g { background:var(--action-green-bg); color:var(--action-green); border:1px solid var(--green-light); }
 .bg-b { background:var(--action-blue-bg); color:#0a4081; border:1px solid #90caf9; }
+.bg-a { background:var(--amber-bg); color:var(--amber-text-dark); border:1px solid var(--amber-border); }
+.bg-r { background:var(--action-red-bg); color:var(--action-red); border:1px solid var(--action-red); }
 .bg-k { background:var(--bg); color:var(--grey-dark); border:1px solid #d8d8d0; }
 .cc-actions { display:flex; gap:8px; flex-shrink:0; }
 .mo { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200; align-items:center; justify-content:center; padding:16px; }
@@ -175,6 +177,11 @@ body.cp { background: var(--bg); }
       </div>
       <div class="ff"><label>Address</label><input id="s-addr" type="text" placeholder="Street, City, Province, Postal"></div>
       <div class="ff"><label>Certifications</label><input id="s-certs" type="text" placeholder="e.g. Certified Organic, GAP"></div>
+      <div class="g2">
+        <div class="ff"><label>Certificate expiry</label><input id="s-cert-exp" type="date"></div>
+        <div class="ff"><label>Certificate document</label><select id="s-cert-doc"><option value="">— none —</option></select></div>
+      </div>
+      <p style="font-size:11px;color:var(--text-light);margin:-6px 0 12px;">Documents come from Organic Certification → Documents. The expiry drives the expired / expiring badges.</p>
       <div class="ff"><label>Notes</label><textarea id="s-notes" rows="2" placeholder="Min order, lead time, payment terms…"></textarea></div>
       <div class="mo-div">Assigned Ingredients</div>
       <div style="margin-top:14px;">
@@ -263,6 +270,12 @@ async function loadSups(){
     h+='<div class="cc-name" style="font-size:17px;">'+snameE+'</div>';
     if(n) h+='<span class="cc-badge bg-g">'+n+' ingredient'+(n===1?'':'s')+'</span>';
     if(s.certifications) h+='<span class="cc-badge bg-b">'+e(s.certifications)+'</span>';
+    if(s.cert_status&&s.cert_status!=='none'){
+      var cs=s.cert_status;
+      h+='<span class="cc-badge '+(cs==='expired'?'bg-r':cs==='expiring'?'bg-a':'bg-g')+'">'
+        +(cs==='expired'?'Certificate expired ':cs==='expiring'?'Certificate expires ':'Certificate valid to ')+e(s.cert_expiry)+'</span>';
+    }
+    if(s.cert_doc_id) h+='<a class="cc-badge bg-b" href="/api/certifications/'+encodeURIComponent(s.cert_doc_id)+'/download" target="_blank" style="text-decoration:none;">&#128206; certificate</a>';
     h+='</div>';
     if(m.length) h+='<div class="cc-sub">'+m.join(' &middot; ')+'</div>';
     if(s.address) h+='<div class="cc-sub">'+e(s.address)+'</div>';
@@ -291,21 +304,23 @@ function rSupIng(){
     return '<label class="sku-chk"><input type="checkbox" '+(!!_sCk[k]?'checked':'')+' onchange="_sCk[\''+e(k)+'\']=this.checked">'+e(i.name)+' <span style="font-size:11px;color:var(--text-light);">('+e(i.unit||'')+')</span></label>';
   }).join('');
 }
-function _clrSup(){['s-name','s-contact','s-phone','s-email','s-web','s-addr','s-certs','s-notes','s-ing-q'].forEach(function(id){G(id).value='';});G('s-msg').textContent='';_sCk={};}
-async function openAddSup(){_sMode='add';_sId=null;G('sup-mo-title').textContent='Add Supplier';G('s-save').textContent='Save Supplier';_clrSup();await _fIng();rSupIng();G('sup-mo').classList.add('open');}
+function _clrSup(){['s-name','s-contact','s-phone','s-email','s-web','s-addr','s-certs','s-cert-exp','s-cert-doc','s-notes','s-ing-q'].forEach(function(id){G(id).value='';});G('s-msg').textContent='';_sCk={};}
+// Certificate document picker: the uploaded documents from /certifications.
+async function _fDocs(){var sel=G('s-cert-doc');var keep=sel.value;var h='<option value="">— none —</option>';try{var docs=await(await fetch('/api/certifications')).json();docs.forEach(function(d){h+='<option value="'+e(d.id)+'">'+e(d.label||d.filename)+(d.category?' ('+e(d.category)+')':'')+'</option>';});}catch(ex){}sel.innerHTML=h;sel.value=keep;}
+async function openAddSup(){_sMode='add';_sId=null;G('sup-mo-title').textContent='Add Supplier';G('s-save').textContent='Save Supplier';_clrSup();await _fIng();await _fDocs();rSupIng();G('sup-mo').classList.add('open');}
 async function openEditSup(sid){
   var s=_sups.find(function(x){return x.id===sid;});if(!s)return;
   _sMode='edit';_sId=sid;G('sup-mo-title').textContent='Edit Supplier';G('s-save').textContent='Save Changes';
   G('s-name').value=s.name||'';G('s-contact').value=s.contact_name||'';G('s-phone').value=s.phone||'';G('s-email').value=s.email||'';G('s-web').value=s.website||'';G('s-addr').value=s.address||'';G('s-certs').value=s.certifications||'';G('s-notes').value=s.notes||'';G('s-ing-q').value='';G('s-msg').textContent='';
   _sCk={};(s.ingredients||[]).forEach(function(i){_sCk[i.name+'|'+(i.unit||'')]=true;});
-  await _fIng();rSupIng();G('sup-mo').classList.add('open');
+  await _fIng();await _fDocs();G('s-cert-exp').value=s.cert_expiry||'';G('s-cert-doc').value=s.cert_doc_id||'';rSupIng();G('sup-mo').classList.add('open');
 }
 function closeSup(){G('sup-mo').classList.remove('open');}
 async function saveSup(){
   var name=G('s-name').value.trim(),msg=G('s-msg'),btn=G('s-save');
   if(!name){msg.className='smsg err';msg.textContent='Name required.';return;}
   var ing=_ing.filter(function(i){return _sCk[i.name+'|'+(i.unit||'')];});
-  var body={name,ingredients:ing,contact_name:G('s-contact').value.trim(),phone:G('s-phone').value.trim(),email:G('s-email').value.trim(),website:G('s-web').value.trim(),address:G('s-addr').value.trim(),certifications:G('s-certs').value.trim(),notes:G('s-notes').value.trim()};
+  var body={name,ingredients:ing,contact_name:G('s-contact').value.trim(),phone:G('s-phone').value.trim(),email:G('s-email').value.trim(),website:G('s-web').value.trim(),address:G('s-addr').value.trim(),certifications:G('s-certs').value.trim(),cert_expiry:G('s-cert-exp').value,cert_doc_id:G('s-cert-doc').value,notes:G('s-notes').value.trim()};
   btn.disabled=true;btn.textContent='Saving…';
   var res=await fetch(_sMode==='add'?'/api/suppliers':'/api/suppliers/'+_sId,{method:_sMode==='add'?'POST':'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   var d=await res.json();btn.disabled=false;btn.textContent=_sMode==='add'?'Save Supplier':'Save Changes';
