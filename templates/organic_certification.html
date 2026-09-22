@@ -30,8 +30,6 @@
    so this page stays self-contained — these classes are page-local there, not in style.css). */
 .count-badge { font-size: 12px; font-weight: 500; color: var(--text-light); background: var(--row-alt); padding: 3px 10px; border-radius: 10px; margin-left: 6px; }
 .empty-state { text-align: center; padding: 40px 20px; color: var(--text-light); font-size: 14px; line-height: 1.6; }
-.search-bar { display: flex; gap: 12px; margin-bottom: 0; flex-wrap: wrap; align-items: flex-end; }
-.search-bar input { flex: 1; min-width: 180px; padding: 11px 13px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; min-height: 44px; }
 .inv-table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .inv-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
 .inv-table th { text-align: left; padding: 10px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-light); background: var(--row-alt); border-bottom: 1px solid var(--border); }
@@ -45,7 +43,6 @@
 .oc-fg-row .oc-fg-stock { font-size: 16px; font-weight: 700; min-width: 64px; text-align: right; }
 .oc-fg-row .oc-fg-stock.zero { color: var(--text-light); }
 .oc-fg-detail { background: #fafaf5; padding: 10px 18px; border-left: 3px solid var(--accent); margin-bottom: 4px; }
-@media (max-width: 640px) { .search-bar input { min-width: 0; } }
 </style>
 </head>
 <body>
@@ -62,12 +59,13 @@
         <p class="oc-intro">Everything needed for the organic certification chain in one place. <strong>Getting ready for an audit?</strong> Work through steps 1–3 in order to get your inventory accurate and proven, then have your records and documents ready to show.</p>
         <div class="section-label">Before an audit — work through in order</div>
         <p class="section-note">Each step builds on the one before it. Steps 1 and 3 have a
-        raw-material side and a finished-goods side — do both. Finished goods are the certified
+        raw-material side and a finished-goods side — do both. Step 1 is not symmetric: the raw
+        side rewrites the books, the finished-goods side only reports. Finished goods are the certified
         product that actually leaves the building, so an audit that only proves the raw side
         proves half the chain.</p>
         <div class="dash-row">
-            <a href="/admin/reconcile-raw" class="dash-btn"><span class="step">1</span><span class="icon">&#9851;</span><span class="label">Reconcile Raw Materials</span><span class="sublabel">Make the books accurate first — replay every completed production run so raw-material balances match what was actually used.</span></a>
-            <a href="/admin/fg-reconcile" class="dash-btn"><span class="step">1</span><span class="icon">&#9851;</span><span class="label">Reconcile Finished Goods</span><span class="sublabel">The same for the FG side — find where recorded stock has drifted from produced minus sold, and what explains each gap.</span></a>
+            <a href="/admin/reconcile-raw" class="dash-btn"><span class="step">1</span><span class="icon">&#9851;</span><span class="label">Rebuild Raw Balances</span><span class="sublabel">Rewrites the books: resets every lot to its received quantity and replays every completed run, so raw-material balances match what was actually used.</span></a>
+            <a href="/admin/fg-reconcile" class="dash-btn"><span class="step">1</span><span class="icon">&#9851;</span><span class="label">Check Finished Goods for Drift</span><span class="sublabel">Read-only: shows where recorded stock has drifted from produced minus sold, lot by lot, and what explains each gap. Fix drift with a count (step 3).</span></a>
         </div>
         <div class="dash-row" style="margin-top:12px;">
             <a href="/mass-balance" class="dash-btn"><span class="step">2</span><span class="icon">&#128202;</span><span class="label">Mass Balance</span><span class="sublabel">Check the numbers add up, both sides at once — Opening + Received &minus; Consumed should equal what's on the shelf. Investigate any gap.</span></a>
@@ -85,7 +83,7 @@
     </div>
 
     <div class="section-label oc-trace-label">Current organic inventory &amp; trace</div>
-    <p class="section-note">A read-only snapshot of organic finished goods, plus a search to trace any LOT end-to-end.</p>
+    <p class="section-note">A read-only snapshot of organic finished goods. To trace a LOT end-to-end, use Search &amp; Trace on the Sales &amp; Receiving Record.</p>
 
     <!-- Organic FG quick view (read-only) -->
     <div class="card" style="margin-top:12px;">
@@ -94,16 +92,11 @@
         <div id="oc-fg-container"><div class="empty-state">Loading…</div></div>
     </div>
 
-    <!-- Search & Trace (embedded) -->
+    <!-- Search & Trace lives on /sales-receiving (one implementation, not two). -->
     <div class="card">
         <h2>Search &amp; Trace</h2>
-        <p class="card-desc">Search by supplier, buyer, product name, LOT#, or date across all receiving and sales transactions.</p>
-        <div class="search-bar">
-            <input id="trace-query" placeholder="Supplier, buyer, product, LOT#, or date…" oninput="doTraceDebounced()">
-            <button class="btn btn-primary" onclick="doTrace()">Search</button>
-            <button class="btn btn-outline" onclick="document.getElementById('trace-query').value='';doTrace()" style="font-size:13px;">Clear</button>
-        </div>
-        <div id="trace-results" style="margin-top:12px;"></div>
+        <p class="card-desc">Follow any supplier LOT# forward to the batches, finished goods and sales it reached, or any FG LOT# back to its batch and raw lots. One search across all receiving and sales, on the Sales &amp; Receiving Record.</p>
+        <a href="/sales-receiving#trace" class="btn btn-primary" style="text-decoration:none;">Open Search &amp; Trace &rarr;</a>
     </div>
 
     <!-- Stock exceptions — historical audit list.
@@ -281,120 +274,6 @@ document.getElementById('oc-fg-container').addEventListener('click', function(e)
     _ocFgExpanded = (_ocFgExpanded===skuKey) ? null : skuKey;
     loadOrganicFg();
 });
-
-// ── Search & Trace (mirrored from organic.html Records tab) ─────────────────
-var _traceDebounceTimer = null;
-function doTraceDebounced(){
-    clearTimeout(_traceDebounceTimer);
-    _traceDebounceTimer = setTimeout(doTrace, 350);
-}
-
-async function doTrace(){
-    var q=document.getElementById('trace-query').value.trim();
-    var container=document.getElementById('trace-results');
-    if(!q){container.innerHTML='';return;}
-    container.innerHTML='<div class="empty-state">Searching…</div>';
-    // Search both raw LOT and FG LOT + text fields
-    var [rawRes, fgRes, rmRes, salesRes] = await Promise.all([
-        fetch('/api/organic/trace?type=raw_lot&q='+encodeURIComponent(q)),
-        fetch('/api/organic/trace?type=fg_lot&q='+encodeURIComponent(q)),
-        fetch('/api/organic/raw-materials'),
-        fetch('/api/organic/sales'),
-    ]);
-    var rawData = await rawRes.json();
-    var fgData = await fgRes.json();
-    var allRM = await rmRes.json();
-    var allSales = await salesRes.json();
-    var ql = q.toLowerCase();
-
-    // Text-match receiving entries (supplier, item, lot#, date)
-    var matchedRM = allRM.filter(function(r){
-        return (r.item||'').toLowerCase().includes(ql)
-            || (r.supplier||'').toLowerCase().includes(ql)
-            || (r.supplier_lot||'').toLowerCase().includes(ql)
-            || (r.date_received||'').includes(ql);
-    });
-    // Text-match sales (buyer, recipe, lot, date)
-    var matchedSales = allSales.filter(function(s){
-        return (s.buyer||'').toLowerCase().includes(ql)
-            || (s.recipe||'').toLowerCase().includes(ql)
-            || (s.brand||'').toLowerCase().includes(ql)
-            || (s.fg_lot||'').toLowerCase().includes(ql)
-            || (s.sale_date||'').includes(ql)
-            || ((s.lots||[]).some(function(l){ return (l.lot||'').toLowerCase().includes(ql); }));
-    });
-
-    var html = '';
-
-    // LOT trace results
-    var rawLots = (rawData.lots) || [];
-    var hasRawTrace = rawLots.length > 0;
-    var hasFGTrace = fgData.finished_goods && fgData.finished_goods.length;
-    if(hasRawTrace || hasFGTrace){
-        html += '<div style="background:#f0f7f0;border:1px solid #a5d6a7;border-radius:8px;padding:14px 16px;margin-bottom:14px;">';
-        html += '<div style="font-size:12px;font-weight:600;color:#2e7d32;margin-bottom:8px;">&#128270; LOT# Trace Results for &ldquo;'+escHtml(q)+'&rdquo;</div>';
-        if(hasRawTrace){
-            // One block per physical lot entry — distinct lots that happen to share
-            // a lot number (e.g. day-zero baseline) are shown separately, never merged.
-            rawLots.forEach(function(L){
-                var hdr = escHtml(L.item||'(unknown)');
-                if(L.supplier) hdr += ' · '+escHtml(L.supplier);
-                if(L.date_received) hdr += ' · recv '+escHtml(L.date_received);
-                hdr += ' · LOT# '+escHtml(L.supplier_lot||q);
-                html += '<div style="margin:6px 0;padding:6px 0;border-top:1px solid #d6ead6;">';
-                html += '<div style="font-size:12px;font-weight:600;">'+hdr+'</div>';
-                if(!L.raw_material_id){
-                    html += '<div style="font-size:11px;color:#b26a00;">⚠ This lot is no longer in current inventory; shown from production history.</div>';
-                }
-                (L.runs||[]).forEach(function(r){
-                    html += '<div style="font-size:13px;padding:2px 0 2px 10px;">→ Used in: '+escHtml(r.day_name||'')+' '+escHtml(r.week_id||'')+' · '+escHtml(r.vessel||'')+' · '+escHtml((r.brand?r.brand+'-':'')+r.recipe)+' (Batch LOT# '+escHtml(r.lot||'')+')</div>';
-                });
-                (L.finished_goods||[]).forEach(function(f){
-                    html += '<div style="font-size:13px;padding:2px 0 2px 20px;color:#2e7d32;">↳ Produced: '+escHtml((f.brand?f.brand+'-':'')+f.recipe+' '+(f.format||''))+' · FG LOT# '+escHtml(f.lot||'')+'</div>';
-                });
-                (L.sales||[]).forEach(function(s){
-                    var prod=(s.brand?s.brand+' ':'')+s.recipe+(s.format?' '+s.format:'');
-                    html += '<div style="font-size:13px;padding:2px 0 2px 30px;color:#555;">↳ Sold: '+escHtml(prod.trim())+' → '+escHtml(s.buyer||'')+' ('+escHtml(s.sale_date||'')+')</div>';
-                });
-                if(!(L.runs||[]).length){
-                    html += '<div style="font-size:12px;color:var(--text-light);padding:2px 0 2px 10px;">Not yet used in any completed production.</div>';
-                }
-                html += '</div>';
-            });
-        }
-        if(hasFGTrace){
-            fgData.finished_goods.forEach(function(f){
-                html += '<div style="font-size:13px;padding:4px 0;">FG: '+escHtml((f.brand?f.brand+'-':'')+f.recipe+' '+f.format)+' · LOT# '+escHtml(f.lot)+'</div>';
-            });
-        }
-        html += '</div>';
-    }
-
-    // Receiving matches
-    if(matchedRM.length){
-        html += '<div style="margin-bottom:14px;"><div style="font-size:12px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Receiving Matches</div>';
-        html += '<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Ingredient</th><th>Supplier</th><th>LOT#</th><th>Qty</th></tr>';
-        matchedRM.slice(0,20).forEach(function(r){
-            html += '<tr><td>'+(r.date_received||'')+'</td><td>'+escHtml(r.item||'')+'</td><td>'+escHtml(r.supplier||'')+'</td><td>'+escHtml(r.supplier_lot||'')+'</td><td>'+(r.remaining!==undefined?r.remaining:r.quantity)+' '+escHtml(r.unit||'')+'</td></tr>';
-        });
-        html += '</table></div></div>';
-    }
-
-    // Sales matches
-    if(matchedSales.length){
-        html += '<div><div style="font-size:12px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Sales Matches</div>';
-        html += '<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Product</th><th>Buyer</th><th>LOT#</th><th>Qty</th></tr>';
-        matchedSales.slice(0,20).forEach(function(s){
-            var lots=(s.lots||[]).map(function(l){return l.lot;}).filter(Boolean).join(', ')||s.fg_lot||'';
-            var prod=(s.brand?s.brand+' ':'')+s.recipe+(s.format?' '+s.format:'');
-            html += '<tr><td>'+(s.sale_date||'')+'</td><td>'+escHtml(prod.trim())+'</td><td>'+escHtml(s.buyer||'')+'</td><td>'+escHtml(lots)+'</td><td>'+(s.quantity||'')+'</td></tr>';
-        });
-        html += '</table></div></div>';
-    }
-
-    if(!html) html = '<div class="empty-state">No results for &ldquo;'+escHtml(q)+'&rdquo;</div>';
-    container.innerHTML = html;
-}
 
 loadOrganicFg();
 </script>
