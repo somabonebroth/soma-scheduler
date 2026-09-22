@@ -4478,6 +4478,7 @@ def _shopify_commit_for_week(week_id):
     created = []
     skipped_idempotent = []
     errors = []
+    organic_skipped = []
 
     for matched in preview["matched"]:
         sku_str = matched["sku"]
@@ -4506,6 +4507,25 @@ def _shopify_commit_for_week(week_id):
                 "existing_sale_id": already.get("id"),
                 "existing_quantity": already.get("quantity"),
             })
+            continue
+
+        # Two-tier organic boundary: organic-certified SKUs are lot-tracked and
+        # wholesale-manual-only (the packer records the REAL lots via Record
+        # Sale). A FIFO deduction here would silently corrupt that lot
+        # accuracy, so the SKU is skipped — not imported, stock untouched —
+        # and reported under organic_skipped (also in errors[] so error_count
+        # reflects it). Organic SKUs are not meant to be on a retail channel;
+        # this fires only on a catalogue mistake.
+        if any(_sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")) == soma_key
+               and (f.get("certification") or "").strip().lower() == "organic"
+               for f in fg):
+            msg = ("Organic-certified SKU (lot-tracked) — not imported. Record it via "
+                   "Manage Inventory → Record Sale with a packer lot allocation, and "
+                   "remove the SKU from the channel.")
+            logger.warning("%s import %s: organic SKU %s skipped (%s units)",
+                           CHANNEL, week_id, sku_str, quantity)
+            organic_skipped.append({"sku": sku_str, "soma_key": soma_key, "quantity": quantity})
+            errors.append({"sku": sku_str, "error": msg})
             continue
 
         # FIFO-deduct (mirrors add_organic_sale's logic)
@@ -4610,6 +4630,7 @@ def _shopify_commit_for_week(week_id):
         "created": created,
         "skipped_idempotent": skipped_idempotent,
         "errors": errors,
+        "organic_skipped": organic_skipped,
     }, 200
 
 
@@ -4817,6 +4838,7 @@ def _clover_commit_for_week(week_id):
     created = []
     skipped_idempotent = []
     errors = []
+    organic_skipped = []
 
     for matched in preview["matched"]:
         sku_str = matched["sku"]
@@ -4844,6 +4866,25 @@ def _clover_commit_for_week(week_id):
                 "existing_sale_id": already.get("id"),
                 "existing_quantity": already.get("quantity"),
             })
+            continue
+
+        # Two-tier organic boundary: organic-certified SKUs are lot-tracked and
+        # wholesale-manual-only (the packer records the REAL lots via Record
+        # Sale). A FIFO deduction here would silently corrupt that lot
+        # accuracy, so the SKU is skipped — not imported, stock untouched —
+        # and reported under organic_skipped (also in errors[] so error_count
+        # reflects it). Organic SKUs are not meant to be on a retail channel;
+        # this fires only on a catalogue mistake.
+        if any(_sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")) == soma_key
+               and (f.get("certification") or "").strip().lower() == "organic"
+               for f in fg):
+            msg = ("Organic-certified SKU (lot-tracked) — not imported. Record it via "
+                   "Manage Inventory → Record Sale with a packer lot allocation, and "
+                   "remove the SKU from the channel.")
+            logger.warning("%s import %s: organic SKU %s skipped (%s units)",
+                           CHANNEL, week_id, sku_str, quantity)
+            organic_skipped.append({"sku": sku_str, "soma_key": soma_key, "quantity": quantity})
+            errors.append({"sku": sku_str, "error": msg})
             continue
 
         candidates = [
@@ -4943,6 +4984,7 @@ def _clover_commit_for_week(week_id):
         "created": created,
         "skipped_idempotent": skipped_idempotent,
         "errors": errors,
+        "organic_skipped": organic_skipped,
     }, 200
 
 

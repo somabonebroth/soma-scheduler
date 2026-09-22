@@ -132,6 +132,38 @@ def _save(path, data):
     os.replace(tmp, path)
 
 
+def _organic_lines_in_order(order, fg_all, make_sku_key):
+    """Names of order lines whose SKU is organic-certified in FG. Resolves each
+    line to FG the same way the deduction does (exact recipe name + format
+    prefix, then substring fallback) and calls the SKU organic if ANY FG entry
+    under that SKU carries certification 'Organic' — the same test
+    retail_orders.py applies. Read-only."""
+    lines = []
+    for item in order.get("items", []):
+        if int(item.get("units") or 0) <= 0:
+            continue
+        product_name = (item.get("name") or "").strip()
+        fmt = (item.get("format") or "").upper()
+        fmt_prefix = fmt.split("-")[0]
+        match = next((
+            f for f in fg_all
+            if (f.get("recipe") or "").lower() == product_name.lower()
+            and (f.get("format") or "").upper().startswith(fmt_prefix)
+        ), None) or next((
+            f for f in fg_all
+            if product_name.lower() in (f.get("recipe") or "").lower()
+            and (f.get("format") or "").upper().startswith(fmt_prefix)
+        ), None)
+        if not match:
+            continue
+        sku = make_sku_key(match.get("brand", ""), match.get("recipe", ""), match.get("format", ""))
+        if any(make_sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")) == sku
+               and (f.get("certification") or "").strip().lower() == "organic"
+               for f in fg_all):
+            lines.append(product_name or sku)
+    return lines
+
+
 def create_ripe_sale_records(order, delivery_date, payment_key):
     """Write sale records for each line item and immediately FIFO-deduct FG inventory.
 
@@ -159,6 +191,21 @@ def create_ripe_sale_records(order, delivery_date, payment_key):
             order_id,
         )
         return True, None
+
+    # Two-tier organic boundary (same guard as retail_orders.py): organic-
+    # certified SKUs are lot-tracked and wholesale-manual-only — the packer
+    # records the REAL lots shipped via Manage Inventory → Record Sale. A FIFO
+    # deduction here would silently corrupt that lot accuracy, so refuse
+    # before anything moves. Organic SKUs are not catalogued on Ripe, so this
+    # only fires on a catalogue mistake — and then fails closed with a reason.
+    organic_lines = _organic_lines_in_order(order, fg_all, _make_sku_key)
+    if organic_lines:
+        return False, (
+            "Cannot approve: " + ", ".join(organic_lines)
+            + " is organic-certified (lot-tracked). Organic SKUs are sold via "
+            "Manage Inventory → Record Sale with a packer lot allocation, not "
+            "through Ripe. Decline this order and remove the SKU from the Ripe catalogue."
+        )
 
     payment_pending = (payment_key == "cc_net14")
     created = []
