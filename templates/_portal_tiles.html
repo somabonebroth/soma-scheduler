@@ -10,12 +10,17 @@
             <div class="portal-stat" id="ripe-stat-prog" title="Approved orders awaiting fulfillment"><span>In process</span><span class="n">–</span></div>
         </div>
     </a>
+    {# Ripe Retail tile hidden 2026-09-22 at Jeremy's request. The /ripe-retail page
+       and its pack-count API stay live; restore by uncommenting this block and the
+       loadRipeRetailCount() call below. #}
+    {#
     <a href="/ripe-retail" class="dash-btn portal-tile tint-amber" id="ripe-retail-btn">
         <span class="label">Ripe Retail</span>
         <div class="portal-stats">
             <div class="portal-stat" id="ripe-retail-stat" title="Paid parcels waiting to be packed"><span>To pack</span><span class="n">–</span></div>
         </div>
     </a>
+    #}
     <a href="/retail-orders" class="dash-btn portal-tile tint-green" id="retail-orders-btn">
         <span class="label">Soma Orders</span>
         <div class="portal-stats">
@@ -41,6 +46,8 @@ function setPortalStat(id, n, tone){
     if (d.count > 0) document.getElementById('ripe-orders-btn').classList.add('has-pending');
   } catch(e) {}
 })();
+{# Ripe Retail count — tile hidden, see above. #}
+{#
 (async function loadRipeRetailCount() {
   try {
     const d = await (await fetch('/api/ripe-retail/pack-count')).json();
@@ -48,6 +55,7 @@ function setPortalStat(id, n, tone){
     if (d.count > 0) document.getElementById('ripe-retail-btn').classList.add('has-pending');
   } catch(e) {}
 })();
+#}
 (async function loadRetailCounts() {
   try {
     const d = await (await fetch('/api/retail-orders/pending-count')).json();
