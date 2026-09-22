@@ -1,0 +1,31 @@
+{# Anchor scroll for pages that fill their cards AFTER the first paint.
+   The browser jumps to #hash as soon as the HTML lands, while every card above
+   the target is still empty; the fetches then fill them and push the target
+   down, so the reader is left near the top of the page. This keeps the target
+   in view while the page settles: it re-scrolls on every layout change (and
+   at a few fixed moments) for six seconds, and stops the moment the reader
+   scrolls themselves.
+   Cards get a scroll-margin in style.css so the sticky header never covers the
+   target. Include once, just before </body>, on any page the dashboard links
+   to with a #hash. #}
+<script>
+(function () {
+  const id = decodeURIComponent((location.hash || '').slice(1));
+  if (!id) return;
+  let stopped = false;
+  const stop = () => { stopped = true; };
+  ['wheel', 'touchstart', 'keydown'].forEach(ev => window.addEventListener(ev, stop, { once: true, passive: true }));
+  const go = () => {
+    if (stopped) return;
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ block: 'start' });
+  };
+  go();
+  window.addEventListener('load', go);
+  [250, 1000, 2500, 5000].forEach(ms => setTimeout(go, ms));
+  if (!('ResizeObserver' in window)) return;
+  const ro = new ResizeObserver(go);
+  ro.observe(document.body);
+  setTimeout(() => ro.disconnect(), 6000);
+})();
+</script>
