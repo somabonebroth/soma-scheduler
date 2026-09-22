@@ -98,9 +98,6 @@
 .mgmt-links a, .mgmt-links button { font-size: 12px; font-weight: 500; color: var(--text); text-decoration: none; background: var(--bg); border: 1px solid var(--border); border-radius: 14px; padding: 5px 12px; cursor: pointer; font-family: inherit; line-height: 1.5; }
 .mgmt-links a:hover, .mgmt-links button:hover { border-color: var(--accent); color: var(--accent); }
 .mgmt-links .soon { opacity: 0.45; cursor: default; pointer-events: none; }
-.portal-tools { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
-.portal-tools a { font-size: 12px; font-weight: 500; color: var(--text); text-decoration: none; background: var(--bg); border: 1px solid var(--border); border-radius: 14px; padding: 5px 12px; }
-.portal-tools a:hover { border-color: var(--accent); color: var(--accent); }
 .mgmt-badge { background: var(--amber-text); color: var(--white); border-radius: 10px; padding: 1px 8px; font-size: 11px; font-weight: 800; line-height: 18px; display: none; }
 /* ── Production (tablet) view: bigger tap targets, no chrome ── */
 /* The floor finds a tile by its colour before it reads the label, so colour
@@ -289,7 +286,6 @@
         </div>
         <div class="section-label">Buyer Portals</div>
         {% include "_portal_tiles.html" %}
-        <div class="portal-tools"><a href="/ripe-analytics">Ripe Analytics</a></div>
         <div class="section-label">Delivery Zones</div>
         <div class="dash-row">
             <a href="/delivery-zones" class="dash-btn full tile-blue"><span class="icon zone-trio" aria-hidden="true"><span class="zone-1">1</span><span class="zone-2">2</span><span class="zone-3">3</span></span><span class="label">Delivery Zone Lookup &amp; Map</span><span class="sublabel">Postal code &rarr; zone, minimum order, delivery fee &mdash; with the Ontario zone map</span></a>
@@ -322,6 +318,10 @@
                 <div class="mgmt-links"><a href="/contacts?tab=suppliers">Suppliers</a><a href="/contacts?tab=buyers">Buyers</a><a href="/contacts?tab=catalogue">SKU Catalogue</a></div>
             </div>
             <div class="mgmt-row">
+                <a class="mgmt-title" href="/ripe-orders">Ripe</a>
+                <div class="mgmt-links"><a href="/ripe-orders">Wholesale Orders</a><a href="/ripe-retail">Retail Pack Queue</a><a href="/ripe-analytics">Ripe Analytics</a><a href="/company-settings#ripe">Buffer &amp; Credits</a></div>
+            </div>
+            <div class="mgmt-row">
                 <a class="mgmt-title" href="/recipes">Recipe Cards</a>
                 <div class="mgmt-links"><a href="/recipes">Open recipes</a><a href="/api/recipe-pdf-all">All recipe cards (PDF)</a></div>
             </div>
@@ -331,7 +331,7 @@
             </div>
             <div class="mgmt-row">
                 <a class="mgmt-title" href="/company-settings">Settings</a>
-                <div class="mgmt-links"><a href="/company-settings">Company Settings</a><a href="/company-settings#ripe">Ripe buffer &amp; credits</a><a href="/ccp-master">CCP Master</a></div>
+                <div class="mgmt-links"><a href="/company-settings">Company Settings</a><a href="/ccp-master">CCP Master</a></div>
             </div>
             <div class="mgmt-row">
                 <a class="mgmt-title" href="/admin/channel-prices">Data &amp; Imports</a>
