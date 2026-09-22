@@ -532,7 +532,35 @@ This is the audit-critical chain: supplier lot → production run → finished g
 
 **Organic Certification (`/organic-certification`) is the audit workspace — keep BOTH sides in it (2026-08-19).** Its "before an audit" flow was raw-only: step 1 Reconcile Raw, step 2 Mass Balance, step 3 `/audit/rm`. The finished-goods counterparts both existed and neither was on the page — `/admin/fg-reconcile` was linked only from the dashboard, and `/audit/fg` (a fully working audit kind; `audit_page` accepts `rm` and `fg`) was linked only from organic.html. Steps 1 and 3 now each carry a raw tile and an FG tile, step 2 spans both. FG is the CERTIFIED product that leaves the building, so a raw-only audit proves half the chain — do not let the FG side drift back off this page. `/audits` is the count HISTORY and is now labelled "Stock Count History" everywhere (it is linked from both the Inventory and Organic Certification dashboard rows — one destination, one label). The zero-day FG reset (`/admin/fg-reset`) is deliberately reachable ONLY from the FG Reconcile page header, one level behind the read-only diagnostic — it is the most destructive tool in the system; keep it off the dashboard.
 
-**Known duplication (NOT fixed):** Search & Trace is implemented twice — independently on `sales_receiving.html` and `organic_certification.html`, each with its own `doTrace`/`doTraceDebounced` and its own copy of `escSku`/`escHtml`. Both hit `/api/organic/trace`. Edit one and the other silently drifts.
+**Organic section audit — SHIPPED 2026-09-22 (6 deploys).** The hub's embedded Search & Trace
+copy was deleted (link card to `/sales-receiving#trace`; that page is now the ONLY
+implementation). Step 1 tiles renamed **Rebuild Raw Balances / Check Finished Goods for
+Drift** because the pair is asymmetric — raw REWRITES the books (replay), FG only REPORTS —
+and the section note says so. The dashboard row keeps three pills (Overview, Mass Balance,
+Certificates & Documents); the hub carries the 1-2-3 sequence. Two read-only cards joined the
+hub beside the Organic FG snapshot and Stock Exceptions: **Supplier Certificates** — supplier
+records gained `cert_expiry` (YYYY-MM-DD, validated) + `cert_doc_id` (a `/certifications`
+document); `GET /api/suppliers` annotates each with `cert_status` none/expired/expiring
+(≤60 d)/current + `cert_days_left`, ONE rule in `suppliers._cert_status` so Buyers & Suppliers
+(expiry field + document picker + colour badge + certificate link) and the hub can never
+disagree — and **Organic Recipe Check** (`GET /api/organic/recipe-check`, audit_tools,
+manager): active recipes certified Organic whose deductable ingredient lines (same filter as
+`_deduct_run_ingredients`) are not organic-named; salt and water exempt
+(`ORGANIC_EXEMPT_WORDS`); recipe cards show an amber "check ingredients" badge (the floor's
+read-only page gets 403 → no badge). Why a NAME check: the raw side of "organic" is naming —
+deduction matches lot item names to recipe lines exactly, which stops "Organic Chicken
+Bones" pulling a "Chicken Bones" lot but says nothing about a recipe that names the
+non-organic ingredient. **The FG count is two-tier, like the reset:** `_build_fg_audit_items`
+emits one item PER ACTIVE LOT for organic SKUs (`id = sku_key@@lot`, system qty = that lot);
+`_apply_fg_audit` drains only that lot on a shortage and on a surplus adds an
+`audit_baseline` row carrying the SAME lot number with the batch dates copied, so trace, Best
+Before and the Record Sale lot picker still see one lot; `audit_fg` adjustments carry `lot`.
+Non-organic SKUs are unchanged (per SKU, FIFO drain, BASELINE lot). An organic SKU with no
+active lot keeps the SKU-level item. Not built (deliberate, Jeremy to decide contents): a
+dated audit-pack PDF; a Mass Balance raw-side organic filter (organic ingredients are already
+separable by name).
+
+**Search & Trace is implemented ONCE** (`sales_receiving.html`, `doTrace`/`doTraceDebounced`) since 2026-09-22 — the second copy on `organic_certification.html` was deleted; the hub links to `/sales-receiving#trace`. Keep it that way.
 
 ---
 
@@ -659,13 +687,16 @@ bugs were found and **fixed**:
    `finished_goods.json` directly; `ledger.py` is read-only + the reset. The ledger
    reconstructs history by re-projecting from FG/sales records (`backfill_fg_events`), not
    a write-through log. This is the known architecture, not a regression.
-2. **The two-tier organic boundary is convention-only, not enforced in code.** No automated
-   subtract path (scheduled deductions, Shopify/Clover commit, Ripe approve) excludes
-   `certification == "Organic"` SKUs, and Ripe/channels even copy the organic cert onto the
-   sale. Organic stays lot-accurate only because it's catalogued wholesale-manual-only. A
-   mis-catalogued organic SKU on a retail channel would silently FIFO-deduct an organic lot.
-   Likewise both sales *add* paths choose allocation-vs-FIFO on whether `allocated_lots` was
-   sent, NOT on the cert flag — no server guard requires an organic sale to carry an allocation.
+2. **The two-tier organic boundary is now enforced on every AUTOMATED subtract path
+   (2026-09-22), convention-only on the manual one.** SBBC retail refused organic SKUs since
+   2026-07-02; Ripe approve + retail auto-approve now refuse BEFORE any stock moves
+   (`ripe_orders._organic_lines_in_order`, same FG matching as the deduction, "any FG entry
+   under the SKU is Organic" test); the Shopify/Clover commits SKIP an organic SKU (stock
+   untouched, not imported) and report it under `organic_skipped[]` + `errors[]` — skip, not
+   refuse-the-week, because the cron never retries an old week. The FG count drains organic
+   per LOT (see the Organic Certification section). STILL convention-only: both manual sales
+   *add* paths choose allocation-vs-FIFO on whether `allocated_lots` was sent, NOT on the cert
+   flag — no server guard requires an organic sale to carry an allocation.
 
 ---
 
