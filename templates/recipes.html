@@ -166,7 +166,11 @@ function mobileConfirm(message, opts){
 var READ_ONLY = {{ 'false' if session.get('role', 'manager') == 'manager' else 'true' }};
 var recipes={};var editingName='';var isAdding=false;var currentFilter='all';var brandOrder=[];var recipeOrder={};var viewingName='';
 function closeModal(id){document.getElementById(id).classList.remove('active');}
-document.addEventListener('DOMContentLoaded',async function(){recipes=await(await fetch('/api/recipes')).json();await loadOrder();renderList();if(!READ_ONLY)checkMigration();});
+document.addEventListener('DOMContentLoaded',async function(){recipes=await(await fetch('/api/recipes')).json();await loadOrder();await loadRecipeCheck();renderList();if(!READ_ONLY)checkMigration();});
+// Organic recipe check: {recipe name -> [non-organic-named ingredients]}. Manager-only
+// endpoint; the floor's read-only page gets 403 and simply shows no badges.
+let recipeCheck={};
+async function loadRecipeCheck(){recipeCheck={};try{const res=await fetch('/api/organic/recipe-check');if(!res.ok)return;const d=await res.json();(d.issues||[]).forEach(function(i){recipeCheck[i.recipe]=i.ingredients||[];});}catch(e){}}
 async function loadOrder(){try{var res=await fetch('/api/recipes/grouped');var g=await res.json();brandOrder=Object.keys(g);recipeOrder={};Object.keys(g).forEach(function(b){recipeOrder[b]=g[b].map(function(r){return r.name;});});}catch(e){}}
 function setFilter(f,btn){currentFilter=f;document.querySelectorAll('.filter-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');renderList();}
 
@@ -200,8 +204,10 @@ function renderList(){
                 cert='<span class="cert-badge" style="font-size:10px;background:'+bg+';color:'+fg+';padding:2px 6px;border-radius:8px;font-weight:600;margin-left:6px;">'+certVal+'</span>';
             }
             var archBadge=archived?'<span style="font-size:10px;background:#999;color:#fff;padding:2px 6px;border-radius:8px;margin-left:6px;">Archived</span>':'';
+            var chk=(!archived&&recipeCheck[name])||null;
+            var chkBadge=chk?'<span class="cert-badge" title="Not organic-named: '+esc(chk.join(', '))+'" style="font-size:10px;background:var(--amber-bg);color:var(--amber-text-dark);border:1px solid var(--amber-border);padding:2px 6px;border-radius:8px;font-weight:600;margin-left:6px;">&#9888; check ingredients</span>':'';
             html+='<div class="recipe-list-item"'+((archived||READ_ONLY)?(archived?' style="opacity:0.7;"':''):' draggable="true"')+' data-recipe-name="'+nameSafe+'" data-recipe-brand="'+brandSafe+'">';
-            html+='<div class="recipe-info"><div class="recipe-name">'+((archived||READ_ONLY)?'':'<span class="drag-handle">&#9776;</span>')+name+cert+archBadge+'</div><div class="recipe-meta">'+(r.format||'')+' | Target: '+(r.yield||'--')+' units</div></div>';
+            html+='<div class="recipe-info"><div class="recipe-name">'+((archived||READ_ONLY)?'':'<span class="drag-handle">&#9776;</span>')+name+cert+chkBadge+archBadge+'</div><div class="recipe-meta">'+(r.format||'')+' | Target: '+(r.yield||'--')+' units</div></div>';
             var btns='<button class="btn-sm" data-action="view" data-name="'+nameSafe+'">View</button>';
             btns+='<button class="btn-sm" data-action="download" data-name="'+nameSafe+'" title="Download PDF">⤓</button>';
             if(READ_ONLY){
@@ -509,7 +515,7 @@ async function saveEdit(){
     var resData;
     try{resData=await res.json();}catch(e){resData={error:'Server error'};}
     if(!res.ok){alert(resData.error||'Save failed');return;}
-    closeModal('edit-modal');recipes=await(await fetch('/api/recipes')).json();await loadOrder();renderList();checkMigration();
+    closeModal('edit-modal');recipes=await(await fetch('/api/recipes')).json();await loadOrder();await loadRecipeCheck();renderList();checkMigration();
     // Show cascade summary if a rename/rebrand updated downstream records
 
 
@@ -557,7 +563,7 @@ async function runMigration(){
     var data=await res.json();
     if(data.success){
         alert('Migrated '+data.changed+' of '+data.total+' recipes. '+data.review_count+' items flagged for review.');
-        recipes=await(await fetch('/api/recipes')).json();await loadOrder();renderList();checkMigration();
+        recipes=await(await fetch('/api/recipes')).json();await loadOrder();await loadRecipeCheck();renderList();checkMigration();
     }
 }
 async function deleteRecipe(name){
@@ -676,7 +682,7 @@ ui.addEventListener('change',function(){if(ui.files.length)doUpload(ui.files[0])
 async function doUpload(file){
     var st=document.getElementById('upload-status');st.className='status loading';st.textContent='Parsing...';st.style.display='block';
     var fd=new FormData();fd.append('file',file);
-    try{var res=await fetch('/api/recipes/upload',{method:'POST',body:fd});var data=await res.json();if(data.success){st.className='status success';st.textContent='Added: '+data.name;recipes=await(await fetch('/api/recipes')).json();await loadOrder();renderList();checkMigration();}else{st.className='status error';st.textContent=data.error||'Failed';}}
+    try{var res=await fetch('/api/recipes/upload',{method:'POST',body:fd});var data=await res.json();if(data.success){st.className='status success';st.textContent='Added: '+data.name;recipes=await(await fetch('/api/recipes')).json();await loadOrder();await loadRecipeCheck();renderList();checkMigration();}else{st.className='status error';st.textContent=data.error||'Failed';}}
     catch(e){st.className='status error';st.textContent='Error: '+e.message;}
 }
 </script>

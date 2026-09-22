@@ -221,6 +221,73 @@ def organic_trace():
     return jsonify({"results": []})
 
 
+# Ingredient words that are never organic-certified and are permitted in an
+# organic recipe without an "organic" name (Canada Organic Regime treats salt
+# and water as outside the organic-percentage calculation). Water is already an
+# untracked ingredient; salt is listed here.
+ORGANIC_EXEMPT_WORDS = ("salt",)
+
+
+def organic_recipe_issues(recipes):
+    """Read-only check: every ACTIVE recipe certified "Organic" should draw only
+    from organic-named ingredients.
+
+    Why a name check: the whole raw-side organic guarantee is naming —
+    production deducts a lot only when its item name EXACTLY matches the
+    recipe's ingredient name (app.ingredients_match), so "Organic Chicken
+    Bones" can never pull a "Chicken Bones" lot. That guard is silent about a
+    recipe that simply names a non-organic ingredient. This surfaces those.
+
+    Same ingredient filter as deduction (structured, not needs_review, tracked,
+    amount > 0) so a flagged line is one that WOULD consume a lot. Returns
+    {checked, issues: [{recipe, brand, format, ingredients[]}]}.
+    """
+    issues = []
+    checked = 0
+    for name, r in (recipes or {}).items():
+        if not isinstance(r, dict) or r.get("archived"):
+            continue
+        if (r.get("certification") or "").strip().lower() != "organic":
+            continue
+        checked += 1
+        flagged = []
+        for section in app.INGREDIENT_SECTIONS:
+            for item in (r.get(section) or []):
+                if not app.is_structured_ingredient(item) or item.get("needs_review"):
+                    continue
+                ing = (item.get("name") or "").strip()
+                if not ing or app.is_untracked_ingredient(ing):
+                    continue
+                try:
+                    amount = float(item.get("amount") or 0)
+                except (ValueError, TypeError):
+                    amount = 0
+                if amount <= 0:
+                    continue
+                low = ing.lower()
+                if "organic" in low or any(w in low for w in ORGANIC_EXEMPT_WORDS):
+                    continue
+                if ing not in flagged:
+                    flagged.append(ing)
+        if flagged:
+            issues.append({
+                "recipe": name,
+                "brand": (r.get("brand") or "").strip(),
+                "format": (r.get("format") or "").strip(),
+                "ingredients": flagged,
+            })
+    issues.sort(key=lambda i: (i["brand"].lower(), i["recipe"].lower()))
+    return {"checked": checked, "issues": issues}
+
+
+@audit_tools_bp.route("/api/organic/recipe-check", methods=["GET"])
+@manager_required
+def organic_recipe_check():
+    """GET /api/organic/recipe-check - organic recipes naming a non-organic
+    ingredient (see organic_recipe_issues). Read-only."""
+    return jsonify(organic_recipe_issues(app.load_recipes()))
+
+
 @audit_tools_bp.route("/api/organic/stock-exceptions", methods=["GET"])
 @manager_required
 def organic_stock_exceptions():

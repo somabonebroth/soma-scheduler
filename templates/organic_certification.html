@@ -92,6 +92,19 @@
         <div id="oc-fg-container"><div class="empty-state">Loading…</div></div>
     </div>
 
+    <!-- Organic recipe check — read-only. The raw side of "organic" is a naming
+         convention (deduction matches lot item names to recipe ingredient names
+         exactly), so an organic recipe that names a non-organic ingredient is
+         the one thing that convention cannot catch. -->
+    <div class="card">
+        <h2>Organic Recipe Check <span class="count-badge" id="rc-count">—</span></h2>
+        <p class="card-desc">Every active recipe certified Organic should list only organic-named
+        ingredients (salt and water excepted). Production deducts a raw lot only when its name
+        matches the recipe line exactly, so a line named without "organic" is one that would
+        consume a non-organic lot. Fix it on the recipe card.</p>
+        <div id="rc-container"><div class="empty-state">Loading…</div></div>
+    </div>
+
     <!-- Search & Trace lives on /sales-receiving (one implementation, not two). -->
     <div class="card">
         <h2>Search &amp; Trace</h2>
@@ -171,6 +184,38 @@ async function loadStockExceptionCount() {
   } catch (e) { document.getElementById('se-count').textContent = '—'; }
 }
 loadStockExceptionCount();
+
+// ── Organic recipe check (read-only) ──
+async function loadRecipeCheck() {
+  const box = document.getElementById('rc-container');
+  const badge = document.getElementById('rc-count');
+  try {
+    const d = await (await fetch('/api/organic/recipe-check')).json();
+    const issues = d.issues || [];
+    badge.textContent = issues.length ? issues.length + ' to review' : 'all clear';
+    if (!d.checked) {
+      box.innerHTML = '<div class="empty-state">No active recipes are certified Organic.</div>';
+      return;
+    }
+    if (!issues.length) {
+      box.innerHTML = '<div class="empty-state">All ' + d.checked + ' organic recipe' + (d.checked === 1 ? '' : 's')
+        + ' use organic-named ingredients.</div>';
+      return;
+    }
+    box.innerHTML = '<div class="inv-table-wrap"><table class="inv-table"><thead><tr><th>Recipe</th>'
+      + '<th>Ingredients to review</th></tr></thead><tbody>'
+      + issues.map(function (i) {
+          const name = (i.brand ? i.brand + '-' : '') + i.recipe + (i.format ? ' ' + i.format : '');
+          return '<tr><td><strong>' + escHtml(name) + '</strong></td><td>' + escHtml(i.ingredients.join(', ')) + '</td></tr>';
+        }).join('')
+      + '</tbody></table></div>'
+      + '<div style="margin-top:10px;"><a href="/recipes" class="btn btn-outline" style="font-size:13px;text-decoration:none;">Open recipe cards &rarr;</a></div>';
+  } catch (e) {
+    badge.textContent = '—';
+    box.innerHTML = '<div class="empty-state">Could not run the recipe check.</div>';
+  }
+}
+loadRecipeCheck();
 
 // ── Shared escaping (mirrored from organic.html) ──
 function escSku(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
