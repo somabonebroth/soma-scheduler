@@ -55,7 +55,19 @@ raw_materials.py    — Flask Blueprint (771 lines, extracted 2026-06-03): the 2
 audit_tools.py      — Flask Blueprint (extracted 2026-06-03): the audit/traceability
                       routes — reconcile-raw (page + run preview/apply), organic trace,
                       organic recipe-check (2026-09-22), mass-balance (api + page).
-                      stock-exceptions removed 2026-09-22. Third inventory slice. PURE routes-move: the audit-critical
+                      stock-exceptions removed 2026-09-22. **Audit pack (2026-09-22):**
+                      `GET /api/organic/audit-pack.pdf?from=&to=&organic_only=` (manager) —
+                      one PDF for an inspector: cover with record checks, the recipe cards
+                      that RAN in the period (current version), the CCP master, one filed
+                      checklist as the worked example (latest day with every section
+                      confirmed, drawn by the SAME `_draw_checklist_content` as the signed
+                      PDF), then every completed batch traced: raw lots (frozen
+                      `ingredients_used`), both checklists it spans (started + counted day,
+                      with sign-off, CCP n/N, HOO review), FG, and every sale on its fg_id.
+                      Period = batch START date (what the LOT# is made from). Data in
+                      `_build_audit_pack` (creates nothing), layout in
+                      `pdf_engine.generate_audit_pack_pdf`. Card at the top of
+                      /organic-certification, default last 90 days. Third inventory slice. PURE routes-move: the audit-critical
                       engines (_rebuild_raw_material_consumption, _compute_mass_balance,
                       _sale_touches_fg) + path consts stay in app.py (8 app.-qualified);
                       ORGANIC_RUNS_PATH + IO from helpers.
@@ -577,8 +589,7 @@ emits one item PER ACTIVE LOT for organic SKUs (`id = sku_key@@lot`, system qty 
 `audit_baseline` row carrying the SAME lot number with the batch dates copied, so trace, Best
 Before and the Record Sale lot picker still see one lot; `audit_fg` adjustments carry `lot`.
 Non-organic SKUs are unchanged (per SKU, FIFO drain, BASELINE lot). An organic SKU with no
-active lot keeps the SKU-level item. Not built (deliberate, Jeremy to decide contents): a
-dated audit-pack PDF; a Mass Balance raw-side organic filter (organic ingredients are already
+active lot keeps the SKU-level item. Not built (deliberate): a Mass Balance raw-side organic filter (organic ingredients are already
 separable by name).
 
 **Second pass the same day — "keep it as simple as possible, we are a tiny company" (Jeremy).**

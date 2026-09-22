@@ -269,17 +269,19 @@ def _draw_checklist_content(c, w, h, date, active_vessels, logo_path=None, fille
     draw_header(c, w, h, title_prefix + " - " + day_name, date.strftime("%d/%m/%Y"), logo_path)
     y = h - 72
 
+    # Two lines: the two-lot header outgrew the one it shared with the kettle
+    # list, which was being drawn on top of it.
     c.setFillColor(LIGHT_BG)
-    c.rect(30, y - 22, w - 60, 22, fill=1, stroke=0)
+    c.rect(30, y - 32, w - 60, 32, fill=1, stroke=0)
     c.setFillColor(black)
     c.setFont(FONT_BOLD, 8)
-    c.drawString(40, y - 15, "DATE: " + date.strftime("%d/%m/%Y")
+    c.drawString(40, y - 13, "DATE: " + date.strftime("%d/%m/%Y")
                  + "    LOT# ON JARS FILLED TODAY: " + lot_filled
                  + "    LOT# FOR BATCHES STARTED TODAY: " + lot_started)
     info = "    ".join([v["vessel"] + ": " + v["recipe"] for v in active_vessels])
     c.setFont(FONT, 7)
-    c.drawString(220, y - 15, info)
-    y = y - 30
+    c.drawString(40, y - 25, "STARTED TODAY:  " + info if info else "No kettles scheduled today")
+    y = y - 40
 
     c.setFillColor(WARNING_BG)
     c.rect(30, y - 26, w - 60, 26, fill=1, stroke=0)
@@ -595,4 +597,324 @@ def generate_daily_package_pdf(output_path, date, vessel_assignments, recipes, l
             card_bottom = draw_recipe_card(c, margin, y, card_w, v["recipe"], rd, v["vessel"])
             y = card_bottom - gap
     draw_checklist_pages(c, w, h, date, active, logo_path, sections=sections)
+    c.save()
+
+
+# -- Audit pack (2026-09-22) --
+# One document for an inspector: recipes that ran, the CCP plan, one completed
+# checklist as the worked example, then every batch in the period traced from
+# supplier lot to buyer. Data comes pre-assembled from audit_tools._build_audit_pack;
+# this function only lays it out.
+RED = HexColor("#c62828")
+
+
+def _dmy(iso):
+    """YYYY-MM-DD[...] -> DD/MM/YYYY; anything else passes through."""
+    try:
+        return datetime.strptime(str(iso)[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+    except (ValueError, TypeError):
+        return str(iso or "")
+
+
+def _clip(c, text, font, size, max_w):
+    """Trim text with an ellipsis so it fits max_w points."""
+    text = str(text or "")
+    if c.stringWidth(text, font, size) <= max_w:
+        return text
+    while text and c.stringWidth(text + "...", font, size) > max_w:
+        text = text[:-1]
+    return text + "..."
+
+
+def _qty(v):
+    """Quantities print without a trailing .0."""
+    try:
+        f = float(v)
+    except (ValueError, TypeError):
+        return str(v or "")
+    return str(int(f)) if f == int(f) else str(round(f, 3))
+
+
+def generate_audit_pack_pdf(output, pack, example=None, logo_path=None):
+    """The audit pack. `pack` is audit_tools._build_audit_pack's dict; `example`
+    is {date, active_vessels, filled} for the worked-example checklist, or None.
+    `output` may be a path or a writable buffer."""
+    w, h = letter
+    c = canvas.Canvas(output, pagesize=letter)
+    period = _dmy(pack["from"]) + " to " + _dmy(pack["to"])
+    scope = "Organic-certified production only" if pack["organic_only"] else "All production"
+    batches = pack["batches"]
+    days = pack["days"]
+    left, right = 30, w - 30
+    width = right - left
+
+    def footer():
+        c.setFillColor(MEDIUM_GRAY)
+        c.setFont(FONT, 6)
+        c.drawString(40, 25, "Audit pack  |  " + period + "  |  Generated " + pack["generated_at"])
+        c.drawRightString(w - 40, 25, "Page " + str(c.getPageNumber()))
+
+    def new_page(title, with_footer=True):
+        if with_footer:
+            footer()
+        c.showPage()
+        draw_header(c, w, h, title, period, logo_path)
+        return h - 72
+
+    def bar(y, text, color=ACCENT, size=8, height=18, right_text=""):
+        c.setFillColor(color)
+        c.rect(left, y - height, width, height, fill=1, stroke=0)
+        c.setFillColor(HEADER_TEXT)
+        c.setFont(FONT_BOLD, size)
+        c.drawString(left + 6, y - height + 6, _clip(c, text, FONT_BOLD, size, width - 150))
+        if right_text:
+            c.setFont(FONT, size - 1)
+            c.drawRightString(right - 6, y - height + 6, right_text)
+        return y - height
+
+    def para(y, text, size=8, font=FONT, color=black, indent=0):
+        c.setFillColor(color)
+        c.setFont(font, size)
+        for line in _wrap_text(text, size, width - indent - 10):
+            c.drawString(left + indent + 4, y - size - 2, line)
+            y -= size + 4
+        return y
+
+    # ── Cover ────────────────────────────────────────────────────────────────
+    draw_header(c, w, h, "PRODUCTION AUDIT PACK", period, logo_path)
+    y = h - 110
+    c.setFillColor(DARK)
+    c.setFont(FONT_BOLD, 20)
+    c.drawString(left + 4, y, "Production audit pack")
+    y -= 22
+    c.setFont(FONT, 11)
+    c.setFillColor(black)
+    c.drawString(left + 4, y, period + "   |   " + scope)
+    y -= 14
+    c.setFont(FONT, 8)
+    c.setFillColor(MEDIUM_GRAY)
+    c.drawString(left + 4, y, (pack.get("company") or "Soma Bone Broth")
+                 + "   |   generated " + pack["generated_at"] + " from the live production records")
+    y -= 26
+
+    full_ccp = sum(1 for d in days if d["ccp_total"] and d["ccp_confirmed"] == d["ccp_total"])
+    reviewed = sum(1 for d in days if d["reviewed_by"])
+    short = sum(1 for b in batches if any(i["short"] for i in b["ingredients"]))
+    sold = sum(1 for b in batches if b["sold"])
+    stats = [
+        ("Batches", str(len(batches))),
+        ("Jars produced", str(sum(b["jars"] for b in batches))),
+        ("Recipes", str(len(pack["recipes"]) + len(pack["recipes_missing"]))),
+        ("Checklist days", str(len(days))),
+    ]
+    box_w = width / len(stats)
+    for i, (label, value) in enumerate(stats):
+        x = left + i * box_w
+        c.setFillColor(LIGHT_BG)
+        c.rect(x + 2, y - 52, box_w - 4, 52, fill=1, stroke=0)
+        c.setFillColor(DARK)
+        c.setFont(FONT_BOLD, 20)
+        c.drawCentredString(x + box_w / 2, y - 28, value)
+        c.setFillColor(MEDIUM_GRAY)
+        c.setFont(FONT, 8)
+        c.drawCentredString(x + box_w / 2, y - 44, label)
+    y -= 70
+
+    y = bar(y, "RECORD CHECKS")
+    checks = [
+        ("Checklist days with every CCP section confirmed", str(full_ccp) + " of " + str(len(days)),
+         full_ccp == len(days)),
+        ("Checklist days reviewed by management", str(reviewed) + " of " + str(len(days)),
+         reviewed == len(days)),
+        ("Batches made with a raw-material shortfall", str(short), short == 0),
+        ("Batches with at least one sale recorded", str(sold) + " of " + str(len(batches)), True),
+    ]
+    for i, (label, value, ok) in enumerate(checks):
+        c.setFillColor(ROW_ALT if i % 2 == 0 else white)
+        c.rect(left, y - 16, width, 16, fill=1, stroke=0)
+        c.setFillColor(black)
+        c.setFont(FONT, 8)
+        c.drawString(left + 8, y - 11, label)
+        c.setFillColor(black if ok else RED)
+        c.setFont(FONT_BOLD, 8)
+        c.drawRightString(right - 8, y - 11, value)
+        y -= 16
+    y -= 18
+
+    y = bar(y, "CONTENTS")
+    ex = ("completed checklist for " + _dmy(pack["example_date"])) if pack["example_date"] \
+        else "none (no filed checklist in this period)"
+    contents = [
+        "1.  Recipes produced in this period (current recipe cards)",
+        "2.  CCP plan (the controlled checklist every production day is signed against)",
+        "3.  Worked example: " + ex,
+        "4.  Traced production: " + str(len(batches)) + " batches, supplier lot to buyer",
+    ]
+    for line in contents:
+        c.setFillColor(black)
+        c.setFont(FONT, 9)
+        c.drawString(left + 8, y - 13, line)
+        y -= 16
+    y -= 14
+    y = bar(y, "HOW TO READ THE LOT NUMBERS", color=DARK)
+    y = para(y - 2, "The LOT# is the batch's production (start) date plus 365 days, written ddmmyy. "
+                    "It is also the Best Before date, and it is the number stamped on every jar and "
+                    "printed on every case label. A batch is started on one day and its jars are "
+                    "sealed-checked and counted the next, so each batch is covered by two daily "
+                    "checklists; section 4 names both. Raw-material quantities are the frozen record "
+                    "taken when the batch was completed, not recomputed from today's recipe.")
+
+    # ── 1. Recipes ───────────────────────────────────────────────────────────
+    y = new_page("1. RECIPES PRODUCED IN THIS PERIOD")
+    y = para(y, "The recipe cards as currently held in the system for every recipe run in this period. "
+                "What each batch actually consumed is recorded per batch in section 4.",
+             color=MEDIUM_GRAY) - 8
+    if not pack["recipes"] and not pack["recipes_missing"]:
+        y = para(y, "No batches were produced in this period.")
+    card_w = width
+    for name, data in pack["recipes"]:
+        est = estimate_card_height(data, card_w)
+        if y - est < 60:
+            y = new_page("1. RECIPES (cont.)")
+        cert = (data.get("certification") or "").strip()
+        if cert:
+            c.setFillColor(MEDIUM_GRAY)
+            c.setFont(FONT, 7)
+            c.drawString(left, y - 8, "Certification: " + cert)
+            y -= 12
+        y = draw_recipe_card(c, left, y, card_w, name, data) - 12
+    for name in pack["recipes_missing"]:
+        y = para(y, name + ": this recipe no longer exists in the system (renamed or deleted). "
+                        "Its batches' ingredients are still recorded in section 4.", color=RED)
+
+    # ── 2. CCP plan ──────────────────────────────────────────────────────────
+    y = new_page("2. CCP PLAN")
+    y = para(y, "The daily production checklist. Each section is confirmed on the production tablet "
+                "and the day is signed off by the kitchen lead; management reviews every day the "
+                "kitchen ran.", color=MEDIUM_GRAY) - 8
+    for sec_num, sec_title, items in _sections_from_master(pack["ccp"]):
+        if y - (20 + 14 * len(items)) < 60:
+            y = new_page("2. CCP PLAN (cont.)")
+        y = bar(y, sec_num + "  " + sec_title, height=20)
+        for i, (num, text) in enumerate(items):
+            lines = _wrap_text(num + "  " + text, 7.5, width - 20)
+            rh = 6 + 10 * len(lines)
+            c.setFillColor(ROW_ALT if i % 2 == 0 else white)
+            c.rect(left, y - rh, width, rh, fill=1, stroke=0)
+            c.setFillColor(black)
+            c.setFont(FONT, 7.5)
+            ty = y - 11
+            for line in lines:
+                c.drawString(left + 8, ty, line)
+                ty -= 10
+            y -= rh
+        y -= 8
+
+    # ── 3. Worked example ────────────────────────────────────────────────────
+    footer()
+    if example:
+        _draw_checklist_content(c, w, h, example["date"], example["active_vessels"], logo_path,
+                                filled_data=example["filled"], sections=pack["ccp"])
+    else:
+        c.showPage()
+        draw_header(c, w, h, "3. WORKED EXAMPLE", period, logo_path)
+        para(h - 72, "No checklist was filed in this period.")
+
+    # ── 4. Traced production ─────────────────────────────────────────────────
+    # The example checklist draws its own footer; don't stamp a second over it.
+    y = new_page("4. TRACED PRODUCTION", with_footer=not example)
+    y = para(y, "Every completed batch started in this period, in date order: the raw lots it "
+                "consumed (supplier and supplier LOT#), the two checklists it was made under, and "
+                "every sale that drew on its LOT#.", color=MEDIUM_GRAY) - 8
+    if not batches:
+        y = para(y, "No batches were produced in this period.")
+
+    cols_in = [("Ingredient", 0.30), ("Supplier", 0.24), ("Supplier LOT#", 0.18),
+               ("Received", 0.13), ("Used", 0.15)]
+    cols_out = [("Date", 0.16), ("Buyer", 0.46), ("Jars", 0.12), ("Order", 0.26)]
+
+    def table_head(y, cols):
+        c.setFillColor(LIGHT_GRAY)
+        c.rect(left + 10, y - 12, width - 10, 12, fill=1, stroke=0)
+        c.setFillColor(black)
+        c.setFont(FONT_BOLD, 6.5)
+        x = left + 14
+        for label, frac in cols:
+            c.drawString(x, y - 9, label.upper())
+            x += (width - 10) * frac
+        return y - 12
+
+    def table_row(y, cols, values, i, color=black):
+        c.setFillColor(ROW_ALT if i % 2 == 0 else white)
+        c.rect(left + 10, y - 11, width - 10, 11, fill=1, stroke=0)
+        c.setFillColor(color)
+        c.setFont(FONT, 7)
+        x = left + 14
+        for (label, frac), v in zip(cols, values):
+            cw = (width - 10) * frac
+            c.drawString(x, y - 8, _clip(c, v, FONT, 7, cw - 6))
+            x += cw
+        return y - 11
+
+    def checklist_line(label, rec):
+        if not rec:
+            return label + ": no counting day recorded", True
+        if not rec["filed"]:
+            return label + " " + _dmy(rec["date"]) + ": checklist NOT filed", True
+        text = (label + " " + _dmy(rec["date"]) + ": signed by " + (rec["signed_by"] or "(no name)")
+                + "  |  CCP " + str(rec["ccp_confirmed"]) + "/" + str(rec["ccp_total"]) + " confirmed"
+                + "  |  " + ("reviewed by " + rec["reviewed_by"] + " " + _dmy(rec["reviewed_at"])
+                            if rec["reviewed_by"] else "not yet reviewed"))
+        flag = rec["ccp_confirmed"] < rec["ccp_total"] or not rec["reviewed_by"]
+        return text, flag
+
+    for b in batches:
+        need = 18 + 30 + 12 + 11 * max(1, len(b["ingredients"])) + 16 + 12 + 11 * max(1, len(b["sold"]))
+        if y - min(need, 300) < 60:
+            y = new_page("4. TRACED PRODUCTION (cont.)")
+        title = "LOT# " + b["lot"] + "   " + b["vessel"] + "   " + " ".join(
+            p for p in (b["brand"], b["recipe"], b["format"]) if p)
+        y = bar(y, title, height=18,
+                right_text=(b["certification"] or "No certification") + "  |  started " + _dmy(b["start_date"]))
+        if b["fg_on_record"]:
+            stock = str(b["jars_remaining"]) + " still in stock"
+        elif b.get("in_reset"):
+            stock = "stock since counted into the zero-day reset baseline"
+        else:
+            stock = "no finished-goods record on file"
+        y = para(y, "Jars produced: " + str(b["jars"]) + "   |   " + stock, font=FONT_BOLD, indent=6)
+        for label, rec in (("Started", b["started"]), ("Counted", b["counted"])):
+            text, flag = checklist_line(label, rec)
+            y = para(y, text, size=7, color=RED if flag else black, indent=6)
+        y -= 4
+
+        if y - 40 < 60:
+            y = new_page("4. TRACED PRODUCTION (cont.)")
+        y = table_head(y, cols_in)
+        if not b["ingredients"]:
+            y = table_row(y, cols_in, ["No raw materials recorded for this batch", "", "", "", ""], 0, RED)
+        for i, ing in enumerate(b["ingredients"]):
+            if y - 11 < 60:
+                y = new_page("4. TRACED PRODUCTION (cont.)")
+                y = table_head(y, cols_in)
+            used = _qty(ing["quantity"]) + " " + (ing["unit"] or "")
+            y = table_row(y, cols_in, [
+                ing["item"], ing["supplier"],
+                ("SHORT - no stock" if ing["short"] else ing["supplier_lot"]),
+                _dmy(ing["date_received"]), used], i, RED if ing["short"] else black)
+        y -= 6
+
+        if y - 30 < 60:
+            y = new_page("4. TRACED PRODUCTION (cont.)")
+        y = table_head(y, cols_out)
+        if not b["sold"]:
+            y = table_row(y, cols_out, ["", "Not sold yet", "", ""], 0, MEDIUM_GRAY)
+        for i, s in enumerate(b["sold"]):
+            if y - 11 < 60:
+                y = new_page("4. TRACED PRODUCTION (cont.)")
+                y = table_head(y, cols_out)
+            y = table_row(y, cols_out, [_dmy(s["date"]), s["buyer"], str(s["quantity"]), s["order"]], i)
+        y -= 16
+
+    footer()
     c.save()

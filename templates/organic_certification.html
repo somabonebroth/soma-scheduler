@@ -32,6 +32,10 @@
 .inv-table th { text-align: left; padding: 10px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-light); background: var(--row-alt); border-bottom: 1px solid var(--border); }
 .inv-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
 .inv-table tr:nth-child(even) { background: var(--row-alt); }
+.ap-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.ap-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-light); }
+.ap-form input[type=date] { padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
+.ap-form .ap-check { flex-direction: row; align-items: center; gap: 6px; font-size: 13px; color: var(--text); padding-bottom: 8px; }
 </style>
 </head>
 <body>
@@ -44,6 +48,18 @@
     </div>
 </div>
 <div class="main">
+    <!-- Audit pack — one PDF for the inspector (audit_tools.audit_pack_pdf).
+         Batches are chosen by START date, the date their LOT# is made from. -->
+    <div class="card" id="audit-pack" style="margin-bottom:24px;">
+        <h2>Audit Pack</h2>
+        <p class="card-desc">One PDF to hand an inspector: the recipes that ran, the CCP plan, a completed checklist as the worked example, and every batch in the period traced from supplier lot to buyer.</p>
+        <form class="ap-form" id="ap-form">
+            <label>From <input type="date" id="ap-from" required></label>
+            <label>To <input type="date" id="ap-to" required></label>
+            <label class="ap-check"><input type="checkbox" id="ap-organic"> Organic only</label>
+            <button type="submit" class="btn btn-primary">Download PDF</button>
+        </form>
+    </div>
     <div class="dashboard-grid">
         <p class="oc-intro">An organic audit asks four things. Each one has a page that answers it.</p>
         <div class="section-label">The four questions</div>
@@ -134,6 +150,25 @@ async function loadSupplierCerts() {
   }
 }
 loadSupplierCerts();
+
+// ── Audit pack: default to the last 90 days, download as a plain GET ──
+(function () {
+  // Local date, not toISOString (UTC), so a Toronto evening doesn't read as tomorrow.
+  const iso = function (d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  const now = new Date();
+  const from = new Date(now.getTime() - 90 * 86400000);
+  document.getElementById('ap-to').value = iso(now);
+  document.getElementById('ap-from').value = iso(from);
+  document.getElementById('ap-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    const q = new URLSearchParams({
+      from: document.getElementById('ap-from').value,
+      to: document.getElementById('ap-to').value,
+    });
+    if (document.getElementById('ap-organic').checked) q.set('organic_only', '1');
+    window.location = '/api/organic/audit-pack.pdf?' + q.toString();
+  });
+})();
 
 // ── Shared escaping (mirrored from organic.html) ──
 function escSku(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}

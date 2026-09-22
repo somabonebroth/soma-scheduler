@@ -25,10 +25,12 @@ unchanged and stays in app.py.
 Defines its own manager_required (verbatim copy) so it has no import-time
 dependency on app.py.
 """
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
+from io import BytesIO
 from functools import wraps
 
-from flask import Blueprint, request, jsonify, session, redirect, url_for, render_template
+from flask import Blueprint, request, jsonify, session, redirect, url_for, render_template, send_file
 
 from helpers import ORGANIC_RUNS_PATH, _load_json, _save_json
 
@@ -305,3 +307,196 @@ def organic_mass_balance():
 def mass_balance_page():
     """Render the mass-balance report page."""
     return render_template("mass_balance.html")
+
+
+# ── Audit pack (2026-09-22) ──────────────────────────────────────────────────
+# One PDF an inspector can read cover to cover: the recipes that ran, the CCP
+# plan, one completed checklist as the worked example, then every batch in the
+# period traced from supplier lot to buyer. It creates NO records — everything is
+# re-read from runs / FG / sales / checklists / daily sign-offs, so the pack can
+# never disagree with the pages those records live on.
+
+def _checklist_record(week_id, day_idx, ccp_nums):
+    """The filing facts for one production day's checklist: who signed, how many
+    CCP sections were confirmed, and whether management reviewed the day."""
+    date = app._run_start_date_str(week_id, day_idx)
+    cl = app.load_checklist(week_id, day_idx) or {}
+    checks = cl.get("checks") or {}
+    confirmed = sum(1 for n in ccp_nums if checks.get("section-" + n))
+    review = app._load_daily_signoffs().get(date) or {}
+    return {
+        "date": date,
+        "filed": bool(cl.get("completed")),
+        "signed_by": (cl.get("signoff_kitchen") or "").strip(),
+        "ccp_confirmed": confirmed,
+        "ccp_total": len(ccp_nums),
+        "reviewed_by": review.get("name", ""),
+        "reviewed_at": (review.get("signed_at") or "")[:10],
+    }
+
+
+def _build_audit_pack(date_from, date_to, organic_only=False):
+    """Every completed batch whose START (production) date is in
+    [date_from, date_to], inclusive — the start date is what the LOT# is made
+    from, so the period and the lots on the jars line up. Each batch carries its
+    raw lots (the frozen ingredients_used snapshot), both checklists it spans
+    (started day N, counted day N+1), its FG record, and every sale that drew on
+    it. organic_only keeps batches whose jars were certified Organic.
+    """
+    runs = _load_json(ORGANIC_RUNS_PATH, [])
+    fg_by_id = {f.get("id"): f for f in _load_json(app.ORGANIC_FG_PATH, [])}
+    sales = _load_json(app.ORGANIC_SALES_PATH, [])
+    recipes = app.load_recipes()
+    ccp = app.load_ccp_master() or []
+    ccp_nums = [str(s.get("num") or "").strip() for s in ccp if isinstance(s, dict)]
+
+    try:
+        import ledger
+        frozen = ledger._reset_frozen_run_ids()
+    except Exception:
+        frozen = set()
+
+    batches = []
+    for run in runs:
+        if run.get("status") != "completed":
+            continue
+        start = app._run_start_date_str(run.get("week_id"), run.get("day_idx"))
+        if not start or start < date_from or start > date_to:
+            continue
+        vessel = run.get("vessel", "")
+        fin_w, fin_d = run.get("finish_week_id"), run.get("finish_day_idx")
+        if fin_w is None or fin_d is None:
+            # Never happens for a run completed by _complete_organic_run; kept so
+            # a hand-edited record degrades to "no counting day" instead of a 500.
+            fin_w, fin_d = None, None
+        fg_id = f"fg_{fin_w}_{fin_d}_{vessel}" if fin_w is not None else None
+        fg = fg_by_id.get(fg_id) or {}
+        recipe_name = run.get("recipe", "")
+        cert = (fg.get("certification")
+                or (recipes.get(recipe_name) or {}).get("certification") or "").strip()
+        if organic_only and cert != "Organic":
+            continue
+
+        sold = []
+        if fg_id:
+            for s in sales:
+                qty = 0
+                if s.get("fg_id") == fg_id:
+                    qty += int(s.get("quantity") or 0)
+                for lot in (s.get("lots") or []):
+                    for b in (lot.get("breakdown") or []):
+                        if b.get("fg_id") == fg_id:
+                            qty += int(b.get("quantity") or 0)
+                if qty:
+                    sold.append({
+                        "buyer": s.get("buyer", ""),
+                        "date": (s.get("deducted_at") or s.get("sale_date")
+                                 or s.get("created_at") or "")[:10],
+                        "quantity": qty,
+                        "order": s.get("order_id") or s.get("ripe_order_id")
+                                 or s.get("retail_order_id") or "",
+                    })
+            sold.sort(key=lambda x: x["date"])
+
+        batches.append({
+            "run_id": run.get("id"),
+            "start_date": start,
+            "vessel": vessel,
+            "recipe": recipe_name,
+            "brand": run.get("brand") or fg.get("brand", ""),
+            "format": fg.get("format") or (recipes.get(recipe_name) or {}).get("format", ""),
+            "certification": cert,
+            "lot": app._run_lot(run),
+            "jars": int(run.get("amount_produced") or 0),
+            "fg_on_record": bool(fg),
+            # A zero-day reset replaced this batch's FG row with a counted baseline.
+            "in_reset": run.get("id") in frozen,
+            "jars_remaining": fg.get("quantity_remaining") if fg else None,
+            "ingredients": [{
+                "item": u.get("item", ""),
+                "supplier": u.get("supplier", ""),
+                "supplier_lot": u.get("supplier_lot", ""),
+                "date_received": u.get("date_received", ""),
+                "quantity": u.get("quantity_used", 0),
+                "unit": u.get("unit", ""),
+                "short": bool(u.get("negative")),
+            } for u in (run.get("ingredients_used") or [])],
+            "started": _checklist_record(run["week_id"], run["day_idx"], ccp_nums),
+            "counted": (_checklist_record(fin_w, fin_d, ccp_nums)
+                        if fin_w is not None else None),
+            "sold": sold,
+        })
+    batches.sort(key=lambda b: (b["start_date"], b["vessel"]))
+
+    # The worked-example checklist: the latest day in the period whose every CCP
+    # section was confirmed (falling back to the latest filed day at all).
+    days = {}
+    for b in batches:
+        for rec in (b["started"], b["counted"]):
+            if rec and rec["filed"]:
+                days[rec["date"]] = rec
+    ordered = sorted(days.values(), key=lambda r: r["date"], reverse=True)
+    example = next((r for r in ordered if r["ccp_total"]
+                    and r["ccp_confirmed"] == r["ccp_total"]), None) \
+        or (ordered[0] if ordered else None)
+
+    used = sorted({b["recipe"] for b in batches if b["recipe"]})
+    return {
+        "from": date_from,
+        "to": date_to,
+        "organic_only": organic_only,
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "company": (app._load_company_info() or {}).get("name", ""),
+        "recipes": [(n, recipes[n]) for n in used if n in recipes],
+        "recipes_missing": [n for n in used if n not in recipes],
+        "ccp": ccp,
+        "example_date": example["date"] if example else None,
+        "batches": batches,
+        "days": ordered,
+    }
+
+
+@audit_tools_bp.route("/api/organic/audit-pack.pdf", methods=["GET"])
+@manager_required
+def audit_pack_pdf():
+    """GET /api/organic/audit-pack.pdf?from=&to=&organic_only= - the audit pack.
+
+    Defaults to the last 90 days. Batches are selected by START date (the date
+    the LOT# is made from)."""
+    from pdf_engine import generate_audit_pack_pdf
+    today = datetime.now()
+    to = (request.args.get("to") or "").strip() or today.strftime("%Y-%m-%d")
+    frm = (request.args.get("from") or "").strip() or (today - timedelta(days=90)).strftime("%Y-%m-%d")
+    try:
+        datetime.strptime(frm, "%Y-%m-%d")
+        datetime.strptime(to, "%Y-%m-%d")
+    except ValueError:
+        return jsonify({"error": "from and to must be YYYY-MM-DD"}), 400
+    if frm > to:
+        return jsonify({"error": "from must be on or before to"}), 400
+    organic_only = (request.args.get("organic_only") or "").lower() in ("1", "true", "yes", "on")
+
+    pack = _build_audit_pack(frm, to, organic_only)
+    example = None
+    if pack["example_date"]:
+        # The worked example is the filed checklist exactly as the signed PDF
+        # draws it: that day's schedule for the vessel line, the CCP master for
+        # the sections, the stored ticks and sign-off.
+        d = datetime.strptime(pack["example_date"], "%Y-%m-%d")
+        week_id = (d - timedelta(days=d.weekday())).strftime("%Y-%m-%d")
+        day_idx = d.weekday()
+        sched = ((app.load_schedule(week_id) or {}).get("schedule") or {}).get(str(day_idx), {})
+        example = {
+            "date": d,
+            "active_vessels": [{"vessel": v, "recipe": sched[v]} for v in app.VESSELS if sched.get(v)],
+            "filled": app.load_checklist(week_id, day_idx) or {},
+        }
+
+    logo_path = os.path.join(app.app.static_folder, "logo.jpg")
+    if not os.path.exists(logo_path):
+        logo_path = None
+    buf = BytesIO()
+    generate_audit_pack_pdf(buf, pack, example, logo_path)
+    buf.seek(0)
+    name = "Soma_Audit_Pack_" + frm + "_to_" + to + ("_Organic" if organic_only else "") + ".pdf"
+    return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=name)
