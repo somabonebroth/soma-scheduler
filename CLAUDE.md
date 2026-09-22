@@ -158,18 +158,19 @@ ripe_orders.py      — Flask Blueprint handling Ripe order workflow within Soma
                       **Monthly promos (2026-09-22).** Company Settings' Ripe card has TWO
                       lists: one-time credits (as before, `kind:"once"`) and monthly promos
                       (`company_info.ripe_monthly_promos`, `{id,name,amount}` templates).
-                      `helpers._renew_monthly_credits` issues ONE instance per promo per
-                      calendar month into the SAME `ripe_credits` list (`id` = `<promo>-YYYY-MM`,
-                      name "Marketing — Sep 2026", `kind:"monthly"`, `issued`, `month`); it
-                      runs inside `_load_company_info` (the one read path, write-back on
-                      change) so settings, Ripe's catalogue, approve and the ledger always
-                      agree. A past month's leftover is kept with `expired:true` (the ledger
-                      shows "expired · $X unused"; `_active_ripe_credits` hides it from Ripe),
-                      a spent one is dropped. No rollover. Editing a promo mid-month moves
-                      this month's instance by the difference; removing it withdraws this
-                      month's balance (PATCH route). The page PATCHes one-time rows only —
-                      the route keeps stored monthly instances. Ripe reads id/name/amount
-                      and ignores the extra fields: NO Ripe-side change. Tests:
+                      Each promo has ONE running credit in the SAME `ripe_credits` list
+                      (`id` = the promo id, `kind:"monthly"`, `issued` cumulative, `month` =
+                      last top-up, `month_issued`): `helpers._renew_monthly_credits` ADDS
+                      the promo's amount to it once per calendar month — **nothing expires,
+                      unused credit adds up** (Jeremy's call, replacing a first cut that
+                      issued a per-month credit and expired leftovers). It runs inside
+                      `_load_company_info` (the one read path, write-back on change) so
+                      settings, Ripe's catalogue, approve and the ledger always agree.
+                      Editing a promo mid-month moves the balance by the difference against
+                      `month_issued`; removing a promo stops the top-ups and the balance
+                      becomes a one-time credit. The page PATCHes one-time rows only — the
+                      route keeps stored monthly balances. Ripe reads id/name/amount and
+                      ignores the extra fields: NO Ripe-side change. Tests:
                       `python3 -m unittest tests.test_ripe_promos`.
 retail_orders.py    — Flask Blueprint (added 2026-07-02): SBBC Wholesale Portal order
                       ingestion, mirroring ripe_orders.py (which shares a live contract

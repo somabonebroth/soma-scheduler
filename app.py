@@ -72,7 +72,6 @@ from helpers import (
     _active_ripe_credits,
     _sanitize_monthly_promos,
     _renew_monthly_credits,
-    _promo_month,
     _load_json,
     _load_rm_sections,
     _normalize_format,
@@ -3626,16 +3625,9 @@ def update_company_info():
         else:
             info[k] = (v or "").strip() if isinstance(v, str) else v
     if promos_changed:
-        # A removed promo ends NOW: withdraw this month's instance. Then renew,
-        # so a promo added today issues this month's credit straight away and
-        # an edited amount moves this month's balance by the difference.
-        live = {p["id"] for p in info["ripe_monthly_promos"]}
-        month = _promo_month()
-        info["ripe_credits"] = [
-            c for c in _sanitize_ripe_credits(info.get("ripe_credits"))
-            if not (c["kind"] == "monthly" and c.get("month") == month
-                    and c.get("template_id") not in live)
-        ]
+        # Renew now, so a promo added today grants this month's amount straight
+        # away, an edited amount moves the balance by the difference, and a
+        # removed promo's balance is kept as a one-time credit.
         _renew_monthly_credits(info)
     _save_json(COMPANY_INFO_PATH, info)
     return jsonify({"ok": True, "info": info})

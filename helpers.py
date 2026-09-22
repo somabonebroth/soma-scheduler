@@ -44,8 +44,8 @@ _DEFAULT_COMPANY_INFO = {
     "registration": "",
     "notes": "",
     "ripe_inventory_buffer": 12,   # units withheld from Ripe's visible stock
-    "ripe_credits": [],            # list of {id, name, amount, kind} account credits Ripe can apply to e-transfer orders; auto-deplete on Soma approval. kind "once" (hand-issued) or "monthly" (an instance issued from ripe_monthly_promos; carries template_id, month, expired)
-    "ripe_monthly_promos": [],     # list of {id, name, amount} standing promos: each issues a fresh credit of `amount` on the 1st of every month; the previous month's leftover expires
+    "ripe_credits": [],            # list of {id, name, amount, kind} account credits Ripe can apply to e-transfer orders; auto-deplete on Soma approval. kind "once" (hand-issued) or "monthly" (the running balance of a ripe_monthly_promos entry; carries template_id, month, issued, month_issued)
+    "ripe_monthly_promos": [],     # list of {id, name, amount} standing promos: `amount` is ADDED to the promo's running credit on the 1st of every month; nothing expires
     "ss_small_order_threshold":  20,    # SS delivery minimum: below this delivery is rejected; at/above it delivery is free
     "fzbb_small_lead_days":  3,    # min days notice for FZ/BB ≤ threshold
     "fzbb_large_lead_days":  7,    # min days notice for FZ/BB ≥ threshold
@@ -399,8 +399,7 @@ def _record_adjustment(record):
 def _load_company_info():
     """Company info / order rules with defaults filled in. This is the ONE read
     path, so the monthly-promo renewal runs here: the first read in a new month
-    issues that month's credits and expires last month's leftovers, and writes
-    the file back — every consumer (settings, Ripe's catalogue, approve, the
+    adds each promo's amount to its running credit and writes the file back — every consumer (settings, Ripe's catalogue, approve, the
     ledger) then agrees on what Ripe can use."""
     info = _load_json(COMPANY_INFO_PATH, {})
     if _renew_monthly_credits(info):
@@ -413,9 +412,10 @@ def _load_company_info():
 def _sanitize_ripe_credits(raw):
     """Coerce a raw ripe_credits payload into a clean list for storage.
     Each entry: {id, name, amount, kind}. Drops fully-blank rows; clamps
-    amount >= 0. A "monthly" entry (an instance issued from a monthly promo)
-    also keeps template_id, month and expired — those are what let the ledger
-    tell "expired with $30 left" from "fully used"."""
+    amount >= 0. A "monthly" entry (the running balance of a monthly promo)
+    also keeps template_id, month (last month topped up), issued (cumulative,
+    for the ledger) and month_issued (what this month's top-up was, so a
+    mid-month edit can move the balance by the difference)."""
     out = []
     if not isinstance(raw, list):
         return out
@@ -435,11 +435,11 @@ def _sanitize_ripe_credits(raw):
         if entry["kind"] == "monthly":
             entry["template_id"] = str(c.get("template_id") or "")
             entry["month"] = str(c.get("month") or "")
-            entry["expired"] = bool(c.get("expired"))
-            try:
-                entry["issued"] = max(0.0, round(float(c.get("issued")), 2))
-            except (TypeError, ValueError):
-                entry["issued"] = amt
+            for key in ("issued", "month_issued"):
+                try:
+                    entry[key] = max(0.0, round(float(c.get(key)), 2))
+                except (TypeError, ValueError):
+                    entry[key] = amt
         out.append(entry)
     return out
 
@@ -473,26 +473,19 @@ def _promo_month(today=None):
     return today.strftime("%Y-%m")
 
 
-def _monthly_credit_name(template_name, month):
-    """'Marketing credit — Sep 2026': what Ripe sees at checkout."""
-    label = datetime.strptime(month, "%Y-%m").strftime("%b %Y")
-    return f"{template_name} — {label}"
-
-
 def _renew_monthly_credits(info, today=None):
-    """Bring `info["ripe_credits"]` up to date with `info["ripe_monthly_promos"]`
-    for the current month. Mutates `info`; returns True when anything changed.
+    """Bring `info["ripe_credits"]` up to date with `info["ripe_monthly_promos"]`.
+    Mutates `info`; returns True when anything changed.
 
-    - Every promo gets ONE instance per month, id `<promo id>-<YYYY-MM>`, for
-      the promo's full amount (`issued`). Editing the promo mid-month moves
-      this month's instance by the difference (issued 50 → 75 adds 25 to
-      whatever is left, floored at 0) and renames it, so a correction takes
-      effect now rather than next month.
-    - An instance from an earlier month with balance left is marked expired
-      (kept, so the ledger can say "expired with $30 left"); one at zero is
-      dropped — it was fully used and the ledger rebuilds it from the draws.
-    - Removing a promo does not touch old months; the PATCH route withdraws
-      the CURRENT month's instance so the promo really ends when it is removed.
+    - Each promo has ONE running credit (id = the promo id, kind "monthly").
+      On the first read of a new month the promo's amount is ADDED to that
+      balance — nothing expires, unused credit simply adds up. A month is
+      topped up once (`month` records the last one).
+    - Editing the promo mid-month moves the balance by the difference against
+      what this month's top-up was (`month_issued`), floored at 0; the credit
+      is renamed to match the promo.
+    - Removing a promo stops the top-ups; the balance already granted is kept
+      as an ordinary one-time credit (visible and deletable in Settings).
     """
     promos = _sanitize_monthly_promos(info.get("ripe_monthly_promos"))
     raw = info.get("ripe_credits")
@@ -506,44 +499,58 @@ def _renew_monthly_credits(info, today=None):
     else:
         credits = _sanitize_ripe_credits(_active_ripe_credits(info))  # migrate the legacy scalar first
     changed = not isinstance(raw, list)
+    live = {p["id"]: p for p in promos}
 
-    kept = []
+    # One balance per promo. Merge any stray per-month instances (the first
+    # cut issued `<promo>-YYYY-MM` credits) and orphans become one-time.
+    balances, kept = {}, []
     for c in credits:
-        if c["kind"] == "monthly" and c.get("month") != month and not c.get("expired"):
-            changed = True
-            if c["amount"] <= 0.005:
-                continue
-            c["expired"] = True
-        kept.append(c)
-    credits = kept
-
-    this_month = {c["template_id"]: c for c in credits
-                  if c["kind"] == "monthly" and c.get("month") == month}
-    for p in promos:
-        inst = this_month.get(p["id"])
-        name = _monthly_credit_name(p["name"], month)
-        if inst is None:
-            if p["amount"] <= 0:
-                continue
-            credits.append({
-                "id": f"{p['id']}-{month}",
-                "name": name,
-                "amount": p["amount"],
-                "issued": p["amount"],
-                "kind": "monthly",
-                "template_id": p["id"],
-                "month": month,
-                "expired": False,
-            })
+        if c["kind"] != "monthly":
+            kept.append(c)
+            continue
+        tid = c.get("template_id")
+        if tid not in live:
+            kept.append({"id": c["id"], "name": c["name"], "amount": c["amount"], "kind": "once"})
             changed = True
             continue
-        if abs(inst["issued"] - p["amount"]) > 0.005:
-            inst["amount"] = max(0.0, round(inst["amount"] + p["amount"] - inst["issued"], 2))
-            inst["issued"] = p["amount"]
+        b = balances.get(tid)
+        if b is None:
+            balances[tid] = c
+            if c["id"] != tid:
+                c["id"] = tid
+                changed = True
+        else:
+            b["amount"] = round(b["amount"] + c["amount"], 2)
+            b["issued"] = round(b["issued"] + c["issued"], 2)
+            if c.get("month", "") > b.get("month", ""):
+                b["month"], b["month_issued"] = c["month"], c["month_issued"]
             changed = True
-        if inst["name"] != name:
-            inst["name"] = name
+    credits = kept
+
+    for p in promos:
+        b = balances.get(p["id"])
+        if b is None:
+            if p["amount"] <= 0:
+                continue
+            b = {"id": p["id"], "name": p["name"], "amount": p["amount"],
+                 "issued": p["amount"], "month_issued": p["amount"],
+                 "kind": "monthly", "template_id": p["id"], "month": month}
             changed = True
+        elif b["month"] != month:
+            b["amount"] = round(b["amount"] + p["amount"], 2)
+            b["issued"] = round(b["issued"] + p["amount"], 2)
+            b["month"], b["month_issued"] = month, p["amount"]
+            changed = True
+        elif abs(b["month_issued"] - p["amount"]) > 0.005:
+            delta = round(p["amount"] - b["month_issued"], 2)
+            b["amount"] = max(0.0, round(b["amount"] + delta, 2))
+            b["issued"] = max(0.0, round(b["issued"] + delta, 2))
+            b["month_issued"] = p["amount"]
+            changed = True
+        if b["name"] != p["name"]:
+            b["name"] = p["name"]
+            changed = True
+        credits.append(b)
 
     if changed:
         info["ripe_credits"] = credits
@@ -552,12 +559,11 @@ def _renew_monthly_credits(info, today=None):
 
 
 def _active_ripe_credits(company):
-    """Usable credits Ripe should see: amount > 0 and not expired. Migrates a
-    legacy scalar `ripe_credit` (v1) into a single named credit when no list
-    exists."""
+    """Usable credits Ripe should see: only amount > 0. Migrates a legacy
+    scalar `ripe_credit` (v1) into a single named credit when no list exists."""
     raw = company.get("ripe_credits")
     if isinstance(raw, list):
-        return [c for c in _sanitize_ripe_credits(raw) if c["amount"] > 0 and not c.get("expired")]
+        return [c for c in _sanitize_ripe_credits(raw) if c["amount"] > 0]
     try:
         legacy = round(float(company.get("ripe_credit") or 0), 2)
     except (TypeError, ValueError):

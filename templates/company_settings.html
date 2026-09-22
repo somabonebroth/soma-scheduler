@@ -84,14 +84,14 @@
       <div class="hint">Name it and enter the amount — it saves as you type. Ripe can apply any portion to an e-transfer order; the balance depletes when you approve, and a credit that reaches $0 is removed.</div>
     </div>
     <div class="ff" style="max-width:520px;margin-bottom:18px;">
-      <label>Monthly promos — a fresh credit on the 1st of every month</label>
+      <label>Monthly promos — added to a running credit on the 1st of every month</label>
       <div id="promos-list" style="margin-top:8px;display:flex;flex-direction:column;gap:8px;"></div>
       <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap;">
         <button type="button" id="add-promo-btn" class="btn btn-secondary">+ Add monthly promo</button>
         <span class="credit-status" id="promo-status" aria-live="polite"></span>
       </div>
       <div id="promo-month" class="hint" style="font-weight:600;color:var(--text);"></div>
-      <div class="hint">Each promo issues its full amount on the 1st; whatever is left at month end expires (no rollover). Adding a promo issues this month's credit right away, editing the amount moves this month's balance by the difference, and removing it withdraws this month's balance.</div>
+      <div class="hint">Each promo adds its amount to one running credit on the 1st; nothing expires, unused credit adds up. Adding a promo grants this month's amount right away and editing the amount moves the balance by the difference. Removing a promo stops the top-ups; the balance already granted stays as a one-time credit above.</div>
     </div>
     <div id="credit-history" hidden style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:18px;">
       <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
@@ -234,15 +234,15 @@ function renderPromos(list) {
   G('promos-list').innerHTML = (list || []).map(function (p) { return creditRowHTML(p, 'promos'); }).join('');
 }
 function renderPromoMonth(credits) {
-  var live = (credits || []).filter(function (c) { return c.kind === 'monthly' && !c.expired; });
+  var live = (credits || []).filter(function (c) { return c.kind === 'monthly'; });
   G('promo-month').textContent = live.length
-    ? 'This month: ' + live.map(function (c) { return c.name + ' · ' + money(c.amount) + ' of ' + money(c.issued != null ? c.issued : c.amount) + ' left'; }).join('  ·  ')
+    ? 'Running balance: ' + live.map(function (c) { return c.name + ' · ' + money(c.amount) + ' available (' + money(c.issued != null ? c.issued : c.amount) + ' granted so far)'; }).join('  ·  ')
     : '';
 }
 function removeRow(btn, section) {
   var row = btn.closest('.credit-row');
   var name = row.querySelector('.cr-name').value.trim();
-  if (section === 'promos' && name && !confirm('Remove the monthly promo "' + name + '"? This month\'s remaining balance is withdrawn from Ripe.')) return;
+  if (section === 'promos' && name && !confirm('Stop the monthly promo "' + name + '"? The balance already granted stays as a one-time credit.')) return;
   row.remove(); dCI(section);
 }
 function scrapeRows(sel) {
@@ -271,7 +271,6 @@ document.getElementById('add-promo-btn').addEventListener('click', function () {
 function money(n) { return '$' + Number(n || 0).toFixed(2); }
 function creditHistoryHTML(c) {
   const spent = c.remaining <= 0.005;
-  const expired = (c.expired || 0) > 0.005;
   const uses = (c.uses || []).map(u =>
     '<span style="font-variant-numeric:tabular-nums;">' + escAttr(u.date) + ' · '
     + (u.order_number ? '#' + escAttr(u.order_number) : escAttr(u.order_id))
@@ -280,8 +279,8 @@ function creditHistoryHTML(c) {
   return '<div' + (spent ? ' style="opacity:.65;"' : '') + '>'
     + '<div style="display:flex;align-items:baseline;gap:8px;font-size:13px;">'
     + '<strong>' + escAttr(c.name) + '</strong>'
-    + (expired ? '<span style="background:var(--amber-bg);color:var(--amber-text-dark);font-size:10px;padding:1px 7px;border-radius:10px;">expired · ' + money(c.expired) + ' unused</span>'
-       : spent ? '<span style="background:var(--bg);color:var(--text-light);font-size:10px;padding:1px 7px;border-radius:10px;">fully used</span>' : '')
+    + (spent ? '<span style="background:var(--bg);color:var(--text-light);font-size:10px;padding:1px 7px;border-radius:10px;">fully used</span>'
+       : c.kind === 'monthly' ? '<span style="background:var(--action-green-bg);color:var(--action-green);font-size:10px;padding:1px 7px;border-radius:10px;">monthly</span>' : '')
     + '<span style="margin-left:auto;font-size:12px;color:var(--text-light);font-variant-numeric:tabular-nums;">'
     + (c.used > 0 ? money(c.used) + ' used · ' : '')
     + '<strong style="color:' + (spent ? 'var(--text-light)' : 'var(--action-green)') + ';">' + money(c.remaining) + '</strong> of ' + money(c.issued) + ' left</span>'
@@ -302,8 +301,7 @@ async function loadCreditHistory() {
     if (!d.credits || !d.credits.length) return; // nothing issued yet — stay hidden
     G('credit-history-totals').innerHTML =
       money(d.totals.issued) + ' issued · ' + money(d.totals.used) + ' used · '
-      + '<strong style="color:var(--action-green);">' + money(d.totals.remaining) + ' remaining</strong>'
-      + ((d.totals.expired || 0) > 0.005 ? ' · ' + money(d.totals.expired) + ' expired' : '');
+      + '<strong style="color:var(--action-green);">' + money(d.totals.remaining) + ' remaining</strong>';
     G('credit-history-body').innerHTML = d.credits.map(creditHistoryHTML).join('');
     wrap.hidden = false;
   } catch (e) {

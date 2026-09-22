@@ -445,10 +445,10 @@ def _credit_ledger(orders):
     pending order's draw is still inside the remaining balance, so it is
     reported as `reserved`, never added to `used`. Hand-edits to a balance in
     Company Settings shift the inferred issued figure; that is inherent.
-    Monthly-promo instances are the exception: they store `issued`, and one
-    whose month has passed with balance left is reported as `expired` (that
-    balance can no longer be used) rather than "fully used".
-    Returns (rows, totals) — rows active-first, then fully-used/expired.
+    A monthly promo's running balance also stores a cumulative `issued`,
+    which wins when it is larger than the reconstruction (a hand-edit lowered
+    the balance) so the row still shows every month's top-up.
+    Returns (rows, totals) — rows active-first, then fully-used.
     """
     from app import _load_company_info, _active_ripe_credits, _sanitize_ripe_credits
     try:
@@ -464,8 +464,8 @@ def _credit_ledger(orders):
     def slot(cid, name):
         if cid not in ledger:
             ledger[cid] = {"id": cid, "name": name or "Credit", "used": 0.0,
-                           "reserved": 0.0, "remaining": 0.0, "expired": 0.0,
-                           "kind": "once", "month": None, "uses": []}
+                           "reserved": 0.0, "remaining": 0.0,
+                           "kind": "once", "uses": []}
         elif name and ledger[cid]["name"] == "Credit":
             ledger[cid]["name"] = name
         return ledger[cid]
@@ -496,27 +496,23 @@ def _credit_ledger(orders):
         e = slot(c["id"], c["name"])
         e["kind"] = c["kind"]
         if c["kind"] == "monthly":
-            e["month"] = c.get("month")
             stored_issued[c["id"]] = c.get("issued", c["amount"])
-        if c.get("expired"):
-            e["expired"] = c["amount"]
-        elif c["amount"] > 0:
+        if c["amount"] > 0:
             e["remaining"] = c["amount"]
 
     rows = []
     for e in ledger.values():
-        e["issued"] = round(e["used"] + e["remaining"] + e["expired"], 2)
+        e["issued"] = round(e["used"] + e["remaining"], 2)
         if e["id"] in stored_issued:
             e["issued"] = round(max(e["issued"], stored_issued[e["id"]]), 2)
         e["used_pct"] = round(e["used"] / e["issued"] * 100) if e["issued"] > 0 else 100
         e["uses"].reverse()  # newest first
         rows.append(e)
-    rows.sort(key=lambda e: (e["remaining"] <= 0.005, e["month"] or "", e["name"].lower()))
+    rows.sort(key=lambda e: (e["remaining"] <= 0.005, e["name"].lower()))
     totals = {
         "issued": round(sum(e["issued"] for e in rows), 2),
         "used": round(sum(e["used"] for e in rows), 2),
         "remaining": round(sum(e["remaining"] for e in rows), 2),
-        "expired": round(sum(e["expired"] for e in rows), 2),
     }
     return rows, totals
 
@@ -746,8 +742,8 @@ def ripe_order_action(order_id):
         # Runs exactly once per order: a re-approve hits the "already {status}"
         # 409 guard above before reaching here. Each applied credit decrements
         # its matching balance by id (floored at 0); a credit that reaches 0 is
-        # dropped. Works on the FULL stored list (not just what Ripe can use)
-        # so an expired monthly leftover kept for the ledger survives the
+        # dropped. Works on the full stored list so a monthly promo's running
+        # balance keeps its bookkeeping fields (issued, month) through the
         # rewrite. Best-effort: a failure here must not undo the approval.
         _applied = order.get("credits_applied") or []
         if _applied:
@@ -757,7 +753,7 @@ def ripe_order_action(order_id):
                 _ci = _load_company_info()
                 _stored = _san(_ci["ripe_credits"]) if isinstance(_ci.get("ripe_credits"), list) \
                     else _san(_act(_ci))              # migrate the legacy scalar
-                _by_id = {c["id"]: c for c in _stored if not c.get("expired")}
+                _by_id = {c["id"]: c for c in _stored}
                 for a in _applied:
                     cid = a.get("id")
                     try:
