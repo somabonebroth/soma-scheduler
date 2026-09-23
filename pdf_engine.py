@@ -10,7 +10,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.lib.units import inch
 from datetime import datetime, timedelta
 
-from helpers import _lot_for_batch_date
+from helpers import VESSELS, _lot_for_batch_date
 
 DARK = HexColor("#1a1a2e")
 ACCENT = HexColor("#4a6741")
@@ -23,7 +23,6 @@ CHECK_GREEN = HexColor("#2d8a4e")
 HEADER_TEXT = white
 FONT = "Helvetica"
 FONT_BOLD = "Helvetica-Bold"
-VESSELS = ["K1", "K2", "K3", "115L"]
 
 
 def draw_header(c, width, height, title, subtitle="", logo_path=None):
@@ -474,7 +473,7 @@ def generate_weekly_schedule_pdf(output_path, week_start, days_map, recipes, not
             vd = next((d for d in day_data if d.get("vessel") == vessel), None)
             if vd and vd.get("recipe"):
                 rn = vd["recipe"]
-                rd = recipes.get(rn, {})
+                rd = vd.get("recipe_data") or recipes.get(rn, {})
                 target = rd.get("yield", "")
                 c.setFont(FONT, 9)
                 c.drawString(col_x[1] + 4, y - 13, rn)
@@ -588,7 +587,7 @@ def generate_daily_package_pdf(output_path, date, vessel_assignments, recipes, l
         y = h - 68
         gap = 12
         for v in active:
-            rd = recipes[v["recipe"]]
+            rd = v.get("recipe_data") or recipes[v["recipe"]]
             est_h = estimate_card_height(rd, card_w)
             if y - est_h < 60:
                 c.showPage()

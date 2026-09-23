@@ -53,6 +53,20 @@ _DEFAULT_COMPANY_INFO = {
 }
 
 
+# The production vessels, in display order. This is the ONE list — app.py,
+# pdf_engine and the schedule/tablet templates (via a Jinja global) all read it.
+# A vessel's name is stored in schedules, checklists, runs and fg_ids, so never
+# rename one that has history; add a new name instead (115L-2 joined 2026-09-23).
+VESSELS = ["K1", "K2", "K3", "115L", "115L-2"]
+# Half-size vessels: half ingredients, half yield, half the raw deduction.
+HALF_VESSELS = ("115L", "115L-2")
+
+
+def _is_half_vessel(vessel):
+    """True for a half-size vessel (half recipe quantities and yield)."""
+    return vessel in HALF_VESSELS
+
+
 DEFAULT_RM_SECTIONS = [
     {"id": "bones", "name": "Bones"},
     {"id": "mirepoix", "name": "Mirepoix"},

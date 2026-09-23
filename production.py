@@ -638,11 +638,11 @@ def get_daily_production(week_id, day_idx):
         if prev_recipe_name and prev_recipe_name.strip():
             prev_recipe_data = recipes.get(prev_recipe_name, {})
             if prev_recipe_data:
-                details = app._halve_for_115L(prev_recipe_data) if vessel == "115L" else prev_recipe_data
+                details = app._halve_for_115L(prev_recipe_data) if app._is_half_vessel(vessel) else prev_recipe_data
                 finish_kettles[vessel] = {
                     "recipe": prev_recipe_name,
                     "details": details,
-                    "halved": vessel == "115L",
+                    "halved": app._is_half_vessel(vessel),
                 }
 
         # START: today's assigned recipe (starting today, will be finished tomorrow)
@@ -650,11 +650,11 @@ def get_daily_production(week_id, day_idx):
         if today_recipe_name and today_recipe_name.strip():
             today_recipe_data = recipes.get(today_recipe_name, {})
             if today_recipe_data:
-                details = app._halve_for_115L(today_recipe_data) if vessel == "115L" else today_recipe_data
+                details = app._halve_for_115L(today_recipe_data) if app._is_half_vessel(vessel) else today_recipe_data
                 start_kettles[vessel] = {
                     "recipe": today_recipe_name,
                     "details": details,
-                    "halved": vessel == "115L",
+                    "halved": app._is_half_vessel(vessel),
                 }
 
     # Annotate 'per L' ingredients with their inferred g/ml dosing unit so the

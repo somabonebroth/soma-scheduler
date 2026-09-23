@@ -91,7 +91,8 @@ function buildDisplayName(brand, recipeName, format) {
     if (fmt) parts.push(fmt);
     return parts.join('-');
 }
-var VESSELS = ['K1','K2','K3','115L'];
+var VESSELS = {{ VESSELS|tojson }};
+const HALF_VESSELS = {{ HALF_VESSELS|tojson }};
 var currentWeekId = '';
 
 function getCurrentMonday() {
@@ -224,7 +225,7 @@ async function loadWeek(weekId) {
                     hasStart = true;
                     displayName = buildDisplayName(recipeData.brand || '', recipeName, recipeData.format || '');
                     var yieldVal = recipeData.yield || 0;
-                    if (vessel === '115L' && yieldVal) {
+                    if (HALF_VESSELS.includes(vessel) && yieldVal) {
                         yieldVal = Math.round(yieldVal / 2);
                         target = yieldVal + ' units (½)';
                     } else {
@@ -232,11 +233,11 @@ async function loadWeek(weekId) {
                     }
                 }
 
-                var vesselLabelClass = vessel === '115L' ? 'vessel-label half-vessel' : 'vessel-label';
+                var vesselLabelClass = HALF_VESSELS.includes(vessel) ? 'vessel-label half-vessel' : 'vessel-label';
                 html += '<div class="vessel-row"><span class="' + vesselLabelClass + '">' + vessel + '</span>';
                 if (displayName) {
                     html += '<span class="recipe-display"><span class="full-name">' + displayName + '</span></span>';
-                    var yieldClass = vessel === '115L' ? 'yield-val halved' : 'yield-val';
+                    var yieldClass = HALF_VESSELS.includes(vessel) ? 'yield-val halved' : 'yield-val';
                     html += '<span class="' + yieldClass + '">' + target + '</span>';
                 } else if (prevRecipeName && recipes[prevRecipeName]) {
                     // Finish-only: this vessel has yesterday's recipe to finish, nothing starting today

@@ -119,7 +119,8 @@ var WEEK_ID='{{ week_id }}';
 var DAY_IDX={{ day_idx }};
 const CAN_EDIT={{ 'true' if can_edit else 'false' }};
 var DAYS_LIST=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-var VESSELS=['K1','K2','K3','115L'];
+var VESSELS = {{ VESSELS|tojson }};
+const HALF_VESSELS = {{ HALF_VESSELS|tojson }};
 var productionData=null;
 var ccpSections=[];
 var saveTimeout=null;
@@ -164,8 +165,8 @@ function buildKettles(){
     for(var vi=0;vi<VESSELS.length;vi++){
         var vessel=VESSELS[vi];var finish=productionData.finish[vessel];var start=productionData.start[vessel];
         if(!finish&&!start)continue;
-        var headerClass=vessel==='115L'?'kettle-header halved':'kettle-header';
-        var halvedTag=vessel==='115L'?'<span class="halved-badge">½ QTY</span>':'';
+        var headerClass=HALF_VESSELS.includes(vessel)?'kettle-header halved':'kettle-header';
+        var halvedTag=HALF_VESSELS.includes(vessel)?'<span class="halved-badge">½ QTY</span>':'';
         html+='<div class="kettle-block"><div class="'+headerClass+'">'+vessel+halvedTag+'</div><div class="t-layout">';
         html+='<div class="t-side"><span class="t-label finish">FINISH</span>';
         if(finish)html+=buildRecipeCard(finish,vessel,'finish');

@@ -112,7 +112,8 @@ var groupedRecipes = {};
 var currentWeekId = '';
 var existingSchedule = false;
 var DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-var VESSELS = ['K1','K2','K3','115L'];
+var VESSELS = {{ VESSELS|tojson }};
+const HALF_VESSELS = {{ HALF_VESSELS|tojson }};
 
 function getCurrentMonday() {
     var today = new Date();
@@ -208,7 +209,7 @@ function buildGrid() {
             var vessel = VESSELS[v];
             var sid = 'sel-' + idx + '-' + vessel.replace(/[()]/g, '');
             var yid = 'yield-' + idx + '-' + vessel.replace(/[()]/g, '');
-            var labelClass = vessel === '115L' ? 'vessel-label half-vessel' : 'vessel-label';
+            var labelClass = HALF_VESSELS.includes(vessel) ? 'vessel-label half-vessel' : 'vessel-label';
             html += '<div class="vessel-row"><span class="' + labelClass + '">' + vessel + '</span><select id="' + sid + '" onchange="updateYield(' + idx + ',\'' + vessel + '\')">' + opts + '</select><span class="yield-display" id="' + yid + '">--</span></div>';
         }
         html += '<div class="day-notes-label">Day Notes</div>';
@@ -237,7 +238,7 @@ function updateYield(dayIdx, vessel) {
     var rn = sel.value;
     if (rn && recipes[rn]) {
         var yieldVal = recipes[rn].yield;
-        if (vessel === '115L') {
+        if (HALF_VESSELS.includes(vessel)) {
             yieldVal = Math.round(yieldVal / 2);
             yel.textContent = yieldVal + ' units (½)';
             yel.className = 'yield-display has-value halved';

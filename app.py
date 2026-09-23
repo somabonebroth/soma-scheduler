@@ -50,6 +50,9 @@ from helpers import (
     COMPANY_INFO_PATH,
     DATA_DIR,
     DEFAULT_RM_SECTIONS,
+    HALF_VESSELS,
+    VESSELS,
+    _is_half_vessel,
     FORMAT_PREFIX_CANONICAL,
     FORMAT_RE,
     INVENTORY_DIR,
@@ -89,6 +92,8 @@ from helpers import (
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ.get("SECRET_KEY", "soma-bone-broth-2026-change-me")
+# The schedule, weekly view and tablet render their vessel rows from these.
+app.jinja_env.globals.update(VESSELS=VESSELS, HALF_VESSELS=list(HALF_VESSELS))
 app.register_blueprint(ripe_orders_bp)
 app.register_blueprint(retail_orders_bp)
 app.register_blueprint(suppliers_bp)
@@ -114,7 +119,6 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # CSRF mitigation
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "soma2026")
 MANAGER_PASSWORD = os.environ.get("MANAGER_PASSWORD", "")  # empty = feature disabled
 FOH_PASSWORD = os.environ.get("FOH_PASSWORD", "")  # empty = FOH login disabled
-VESSELS = ["K1", "K2", "K3", "115L"]
 DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 RECIPES_PATH = os.path.join(DATA_DIR, "recipes.json")
@@ -369,7 +373,7 @@ def get_current_week_id():
 
 # ── Structured Ingredient Helpers ──────────────────────────────────────
 VALID_UNITS = ["kg", "g", "L", "ml", "lbs", "Bunch", "Pack", "Adjunct", "per L"]
-# Units where the raw recipe amount IS deducted directly (halved for 115L).
+# Units where the raw recipe amount IS deducted directly (halved for a half vessel).
 # Only "per L" has special math (amount × batch_liters).
 INGREDIENT_SECTIONS = ["kettle_overnight", "after_skim", "finishing", "add_to_jar"]
 
@@ -1496,8 +1500,16 @@ def generate_pdfs():
         days_map = {}
         for day_idx in range(7):
             day_schedule = schedule.get(str(day_idx)) or schedule.get(day_idx) or {}
-            days_map[day_idx] = [{"vessel": v, "recipe": day_schedule.get(v)}
-                                 for v in VESSELS if day_schedule.get(v)]
+            days_map[day_idx] = []
+            for v in VESSELS:
+                rn = day_schedule.get(v)
+                if not rn:
+                    continue
+                entry = {"vessel": v, "recipe": rn}
+                # A half vessel's card and yield print HALF, as the tablet shows.
+                if _is_half_vessel(v) and rn in recipes:
+                    entry["recipe_data"] = _halve_for_115L(recipes[rn])
+                days_map[day_idx].append(entry)
 
         generate_weekly_schedule_pdf(filepath, week_start, days_map, recipes, notes, logo_path)
         generated.append(filename)
@@ -1565,11 +1577,11 @@ def download_all_pdfs(week_id):
     return send_file(zip_buffer, mimetype="application/zip", as_attachment=True,
                      download_name=f"Soma_Production_{week_id}.zip")
 
-# ── 115L Halving Helper ──────────────────────────────────────────────
+# ── Half-vessel (115L) Halving Helper ──────────────────────────────────────────────
 
 
 def _halve_for_115L(recipe_data):
-    """Return a copy of recipe_data with quantities halved for the 115L vessel.
+    """Return a copy of recipe_data with quantities halved for a half vessel (115L, 115L-2).
     Structured ingredients with unit='per L' are NOT halved.
     """
     import copy
@@ -2266,8 +2278,7 @@ def _deduct_run_ingredients(recipe_data, vessel, recipe_name, amount, eligible_m
     if amount <= 0:
         return ingredients_used, warnings
 
-    is_115L = vessel == "115L"
-    half_factor = 0.5 if is_115L else 1.0
+    half_factor = 0.5 if _is_half_vessel(vessel) else 1.0
     try:
         recipe_yield = int(recipe_data.get("yield") or 0)
     except (ValueError, TypeError):
