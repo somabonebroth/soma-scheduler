@@ -31,7 +31,7 @@ from functools import wraps
 
 from flask import (
     Blueprint, request, jsonify, session, redirect, url_for,
-    send_file, send_from_directory,
+    send_file, send_from_directory, render_template,
 )
 
 from helpers import (
@@ -935,3 +935,121 @@ def delete_rm_receipt_photo(entry_id):
             os.remove(os.path.join(app.RM_RECEIPT_PHOTOS_DIR, fn))
             return jsonify({"ok": True})
     return jsonify({"error": "Not found"}), 404
+
+
+# ---------------------------------------------------------------------------
+# Ingredient rename (2026-09-23). Received lots can't be renamed one by one
+# (update_raw_material locks `item`), and renaming a recipe ingredient does not
+# cascade to the lots — so after the recipes moved to "Organic X" names, every
+# lot still received as "X" was stranded: no recipe asks for it, new batches find
+# nothing, and Rebuild Raw Balances (which replays past runs against CURRENT
+# recipe names) would mark every past batch short. This renames ALL lots of an
+# orphaned name, history included, so recipes, stock and replay agree again.
+# Past batch records are untouched: `ingredients_used` snapshots its own item
+# name and the trace keys on raw_material_id.
+# ---------------------------------------------------------------------------
+
+def _norm_ing(name):
+    """Case/whitespace-insensitive key, same equivalence as app.ingredients_match."""
+    return " ".join((name or "").lower().split())
+
+
+def _ingredient_rename_plan(materials, recipes, custom_items):
+    """Pure: which lot names no current recipe or custom item uses, and which
+    of those have an "Organic <name>" twin in the recipes.
+
+    Returns {renames: [{from, to, lots, in_stock, units}], unmatched: [{name,
+    lots, in_stock, units}]}. A name still used by any active recipe is never
+    touched, so a non-organic recipe that kept the plain name keeps its lots."""
+    known = {}
+    for r in (recipes or {}).values():
+        if not isinstance(r, dict) or r.get("archived"):
+            continue
+        for section in app.INGREDIENT_SECTIONS:
+            for item in (r.get(section) or []):
+                if not app.is_structured_ingredient(item):
+                    continue
+                name = (item.get("name") or "").strip()
+                if name:
+                    known.setdefault(_norm_ing(name), name)
+    for c in custom_items or []:
+        name = (c.get("name") or "").strip()
+        if name:
+            known.setdefault(_norm_ing(name), name)
+
+    orphans = {}
+    for m in materials:
+        name = (m.get("item") or "").strip()
+        key = _norm_ing(name)
+        if not key or key in known:
+            continue
+        o = orphans.setdefault(key, {"name": name, "lots": 0, "in_stock": 0.0, "units": set()})
+        o["lots"] += 1
+        try:
+            o["in_stock"] += max(float(m.get("remaining") or 0), 0)
+        except (ValueError, TypeError):
+            pass
+        if m.get("unit"):
+            o["units"].add(m["unit"])
+
+    renames, unmatched = [], []
+    for key, o in sorted(orphans.items()):
+        row = {"lots": o["lots"], "in_stock": round(o["in_stock"], 4),
+               "units": sorted(o["units"])}
+        target = known.get("organic " + key)
+        if target:
+            renames.append(dict(row, **{"from": o["name"], "to": target}))
+        else:
+            unmatched.append(dict(row, name=o["name"]))
+    return {"renames": renames, "unmatched": unmatched}
+
+
+@raw_materials_bp.route("/admin/rename-ingredients")
+@manager_required
+def rename_ingredients_page():
+    """Preview + apply page for the ingredient lot rename."""
+    return render_template("rename_ingredients.html")
+
+
+@raw_materials_bp.route("/admin/rename-ingredients/run", methods=["GET", "POST"])
+@manager_required
+def rename_ingredients_run():
+    """GET = preview (no writes). POST = apply: every lot of each planned
+    old name gets the new name, keeping `item_renamed_from` + `item_renamed_at`
+    so the record still shows what the delivery was received as. Section
+    assignments follow the name when the new name has none yet."""
+    materials = _load_json(app.ORGANIC_RAW_PATH, [])
+    plan = _ingredient_rename_plan(
+        materials, app.load_recipes(), _load_json(app.ORGANIC_CUSTOM_ITEMS_PATH, []))
+    if request.method == "GET":
+        return jsonify(plan)
+    if not plan["renames"]:
+        return jsonify(dict(plan, applied=0))
+
+    to_by_key = {_norm_ing(r["from"]): r["to"] for r in plan["renames"]}
+    now = datetime.now().isoformat()
+    applied = 0
+    for m in materials:
+        target = to_by_key.get(_norm_ing(m.get("item")))
+        if not target:
+            continue
+        m["item_renamed_from"] = m.get("item")
+        m["item_renamed_at"] = now
+        m["item"] = target
+        applied += 1
+    _save_json(app.ORGANIC_RAW_PATH, materials)
+
+    sections = _load_rm_sections()
+    assignments = dict(sections.get("assignments") or {})
+    moved = 0
+    for r in plan["renames"]:
+        for unit in r["units"]:
+            old_key, new_key = r["from"] + "|" + unit, r["to"] + "|" + unit
+            if old_key in assignments and new_key not in assignments:
+                assignments[new_key] = assignments[old_key]
+                moved += 1
+    if moved:
+        sections["assignments"] = assignments
+        _save_json(RM_SECTIONS_PATH, sections)
+
+    return jsonify(dict(plan, applied=applied, sections_moved=moved))

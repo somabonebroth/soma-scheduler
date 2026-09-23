@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rename Ingredient Lots</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 980px; margin: 0 auto; padding: 24px; color: var(--text); background: var(--bg); }
+  h1 { font-size: 22px; }
+  p { font-size: 14px; line-height: 1.5; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; background: var(--white); }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+  th { background: var(--accent); color: var(--white); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .section-title { font-size: 13px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--grey-dark); margin-top: 22px; }
+  .topnav { display: flex; justify-content: flex-end; margin-bottom: 6px; }
+</style>
+</head>
+<body>
+  <div class="topnav"><a class="btn btn-outline" href="/organic?tab=raw">&larr; Raw Materials</a></div>
+  <h1>Rename Ingredient Lots</h1>
+  <p>Lots keep the name they were received under. When a recipe ingredient is renamed
+    (e.g. "Carrots" &rarr; "Organic Carrots"), the old lots no longer match any recipe and
+    show as zero stock. This renames <b>every</b> lot of the old name, past ones included,
+    so recipes, stock and history agree. Each lot keeps a note of its original name.
+    Past batch records are not changed.</p>
+
+  <div class="section-title">Will be renamed</div>
+  <div id="renames">Loading…</div>
+
+  <div class="section-title">Old names with no "Organic" match (left alone)</div>
+  <div id="unmatched"></div>
+
+  <p style="margin-top:20px;">
+    <button class="btn btn-primary" id="apply-btn" disabled onclick="applyRename()">Rename these lots</button>
+    <span id="status" class="status" style="margin-left:8px;"></span>
+  </p>
+
+<script>
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  function table(rows, cols) {
+    if (!rows.length) return '<p>None.</p>';
+    let h = '<table><tr>' + cols.map(c => '<th class="' + (c[2] || '') + '">' + c[0] + '</th>').join('') + '</tr>';
+    rows.forEach(r => { h += '<tr>' + cols.map(c => '<td class="' + (c[2] || '') + '">' + esc(c[1](r)) + '</td>').join('') + '</tr>'; });
+    return h + '</table>';
+  }
+
+  function render(plan) {
+    document.getElementById('renames').innerHTML = table(plan.renames, [
+      ['Received as', r => r.from], ['Becomes', r => r.to],
+      ['Lots', r => r.lots, 'num'], ['In stock', r => r.in_stock + ' ' + r.units.join('/'), 'num']]);
+    document.getElementById('unmatched').innerHTML = table(plan.unmatched, [
+      ['Name', r => r.name], ['Lots', r => r.lots, 'num'],
+      ['In stock', r => r.in_stock + ' ' + r.units.join('/'), 'num']]);
+    document.getElementById('apply-btn').disabled = !plan.renames.length;
+  }
+
+  async function load() {
+    const r = await fetch('/admin/rename-ingredients/run');
+    render(await r.json());
+  }
+
+  async function applyRename() {
+    if (!confirm('Rename all these lots? Each keeps a note of its original name.')) return;
+    const btn = document.getElementById('apply-btn');
+    const st = document.getElementById('status');
+    btn.disabled = true;
+    st.textContent = 'Renaming…';
+    const r = await fetch('/admin/rename-ingredients/run', {method: 'POST'});
+    const d = await r.json();
+    if (!r.ok) { st.textContent = d.error || 'Failed'; return; }
+    st.textContent = 'Renamed ' + d.applied + ' lots' + (d.sections_moved ? ', ' + d.sections_moved + ' section groupings carried over' : '') + '.';
+    load();
+  }
+
+  load();
+</script>
+</body>
+</html>
