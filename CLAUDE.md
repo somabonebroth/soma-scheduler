@@ -571,12 +571,22 @@ implementation). Step 1 tiles renamed **Rebuild Raw Balances / Check Finished Go
 Drift** because the pair is asymmetric — raw REWRITES the books (replay), FG only REPORTS —
 and the section note says so. The dashboard row keeps three pills (Overview, Mass Balance,
 Certificates & Documents); the hub carries the 1-2-3 sequence. Two read-only cards joined the
-hub beside the Organic FG snapshot and Stock Exceptions: **Supplier Certificates** — supplier
-records gained `cert_expiry` (YYYY-MM-DD, validated) + `cert_doc_id` (a `/certifications`
-document); `GET /api/suppliers` annotates each with `cert_status` none/expired/expiring
-(≤60 d)/current + `cert_days_left`, ONE rule in `suppliers._cert_status` so Buyers & Suppliers
-(expiry field + document picker + colour badge + certificate link) and the hub can never
-disagree — and **Organic Recipe Check** (`GET /api/organic/recipe-check`, audit_tools,
+hub beside the Organic FG snapshot and Stock Exceptions: **Supplier Certificates** — ONE
+status rule in `suppliers._cert_status` (none / expired / renew ≤14 d / expiring ≤60 d /
+current) so Buyers & Suppliers, the hub and the Daily Summary can never disagree.
+**Reshaped 2026-09-23:** a supplier has `type` (`supplier` | `distributor`) and a
+`certificates` list `{id, name, source, expiry, file, filename, doc_id}` — `source` blank =
+its own certificate, set = the upstream supplier a DISTRIBUTOR buys from (e.g. The Butcher
+Shoppe holds its farms' organic certs). PDFs upload per certificate to
+`DATA_DIR/supplier_certs/<sid>_<cid>.pdf` (`POST`/`GET
+/api/suppliers/<sid>/certificates/<cid>/file`, PDF magic-checked, 15 MB); the form never
+sends `file`, the server carries it over by cert id, and removing a cert or supplier deletes
+its file. The old single fields (`certifications` text, `cert_expiry`, `cert_doc_id`) fold
+into one cert on read (`_normalize_supplier`, persisted on next save; `doc_id` links stay
+readable). `suppliers.renewals_due()` feeds the Daily Summary's **Request renewal** block
+(`brief["renewals"]`, measured from TODAY, NOT an action — never gates a sign-off; a cert
+leaves the list when its expiry is moved forward). Tests: `python3 -m unittest
+tests.test_supplier_certs` — and **Organic Recipe Check** (`GET /api/organic/recipe-check`, audit_tools,
 manager): active recipes certified Organic whose deductable ingredient lines (same filter as
 `_deduct_run_ingredients`) are not organic-named; salt and water exempt
 (`ORGANIC_EXEMPT_WORDS`); recipe cards show an amber "check ingredients" badge (the floor's

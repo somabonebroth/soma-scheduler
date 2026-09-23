@@ -31,6 +31,7 @@ from helpers import _load_json, _sku_display
 import app
 import production
 import cleaning
+import suppliers
 
 logger = logging.getLogger(__name__)
 
@@ -588,6 +589,14 @@ def _build_brief(on):
     foh_handover = next((n["text"] for n in checks["notes"]
                          if n.get("source") == "FOH note"), "")
     signoffs = app._load_daily_signoffs()
+    # Supplier certificates to chase. Measured from TODAY, not the viewed
+    # date — it is a to-do for this morning, not a record of that day — and
+    # deliberately not an action: it never gates or snapshots a sign-off.
+    try:
+        renewals = suppliers.renewals_due()
+    except Exception:
+        logger.exception("supplier renewals unavailable")
+        renewals = []
     return {
         "date": on.isoformat(),
         "day_name": on.strftime("%A"),
@@ -598,6 +607,7 @@ def _build_brief(on):
         "notes": notes,
         "handover_note": handover,
         "foh_handover_note": foh_handover,
+        "renewals": renewals,
         "actions": actions,
         "all_clear": not actions,
         "signoff": signoffs.get(on.isoformat()),

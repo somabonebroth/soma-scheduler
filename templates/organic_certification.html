@@ -84,12 +84,13 @@
             <a href="/admin/fg-reconcile">Check finished goods for drift</a> (read-only, lot by lot; the zero-day reset is behind it).</p>
     </div>
 
-    <!-- Supplier certificates — read-only view of suppliers' cert_expiry /
-         cert_doc_id (edited on Buyers & Suppliers). Status comes from the
-         server (suppliers._cert_status) so both pages agree. -->
+    <!-- Supplier certificates — read-only view of each supplier's
+         `certificates` list (edited on Buyers & Suppliers, incl. the ones a
+         distributor holds for its suppliers). Status comes from the server
+         (suppliers._cert_status) so both pages agree. -->
     <div class="card" id="supplier-certs" style="margin-top:24px;">
         <h2>Supplier Certificates <span class="count-badge" id="sc-count">—</span></h2>
-        <p class="card-desc">Expired, expiring within 60 days, or not recorded. Record the expiry date and attach the certificate on Buyers &amp; Suppliers.</p>
+        <p class="card-desc">Every certificate on file, including the ones distributors hold for their suppliers. Expiry dates and PDFs are kept on Buyers &amp; Suppliers; the Daily Summary asks for a renewal 14 days before expiry.</p>
         <div id="sc-container"><div class="empty-state">Loading…</div></div>
     </div>
 </div>
@@ -116,29 +117,39 @@ async function loadSupplierCerts() {
       box.innerHTML = '<div class="empty-state">No suppliers yet.</div>';
       return;
     }
-    const order = { expired: 0, expiring: 1, none: 2, current: 3 };
-    sups.sort(function (a, b) {
-      const d = (order[a.cert_status] ?? 9) - (order[b.cert_status] ?? 9);
-      return d || String(a.name || '').localeCompare(String(b.name || ''));
+    // One row per certificate; a supplier with none gets one "not recorded" row.
+    const rows = [];
+    sups.forEach(function (s) {
+      const certs = s.certificates || [];
+      if (!certs.length) rows.push({ s: s, c: { name: '', status: 'none' } });
+      certs.forEach(function (c) { rows.push({ s: s, c: c }); });
     });
-    const n = function (st) { return sups.filter(function (s) { return s.cert_status === st; }).length; };
+    const order = { expired: 0, renew: 1, expiring: 2, none: 3, current: 4 };
+    rows.sort(function (a, b) {
+      const d = (order[a.c.status] ?? 9) - (order[b.c.status] ?? 9);
+      return d || String(a.s.name || '').localeCompare(String(b.s.name || ''));
+    });
+    const n = function (st) { return rows.filter(function (r) { return r.c.status === st; }).length; };
     const parts = [];
     if (n('expired')) parts.push(n('expired') + ' expired');
+    if (n('renew')) parts.push(n('renew') + ' to renew');
     if (n('expiring')) parts.push(n('expiring') + ' expiring');
     if (n('none')) parts.push(n('none') + ' not recorded');
     badge.textContent = parts.length ? parts.join(' · ') : 'all current';
-    const label = { expired: 'Expired', expiring: 'Expiring', current: 'Current', none: 'No expiry recorded' };
-    const colour = { expired: 'var(--action-red)', expiring: 'var(--amber-text-dark)', current: 'var(--action-green)', none: 'var(--text-light)' };
+    const label = { expired: 'Expired', renew: 'Request renewal', expiring: 'Expiring', current: 'Current', none: 'Not recorded' };
+    const colour = { expired: 'var(--action-red)', renew: 'var(--action-red)', expiring: 'var(--amber-text-dark)', current: 'var(--action-green)', none: 'var(--text-light)' };
     box.innerHTML = '<div class="inv-table-wrap"><table class="inv-table"><thead><tr><th>Supplier</th>'
-      + '<th>Certifications</th><th>Expiry</th><th>Status</th><th>Document</th></tr></thead><tbody>'
-      + sups.map(function (s) {
-          const st = s.cert_status || 'none';
-          const doc = s.cert_doc_id
-            ? '<a href="/api/certifications/' + encodeURIComponent(s.cert_doc_id) + '/download" target="_blank">&#128206; open</a>'
+      + '<th>Certificate</th><th>Expiry</th><th>Status</th><th>PDF</th></tr></thead><tbody>'
+      + rows.map(function (r) {
+          const s = r.s, c = r.c, st = c.status || 'none';
+          const url = c.file ? '/api/suppliers/' + encodeURIComponent(s.id) + '/certificates/' + encodeURIComponent(c.id) + '/file'
+            : c.doc_id ? '/api/certifications/' + encodeURIComponent(c.doc_id) + '/download' : '';
+          const doc = url ? '<a href="' + url + '" target="_blank">&#128206; open</a>'
             : '<span style="color:var(--text-light);">—</span>';
-          return '<tr><td><strong>' + escHtml(s.name) + '</strong></td>'
-            + '<td>' + escHtml(s.certifications || '—') + '</td>'
-            + '<td>' + escHtml(s.cert_expiry || '—') + '</td>'
+          return '<tr><td><strong>' + escHtml(s.name) + '</strong>'
+            + (s.type === 'distributor' ? ' <span style="color:var(--text-light);font-size:12px;">(distributor)</span>' : '') + '</td>'
+            + '<td>' + escHtml(c.name || '—') + (c.source ? ' <span style="color:var(--text-light);">for ' + escHtml(c.source) + '</span>' : '') + '</td>'
+            + '<td>' + escHtml(c.expiry || '—') + '</td>'
             + '<td style="color:' + colour[st] + ';font-weight:600;">' + label[st] + '</td>'
             + '<td>' + doc + '</td></tr>';
         }).join('')

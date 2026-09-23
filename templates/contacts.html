@@ -32,6 +32,17 @@ body.cp { background: var(--bg); }
 .bg-a { background:var(--amber-bg); color:var(--amber-text-dark); border:1px solid var(--amber-border); }
 .bg-r { background:var(--action-red-bg); color:var(--action-red); border:1px solid var(--action-red); }
 .bg-k { background:var(--bg); color:var(--grey-dark); border:1px solid #d8d8d0; }
+.cert-hint { font-size:11px; color:var(--text-light); margin:10px 0; }
+.cert-row { border:1.5px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:8px; background:var(--white); }
+.cert-row .g2 { margin:0; }
+.cert-row .ff { margin-bottom:8px; }
+.cert-foot { display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:12px; }
+.cert-foot input[type=file] { font-size:12px; flex:1; min-width:0; }
+.cert-add { font-size:12px; padding:6px 14px; margin-bottom:6px; }
+.cert-list { margin-top:8px; border-top:1px solid var(--border); padding-top:6px; }
+.cert-line { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12px; padding:3px 0; }
+.cert-line .cc-badge { margin-top:0; }
+.cert-line a { font-size:12px; }
 .cc-actions { display:flex; gap:8px; flex-shrink:0; }
 .mo { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:200; align-items:center; justify-content:center; padding:16px; }
 .mo.open { display:flex; }
@@ -168,6 +179,7 @@ body.cp { background: var(--bg); }
     <div class="mo-head"><h2 id="sup-mo-title">Add Supplier</h2><button class="mo-x" onclick="closeSup()">×</button></div>
     <div class="mo-body">
       <div class="ff"><label>Supplier Name *</label><input id="s-name" type="text" placeholder="e.g. Pfennings Organic"></div>
+      <div class="ff"><label>Type</label><select id="s-type" onchange="rCerts()"><option value="supplier">Supplier &mdash; grows or makes what we buy</option><option value="distributor">Distributor &mdash; sells us what other suppliers make</option></select></div>
       <div class="mo-div">Contact Information</div>
       <div class="g2" style="margin-top:14px;">
         <div class="ff"><label>Contact Name</label><input id="s-contact" type="text" placeholder="Jane Smith"></div>
@@ -176,12 +188,16 @@ body.cp { background: var(--bg); }
         <div class="ff"><label>Website</label><input id="s-web" type="url" placeholder="https://"></div>
       </div>
       <div class="ff"><label>Address</label><input id="s-addr" type="text" placeholder="Street, City, Province, Postal"></div>
-      <div class="ff"><label>Certifications</label><input id="s-certs" type="text" placeholder="e.g. Certified Organic, GAP"></div>
-      <div class="g2">
-        <div class="ff"><label>Certificate expiry</label><input id="s-cert-exp" type="date"></div>
-        <div class="ff"><label>Certificate document</label><select id="s-cert-doc"><option value="">— none —</option></select></div>
+      <div class="mo-div">Certificates</div>
+      <p class="cert-hint">Name, expiry and a PDF copy of each. The Daily Summary asks you to request a renewal 14 days before expiry.</p>
+      <div id="s-certs-own"></div>
+      <button type="button" class="btn btn-o cert-add" onclick="addCert(false)">+ Add certificate</button>
+      <div id="s-up-wrap">
+        <div class="mo-div">Their suppliers' certificates</div>
+        <p class="cert-hint">For a distributor: the certificate of each supplier whose product we buy through them.</p>
+        <div id="s-certs-up"></div>
+        <button type="button" class="btn btn-o cert-add" onclick="addCert(true)">+ Add supplier's certificate</button>
       </div>
-      <p style="font-size:11px;color:var(--text-light);margin:-6px 0 12px;">Documents come from Organic Certification → Documents. The expiry drives the expired / expiring badges.</p>
       <div class="ff"><label>Notes</label><textarea id="s-notes" rows="2" placeholder="Min order, lead time, payment terms…"></textarea></div>
       <div class="mo-div">Assigned Ingredients</div>
       <div style="margin-top:14px;">
@@ -269,18 +285,13 @@ async function loadSups(){
     h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">';
     h+='<div class="cc-name" style="font-size:17px;">'+snameE+'</div>';
     if(n) h+='<span class="cc-badge bg-g">'+n+' ingredient'+(n===1?'':'s')+'</span>';
-    if(s.certifications) h+='<span class="cc-badge bg-b">'+e(s.certifications)+'</span>';
-    if(s.cert_status&&s.cert_status!=='none'){
-      var cs=s.cert_status;
-      h+='<span class="cc-badge '+(cs==='expired'?'bg-r':cs==='expiring'?'bg-a':'bg-g')+'">'
-        +(cs==='expired'?'Certificate expired ':cs==='expiring'?'Certificate expires ':'Certificate valid to ')+e(s.cert_expiry)+'</span>';
-    }
-    if(s.cert_doc_id) h+='<a class="cc-badge bg-b" href="/api/certifications/'+encodeURIComponent(s.cert_doc_id)+'/download" target="_blank" style="text-decoration:none;">&#128206; certificate</a>';
+    if(s.type==='distributor') h+='<span class="cc-badge bg-k">Distributor</span>';
     h+='</div>';
     if(m.length) h+='<div class="cc-sub">'+m.join(' &middot; ')+'</div>';
     if(s.address) h+='<div class="cc-sub">'+e(s.address)+'</div>';
     if(n) h+='<div class="cc-sub" style="margin-top:6px;font-size:11px;">'+prev+'</div>';
     if(s.notes) h+='<div class="cc-sub" style="font-style:italic;margin-top:4px;color:#999;">'+e(s.notes)+'</div>';
+    h+=certListHtml(s);
     h+='</div><div class="cc-actions">';
     h+='<button class="btn btn-p" style="font-size:12px;padding:8px 16px;background:#2e7d32;border:none;" data-edit-sid="'+sidE+'">Edit</button>';
     h+='<button class="btn-r" data-del-sid="'+sidE+'" data-del-name="'+snameE+'">Delete</button>';
@@ -304,27 +315,120 @@ function rSupIng(){
     return '<label class="sku-chk"><input type="checkbox" '+(!!_sCk[k]?'checked':'')+' onchange="_sCk[\''+e(k)+'\']=this.checked">'+e(i.name)+' <span style="font-size:11px;color:var(--text-light);">('+e(i.unit||'')+')</span></label>';
   }).join('');
 }
-function _clrSup(){['s-name','s-contact','s-phone','s-email','s-web','s-addr','s-certs','s-cert-exp','s-cert-doc','s-notes','s-ing-q'].forEach(function(id){G(id).value='';});G('s-msg').textContent='';_sCk={};}
-// Certificate document picker: the uploaded documents from /certifications.
-async function _fDocs(){var sel=G('s-cert-doc');var keep=sel.value;var h='<option value="">— none —</option>';try{var docs=await(await fetch('/api/certifications')).json();docs.forEach(function(d){h+='<option value="'+e(d.id)+'">'+e(d.label||d.filename)+(d.category?' ('+e(d.category)+')':'')+'</option>';});}catch(ex){}sel.innerHTML=h;sel.value=keep;}
-async function openAddSup(){_sMode='add';_sId=null;G('sup-mo-title').textContent='Add Supplier';G('s-save').textContent='Save Supplier';_clrSup();await _fIng();await _fDocs();rSupIng();G('sup-mo').classList.add('open');}
+function _clrSup(){['s-name','s-contact','s-phone','s-email','s-web','s-addr','s-notes','s-ing-q'].forEach(function(id){G(id).value='';});G('s-type').value='supplier';G('s-msg').textContent='';_sCk={};_sCerts=[];rCerts();}
+
+/* ── Supplier certificates ──
+   Each row: {id, name, source, expiry, file, doc_id, up, pending}. `up` marks
+   a certificate a DISTRIBUTOR holds for one of its own suppliers (`source` =
+   that supplier's name). The PDF is uploaded after the supplier saves, one
+   request per new file; the server keeps file links by certificate id. */
+let _sCerts = [];
+const CERT_LABEL = {expired: 'Expired', renew: 'Request renewal', expiring: 'Expires soon', current: 'Valid', none: 'No expiry'};
+const CERT_BADGE = {expired: 'bg-r', renew: 'bg-r', expiring: 'bg-a', current: 'bg-g', none: 'bg-k'};
+function certFileUrl(sid, c){
+  if(c.file) return '/api/suppliers/'+encodeURIComponent(sid)+'/certificates/'+encodeURIComponent(c.id)+'/file';
+  if(c.doc_id) return '/api/certifications/'+encodeURIComponent(c.doc_id)+'/download';
+  return '';
+}
+function certWhen(c){
+  if(!c.expiry) return 'no expiry recorded';
+  if(c.days_left<0) return 'expired '+e(c.expiry);
+  return 'expires '+e(c.expiry)+(c.days_left<=60?' ('+c.days_left+' day'+(c.days_left===1?'':'s')+')':'');
+}
+function certListHtml(s){
+  const certs=s.certificates||[];
+  if(!certs.length) return '<div class="cert-list"><div class="cert-line" style="color:var(--text-light);">No certificates on file.</div></div>';
+  return '<div class="cert-list">'+certs.map(function(c){
+    const url=certFileUrl(s.id,c);
+    return '<div class="cert-line"><span class="cc-badge '+CERT_BADGE[c.status||'none']+'">'+CERT_LABEL[c.status||'none']+'</span>'
+      +'<strong>'+e(c.name)+'</strong>'+(c.source?' <span style="color:var(--text-light);">for '+e(c.source)+'</span>':'')
+      +' <span style="color:var(--text-light);">&middot; '+certWhen(c)+'</span>'
+      +(url?' <a href="'+url+'" target="_blank">&#128206; PDF</a>':' <span style="color:var(--action-red);">no PDF</span>')
+      +'</div>';
+  }).join('')+'</div>';
+}
+function addCert(up){
+  _sCerts.push({id:'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:up?'':'Certified Organic',source:'',expiry:'',up:up});
+  rCerts();
+}
+function rmCert(i){
+  const c=_sCerts[i];
+  if((c.file||c.doc_id)&&!confirm('Remove "'+(c.name||'this certificate')+'" and its PDF?'))return;
+  _sCerts.splice(i,1);rCerts();
+}
+function certRowHtml(c,i){
+  const url=_sId?certFileUrl(_sId,c):'';
+  return '<div class="cert-row">'
+    +(c.up?'<div class="ff"><label>Their supplier *</label><input type="text" data-ci="'+i+'" data-k="source" value="'+e(c.source)+'" placeholder="e.g. Pfennings Organic"></div>':'')
+    +'<div class="g2"><div class="ff"><label>Certificate *</label><input type="text" data-ci="'+i+'" data-k="name" value="'+e(c.name)+'" placeholder="e.g. Certified Organic (Pro-Cert)"></div>'
+    +'<div class="ff"><label>Expires</label><input type="date" data-ci="'+i+'" data-k="expiry" value="'+e(c.expiry)+'"></div></div>'
+    +'<div class="cert-foot">'
+    +(url?'<a href="'+url+'" target="_blank">&#128206; Current PDF</a><span style="color:var(--text-light);">Replace:</span>':'<span style="color:var(--text-light);">PDF:</span>')
+    +'<input type="file" accept="application/pdf,.pdf" data-ci="'+i+'">'
+    +'<button type="button" class="btn-r" onclick="rmCert('+i+')">Remove</button></div></div>';
+}
+function rCerts(){
+  const own=[],up=[];
+  _sCerts.forEach(function(c,i){(c.up?up:own).push(certRowHtml(c,i));});
+  G('s-certs-own').innerHTML=own.join('');
+  G('s-certs-up').innerHTML=up.join('');
+  G('s-up-wrap').style.display=(G('s-type').value==='distributor'||up.length)?'':'none';
+}
+// One delegated listener: typing updates state without re-rendering (keeps focus).
+document.addEventListener('input',function(ev){
+  const i=ev.target.getAttribute&&ev.target.getAttribute('data-ci');
+  if(i===null||i===undefined||!_sCerts[i])return;
+  if(ev.target.type==='file')return;
+  _sCerts[i][ev.target.getAttribute('data-k')]=ev.target.value;
+});
+document.addEventListener('change',function(ev){
+  const i=ev.target.getAttribute&&ev.target.getAttribute('data-ci');
+  if(i===null||i===undefined||!_sCerts[i]||ev.target.type!=='file')return;
+  _sCerts[i].pending=ev.target.files[0]||null;
+});
+async function uploadCertFiles(sid){
+  const errs=[];
+  for(const c of _sCerts){
+    if(!c.pending)continue;
+    const fd=new FormData();fd.append('file',c.pending);
+    try{
+      const r=await fetch('/api/suppliers/'+encodeURIComponent(sid)+'/certificates/'+encodeURIComponent(c.id)+'/file',{method:'POST',body:fd});
+      if(r.ok){c.pending=null;}else{const d=await r.json().catch(function(){return {};});errs.push((c.name||'Certificate')+': '+(d.error||'upload failed'));}
+    }catch(ex){errs.push((c.name||'Certificate')+': upload failed');}
+  }
+  return errs;
+}
+async function openAddSup(){_sMode='add';_sId=null;G('sup-mo-title').textContent='Add Supplier';G('s-save').textContent='Save Supplier';_clrSup();await _fIng();rSupIng();G('sup-mo').classList.add('open');}
 async function openEditSup(sid){
   var s=_sups.find(function(x){return x.id===sid;});if(!s)return;
   _sMode='edit';_sId=sid;G('sup-mo-title').textContent='Edit Supplier';G('s-save').textContent='Save Changes';
-  G('s-name').value=s.name||'';G('s-contact').value=s.contact_name||'';G('s-phone').value=s.phone||'';G('s-email').value=s.email||'';G('s-web').value=s.website||'';G('s-addr').value=s.address||'';G('s-certs').value=s.certifications||'';G('s-notes').value=s.notes||'';G('s-ing-q').value='';G('s-msg').textContent='';
+  G('s-name').value=s.name||'';G('s-contact').value=s.contact_name||'';G('s-phone').value=s.phone||'';G('s-email').value=s.email||'';G('s-web').value=s.website||'';G('s-addr').value=s.address||'';G('s-type').value=s.type||'supplier';G('s-notes').value=s.notes||'';G('s-ing-q').value='';G('s-msg').textContent='';
   _sCk={};(s.ingredients||[]).forEach(function(i){_sCk[i.name+'|'+(i.unit||'')]=true;});
-  await _fIng();await _fDocs();G('s-cert-exp').value=s.cert_expiry||'';G('s-cert-doc').value=s.cert_doc_id||'';rSupIng();G('sup-mo').classList.add('open');
+  _sCerts=(s.certificates||[]).map(function(c){return {id:c.id,name:c.name||'',source:c.source||'',expiry:c.expiry||'',file:c.file||'',doc_id:c.doc_id||'',up:!!c.source};});
+  rCerts();await _fIng();rSupIng();G('sup-mo').classList.add('open');
 }
 function closeSup(){G('sup-mo').classList.remove('open');}
 async function saveSup(){
   var name=G('s-name').value.trim(),msg=G('s-msg'),btn=G('s-save');
   if(!name){msg.className='smsg err';msg.textContent='Name required.';return;}
   var ing=_ing.filter(function(i){return _sCk[i.name+'|'+(i.unit||'')];});
-  var body={name,ingredients:ing,contact_name:G('s-contact').value.trim(),phone:G('s-phone').value.trim(),email:G('s-email').value.trim(),website:G('s-web').value.trim(),address:G('s-addr').value.trim(),certifications:G('s-certs').value.trim(),cert_expiry:G('s-cert-exp').value,cert_doc_id:G('s-cert-doc').value,notes:G('s-notes').value.trim()};
+  var body={name,ingredients:ing,contact_name:G('s-contact').value.trim(),phone:G('s-phone').value.trim(),email:G('s-email').value.trim(),website:G('s-web').value.trim(),address:G('s-addr').value.trim(),type:G('s-type').value,notes:G('s-notes').value.trim(),
+    certificates:_sCerts.map(function(c){return {id:c.id,name:(c.name||'').trim(),source:c.up?(c.source||'').trim():'',expiry:c.expiry||''};})};
+  const badCert=_sCerts.find(function(c){return !(c.name||'').trim()||(c.up&&!(c.source||'').trim());});
+  if(badCert){msg.className='smsg err';msg.textContent=badCert.up&&!(badCert.source||'').trim()?'Name the supplier each certificate belongs to.':'Every certificate needs a name.';return;}
   btn.disabled=true;btn.textContent='Saving…';
   var res=await fetch(_sMode==='add'?'/api/suppliers':'/api/suppliers/'+_sId,{method:_sMode==='add'?'POST':'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  var d=await res.json();btn.disabled=false;btn.textContent=_sMode==='add'?'Save Supplier':'Save Changes';
-  if(res.ok){closeSup();loadSups();}else{msg.className='smsg err';msg.textContent=d.error||'Failed.';}
+  var d=await res.json();
+  if(res.ok){
+    const errs=await uploadCertFiles(d.id);
+    btn.disabled=false;
+    if(errs.length){
+      // The supplier is saved; stay open in edit mode so the PDF can be retried.
+      _sMode='edit';_sId=d.id;G('sup-mo-title').textContent='Edit Supplier';btn.textContent='Save Changes';
+      msg.className='smsg err';msg.textContent='Saved, but: '+errs.join('; ');loadSups();return;
+    }
+    closeSup();loadSups();
+  }else{btn.disabled=false;btn.textContent=_sMode==='add'?'Save Supplier':'Save Changes';msg.className='smsg err';msg.textContent=d.error||'Failed.';}
 }
 async function delSup(sid,name){if(!confirm('Delete supplier "'+name+'"?'))return;await fetch('/api/suppliers/'+sid,{method:'DELETE'});loadSups();}
 

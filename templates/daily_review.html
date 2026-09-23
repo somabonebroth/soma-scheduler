@@ -185,6 +185,28 @@ function staffNotesHtml(b){
             : '');
 }
 
+// Supplier certificates expired or expiring within 14 days
+// (suppliers.renewals_due). Not an action: it stays until the new expiry is
+// entered on Buyers & Suppliers, whatever day is being reviewed.
+function renewalsHtml(list){
+    if (!list || !list.length) return '';
+    return '<div class="dr-section sec-amber"><div class="dr-head">'
+        + '<span class="dr-title">Request renewal</span>'
+        + '<span class="dr-sub">Supplier certificates expiring within 14 days</span></div>'
+        + '<div class="dr-body">' + list.map(r => {
+            const when = r.days_left < 0
+                ? 'expired ' + (-r.days_left) + ' day' + (r.days_left === -1 ? '' : 's') + ' ago'
+                : r.days_left === 0 ? 'expires today'
+                : 'expires in ' + r.days_left + ' day' + (r.days_left === 1 ? '' : 's');
+            return '<div class="dr-issue"><span class="dr-lvl ' + (r.days_left < 0 ? 'high' : 'medium') + '">'
+                + (r.days_left < 0 ? 'Expired' : 'Renew') + '</span><span><b>' + esc(r.supplier) + '</b> &mdash; '
+                + esc(r.certificate) + (r.source ? ' (' + esc(r.source) + ')' : '')
+                + ' ' + when + ' <span class="dr-lot">' + esc(r.expiry) + '</span></span></div>';
+          }).join('')
+        + '<div style="margin-top:8px;font-size:12px;"><a href="/contacts?tab=suppliers">Update on Buyers &amp; Suppliers &rarr;</a></div>'
+        + '</div></div>';
+}
+
 function productionHtml(p){
     // Lots + stamp guide + table + totals come from the shared labelling
     // panel (_labelling_panel.html); this page adds its own sign-off line,
@@ -393,6 +415,7 @@ async function load(){
         + '<div class="dr-nav"><button onclick="step(1)">&#8592; Earlier</button>'
         + '<button onclick="step(-1)"' + (offset <= 1 ? ' disabled' : '') + '>Later &#8594;</button></div></div>'
         + staffNotesHtml(b)
+        + renewalsHtml(b.renewals)
         + banner
         + productionHtml(b.production)
         + transactionsHtml(b.transactions)
