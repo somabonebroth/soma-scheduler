@@ -32,11 +32,13 @@
   <div class="lbl">Order Number</div><div class="val">{{ order.id }}</div>
   {% if order.order_number %}<div class="lbl">Ripe Order #</div><div class="val sm">{{ order.order_number }}</div>{% endif %}
 </div>
+{# Order placed / requested date / deliver-to removed 2026-09-25 — the slip
+   names the business instead. Older orders without one show no info block. #}
+{% if order.business_name %}
 <div class="ps-info">
-  <div><div class="lbl">Order Placed</div><div class="val">{{ order.created_at[:10] }}</div></div>
-  <div><div class="lbl">Requested Date</div><div class="val">{{ order.requested_date or '—' }}{% if order.requested_time %} · {{ order.requested_time }}{% endif %}</div></div>
-  <div class="wide"><div class="lbl">Deliver To</div><div class="val"><strong>{{ order.delivery_label }}</strong><br>{{ order.delivery_address }}</div></div>
+  <div class="wide"><div class="lbl">Business</div><div class="val"><strong>{{ order.business_name }}</strong></div></div>
 </div>
+{% endif %}
 {% if order.notes %}
 <div class="ps-notes"><strong>Notes:</strong> {{ order.notes }}</div>
 {% endif %}
