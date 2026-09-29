@@ -39,8 +39,6 @@
 .finish-inputs textarea { min-height: 50px; resize: vertical; }
 .prod-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
 .prod-row label { font-size: 11px; }
-.label-btn { background: var(--accent); color: var(--white); border: none; padding: 8px 14px; border-radius: 4px; font-size: 13px; font-weight: 600; cursor: pointer; margin-bottom: 8px; }
-.label-btn:hover { background: var(--accent-light); }
 .no-production { color: var(--text-light); font-size: 12px; padding: 20px; text-align: center; }
 .kettles-end-section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 16px; }
 .kettles-end-section h3 { font-size: 14px; margin-bottom: 8px; color: var(--dark); }
@@ -152,7 +150,6 @@ function applyReadOnly(){
     // also gated server-side (boh_required), so this is presentation only.
     const main=document.querySelector('.main');
     main.querySelectorAll('input,textarea').forEach(function(el){el.disabled=true;});
-    main.querySelectorAll('.label-btn').forEach(function(el){el.style.display='none';});
     const signoff=document.querySelector('.signoff-section');
     if(signoff)signoff.style.display='none';
     const ind=document.getElementById('save-indicator');
@@ -232,10 +229,6 @@ function buildRecipeCard(data,vessel,side){
         html+='<div class="finish-inputs">';
         html+='<div class="prod-row"><div><label>Amount Produced</label><input type="number" id="produced-'+vid+'" inputmode="numeric" min="0" step="1" placeholder="units" oninput="autoSave();updatePct()"></div>';
         html+='<div><label>BB Produced</label><input type="number" id="bb-'+vid+'" inputmode="numeric" min="0" step="1" placeholder="BB units" oninput="autoSave();updatePct()"></div></div>';
-        html+='<div style="display:flex;gap:8px;margin-bottom:8px;">';
-        html+='<button class="label-btn" onclick="generateLabel(\''+name.replace(/'/g,"\\'")+'\',\''+(r.brand||'').replace(/'/g,"\\'")+'\',\''+(r.format||'').replace(/'/g,"\\'")+'\')">Generate Label</button>';
-        html+='<button class="label-btn" style="background:#5b9bd5;" onclick="generateLabel(\''+name.replace(/'/g,"\\'")+'\',\''+(r.brand||'').replace(/'/g,"\\'")+'\',\'BB-750ML\')">Generate BB Label</button>';
-        html+='</div>';
         html+='<label style="margin-top:4px;">Notes</label><textarea id="fnotes-'+vid+'" placeholder="Finish notes..." oninput="autoSave()"></textarea>';
         html+='</div>';
     }
@@ -311,18 +304,6 @@ function autoSave(){
         }
         catch(e){ind.textContent='Save failed';}
     },800);
-}
-
-// The label buttons sit on the FINISH side: these jars come from the batch
-// STARTED yesterday, and the inventory record stamps LOT# = start date + 365.
-// So send prev_lot + prev_date (DD/MM/YYYY, the format /api/label parses) —
-// the same LOT# the Daily Summary shows and the Best Before that matches it.
-async function generateLabel(recipeName,brandName,format){
-    try{
-        var res=await fetch('/api/label',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({brand_name:brandName,recipe_name:recipeName,recipe_format:format,lot:productionData.prev_lot,production_date:productionData.prev_date})});
-        if(res.ok){var blob=await res.blob();var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download='Label_'+recipeName.replace(/[^a-zA-Z0-9]/g,'_')+'.pdf';a.click();URL.revokeObjectURL(url);}
-        else{var err=await res.json();alert(err.error||'Label generation failed');}
-    }catch(e){alert('Label generation failed');}
 }
 
 document.addEventListener('DOMContentLoaded',init);

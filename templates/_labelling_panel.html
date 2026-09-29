@@ -1,5 +1,7 @@
 {# The labelling panel — lot cards with the mirrored hot-stamp guide, the
-   per-product table with Generate Label buttons, and the totals strip.
+   per-product table, and the totals strip. Label buttons render only when
+   the caller asks — lpBodyHtml({labels: true}) — and only the Daily Summary
+   does: it is the ONE place a case label is printed (2026-09-29).
    Shared by daily_review.html (Daily Summary section 1) and the FOH
    dashboard (extracted 2026-08-26 so the two can never drift).
    Usage: include this once, then lpSetData(production, dateIso) and inject
@@ -98,7 +100,8 @@ async function lpGenerateLabel(idx){
     }
 }
 
-function lpBodyHtml(){
+function lpBodyHtml(opts){
+    const labels = !!(opts && opts.labels);
     const p = lpProd;
     if (!p || !p.rows.length) {
         return '<div class="dr-empty">No production recorded for this day.</div>';
@@ -108,7 +111,7 @@ function lpBodyHtml(){
     body += '<div class="dr-scroll"><table class="dr-table"><tr>'
         + '<th>Product</th><th>Vessel</th><th>Lot</th>'
         + (showBatch ? '<th>Batched</th>' : '')
-        + '<th class="num">Jars</th><th class="num"></th></tr>'
+        + '<th class="num">Jars</th>' + (labels ? '<th class="num"></th>' : '') + '</tr>'
         + p.rows.map((r, i) =>
             '<tr><td>' + lpEsc(r.item)
             + (r.certification ? ' <span class="dr-tag">' + lpEsc(r.certification) + '</span>' : '')
@@ -116,9 +119,9 @@ function lpBodyHtml(){
             + '<td class="dr-lot">' + lpEsc(r.lot || '—') + '</td>'
             + (showBatch ? '<td class="dr-lot">' + lpEsc(r.batched_on || '—') + '</td>' : '')
             + '<td class="num"><b>' + r.quantity + '</b></td>'
-            + '<td class="num">' + (r.recipe
+            + (labels ? '<td class="num">' + (r.recipe
                 ? '<button class="dr-labelbtn" id="lp-lbl-' + i + '" onclick="lpGenerateLabel(' + i + ')">Label</button>'
-                : '') + '</td></tr>').join('')
+                : '') + '</td>' : '') + '</tr>').join('')
         + '</table></div>';
     body += '<div class="dr-totals"><span>Total jars: <b>' + p.total_jars + '</b></span>'
         + p.totals.map(t => '<span>' + lpEsc(t[0]) + ': <b>' + t[1] + '</b></span>').join('') + '</div>';

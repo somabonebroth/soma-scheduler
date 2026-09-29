@@ -471,7 +471,7 @@ and a mirror check. `_lot_blocks` reads the lots off the **FG rows**, never reco
 the date, so the panel and the inventory record can't disagree; a day whose jars came from
 batches started on different dates gets one block per lot. Each product row has a Generate
 Label button → `/api/label` with the FG lot + the BATCH (start) date, so printed Best
-Before = lot. **The tablet agrees since 2026-09-18:** `daily_production.html`'s finish-side label buttons send `productionData.prev_lot` + `prev_date` (start+365, what FG stamps). Before that they sent `lot` (finish+365) and a `date` string `/api/label` could not parse (so Best Before fell back to today+365) — the printed case label ran one day ahead of the Daily Summary's LOT#.
+Before = lot. **The Daily Summary is the ONLY place a case label is printed (2026-09-29, Jeremy's call).** The tablet's finish-side Generate Label + Generate BB Label buttons were removed, and the shared `_labelling_panel.html` renders its Label column only when called as `lpBodyHtml({labels: true})` — `daily_review.html` does, the FOH dashboard does not. Don't add a label button anywhere else; a second caller is how the tablet once printed a LOT# one day ahead of the Daily Summary.
 Section 2 gained **Portal orders** (Ripe + Wholesale Portal sale rows regrouped by order,
 keyed on `deducted_at` — the day stock actually left — NOT `sale_date`, which for wholesale
 is a future delivery date) and **Retail channels**: Shopify + Clover read LIVE for the date

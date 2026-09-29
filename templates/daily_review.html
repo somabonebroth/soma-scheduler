@@ -212,7 +212,7 @@ function productionHtml(p){
     // panel (_labelling_panel.html); this page adds its own sign-off line,
     // issues and section chrome on top.
     lpSetData(p, brief.date);
-    let body = lpBodyHtml();
+    let body = lpBodyHtml({labels: true});
     if (p.kitchen_signoff) {
         body += '<div class="dr-totals"><span>Kitchen sign-off: <b>' + esc(p.kitchen_signoff) + '</b></span></div>';
     }
