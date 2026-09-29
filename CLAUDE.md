@@ -569,6 +569,12 @@ The tool (preview GET / apply POST on `/run`) renames EVERY lot of a name no act
 custom item uses, when the recipes hold an "Organic <name>" twin; history included, so replay
 agrees. Each lot keeps `item_renamed_from`/`item_renamed_at`; section assignments follow the name.
 Past `ingredients_used` snapshots are untouched. Not linked from the dashboard — reach it by URL.
+**Since 2026-09-29 the preview names its skips:** a name an active recipe still uses is left
+alone, and when it also has an Organic twin it lists under "Skipped" with the recipes holding
+it (the "Turkey" recipe kept three names stranded while the page showed nothing to do). An
+unmatched name can be PICKED onto a current name (`POST {"picks": {old: new}}`; old must be
+unmatched, new a recipe/custom name) — e.g. "Organic Parsley" → "Organic Fresh Parsley".
+Renaming fixes new batches only; past batches' shortage markers clear with Rebuild Raw Balances.
 Tests: `python3 -m unittest tests.test_ingredient_rename`.
 
 **Receipt photos:** one per delivery, stored as `<entry_id>.<ext>` in `rm_receipt_photos/`, anchored to the first entry of a bulk save. `GET /api/organic/raw-materials/receipt-photos` lists which entry ids have one; the Receiving list shows a "📎 Invoice" button per delivery.

@@ -959,10 +959,16 @@ def _ingredient_rename_plan(materials, recipes, custom_items):
     of those have an "Organic <name>" twin in the recipes.
 
     Returns {renames: [{from, to, lots, in_stock, units}], unmatched: [{name,
-    lots, in_stock, units}]}. A name still used by any active recipe is never
-    touched, so a non-organic recipe that kept the plain name keeps its lots."""
-    known = {}
-    for r in (recipes or {}).values():
+    lots, in_stock, units}], blocked: [{name, to, lots, in_stock, units,
+    recipes}], targets: [names]}. A name still used by any active recipe is
+    never touched, so a non-organic recipe that kept the plain name keeps its
+    lots — but when that name ALSO has an "Organic" twin it is reported under
+    `blocked` with the recipes holding it, because a skip nobody sees looks
+    exactly like a rename that worked (2026-09-29: one recipe still on the old
+    names kept three ingredients stranded). `targets` is every current name,
+    for the page's manual pick on an unmatched row."""
+    known, used_by = {}, {}
+    for rname, r in (recipes or {}).items():
         if not isinstance(r, dict) or r.get("archived"):
             continue
         for section in app.INGREDIENT_SECTIONS:
@@ -972,18 +978,24 @@ def _ingredient_rename_plan(materials, recipes, custom_items):
                 name = (item.get("name") or "").strip()
                 if name:
                     known.setdefault(_norm_ing(name), name)
+                    used_by.setdefault(_norm_ing(name), set()).add(rname)
     for c in custom_items or []:
         name = (c.get("name") or "").strip()
         if name:
             known.setdefault(_norm_ing(name), name)
 
-    orphans = {}
+    orphans, blocked = {}, {}
     for m in materials:
         name = (m.get("item") or "").strip()
         key = _norm_ing(name)
-        if not key or key in known:
+        if not key:
             continue
-        o = orphans.setdefault(key, {"name": name, "lots": 0, "in_stock": 0.0, "units": set()})
+        if key in known:
+            if "organic " + key not in known:
+                continue
+            o = blocked.setdefault(key, {"name": name, "lots": 0, "in_stock": 0.0, "units": set()})
+        else:
+            o = orphans.setdefault(key, {"name": name, "lots": 0, "in_stock": 0.0, "units": set()})
         o["lots"] += 1
         try:
             o["in_stock"] += max(float(m.get("remaining") or 0), 0)
@@ -1001,7 +1013,14 @@ def _ingredient_rename_plan(materials, recipes, custom_items):
             renames.append(dict(row, **{"from": o["name"], "to": target}))
         else:
             unmatched.append(dict(row, name=o["name"]))
-    return {"renames": renames, "unmatched": unmatched}
+    blocked_rows = []
+    for key, o in sorted(blocked.items()):
+        blocked_rows.append({"name": o["name"], "to": known["organic " + key],
+                             "lots": o["lots"], "in_stock": round(o["in_stock"], 4),
+                             "units": sorted(o["units"]),
+                             "recipes": sorted(used_by.get(key, ()))})
+    return {"renames": renames, "unmatched": unmatched, "blocked": blocked_rows,
+            "targets": sorted(known.values(), key=str.lower)}
 
 
 @raw_materials_bp.route("/admin/rename-ingredients")
@@ -1017,12 +1036,30 @@ def rename_ingredients_run():
     """GET = preview (no writes). POST = apply: every lot of each planned
     old name gets the new name, keeping `item_renamed_from` + `item_renamed_at`
     so the record still shows what the delivery was received as. Section
-    assignments follow the name when the new name has none yet."""
+    assignments follow the name when the new name has none yet.
+
+    POST may carry `{"picks": {"<unmatched name>": "<current name>"}}` — a
+    manager's choice for a name with no automatic "Organic" twin (e.g. lots
+    received as "Organic Parsley" when the recipes say "Organic Fresh
+    Parsley"). Only UNMATCHED names may be picked, and only onto a name a
+    recipe or custom item uses, so a pick can't strand stock a second time."""
     materials = _load_json(app.ORGANIC_RAW_PATH, [])
     plan = _ingredient_rename_plan(
         materials, app.load_recipes(), _load_json(app.ORGANIC_CUSTOM_ITEMS_PATH, []))
     if request.method == "GET":
         return jsonify(plan)
+
+    picks = (request.get_json(silent=True) or {}).get("picks") or {}
+    unmatched = {_norm_ing(u["name"]): u for u in plan["unmatched"]}
+    targets = {_norm_ing(t): t for t in plan["targets"]}
+    for src, dst in picks.items():
+        u, target = unmatched.get(_norm_ing(src)), targets.get(_norm_ing(dst))
+        if not u or not target:
+            return jsonify({"error": f"Can't rename '{src}' to '{dst}': the old name must "
+                                     f"be in the unmatched list and the new one a current "
+                                     f"recipe ingredient."}), 400
+        plan["renames"].append({"from": u["name"], "to": target, "lots": u["lots"],
+                                "in_stock": u["in_stock"], "units": u["units"]})
     if not plan["renames"]:
         return jsonify(dict(plan, applied=0))
 

@@ -29,7 +29,15 @@
   <div class="section-title">Will be renamed</div>
   <div id="renames">Loading…</div>
 
-  <div class="section-title">Old names with no "Organic" match (left alone)</div>
+  <div class="section-title">Skipped &mdash; a recipe still uses the old name</div>
+  <p style="margin:4px 0 0;">These have an "Organic" name in the recipes, but the recipes listed
+    still ask for the old one, so their lots stay put. Change those recipes to the Organic name,
+    then come back here.</p>
+  <div id="blocked"></div>
+
+  <div class="section-title">Old names with no "Organic" match</div>
+  <p style="margin:4px 0 0;">Left alone unless you pick the name the recipes use for it
+    (e.g. "Organic Parsley" &rarr; "Organic Fresh Parsley").</p>
   <div id="unmatched"></div>
 
   <p style="margin-top:20px;">
@@ -47,14 +55,42 @@
     return h + '</table>';
   }
 
+  let picks = {};
+
+  function pickSelect(name, targets) {
+    let h = '<select data-from="' + esc(name) + '" onchange="setPick(this)"><option value="">Leave alone</option>';
+    targets.forEach(t => { h += '<option value="' + esc(t) + '">' + esc(t) + '</option>'; });
+    return h + '</select>';
+  }
+
+  function setPick(sel) {
+    if (sel.value) picks[sel.dataset.from] = sel.value; else delete picks[sel.dataset.from];
+    updateButton();
+  }
+
+  let autoCount = 0;
+  function updateButton() {
+    document.getElementById('apply-btn').disabled = !(autoCount || Object.keys(picks).length);
+  }
+
   function render(plan) {
     document.getElementById('renames').innerHTML = table(plan.renames, [
       ['Received as', r => r.from], ['Becomes', r => r.to],
       ['Lots', r => r.lots, 'num'], ['In stock', r => r.in_stock + ' ' + r.units.join('/'), 'num']]);
-    document.getElementById('unmatched').innerHTML = table(plan.unmatched, [
-      ['Name', r => r.name], ['Lots', r => r.lots, 'num'],
+    document.getElementById('blocked').innerHTML = table(plan.blocked || [], [
+      ['Received as', r => r.name], ['Would become', r => r.to],
+      ['Still used by', r => r.recipes.join(', ')],
       ['In stock', r => r.in_stock + ' ' + r.units.join('/'), 'num']]);
-    document.getElementById('apply-btn').disabled = !plan.renames.length;
+    const um = document.getElementById('unmatched');
+    um.innerHTML = table(plan.unmatched, [
+      ['Name', r => r.name], ['Lots', r => r.lots, 'num'],
+      ['In stock', r => r.in_stock + ' ' + r.units.join('/'), 'num'], ['Rename to', r => '']]);
+    um.querySelectorAll('tr').forEach((tr, i) => {
+      if (i) tr.lastElementChild.innerHTML = pickSelect(plan.unmatched[i - 1].name, plan.targets || []);
+    });
+    picks = {};
+    autoCount = plan.renames.length;
+    updateButton();
   }
 
   async function load() {
@@ -68,7 +104,8 @@
     const st = document.getElementById('status');
     btn.disabled = true;
     st.textContent = 'Renaming…';
-    const r = await fetch('/admin/rename-ingredients/run', {method: 'POST'});
+    const r = await fetch('/admin/rename-ingredients/run', {method: 'POST',
+      headers: {'Content-Type': 'application/json'}, body: JSON.stringify({picks})});
     const d = await r.json();
     if (!r.ok) { st.textContent = d.error || 'Failed'; return; }
     st.textContent = 'Renamed ' + d.applied + ' lots' + (d.sections_moved ? ', ' + d.sections_moved + ' section groupings carried over' : '') + '.';

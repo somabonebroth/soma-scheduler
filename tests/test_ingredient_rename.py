@@ -28,7 +28,28 @@ class Plan(unittest.TestCase):
         mats = [{"item": "Carrots", "unit": "kg", "remaining": 3}]
         recipes = {"A": recipe("Organic Carrots"), "B": recipe("Carrots")}
         plan = _ingredient_rename_plan(mats, recipes, [])
-        self.assertEqual(plan, {"renames": [], "unmatched": []})
+        self.assertEqual((plan["renames"], plan["unmatched"]), ([], []))
+
+    def test_name_held_by_a_recipe_with_an_organic_twin_is_reported(self):
+        # The 2026-09-29 case: "Turkey" kept the plain names, so the lots were
+        # skipped with nothing on the page saying why.
+        mats = [{"item": "Fresh Thyme", "unit": "Bunch", "remaining": 5}]
+        recipes = {"A": recipe("Organic Fresh Thyme"), "Turkey": recipe("Fresh Thyme")}
+        plan = _ingredient_rename_plan(mats, recipes, [])
+        self.assertEqual(plan["renames"], [])
+        b = plan["blocked"][0]
+        self.assertEqual((b["name"], b["to"], b["recipes"], b["in_stock"]),
+                         ("Fresh Thyme", "Organic Fresh Thyme", ["Turkey"], 5))
+
+    def test_used_name_without_twin_is_not_blocked(self):
+        mats = [{"item": "Carrots", "unit": "kg", "remaining": 3}]
+        plan = _ingredient_rename_plan(mats, {"B": recipe("Carrots")}, [])
+        self.assertEqual(plan["blocked"], [])
+
+    def test_targets_list_current_names(self):
+        plan = _ingredient_rename_plan([], {"A": recipe("Organic Fresh Parsley")},
+                                       [{"name": "Jars"}])
+        self.assertEqual(plan["targets"], ["Jars", "Organic Fresh Parsley"])
 
     def test_archived_recipe_does_not_keep_a_name(self):
         old = dict(recipe("Carrots"), archived=True)
@@ -45,7 +66,7 @@ class Plan(unittest.TestCase):
     def test_custom_item_counts_as_known(self):
         mats = [{"item": "Jars", "unit": "ea", "remaining": 2}]
         plan = _ingredient_rename_plan(mats, {}, [{"name": "Jars", "unit": "ea"}])
-        self.assertEqual(plan, {"renames": [], "unmatched": []})
+        self.assertEqual((plan["renames"], plan["unmatched"]), ([], []))
 
 
 if __name__ == "__main__":
