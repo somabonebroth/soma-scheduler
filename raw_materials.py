@@ -44,6 +44,7 @@ from helpers import (
     _runs_using_raw_material,
     _record_adjustment,
     _in_date_window,
+    _delivery_id,
 )
 
 import app
@@ -406,6 +407,9 @@ def get_raw_materials():
     if date_from or date_to:
         materials = [m for m in materials
                      if _in_date_window(m.get("date_received"), date_from, date_to)]
+    # Name each line's delivery so the Receiving list can group by it (older
+    # lines get it derived from their id; see helpers._delivery_id).
+    materials = [dict(m, delivery_id=_delivery_id(m)) for m in materials]
     return jsonify(materials)
 
 
@@ -565,6 +569,8 @@ def add_raw_materials_bulk():
     shared_baseline_lot = "BL-" + base_ts.strftime("%d%m%y") if is_baseline else None
     suppliers_seen = set()
     created = []
+    # One save = one delivery; the invoice photo is stored against line _000.
+    delivery_id = None if is_baseline else "rm_bulk_" + base_ts.strftime("%Y%m%d%H%M%S") + "_000"
 
     for i, item in enumerate(to_create):
         if is_baseline:
@@ -589,7 +595,9 @@ def add_raw_materials_bulk():
         }
         if is_baseline:
             entry["migration_baseline"] = True
-        elif not item["supplier_lot"]:
+        else:
+            entry["delivery_id"] = delivery_id
+        if not is_baseline and not item["supplier_lot"]:
             # Auto-generated MAN- lot (no real supplier lot# provided) — flag for follow-up.
             entry["no_supplier_lot"] = True
         if item["notes"]:
@@ -919,10 +927,22 @@ def list_rm_receipt_photos():
 @raw_materials_bp.route("/api/organic/raw-materials/receipt-photo/<entry_id>", methods=["GET"])
 @manager_required
 def get_rm_receipt_photo(entry_id):
-    """GET the stored receipt photo for a raw-material entry."""
-    for fn in os.listdir(app.RM_RECEIPT_PHOTOS_DIR):
-        if fn.startswith(entry_id + "."):
-            return send_from_directory(app.RM_RECEIPT_PHOTOS_DIR, fn)
+    """GET the invoice photo for a raw-material line.
+
+    Any line of a delivery works, not just the one the photo was stored on: a
+    line without its own photo falls back to its delivery's. That is what lets
+    a batch's raw lots each lead straight to their invoice.
+    """
+    names = [entry_id]
+    entry = next((m for m in _load_json(app.ORGANIC_RAW_PATH, [])
+                  if m.get("id") == entry_id), None)
+    if entry and _delivery_id(entry) and _delivery_id(entry) != entry_id:
+        names.append(_delivery_id(entry))
+    files = os.listdir(app.RM_RECEIPT_PHOTOS_DIR)
+    for name in names:
+        for fn in files:
+            if fn.startswith(name + "."):
+                return send_from_directory(app.RM_RECEIPT_PHOTOS_DIR, fn)
     return jsonify({"error": "Not found"}), 404
 
 

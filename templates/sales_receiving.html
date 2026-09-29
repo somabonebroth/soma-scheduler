@@ -721,10 +721,11 @@ async function loadReceiving(){
         return (b.date_received||b.created_at||'').localeCompare(a.date_received||a.created_at||'');
     });
 
-    // Group: same date + supplier = one delivery transaction
+    // Group by the delivery the line was saved on (server-supplied); lines with
+    // no known delivery fall back to same date + supplier.
     var txMap = {}, txOrder = [];
     deliveries.forEach(function(r){
-        var key = (r.date_received||'')+'||'+(r.supplier||'(unknown)');
+        const key = r.delivery_id || ((r.date_received||'')+'||'+(r.supplier||'(unknown)'));
         if(!txMap[key]){ txMap[key]={date:r.date_received||'',supplier:r.supplier||'(unknown)',items:[]}; txOrder.push(key); }
         txMap[key].items.push(r);
     });

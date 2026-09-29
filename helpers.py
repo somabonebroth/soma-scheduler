@@ -636,3 +636,24 @@ def _in_date_window(value, date_from, date_to):
     if date_to and d > date_to:
         return False
     return True
+
+
+_BULK_ID_RE = re.compile(r"^(rm_bulk_\d{14})_\d{3}$")
+
+
+def _delivery_id(entry):
+    """The delivery a raw-material line arrived on, or None if unknown.
+
+    A delivery's lines are saved in ONE bulk request, and its invoice photo is
+    stored against the FIRST line's id — so that id names the delivery. New
+    lines carry it as `delivery_id`; lines saved before 2026-09-29 get the same
+    answer from their id, because a bulk save numbers its lines
+    rm_bulk_<timestamp>_000, _001, ... and _000 is the one the photo went on.
+    Anything else (baselines, adjustments, single adds) has no invoice: None.
+    """
+    if entry.get("delivery_id"):
+        return entry["delivery_id"]
+    if entry.get("migration_baseline") or entry.get("adjustment"):
+        return None
+    m = _BULK_ID_RE.match(entry.get("id") or "")
+    return m.group(1) + "_000" if m else None
