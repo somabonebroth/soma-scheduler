@@ -184,22 +184,21 @@ def draw_recipe_card(c, x, y, card_w, recipe_name, recipe_data, vessel=""):
 
 
 # -- Label PDF --
-def generate_label_pdf(output, brand_name, recipe_format, lot, best_before, qr_data=None, copies=1):
-    """Generate a 2x1in case label PDF, `copies` pages of the same label.
+def generate_label_pdf(output, brand_name, recipe_format, lot, best_before, qr_data=None):
+    """Generate one 2x1in case label PDF. How many to print is set in the
+    printer's app (Flash Label), not here.
 
     With qr_data (organic case labels, 2026-09-30) the QR sits on the left and
-    the text is left-aligned beside it — the layout Jeremy test-printed on the
-    Vevor and approved. Without it, the original centred text-only label.
+    the text is left-aligned beside it. Without it, the original centred
+    text-only label.
     """
     label_w = 2 * inch
     label_h = 1 * inch
     c = canvas.Canvas(output, pagesize=(label_w, label_h))
-    for _ in range(max(1, int(copies or 1))):
-        if qr_data:
-            _draw_qr_label(c, label_w, label_h, brand_name, recipe_format, lot, best_before, qr_data)
-        else:
-            _draw_text_label(c, label_w, label_h, brand_name, recipe_format, lot, best_before)
-        c.showPage()
+    if qr_data:
+        _draw_qr_label(c, label_w, label_h, brand_name, recipe_format, lot, best_before, qr_data)
+    else:
+        _draw_text_label(c, label_w, label_h, brand_name, recipe_format, lot, best_before)
     c.save()
 
 
@@ -237,37 +236,76 @@ def _draw_text_label(c, label_w, label_h, brand_name, recipe_format, lot, best_b
     c.rect(2, 2, label_w - 4, label_h - 4, fill=0, stroke=1)
 
 
+def _wrap_measured(text, font, size, width):
+    """Wrap to lines that really fit `width` points, measured with the font's
+    own metrics. Breaks at spaces, then after hyphens inside a word too long
+    for a line (e.g. "Broth-SS-750ML"). A piece that still does not fit is
+    returned as-is; the caller shrinks the type until nothing overflows."""
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+    pieces = []
+    for word in (text or "").split():
+        if stringWidth(word, font, size) <= width or "-" not in word:
+            pieces.append(word)
+        else:
+            parts = word.split("-")
+            pieces.extend(p + "-" for p in parts[:-1])
+            pieces.append(parts[-1])
+    lines, cur = [], ""
+    for p in pieces:
+        joiner = "" if cur.endswith("-") or not cur else " "
+        trial = cur + joiner + p
+        if cur and stringWidth(trial, font, size) > width:
+            lines.append(cur)
+            cur = p
+        else:
+            cur = trial
+    if cur:
+        lines.append(cur)
+    return lines
+
+
 def _draw_qr_label(c, label_w, label_h, brand_name, recipe_format, lot, best_before, qr_data):
-    """Organic case label: QR (with its own quiet zone) left, text right."""
+    """Organic case label: QR (with its own quiet zone) left, text right.
+
+    The text column keeps a clear right margin (thermal printers do not print
+    to the edge) and every line is MEASURED; if a long brand or product name
+    will not fit, the whole block steps down in size together, so nothing is
+    ever cut off. The block is centred vertically beside the QR.
+    """
     from reportlab.graphics.barcode import qr
     from reportlab.graphics.shapes import Drawing
     from reportlab.graphics import renderPDF
+    from reportlab.pdfbase.pdfmetrics import stringWidth
 
-    size = 0.82 * inch
+    size = 0.72 * inch
     widget = qr.QrCodeWidget(qr_data, barLevel="M")
     x0, y0, x1, y1 = widget.getBounds()
     d = Drawing(size, size, transform=[size / (x1 - x0), 0, 0, size / (y1 - y0), 0, 0])
     d.add(widget)
-    renderPDF.draw(d, c, 3, (label_h - size) / 2)
+    renderPDF.draw(d, c, 4, (label_h - size) / 2)
 
-    tx = size + 4
-    tw = label_w - tx - 5
-    y = label_h - 13
+    tx = 4 + size + 4
+    tw = label_w - tx - 10          # right margin: the printer's dead edge
+    max_h = label_h - 10
+    # (text, font, size, line spacing, extra gap above)
+    spec = [(brand_name, FONT_BOLD, 7, 8.5, 0), (recipe_format, FONT, 6, 7.5, 0),
+            ("LOT# " + lot, FONT_BOLD, 6.5, 8, 2), ("Best Before: " + best_before, FONT, 6, 7.5, 0)]
+    for scale in [1 - i * 0.05 for i in range(8)]:
+        blocks = [(_wrap_measured(t, f, sz * scale, tw), f, sz * scale, lead * scale, gap * scale)
+                  for t, f, sz, lead, gap in spec]
+        fits = all(stringWidth(line, f, sz) <= tw for lines, f, sz, _, _ in blocks for line in lines)
+        height = sum(len(lines) * lead + gap for lines, _, _, lead, gap in blocks)
+        if fits and height <= max_h:
+            break
+
+    y = (label_h + height) / 2 - blocks[0][2]
     c.setFillColor(black)
-    c.setFont(FONT_BOLD, 7)
-    for line in _wrap_text(brand_name, 7, tw):
-        c.drawString(tx, y, line)
-        y -= 8.5
-    c.setFont(FONT, 6)
-    for line in _wrap_text(recipe_format, 6, tw):
-        c.drawString(tx, y, line)
-        y -= 7.5
-    y -= 2
-    c.setFont(FONT_BOLD, 6.5)
-    c.drawString(tx, y, "LOT# " + lot)
-    y -= 8
-    c.setFont(FONT, 6)
-    c.drawString(tx, y, "Best Before: " + best_before)
+    for lines, f, sz, lead, gap in blocks:
+        y -= gap
+        c.setFont(f, sz)
+        for line in lines:
+            c.drawString(tx, y, line)
+            y -= lead
 
 
 # -- Checklist sections (default) --

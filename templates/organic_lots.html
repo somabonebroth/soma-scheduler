@@ -180,7 +180,7 @@ function olRenderFolder(f) {
     let unrecorded = [];
     f.skus.forEach(s => {
         h += '<tr><td class="name" colspan="4"><div class="ol-name-row"><span>' + olEsc(s.name) + '</span>'
-            + '<button class="btn btn-outline ol-label-btn" onclick="olPrintLabels(\'' + olEsc(f.lot).replace(/'/g, '') + '\', ' + f.skus.indexOf(s) + ')">Print labels</button></div></td></tr>'
+            + '<button class="btn btn-outline ol-label-btn" onclick="olPrintLabels(\'' + olEsc(f.lot).replace(/'/g, '') + '\', ' + f.skus.indexOf(s) + ')">Print label</button></div></td></tr>'
             + '<tr><td class="num">' + olJars(s.made + s.added) + '</td><td class="num">' + olJars(s.sold)
             + '</td><td class="num">' + olJars(s.reduced) + '</td><td class="num">' + olJars(s.held) + '</td></tr>';
         if (s.unrecorded) unrecorded.push(olEsc(s.name) + ': ' + (s.unrecorded > 0 ? s.unrecorded + ' jars missing' : (-s.unrecorded) + ' jars extra'));
@@ -197,25 +197,21 @@ function olRenderFolder(f) {
 
 // Go-live relabelling (2026-09-30): stock already on the shelf needs QR case
 // labels once. Day to day, labels print ONLY from the Daily Summary — this
-// button is for the go-live count and can be removed after it.
+// button is for the go-live count and can be removed after it. One label; the
+// number of copies is set in the printer's app.
 async function olPrintLabels(lot, idx) {
     const f = olFolders.find(x => x.lot === lot);
     const s = f && f.skus[idx];
     if (!s) return;
-    const answer = prompt('How many case labels for ' + s.name + ', LOT# ' + lot + '?', String(Math.floor(s.held / 12)));
-    if (answer === null) return;
-    const copies = parseInt(answer, 10);
-    if (!(copies > 0)) return;
     const res = await fetch('/api/label', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({brand_name: s.brand, recipe_name: s.recipe, recipe_format: s.format,
-                              lot: lot, copies: copies}),
+        body: JSON.stringify({brand_name: s.brand, recipe_name: s.recipe, recipe_format: s.format, lot: lot}),
     });
     if (!res.ok) { alert('Label generation failed'); return; }
     const url = URL.createObjectURL(await res.blob());
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'Labels_' + s.recipe.replace(/[^a-zA-Z0-9]/g, '_') + '_' + lot + '.pdf';
+    a.download = 'Label_' + s.recipe.replace(/[^a-zA-Z0-9]/g, '_') + '_' + lot + '.pdf';
     a.click();
     URL.revokeObjectURL(url);
 }

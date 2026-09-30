@@ -1,13 +1,15 @@
 """Organic case QR labels (helpers + /api/label, 2026-09-30).
 
-An organic case label carries a QR "SOMA:<LOT#>:<SKU code>" and prints one
-label per case; every other label is the original single text-only label.
+An organic case label carries a QR "SOMA:<LOT#>:<SKU code>"; every other
+label is the original text-only label. One label per request either way — the
+number of copies is set in the printer's app.
 """
 import re
 import unittest
 from unittest import mock
 
 import app
+import pdf_engine
 from helpers import _organic_qr_payload, _organic_sku_code, _parse_organic_qr
 
 KEY = "SOMA|ORGANIC CHICKEN BONE BROTH|SS-750ML"
@@ -51,9 +53,9 @@ class LabelRoute(unittest.TestCase):
     def tearDown(self):
         self.patch.stop()
 
-    def label(self, recipe, copies):
+    def label(self, recipe):
         r = self.c.post("/api/label", json={"brand_name": "Soma", "recipe_name": recipe,
-                                            "recipe_format": "SS-750ML", "lot": "210927", "copies": copies})
+                                            "recipe_format": "SS-750ML", "lot": "210927", "copies": 20})
         self.assertEqual(r.status_code, 200)
         return r.data
 
@@ -61,23 +63,58 @@ class LabelRoute(unittest.TestCase):
     def pages(pdf):
         return len(re.findall(rb"/Type\s*/Page\b", pdf))
 
-    def test_organic_prints_one_label_per_case(self):
-        self.assertEqual(self.pages(self.label("Organic Chicken Bone Broth", 20)), 20)
-
-    def test_copies_are_capped(self):
-        self.assertEqual(self.pages(self.label("Organic Chicken Bone Broth", 5000)), 200)
-
-    def test_non_organic_is_one_text_label(self):
-        self.assertEqual(self.pages(self.label("Chicken Bone Broth", 20)), 1)
+    def test_always_one_label(self):
+        # Copies are set in the printer's app (Flash Label), never here.
+        self.assertEqual(self.pages(self.label("Organic Chicken Bone Broth")), 1)
+        self.assertEqual(self.pages(self.label("Chicken Bone Broth")), 1)
 
     def test_the_qr_is_drawn_only_for_organic(self):
         with mock.patch.object(app, "generate_label_pdf") as gen:
             gen.side_effect = lambda buf, *a, **k: buf.write(b"%PDF")
-            self.label("Organic Chicken Bone Broth", 3)
+            self.label("Organic Chicken Bone Broth")
             self.assertEqual(gen.call_args.kwargs["qr_data"], _organic_qr_payload("210927", KEY))
-            self.label("Chicken Bone Broth", 3)
+            self.label("Chicken Bone Broth")
             self.assertIsNone(gen.call_args.kwargs["qr_data"])
-            self.assertEqual(gen.call_args.kwargs["copies"], 1)
+
+
+class LabelFit(unittest.TestCase):
+    """Nothing on an organic label may run into the printer's dead right edge
+    (the first version wrapped by a character-count guess and got cut off)."""
+
+    def drawn(self, brand, product):
+        import io
+        from reportlab.pdfgen.canvas import Canvas
+        calls = []
+        real = Canvas.drawString
+
+        def spy(canvas, x, y, text, *a, **k):
+            calls.append((x, y, text, canvas._fontname, canvas._fontsize))
+            return real(canvas, x, y, text, *a, **k)
+        with mock.patch.object(Canvas, "drawString", spy):
+            pdf_engine.generate_label_pdf(io.BytesIO(), brand, product, "210927", "21/09/2027",
+                                          qr_data="SOMA:210927:33812A")
+        return calls
+
+    def check(self, brand, product):
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+        from reportlab.lib.units import inch
+        calls = self.drawn(brand, product)
+        text = " ".join(t for _, _, t, _, _ in calls)
+        for word in (brand + " " + product).split():
+            for part in word.split("-"):
+                self.assertIn(part, text)          # nothing dropped
+        for x, y, t, font, size in calls:
+            self.assertLessEqual(x + stringWidth(t, font, size), 2 * inch - 10 + 0.01, t)
+            self.assertGreaterEqual(y, 4, t)       # nothing off the bottom
+            self.assertLessEqual(y + size, 1 * inch - 3, t)
+        return calls
+
+    def test_ordinary_names_keep_full_size(self):
+        calls = self.check("Soma Bone Broth", "Organic Chicken Bone Broth-SS-750ML")
+        self.assertEqual(calls[0][4], 7)  # brand not shrunk
+
+    def test_long_names_shrink_instead_of_overflowing(self):
+        self.check("Nature's Emporium Private Label", "Organic Grass-Fed Beef Bone Broth with Turmeric-SS-750ML")
 
 
 if __name__ == "__main__":
