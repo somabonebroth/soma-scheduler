@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Organic Sale · Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.os-main { max-width: 640px; margin: 0 auto; }
+.os-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-light); margin-bottom: 12px; }
+.os-field select, .os-field input { font-size: 16px; padding: 10px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--white); color: var(--text); width: 100%; min-width: 0; box-sizing: border-box; }
+.os-row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.os-cam { position: relative; background: var(--black); border-radius: var(--r-lg); overflow: hidden; aspect-ratio: 4 / 3; display: none; }
+.os-cam video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.os-cam .frame { position: absolute; inset: 18% 22%; border: 3px solid rgba(255,255,255,0.85); border-radius: var(--r-md); pointer-events: none; }
+.os-cam.hit .frame { border-color: var(--green-light); }
+.os-cam.miss .frame { border-color: var(--action-red); }
+.os-status { font-size: 15px; font-weight: 600; min-height: 22px; margin: 10px 0; color: var(--dark); }
+.os-status.ok { color: var(--action-green); }
+.os-status.bad { color: var(--action-red); }
+.os-big { width: 100%; font-size: 17px; padding: 14px; }
+.os-tally { list-style: none; margin: 8px 0 0; padding: 0; }
+.os-tally li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.os-tally .what { flex: 1; min-width: 0; font-size: 14px; }
+.os-tally .what small { display: block; color: var(--text-light); font-size: 12px; }
+.os-tally .n { font-size: 20px; font-weight: 700; color: var(--dark); min-width: 44px; text-align: right; }
+.os-icon-btn { width: 40px; height: 40px; border-radius: var(--r-md); border: 1px solid var(--border); background: var(--white); font-size: 18px; color: var(--dark); cursor: pointer; flex: none; }
+.os-total { font-size: 14px; color: var(--text-light); margin-top: 10px; }
+.os-total b { color: var(--dark); }
+.os-plain { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.os-plain .what { flex: 1; min-width: 0; font-size: 14px; }
+.os-plain .what small { display: block; color: var(--text-light); font-size: 12px; }
+.os-plain .n { min-width: 32px; text-align: center; font-size: 17px; font-weight: 700; }
+.os-muted { font-size: 13px; color: var(--text-light); }
+.os-warn { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark); border-radius: var(--r-md); padding: 8px 12px; font-size: 13px; margin-top: 8px; }
+details.os-hand summary { cursor: pointer; font-size: 13px; color: var(--dark); margin-top: 12px; }
+.os-done { text-align: center; }
+.os-done .big { font-size: 40px; }
+</style>
+</head>
+<body>
+<div class="header">
+    <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+    <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Organic Sale</p></div>
+    <div class="header-right"><a href="/" class="header-btn">⌂ Dashboard</a></div>
+</div>
+<div class="main os-main" id="os-root">
+    <div class="card">
+        <h2>1. Order</h2>
+        <label class="os-field">Buyer <select id="os-buyer" onchange="osBuyerChanged()"><option value="">Loading…</option></select></label>
+        <label class="os-field" id="os-loc-field" style="display:none;">Location <select id="os-loc"></select></label>
+        <div class="os-row2">
+            <label class="os-field">Delivery date <input type="date" id="os-date"></label>
+            <label class="os-field">PO # <input type="text" id="os-po" autocomplete="off"></label>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>2. Scan organic cases</h2>
+        <p class="os-muted" style="margin-top:0;">Scan every organic case in the pile, one at a time. Move the phone off each label before the next one. Each beep adds one case.</p>
+        <div class="os-cam" id="os-cam"><video id="os-video" playsinline muted autoplay></video><div class="frame"></div></div>
+        <div class="os-status" id="os-status"></div>
+        <button class="btn btn-primary os-big" id="os-cam-btn" onclick="osToggleCamera()">Start scanning</button>
+        <ul class="os-tally" id="os-tally"></ul>
+        <div class="os-total" id="os-org-total"></div>
+        <details class="os-hand">
+            <summary>Label won't scan? Add a case by hand</summary>
+            <ul class="os-tally" id="os-hand-list"></ul>
+        </details>
+    </div>
+
+    <div class="card">
+        <h2>3. Other products</h2>
+        <p class="os-muted" style="margin-top:0;">Everything that isn't organic, in cases. These come off the oldest stock first.</p>
+        <div id="os-plain"><p class="os-muted">Pick a buyer to see their products.</p></div>
+    </div>
+
+    <div class="card">
+        <h2>4. Record</h2>
+        <div class="os-total" id="os-summary" style="margin-top:0;"></div>
+        <div id="os-msg"></div>
+        <button class="btn btn-primary os-big" id="os-save" onclick="osSave()" style="margin-top:12px;">Record sale</button>
+    </div>
+</div>
+<script src="/static/vendor/jsqr/jsQR.js"></script>
+<script>
+// Organic Sale (sales.add_organic_scan_order). Scanned cases are resolved on
+// the phone against /api/organic/sale-stock (no round trip per beep); the
+// order route re-checks every line and saves all-or-nothing.
+//
+// Counting rule (Jeremy's choice): a case is added each time a label COMES
+// INTO view. The same code must leave the frame (unseen for OS_GONE_MS)
+// before it can count again, so holding the phone on one label counts once.
+const OS_GONE_MS = 700;
+let osBuyers = [], osOrganic = [], osPlain = [];
+let osTally = {};          // "sku_key@@lot" -> cases
+let osPlainQty = {};       // sku_key -> cases
+let osStream = null, osTimer = null, osInFrame = null, osLastSeen = 0, osAudio = null;
+const osCanvas = document.createElement('canvas');
+
+function osEsc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function osKey(r) { return r.sku_key + '@@' + r.lot; }
+function osBuyer() { return osBuyers.find(b => b.id === document.getElementById('os-buyer').value); }
+function osOnList(skuKey) {
+    const b = osBuyer();
+    return !b || (b.skus || []).some(s => s.sku_key === skuKey);
+}
+
+// ── Sound: a short high beep for a case, a low buzz for a refusal. ──
+function osBeep(ok) {
+    try {
+        osAudio = osAudio || new (window.AudioContext || window.webkitAudioContext)();
+        const o = osAudio.createOscillator(), g = osAudio.createGain();
+        o.frequency.value = ok ? 1320 : 220;
+        o.type = ok ? 'sine' : 'square';
+        g.gain.value = 0.15;
+        o.connect(g); g.connect(osAudio.destination);
+        o.start(); o.stop(osAudio.currentTime + (ok ? 0.12 : 0.35));
+    } catch (e) {}
+}
+
+function osStatus(text, kind) {
+    const el = document.getElementById('os-status');
+    el.textContent = text;
+    el.className = 'os-status' + (kind ? ' ' + kind : '');
+    const cam = document.getElementById('os-cam');
+    cam.classList.remove('hit', 'miss');
+    if (kind) { cam.classList.add(kind === 'ok' ? 'hit' : 'miss'); setTimeout(() => cam.classList.remove('hit', 'miss'), 500); }
+}
+
+// Add one case of a (SKU, LOT#) — refused past the cases on record.
+function osAddCase(r) {
+    const k = osKey(r), have = osTally[k] || 0;
+    if (have + 1 > r.cases) {
+        osBeep(false);
+        osStatus('No more cases of LOT# ' + r.lot + ' on record (' + r.cases + ')', 'bad');
+        return;
+    }
+    osTally[k] = have + 1;
+    osBeep(true);
+    osStatus('+1 ' + r.name + ' · LOT# ' + r.lot + ' (' + osTally[k] + ')', 'ok');
+    osRender();
+}
+
+function osScanned(text) {
+    const parts = (text || '').trim().toUpperCase().split(':');
+    if (parts.length !== 3 || parts[0] !== 'SOMA') {
+        osBeep(false);
+        osStatus('Not an organic case label', 'bad');
+        return;
+    }
+    const r = osOrganic.find(x => x.lot.toUpperCase() === parts[1] && x.sku_code === parts[2]);
+    if (!r) {
+        osBeep(false);
+        osStatus('LOT# ' + parts[1] + ': nothing of this product on record', 'bad');
+        return;
+    }
+    osAddCase(r);
+}
+
+function osTick() {
+    const v = document.getElementById('os-video');
+    if (v.readyState >= 2 && v.videoWidth) {
+        const w = 480, h = Math.round(v.videoHeight * w / v.videoWidth);
+        osCanvas.width = w; osCanvas.height = h;
+        const ctx = osCanvas.getContext('2d', {willReadFrequently: true});
+        ctx.drawImage(v, 0, 0, w, h);
+        const hit = jsQR(ctx.getImageData(0, 0, w, h).data, w, h, {inversionAttempts: 'dontInvert'});
+        osFrame(hit && hit.data, Date.now());
+    }
+    osTimer = setTimeout(osTick, 120);
+}
+
+// One camera frame: `data` is the code seen (or null). A code counts when it
+// comes into view; it can only count again after being gone OS_GONE_MS.
+function osFrame(data, now) {
+    if (data) {
+        if (data !== osInFrame) osScanned(data);
+        osInFrame = data;
+        osLastSeen = now;
+    } else if (osInFrame && now - osLastSeen > OS_GONE_MS) {
+        osInFrame = null;
+    }
+}
+
+async function osToggleCamera() {
+    const btn = document.getElementById('os-cam-btn');
+    if (osStream) { osStopCamera(); return; }
+    osBeep(true);   // unlocks sound on iPhone: it must start from a tap
+    try {
+        osStream = await navigator.mediaDevices.getUserMedia({video: {facingMode: 'environment'}, audio: false});
+    } catch (e) {
+        osStatus('Camera not available: ' + e.message + '. Allow camera access for this site, or add cases by hand below.', 'bad');
+        return;
+    }
+    const v = document.getElementById('os-video');
+    v.srcObject = osStream;
+    await v.play().catch(() => {});
+    document.getElementById('os-cam').style.display = 'block';
+    btn.textContent = 'Stop scanning';
+    osStatus('Point at a case label');
+    osTick();
+}
+
+function osStopCamera() {
+    if (osStream) osStream.getTracks().forEach(t => t.stop());
+    osStream = null;
+    clearTimeout(osTimer);
+    osInFrame = null;
+    document.getElementById('os-cam').style.display = 'none';
+    document.getElementById('os-cam-btn').textContent = 'Start scanning';
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) osStopCamera(); });
+
+// Handlers take list positions, never keys: a key can hold an apostrophe
+// (Nature's Emporium), which would end the string inside an onclick.
+function osChangeCase(i, delta) {
+    const k = osKey(osOrganic[i]);
+    osTally[k] = Math.max(0, (osTally[k] || 0) + delta);
+    if (!osTally[k]) delete osTally[k];
+    osRender();
+}
+
+function osChangePlain(i, delta) {
+    const r = osPlain[i], key = r.sku_key;
+    const max = r ? Math.floor(r.held / 12) : 0;
+    osPlainQty[key] = Math.min(max, Math.max(0, (osPlainQty[key] || 0) + delta));
+    if (!osPlainQty[key]) delete osPlainQty[key];
+    osRender();
+}
+
+function osRender() {
+    // Scanned tally
+    const rows = osOrganic.filter(r => osTally[osKey(r)]);
+    document.getElementById('os-tally').innerHTML = rows.map(r => {
+        const k = osKey(r);
+        return '<li><div class="what">' + osEsc(r.name) + '<small>LOT# ' + osEsc(r.lot)
+            + (osOnList(r.sku_key) ? '' : ' &middot; not on this buyer\'s price list') + '</small></div>'
+            + '<button class="os-icon-btn" aria-label="Remove one case" onclick="osChangeCase(' + osOrganic.indexOf(r) + ', -1)">&minus;</button>'
+            + '<div class="n">' + osTally[k] + '</div></li>';
+    }).join('');
+    const orgCases = Object.values(osTally).reduce((a, b) => a + b, 0);
+    document.getElementById('os-org-total').innerHTML = orgCases ? '<b>' + orgCases + '</b> organic case' + (orgCases === 1 ? '' : 's') + ' scanned' : '';
+
+    // By-hand list
+    document.getElementById('os-hand-list').innerHTML = osOrganic.length ? osOrganic.map(r =>
+        '<li><div class="what">' + osEsc(r.name) + '<small>LOT# ' + osEsc(r.lot) + ' &middot; ' + r.cases + ' cases on record</small></div>'
+        + '<button class="os-icon-btn" aria-label="Add one case" onclick="osAddCase(osOrganic[' + osOrganic.indexOf(r) + '])">+</button></li>'
+    ).join('') : '<li class="os-muted">No organic stock on record.</li>';
+
+    // Plain products: the buyer's catalogue, in stock, not organic.
+    const b = osBuyer();
+    const box = document.getElementById('os-plain');
+    if (!b) {
+        box.innerHTML = '<p class="os-muted">Pick a buyer to see their products.</p>';
+    } else {
+        const inStock = osPlain.filter(r => (b.skus || []).some(s => s.sku_key === r.sku_key) && r.held >= 12);
+        box.innerHTML = inStock.length ? inStock.map(r =>
+            '<div class="os-plain"><div class="what">' + osEsc(r.name) + '<small>' + Math.floor(r.held / 12) + ' cases in stock</small></div>'
+            + '<button class="os-icon-btn" aria-label="One case less" onclick="osChangePlain(' + osPlain.indexOf(r) + ', -1)">&minus;</button>'
+            + '<div class="n">' + (osPlainQty[r.sku_key] || 0) + '</div>'
+            + '<button class="os-icon-btn" aria-label="One case more" onclick="osChangePlain(' + osPlain.indexOf(r) + ', 1)">+</button></div>'
+        ).join('') : '<p class="os-muted">None of this buyer\'s other products are in stock.</p>';
+    }
+
+    const plainCases = Object.values(osPlainQty).reduce((a, x) => a + x, 0);
+    document.getElementById('os-summary').innerHTML = (orgCases || plainCases)
+        ? '<b>' + orgCases + '</b> organic + <b>' + plainCases + '</b> other = <b>' + (orgCases + plainCases) + '</b> cases (' + (orgCases + plainCases) * 12 + ' jars)'
+        : 'Nothing added yet.';
+}
+
+function osBuyerChanged() {
+    const b = osBuyer();
+    const locs = (b && b.locations) || [];
+    const field = document.getElementById('os-loc-field');
+    field.style.display = locs.length ? '' : 'none';
+    document.getElementById('os-loc').innerHTML = '<option value="">Main / primary address</option>'
+        + locs.map((l, i) => '<option value="' + i + '">' + osEsc(l.name + (l.address ? ' — ' + l.address : '')) + '</option>').join('');
+    // A buyer switch drops plain lines that are not on the new buyer's list.
+    Object.keys(osPlainQty).forEach(k => { if (!osOnList(k)) delete osPlainQty[k]; });
+    osRender();
+}
+
+async function osSave() {
+    const b = osBuyer();
+    const msg = document.getElementById('os-msg');
+    msg.innerHTML = '';
+    if (!b) { msg.innerHTML = '<div class="os-warn">Pick a buyer first.</div>'; return; }
+    const cases = osOrganic.filter(r => osTally[osKey(r)]).map(r => ({sku_key: r.sku_key, lot: r.lot, cases: osTally[osKey(r)]}));
+    const lines = Object.keys(osPlainQty).map(k => ({sku_key: k, cases: osPlainQty[k]}));
+    if (!cases.length && !lines.length) { msg.innerHTML = '<div class="os-warn">Scan a case or add a product first.</div>'; return; }
+    const locIdx = document.getElementById('os-loc').value;
+    const loc = locIdx !== '' ? (b.locations || [])[+locIdx] : null;
+    const btn = document.getElementById('os-save');
+    btn.disabled = true; btn.textContent = 'Recording…';
+    try {
+        const res = await fetch('/api/organic/sales/organic-order', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                buyer_id: b.id, sale_date: document.getElementById('os-date').value,
+                po_number: document.getElementById('os-po').value.trim(),
+                location_name: loc ? loc.name || '' : '', location_address: loc ? loc.address || '' : '',
+                cases: cases, lines: lines,
+            }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            msg.innerHTML = '<div class="os-warn"><b>' + osEsc(data.error || 'Not saved') + '.</b> '
+                + osEsc((data.details || []).join('; ')) + '</div>';
+            btn.disabled = false; btn.textContent = 'Record sale';
+            return;
+        }
+        osStopCamera();
+        const total = cases.reduce((a, c) => a + c.cases, 0) + lines.reduce((a, l) => a + l.cases, 0);
+        document.getElementById('os-root').innerHTML = '<div class="card os-done"><div class="big">&#10004;</div>'
+            + '<h2>Sale recorded</h2><p class="os-muted">' + osEsc(b.name) + ' &middot; ' + total + ' cases</p>'
+            + '<a class="btn btn-primary os-big" style="display:block;text-decoration:none;margin:14px 0 10px;" target="_blank" href="/api/organic/sales/'
+            + encodeURIComponent(data.slip_sale_id) + '/packing-slip">Print packing slip</a>'
+            + '<a class="btn btn-outline os-big" style="display:block;text-decoration:none;" href="/organic-sale">New organic sale</a></div>';
+    } catch (e) {
+        msg.innerHTML = '<div class="os-warn">Network error: ' + osEsc(e.message) + '. Nothing was saved.</div>';
+        btn.disabled = false; btn.textContent = 'Record sale';
+    }
+}
+
+(async function () {
+    document.getElementById('os-date').value = new Date().toLocaleDateString('en-CA');
+    try {
+        const [bRes, sRes] = await Promise.all([fetch('/api/buyers'), fetch('/api/organic/sale-stock')]);
+        osBuyers = await bRes.json();
+        const stock = await sRes.json();
+        osOrganic = stock.organic || [];
+        osPlain = stock.plain || [];
+    } catch (e) {
+        document.getElementById('os-msg').innerHTML = '<div class="os-warn">Could not load buyers and stock: ' + osEsc(e.message) + '</div>';
+    }
+    document.getElementById('os-buyer').innerHTML = '<option value="">Pick a buyer</option>'
+        + osBuyers.map(b => '<option value="' + osEsc(b.id) + '">' + osEsc(b.name) + '</option>').join('');
+    osRender();
+})();
+</script>
+</body>
+</html>

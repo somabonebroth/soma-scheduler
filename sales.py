@@ -40,6 +40,8 @@ from helpers import (
     _add_contact,
     _load_company_info,
     _in_date_window,
+    _organic_sku_code,
+    _sku_display,
 )
 
 import app
@@ -354,6 +356,44 @@ def add_organic_sale():
     return jsonify({"success": True, "id": sale["id"], "sale": sale})
 
 
+def _order_line_record(fg, order_id, data, sku_key, brand, recipe, fmt, quantity, sale_lots, unit_price):
+    """One sale row of a multi-line order — the shape Record Sale and Organic
+    Sale both write, so the packing slip, Organic Lots and the trace read
+    either the same way. `data` is the order body (buyer, dates, location)."""
+    sale_cert = ""
+    for lot_entry in sale_lots:
+        for b in (lot_entry.get("breakdown") or []):
+            target = next((f for f in fg if f.get("id") == b.get("fg_id")), None)
+            if target and target.get("certification"):
+                sale_cert = target["certification"]
+                break
+        if sale_cert:
+            break
+    return {
+        "id":          "SL-" + datetime.now().strftime("%Y%m%d%H%M%S%f"),
+        "order_id":    order_id,
+        "sku_key":     sku_key,
+        "brand":       brand,
+        "recipe":      recipe,
+        "format":      fmt,
+        "certification": sale_cert,
+        "quantity":    quantity,
+        "cases":       quantity // 12,
+        "lots":        sale_lots,
+        "fg_lot":      (sale_lots[0]["lot"] if len(sale_lots) == 1 else ""),
+        "fg_id":       (sale_lots[0]["fg_ids"][0] if len(sale_lots) == 1 and sale_lots[0]["fg_ids"] else ""),
+        "buyer":       (data.get("buyer") or "").strip(),
+        "buyer_id":    data.get("buyer_id", ""),
+        "sale_date":   data.get("sale_date") or datetime.now().date().isoformat(),
+        "po_number":   (data.get("po_number") or "").strip(),
+        "location_name":    (data.get("location_name") or "").strip(),
+        "location_address": (data.get("location_address") or "").strip(),
+        "unit_price":  unit_price,
+        "line_total":  round(unit_price * quantity, 2) if unit_price is not None else None,
+        "created_at":  datetime.now().isoformat(),
+    }
+
+
 @sales_bp.route("/api/organic/sales/order", methods=["POST"])
 @manager_required
 def add_sale_order():
@@ -386,10 +426,6 @@ def add_sale_order():
     fg    = _load_json(app.ORGANIC_FG_PATH, [])
 
     buyer        = (data.get("buyer") or "").strip()
-    sale_date    = data.get("sale_date") or datetime.now().date().isoformat()
-    po_number    = (data.get("po_number") or "").strip()
-    location_name    = (data.get("location_name") or "").strip()
-    location_address = (data.get("location_address") or "").strip()
 
     order_id = "ORD-" + datetime.now().strftime("%Y%m%d%H%M%S")
 
@@ -438,40 +474,8 @@ def add_sale_order():
         recipe = recipe_d or recipe
         fmt    = fmt_d    or fmt
 
-        sale_cert = ""
-        for lot_entry in sale_lots:
-            for b in (lot_entry.get("breakdown") or []):
-                target = next((f for f in fg if f.get("id") == b.get("fg_id")), None)
-                if target and target.get("certification"):
-                    sale_cert = target["certification"]
-                    break
-            if sale_cert:
-                break
-
-        line_total = round(unit_price * quantity, 2) if unit_price is not None else None
-        sale = {
-            "id":          "SL-" + datetime.now().strftime("%Y%m%d%H%M%S%f"),
-            "order_id":    order_id,
-            "sku_key":     sku_key,
-            "brand":       brand,
-            "recipe":      recipe,
-            "format":      fmt,
-            "certification": sale_cert,
-            "quantity":    quantity,
-            "cases":       quantity // 12,
-            "lots":        sale_lots,
-            "fg_lot":      (sale_lots[0]["lot"] if len(sale_lots) == 1 else ""),
-            "fg_id":       (sale_lots[0]["fg_ids"][0] if len(sale_lots) == 1 and sale_lots[0]["fg_ids"] else ""),
-            "buyer":       buyer,
-            "buyer_id":    data.get("buyer_id", ""),
-            "sale_date":   sale_date,
-            "po_number":   po_number,
-            "location_name":    location_name,
-            "location_address": location_address,
-            "unit_price":  unit_price,
-            "line_total":  line_total,
-            "created_at":  datetime.now().isoformat(),
-        }
+        sale = _order_line_record(fg, order_id, data, sku_key, brand, recipe, fmt,
+                                  quantity, sale_lots, unit_price)
         saved_ids.append(sale["id"])
         saved_sales.append(sale)
         sales.append(sale)
@@ -492,6 +496,144 @@ def add_sale_order():
         "saved":    len(saved_ids),
         "errors":   errors,
     })
+
+
+def _is_organic_sku(fg, sku_key):
+    """Any finished-goods entry under the SKU certified Organic — the same
+    test the automated channels refuse on."""
+    return any((f.get("certification") or "").strip().lower() == "organic"
+               and _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")) == sku_key
+               for f in fg)
+
+
+@sales_bp.route("/organic-sale")
+@manager_required
+def organic_sale_page():
+    """Organic Sale: scan organic cases on the phone, add the rest, one order."""
+    return render_template("organic_sale.html")
+
+
+@sales_bp.route("/api/organic/sale-stock", methods=["GET"])
+@manager_required
+def get_organic_sale_stock():
+    """What the Organic Sale page can sell, so a scan resolves on the phone
+    with no round trip. `organic`: one row per organic (SKU, LOT#) in stock,
+    with the SKU code its case QR carries and whole cases held. `plain`: every
+    other SKU in stock (FIFO lines). The order route re-checks everything."""
+    fg = _load_json(app.ORGANIC_FG_PATH, [])
+    organic, plain = {}, {}
+    for f in fg:
+        held = int(f.get("quantity_remaining") or 0)
+        if held <= 0:
+            continue
+        key = _sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", ""))
+        name = _sku_display(f.get("brand", ""), f.get("recipe", ""), f.get("format", ""))
+        if _is_organic_sku(fg, key):
+            row = organic.setdefault((key, f.get("lot") or ""), {
+                "sku_key": key, "name": name, "lot": f.get("lot") or "",
+                "sku_code": _organic_sku_code(key), "held": 0})
+        else:
+            row = plain.setdefault(key, {"sku_key": key, "name": name, "held": 0})
+        row["held"] += held
+    for row in organic.values():
+        row["cases"] = row["held"] // 12
+    return jsonify({
+        "organic": sorted(organic.values(), key=lambda r: (r["name"], r["lot"])),
+        "plain": sorted(plain.values(), key=lambda r: r["name"]),
+    })
+
+
+@sales_bp.route("/api/organic/sales/organic-order", methods=["POST"])
+@manager_required
+def add_organic_scan_order():
+    """Organic Sale (2026-09-30): an order built by scanning organic cases.
+
+    Body: {
+        buyer, buyer_id, sale_date (delivery), po_number, location_name, location_address,
+        cases: [{sku_key, lot, cases}, ...]   # scanned organic cases, 12 jars each
+        lines: [{sku_key, cases}, ...]        # everything else, FIFO
+    }
+
+    Organic cases come off EXACTLY the lot scanned (_deduct_allocation); the
+    other lines FIFO. An organic SKU cannot be sold as a plain line and a plain
+    SKU cannot be scanned. ALL-OR-NOTHING: the deduction runs on a copy of
+    finished goods and nothing is saved unless every line fits — unlike
+    /api/organic/sales/order, which keeps the lines that worked. Prices come
+    from the buyer's catalogue on file (per jar), not from the phone.
+    `deducted_at` is stamped because stock leaves at recording, while
+    sale_date is the delivery date.
+    """
+    data = request.get_json() or {}
+    fg = copy.deepcopy(_load_json(app.ORGANIC_FG_PATH, []))
+    buyers = app._load_buyers()
+    buyer_rec = next((b for b in buyers if b.get("id") == data.get("buyer_id")), None)
+    if not buyer_rec:
+        return jsonify({"error": "Pick a buyer"}), 400
+    data["buyer"] = buyer_rec.get("name", "")
+    prices = {s.get("sku_key"): s.get("price") for s in buyer_rec.get("skus") or []}
+
+    def _count(v):
+        try:
+            return int(v or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    organic = {}   # sku_key -> {lot: jars}
+    for c in data.get("cases") or []:
+        key, lot, n = (c.get("sku_key") or "").strip(), (c.get("lot") or "").strip(), _count(c.get("cases"))
+        if key and lot and n > 0:
+            organic.setdefault(key, {})
+            organic[key][lot] = organic[key].get(lot, 0) + n * 12
+    plain = {}
+    for ln in data.get("lines") or []:
+        key, n = (ln.get("sku_key") or "").strip(), _count(ln.get("cases"))
+        if key and n > 0:
+            plain[key] = plain.get(key, 0) + n * 12
+    if not organic and not plain:
+        return jsonify({"error": "Nothing to record: scan a case or add a product"}), 400
+
+    errors, deducted = [], []
+    for key, by_lot in organic.items():
+        if not _is_organic_sku(fg, key):
+            errors.append(f"{key}: not an organic product, so it cannot be scanned")
+            continue
+        allocation = [{"lot": lot, "quantity": q} for lot, q in by_lot.items()]
+        try:
+            deducted.append((key, sum(by_lot.values()), _deduct_allocation(fg, key, allocation, sum(by_lot.values()))))
+        except ValueError as e:
+            errors.append(f"{key}: {e}")
+    for key, qty in plain.items():
+        if _is_organic_sku(fg, key):
+            errors.append(f"{key}: organic, so its cases must be scanned")
+            continue
+        try:
+            deducted.append((key, qty, _deduct_fifo(fg, key, qty)))
+        except ValueError as e:
+            errors.append(f"{key}: {e}")
+    if errors:
+        return jsonify({"error": "Nothing was saved", "details": errors}), 400
+
+    order_id = "ORD-" + datetime.now().strftime("%Y%m%d%H%M%S")
+    now_iso = datetime.now().isoformat()
+    new_rows = []
+    for key, qty, (sale_lots, brand, recipe, fmt) in deducted:
+        price = prices.get(key)
+        try:
+            price = round(float(price), 2) if price is not None else None
+        except (TypeError, ValueError):
+            price = None
+        row = _order_line_record(fg, order_id, data, key, brand, recipe, fmt, qty, sale_lots, price)
+        row["deducted_at"] = now_iso
+        row["entry"] = "organic_sale"
+        new_rows.append(row)
+
+    sales = _load_json(app.ORGANIC_SALES_PATH, [])
+    sales.extend(new_rows)
+    _save_json(app.ORGANIC_SALES_PATH, sales)
+    _save_json(app.ORGANIC_FG_PATH, fg)
+    _add_contact("buyer", data["buyer"])
+    return jsonify({"success": True, "order_id": order_id, "ids": [r["id"] for r in new_rows],
+                    "slip_sale_id": new_rows[0]["id"]})
 
 
 @sales_bp.route("/api/organic/sales/<sale_id>", methods=["PATCH"])

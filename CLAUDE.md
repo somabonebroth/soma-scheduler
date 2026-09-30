@@ -36,6 +36,26 @@ sales.py            — Flask Blueprint (731 lines, extracted 2026-06-03): the 7
                       ORGANIC_FG_PATH/ORGANIC_SALES_PATH constants stay in app.py
                       (app.-qualified); foundation IO from helpers. Channel imports,
                       sales analytics, and trace deliberately NOT included.
+                      **Organic Sale (2026-09-30):** `/organic-sale` (templates/organic_sale.html,
+                      phone-first; "Organic Sale" tile in the manager's Quick Actions) +
+                      `GET /api/organic/sale-stock` (organic rows per SKU+LOT with the QR SKU
+                      code and whole cases; plain SKUs) + `POST /api/organic/sales/organic-order`
+                      (`add_organic_scan_order`). The camera reads case QRs with jsQR 1.4.0,
+                      VENDORED at `static/vendor/jsqr/` (with its Apache-2.0 LICENSE; iOS Safari
+                      has no BarcodeDetector) and resolves them on the phone. Counting rule
+                      (Jeremy's choice): a case counts each time a label COMES INTO view; the
+                      same code must be unseen for 700 ms (`osFrame`, `OS_GONE_MS`) before it
+                      counts again. Over-scan past a lot's whole cases is refused with a buzz;
+                      a "won't scan" list adds cases by hand. Non-organic lines are the buyer's
+                      catalogue in CASES, FIFO. The route is ALL-OR-NOTHING (deduction runs on
+                      a deepcopy; any failed line saves nothing — unlike `/order`, which keeps
+                      the lines that worked), refuses an organic SKU as a plain line and a
+                      plain SKU as a scan, prices from the buyer record on file (per jar), and
+                      stamps `deducted_at` (stock leaves now; `sale_date` = delivery) and
+                      `entry: "organic_sale"`. Rows are built by `_order_line_record`, shared
+                      with `add_sale_order`, so the slip / Organic Lots / trace read both the
+                      same. Tests: `python3 -m unittest tests.test_organic_sale`. Record Sale
+                      does NOT yet refuse organic SKUs — that is the go-live switch.
 finished_goods.py   — Flask Blueprint (542 lines, extracted 2026-06-03): the 10
                       finished-goods routes (/api/organic/finished-goods*) + the
                       inventory tail folded in later: sku-meta (update_sku_meta,
