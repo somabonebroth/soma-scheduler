@@ -285,6 +285,24 @@ delivery_zone_routes.py — the thin Blueprint over it: `/delivery-zones` page +
                       dashboard tile in its own "Delivery Zones" section — above
                       Administration for the manager, above End of Day for FOH (it
                       left the Buyers & Suppliers admin row and the FOH tools strip).
+organic_lots.py     — Flask Blueprint (added 2026-09-30): **Organic Lots**, one folder per
+                      organic LOT# at `/organic-lots` (+ `GET /api/organic-lots`, manager).
+                      READ-ONLY — creates and writes nothing. A folder = IN (the batches +
+                      the invoice of every delivery whose raw lots they used, via
+                      `helpers._delivery_id`; opening-count lots say "no invoice"; lines
+                      with no raw lot listed as short), MADE per SKU (run FG = made; reset/
+                      audit/migration/manual rows = "added" with a label), OUT (each sale
+                      as its WHOLE order, the lines drawing on this lot in bold, a link to
+                      the order's packing slip; `subtract` adjustments and negative per-lot
+                      `audit_fg` counts as reductions), HELD. Held while any jar remains,
+                      Closed at zero. Joined on fg_id, never lot string. Per SKU,
+                      `unrecorded` = made + added − sold − reduced − held — nonzero means
+                      stock moved with no log line (e.g. `lot-adjust`, which records
+                      nothing) and the page says so. `build_folders` is pure; tests
+                      `python3 -m unittest tests.test_organic_lots`. Linked from the
+                      dashboard's Organic Certification row and the top of the hub. First
+                      step of the Organic Lots plan (QR case labels + an iPhone Organic
+                      Sale scan come next; see memory `project_organic_lot_folders`).
 ledger.py           — Flask Blueprint: inventory event-ledger subsystem (added
                       2026-06-09). Read-only FG reconciliation/drift detector
                       (/admin/fg-reconcile), append-only event model + projection

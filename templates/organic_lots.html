@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Organic Lots · Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.ol-intro { margin: 0 0 16px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
+.ol-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.ol-folder { display: block; text-align: left; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px; cursor: pointer; font: inherit; color: var(--text); }
+.ol-folder:hover { border-color: var(--accent); }
+.ol-folder .lot { font-size: 20px; font-weight: 700; color: var(--dark); }
+.ol-folder .meta { font-size: 12px; color: var(--text-light); margin-top: 2px; }
+.ol-folder .held { font-size: 14px; font-weight: 600; margin-top: 10px; }
+.ol-folder .skus { font-size: 12px; color: var(--text-light); margin-top: 6px; line-height: 1.5; }
+.ol-heading { font-size: 11px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 8px; border-left: 3px solid var(--accent); padding-left: 8px; }
+details.ol-closed > summary { cursor: pointer; list-style: none; }
+details.ol-closed > summary::-webkit-details-marker { display: none; }
+.pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 10px; vertical-align: middle; }
+.pill.held { background: var(--action-green-bg); color: var(--action-green); }
+.pill.closed { background: var(--row-alt); color: var(--grey-dark); }
+.ol-back { background: none; border: none; color: var(--dark); font: inherit; font-size: 14px; cursor: pointer; padding: 0; margin-bottom: 12px; }
+.ol-title { font-size: 26px; font-weight: 700; color: var(--dark); margin: 0; }
+.ol-sub { font-size: 13px; color: var(--text-light); margin: 4px 0 0; }
+.ol-table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.ol-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ol-table th { text-align: left; padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-light); background: var(--row-alt); border-bottom: 1px solid var(--border); }
+.ol-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.ol-table .num { text-align: right; white-space: nowrap; }
+.ol-table .cases { display: block; font-size: 11px; color: var(--text-light); }
+.ol-table tr.here td { font-weight: 600; }
+.ol-sum td.name { font-weight: 600; color: var(--dark); border-bottom: none; padding-bottom: 0; }
+.ol-sum td.num { font-size: 15px; font-weight: 600; }
+.ol-sum th, .ol-sum td.num { width: 25%; }
+.ol-item { border: 1px solid var(--border); border-radius: var(--r-md); padding: 12px 14px; margin-bottom: 10px; }
+.ol-item-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ol-item-head strong { font-size: 14px; color: var(--dark); }
+.ol-item-meta { font-size: 12px; color: var(--text-light); }
+.ol-lines { margin: 8px 0 0; padding: 0; list-style: none; font-size: 13px; line-height: 1.6; }
+.ol-warn { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark); border-radius: var(--r-md); padding: 8px 12px; font-size: 13px; margin-top: 8px; }
+.ol-held-line { font-size: 15px; font-weight: 700; color: var(--dark); margin-top: 4px; }
+.ol-empty { text-align: center; padding: 28px 20px; color: var(--text-light); font-size: 14px; }
+.ol-btn { font-size: 13px; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="header">
+    <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+    <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Organic Lots</p></div>
+    <div class="header-right" style="display:flex;align-items:center;gap:8px;">
+        <a href="/organic-certification" class="header-btn">Organic Certification</a>
+        <a href="/" class="header-btn">⌂ Dashboard</a>
+    </div>
+</div>
+<div class="main">
+    <div id="ol-root"><div class="ol-empty">Loading…</div></div>
+</div>
+<script>
+// Organic Lots (organic_lots.py): one folder per organic LOT#. The list and a
+// folder are the same page; the open folder is the URL hash (#280927), so a
+// folder can be linked and the browser's back button closes it.
+let olFolders = [];
+
+function olEsc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function olDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso + 'T00:00:00');
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString('en-CA', {day: 'numeric', month: 'short', year: 'numeric'});
+}
+
+// Jars with their case count underneath (a case is 12 jars).
+function olJars(n) {
+    const cases = Math.floor(n / 12), loose = n % 12;
+    let c = cases + (cases === 1 ? ' case' : ' cases');
+    if (loose) c += ' + ' + loose;
+    return n + '<span class="cases">' + c + '</span>';
+}
+
+function olFolderCard(f) {
+    return '<button class="ol-folder" onclick="location.hash=\'' + encodeURIComponent(f.lot) + '\'">'
+        + '<div class="lot">&#128193; ' + olEsc(f.lot) + '</div>'
+        + '<div class="meta">' + (f.batch_date ? 'Batch ' + olEsc(olDate(f.batch_date)) : '&nbsp;') + '</div>'
+        + '<div class="held">' + (f.status === 'held' ? f.held + ' jars held' : 'Closed') + ' <span class="ol-item-meta">of ' + f.made + '</span></div>'
+        + '<div class="skus">' + f.skus.map(s => olEsc(s.name)).join('<br>') + '</div>'
+        + '</button>';
+}
+
+function olRenderList() {
+    const held = olFolders.filter(f => f.status === 'held');
+    const closed = olFolders.filter(f => f.status !== 'held');
+    let h = '<p class="ol-intro">One folder per organic LOT#: the invoices for what went in, what was made, and every sale and reduction that came out. <strong>Held</strong> means jars are still on the shelf; a folder <strong>closes</strong> at zero.</p>';
+    if (!olFolders.length) {
+        h += '<div class="card"><div class="ol-empty">No organic lots yet.</div></div>';
+    }
+    if (held.length) {
+        h += '<div class="ol-heading">Held (' + held.length + ')</div><div class="ol-grid">' + held.map(olFolderCard).join('') + '</div>';
+    }
+    if (closed.length) {
+        h += '<details class="ol-closed"><summary><div class="ol-heading">Closed (' + closed.length + ') &#9662;</div></summary>'
+            + '<div class="ol-grid">' + closed.map(olFolderCard).join('') + '</div></details>';
+    }
+    document.getElementById('ol-root').innerHTML = h;
+}
+
+function olInHtml(f) {
+    let h = '<div class="card"><h2>In</h2>';
+    f.batches.forEach(b => {
+        h += '<p class="ol-item-meta" style="margin:0 0 4px;">Batch: ' + olEsc(b.recipe) + ' &middot; ' + olEsc(b.vessel)
+            + (b.start_date ? ' &middot; started ' + olEsc(olDate(b.start_date)) : '') + '</p>';
+    });
+    f.added.forEach(a => {
+        h += '<p class="ol-item-meta" style="margin:0 0 4px;">' + olEsc(a.label) + ': ' + a.quantity + ' jars of ' + olEsc(a.sku)
+            + (a.date ? ' &middot; ' + olEsc(olDate(a.date)) : '') + '</p>';
+    });
+    if (f.batches.length || f.added.length) h += '<div style="height:8px;"></div>';
+    if (!f.invoices.length && !f.no_lot.length) {
+        h += '<p class="ol-item-meta">' + (f.batches.length ? 'No raw lots on record for this batch.' : 'This stock was not made by a batch on record, so there are no invoices to show.') + '</p>';
+    }
+    f.invoices.forEach(inv => {
+        h += '<div class="ol-item"><div class="ol-item-head"><span><strong>' + olEsc(inv.supplier || 'Unknown supplier') + '</strong> '
+            + '<span class="ol-item-meta">received ' + olEsc(olDate(inv.date_received)) + '</span></span>';
+        if (inv.photo_id) {
+            h += '<a class="btn btn-outline ol-btn" target="_blank" href="/api/organic/raw-materials/receipt-photo/' + encodeURIComponent(inv.photo_id) + '">&#128206; Invoice</a>';
+        }
+        h += '</div><ul class="ol-lines">';
+        inv.lines.forEach(l => {
+            h += '<li>' + olEsc(l.item) + ' &middot; LOT ' + olEsc(l.supplier_lot) + ' &middot; ' + olEsc(l.quantity) + ' ' + olEsc(l.unit)
+                + (f.batches.length > 1 ? ' <span class="ol-item-meta">(' + olEsc(l.vessel) + ')</span>' : '') + '</li>';
+        });
+        h += '</ul>';
+        if (inv.opening_count) h += '<div class="ol-item-meta" style="margin-top:6px;">Opening stock count, not a delivery, so there is no invoice.</div>';
+        else if (!inv.photo_id) h += '<div class="ol-warn">No invoice on file for this delivery.</div>';
+        h += '</div>';
+    });
+    if (f.no_lot.length) {
+        h += '<div class="ol-warn">Used with no raw lot on record (short at the time): '
+            + f.no_lot.map(l => olEsc(l.item) + ' ' + olEsc(l.quantity) + ' ' + olEsc(l.unit)).join(', ') + '</div>';
+    }
+    return h + '</div>';
+}
+
+function olOutHtml(f) {
+    let h = '<div class="card"><h2>Out</h2>';
+    if (!f.out.length) h += '<p class="ol-item-meta">Nothing has left this lot yet.</p>';
+    f.out.forEach(o => {
+        if (o.kind === 'sale') {
+            h += '<div class="ol-item"><div class="ol-item-head"><span><strong>' + olEsc(o.buyer || 'Sale') + '</strong> '
+                + '<span class="ol-item-meta">' + olEsc(olDate(o.date))
+                + (o.delivery_date && o.delivery_date !== o.date ? ' &middot; delivery ' + olEsc(olDate(o.delivery_date)) : '')
+                + (o.po_number ? ' &middot; PO ' + olEsc(o.po_number) : '') + '</span></span>'
+                + '<a class="btn btn-outline ol-btn" target="_blank" href="/api/organic/sales/' + encodeURIComponent(o.slip_sale_id) + '/packing-slip">Packing slip</a></div>'
+                + '<p class="ol-item-meta" style="margin:6px 0;">' + o.jars + ' jars from this lot</p>'
+                + '<div class="ol-table-wrap"><table class="ol-table"><thead><tr><th>Product</th><th class="num">Qty</th><th>LOT#</th></tr></thead><tbody>';
+            o.lines.forEach(l => {
+                h += '<tr' + (l.from_this_lot ? ' class="here"' : '') + '><td>' + olEsc(l.name) + '</td><td class="num">' + l.quantity
+                    + '</td><td>' + olEsc(l.lots.join(', ') || 'FIFO') + '</td></tr>';
+            });
+            h += '</tbody></table></div></div>';
+        } else {
+            h += '<div class="ol-item"><div class="ol-item-head"><span><strong>&minus;' + o.jars + ' jars &middot; ' + olEsc(o.reason || 'Reduced') + '</strong> '
+                + '<span class="ol-item-meta">' + olEsc(olDate(o.date)) + ' &middot; ' + olEsc(o.sku) + '</span></span></div>'
+                + (o.notes ? '<p class="ol-item-meta" style="margin:6px 0 0;">' + olEsc(o.notes) + '</p>' : '') + '</div>';
+        }
+    });
+    return h + '</div>';
+}
+
+function olRenderFolder(f) {
+    let h = '<button class="ol-back" onclick="location.hash=\'\'">&larr; All organic lots</button>'
+        + '<div class="card"><h1 class="ol-title">&#128193; LOT# ' + olEsc(f.lot) + ' <span class="pill ' + f.status + '">' + (f.status === 'held' ? 'Held' : 'Closed') + '</span></h1>'
+        + '<p class="ol-sub">' + (f.batch_date ? 'Batch started ' + olEsc(olDate(f.batch_date)) : '') + '</p>'
+        + '<div class="ol-table-wrap" style="margin-top:14px;"><table class="ol-table ol-sum"><thead><tr><th class="num">Made</th><th class="num">Sold</th><th class="num">Reduced</th><th class="num">Held</th></tr></thead><tbody>';
+    let unrecorded = [];
+    f.skus.forEach(s => {
+        h += '<tr><td class="name" colspan="4">' + olEsc(s.name) + '</td></tr>'
+            + '<tr><td class="num">' + olJars(s.made + s.added) + '</td><td class="num">' + olJars(s.sold)
+            + '</td><td class="num">' + olJars(s.reduced) + '</td><td class="num">' + olJars(s.held) + '</td></tr>';
+        if (s.unrecorded) unrecorded.push(olEsc(s.name) + ': ' + (s.unrecorded > 0 ? s.unrecorded + ' jars missing' : (-s.unrecorded) + ' jars extra'));
+    });
+    h += '</tbody></table></div><p class="ol-item-meta" style="margin:8px 0 0;">All figures in jars.</p>';
+    if (unrecorded.length) {
+        h += '<div class="ol-warn">Stock changed with nothing on record to explain it (usually a lot corrected by hand): ' + unrecorded.join('; ') + '.</div>';
+    }
+    h += '</div>' + olInHtml(f) + olOutHtml(f)
+        + '<div class="card"><h2>Held</h2><p class="ol-held-line">' + (f.held ? f.held + ' jars on the shelf' : 'Nothing left &middot; this lot is closed') + '</p></div>';
+    document.getElementById('ol-root').innerHTML = h;
+    window.scrollTo(0, 0);
+}
+
+function olRoute() {
+    const lot = decodeURIComponent(location.hash.slice(1));
+    const f = lot && olFolders.find(x => x.lot === lot);
+    if (f) olRenderFolder(f);
+    else olRenderList();
+}
+
+(async function () {
+    try {
+        const res = await fetch('/api/organic-lots');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        olFolders = (await res.json()).folders || [];
+    } catch (e) {
+        document.getElementById('ol-root').innerHTML = '<div class="card"><div class="ol-empty">Could not load the organic lots (' + olEsc(e.message) + ').</div></div>';
+        return;
+    }
+    window.addEventListener('hashchange', olRoute);
+    olRoute();
+})();
+</script>
+</body>
+</html>
