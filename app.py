@@ -83,6 +83,7 @@ from helpers import (
     _prod_date,
     _record_adjustment,
     _runs_using_raw_material,
+    _organic_qr_payload,
     _save_json,
     _section_for_ingredient,
     _sku_display,
@@ -1645,8 +1646,22 @@ def generate_label():
         recipe_name=recipe_name,
     )
 
+    # Organic case labels carry a QR (LOT# + SKU) that the Organic Sale scan
+    # reads, and print one label per case in one PDF. Organic is decided from
+    # the recipe on file, never from the caller. Everything else is unchanged:
+    # one text-only label.
+    qr_data, copies = None, 1
+    recipe_rec = load_recipes().get(recipe_name) or {}
+    if (recipe_rec.get("certification") or "").strip().lower() == "organic":
+        qr_data = _organic_qr_payload(lot, _sku_key(brand_name, recipe_name, recipe_format))
+        try:
+            copies = min(200, max(1, int(data.get("copies") or 1)))
+        except (ValueError, TypeError):
+            copies = 1
+
     label_buffer = io.BytesIO()
-    generate_label_pdf(label_buffer, brand_name, recipe_format_display, lot, best_before.strftime("%d/%m/%Y"))
+    generate_label_pdf(label_buffer, brand_name, recipe_format_display, lot,
+                       best_before.strftime("%d/%m/%Y"), qr_data=qr_data, copies=copies)
     label_buffer.seek(0)
 
     safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', recipe_name)

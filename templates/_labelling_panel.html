@@ -74,6 +74,13 @@ function lpLotsHtml(p){
         + '<div class="dr-stamp">' + lpStampHtml(b) + '</div></div>').join('');
 }
 
+// Organic rows print one QR case label per FULL case (12 jars) in one PDF;
+// loose jars are not cased. The server adds the QR only for a recipe on file
+// as Organic, whatever this page sends.
+function lpIsOrganic(r){ return (r.certification || '').trim().toLowerCase() === 'organic'; }
+function lpCases(r){ return Math.floor((r.quantity || 0) / 12); }
+function lpBtnText(r){ return lpIsOrganic(r) ? 'Labels &times;' + lpCases(r) : 'Label'; }
+
 async function lpGenerateLabel(idx){
     const r = lpProd && lpProd.rows[idx];
     if (!r) return;
@@ -84,7 +91,8 @@ async function lpGenerateLabel(idx){
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({brand_name: r.brand, recipe_name: r.recipe,
                                   recipe_format: r.format, lot: r.lot,
-                                  production_date: r.production_date}),
+                                  production_date: r.production_date,
+                                  copies: lpIsOrganic(r) ? lpCases(r) : 1}),
         });
         if (!res.ok) { alert('Label generation failed'); return; }
         const url = URL.createObjectURL(await res.blob());
@@ -96,7 +104,7 @@ async function lpGenerateLabel(idx){
     } catch (e) {
         alert('Label generation failed');
     } finally {
-        if (btn) { btn.disabled = false; btn.textContent = 'Label'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = lpBtnText(r); }
     }
 }
 
@@ -119,8 +127,8 @@ function lpBodyHtml(opts){
             + '<td class="dr-lot">' + lpEsc(r.lot || '—') + '</td>'
             + (showBatch ? '<td class="dr-lot">' + lpEsc(r.batched_on || '—') + '</td>' : '')
             + '<td class="num"><b>' + r.quantity + '</b></td>'
-            + (labels ? '<td class="num">' + (r.recipe
-                ? '<button class="dr-labelbtn" id="lp-lbl-' + i + '" onclick="lpGenerateLabel(' + i + ')">Label</button>'
+            + (labels ? '<td class="num">' + (r.recipe && (!lpIsOrganic(r) || lpCases(r) > 0)
+                ? '<button class="dr-labelbtn" id="lp-lbl-' + i + '" onclick="lpGenerateLabel(' + i + ')">' + lpBtnText(r) + '</button>'
                 : '') + '</td>' : '') + '</tr>').join('')
         + '</table></div>';
     body += '<div class="dr-totals"><span>Total jars: <b>' + p.total_jars + '</b></span>'

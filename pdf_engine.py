@@ -184,12 +184,27 @@ def draw_recipe_card(c, x, y, card_w, recipe_name, recipe_data, vessel=""):
 
 
 # -- Label PDF --
-def generate_label_pdf(output, brand_name, recipe_format, lot, best_before):
-    """Generate a product label PDF."""
+def generate_label_pdf(output, brand_name, recipe_format, lot, best_before, qr_data=None, copies=1):
+    """Generate a 2x1in case label PDF, `copies` pages of the same label.
+
+    With qr_data (organic case labels, 2026-09-30) the QR sits on the left and
+    the text is left-aligned beside it — the layout Jeremy test-printed on the
+    Vevor and approved. Without it, the original centred text-only label.
+    """
     label_w = 2 * inch
     label_h = 1 * inch
     c = canvas.Canvas(output, pagesize=(label_w, label_h))
+    for _ in range(max(1, int(copies or 1))):
+        if qr_data:
+            _draw_qr_label(c, label_w, label_h, brand_name, recipe_format, lot, best_before, qr_data)
+        else:
+            _draw_text_label(c, label_w, label_h, brand_name, recipe_format, lot, best_before)
+        c.showPage()
+    c.save()
 
+
+def _draw_text_label(c, label_w, label_h, brand_name, recipe_format, lot, best_before):
+    """The original text-only label, centred."""
     y = label_h - 14
 
     # Brand name bold
@@ -221,7 +236,38 @@ def generate_label_pdf(output, brand_name, recipe_format, lot, best_before):
     c.setStrokeColor(LIGHT_GRAY)
     c.rect(2, 2, label_w - 4, label_h - 4, fill=0, stroke=1)
 
-    c.save()
+
+def _draw_qr_label(c, label_w, label_h, brand_name, recipe_format, lot, best_before, qr_data):
+    """Organic case label: QR (with its own quiet zone) left, text right."""
+    from reportlab.graphics.barcode import qr
+    from reportlab.graphics.shapes import Drawing
+    from reportlab.graphics import renderPDF
+
+    size = 0.82 * inch
+    widget = qr.QrCodeWidget(qr_data, barLevel="M")
+    x0, y0, x1, y1 = widget.getBounds()
+    d = Drawing(size, size, transform=[size / (x1 - x0), 0, 0, size / (y1 - y0), 0, 0])
+    d.add(widget)
+    renderPDF.draw(d, c, 3, (label_h - size) / 2)
+
+    tx = size + 4
+    tw = label_w - tx - 5
+    y = label_h - 13
+    c.setFillColor(black)
+    c.setFont(FONT_BOLD, 7)
+    for line in _wrap_text(brand_name, 7, tw):
+        c.drawString(tx, y, line)
+        y -= 8.5
+    c.setFont(FONT, 6)
+    for line in _wrap_text(recipe_format, 6, tw):
+        c.drawString(tx, y, line)
+        y -= 7.5
+    y -= 2
+    c.setFont(FONT_BOLD, 6.5)
+    c.drawString(tx, y, "LOT# " + lot)
+    y -= 8
+    c.setFont(FONT, 6)
+    c.drawString(tx, y, "Best Before: " + best_before)
 
 
 # -- Checklist sections (default) --

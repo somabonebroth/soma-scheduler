@@ -6,6 +6,7 @@ helpers. app.py imports these back. See CLAUDE.md "Pending architectural work".
 
 This module must NOT import app.py (would create a circular import).
 """
+import hashlib
 import os
 import json
 import re
@@ -657,3 +658,31 @@ def _delivery_id(entry):
         return None
     m = _BULK_ID_RE.match(entry.get("id") or "")
     return m.group(1) + "_000" if m else None
+
+
+# ── Organic case QR (2026-09-30) ─────────────────────────────────────────
+# The QR on an organic case label says which LOT# and which SKU is in the box:
+# "SOMA:<LOT#>:<SKU code>", e.g. SOMA:210927:3FA9C2. Capitals, digits and ':'
+# only, so it fits QR alphanumeric mode — the smallest, chunkiest code, which
+# matters on a 2x1 label. The SKU code is the first 6 hex characters of a
+# SHA-1 of the sku_key: fixed forever for a SKU, needs no table, and the
+# scanner resolves it by recomputing it for the SKUs actually in stock.
+ORGANIC_QR_PREFIX = "SOMA"
+
+
+def _organic_sku_code(sku_key):
+    """The 6-character code that names a SKU inside an organic case QR."""
+    return hashlib.sha1((sku_key or "").strip().upper().encode("utf-8")).hexdigest()[:6].upper()
+
+
+def _organic_qr_payload(lot, sku_key):
+    """The text an organic case label's QR code carries."""
+    return f"{ORGANIC_QR_PREFIX}:{(lot or '').strip().upper()}:{_organic_sku_code(sku_key)}"
+
+
+def _parse_organic_qr(text):
+    """(lot, sku_code) from a scanned organic case QR, or None if it is not one."""
+    parts = (text or "").strip().upper().split(":")
+    if len(parts) != 3 or parts[0] != ORGANIC_QR_PREFIX or not parts[1] or len(parts[2]) != 6:
+        return None
+    return parts[1], parts[2]
