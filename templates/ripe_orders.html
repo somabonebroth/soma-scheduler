@@ -129,6 +129,8 @@
       <td>
         <strong>{{ o.id }}</strong>
         {% if o.order_mode == 'retail' %}<br><span class="tag" style="background:#fdf0e6;color:#8a4a1a;font-size:10px;padding:1px 7px;margin-top:3px;">Retail</span>{% endif %}
+        {# Van request (2026-10-01): Ripe flags it on the order form; no charge. #}
+        {% if o.van_requested %}<br><span class="tag" style="background:var(--orange);color:#fff;font-size:11px;font-weight:700;letter-spacing:.04em;padding:2px 8px;margin-top:4px;">VAN REQUESTED</span>{% endif %}
       </td>
       <td>{{ o.created_at[:10] }}</td>
       <td style="font-size:12px;">{{ o.delivery_label }}</td>
@@ -160,6 +162,9 @@
     <tr id="detail-{{ o.id }}" class="order-detail">
       <td colspan="7" style="padding:0 10px 10px;">
         <div class="order-detail-inner">
+          {% if o.van_requested %}
+          <div style="background:var(--orange);color:#fff;font-weight:700;font-size:14px;letter-spacing:.03em;padding:10px 14px;border-radius:8px;margin-bottom:12px;">VAN REQUESTED — Ripe has asked to use the van for this order</div>
+          {% endif %}
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px;font-size:13px;">
             <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Delivery</div>{{ o.delivery_label }}<br><span style="font-size:11px;color:var(--text-light);">{{ o.delivery_address }}</span></div>
             <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Requested</div>{{ o.requested_date or '—' }}{% if o.requested_time %} · {{ o.requested_time }}{% endif %}</div>
