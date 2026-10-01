@@ -661,7 +661,7 @@ emits one item PER ACTIVE LOT for organic SKUs (`id = sku_key@@lot`, system qty 
 `audit_baseline` row carrying the SAME lot number with the batch dates copied, so trace, Best
 Before and the Record Sale lot picker still see one lot; `audit_fg` adjustments carry `lot`.
 Non-organic SKUs are unchanged (per SKU, FIFO drain, BASELINE lot). An organic SKU with no
-active lot keeps the SKU-level item. Not built (deliberate): a Mass Balance raw-side organic filter (organic ingredients are already
+active lot keeps the SKU-level item. **A LOT# not listed (2026-10-01, go-live count):** the count lists only lots with stock on record, so every ORGANIC item has "+ Add a LOT# not listed" (`addLotItem` in audit.html): it prompts for the LOT#, checks it is a real ddmmyy date, and inserts an item `sku_key@@LOT` with system 0; counting it goes through the existing per-lot surplus path, so stock is created under that exact LOT#. `complete_audit` refuses (400, nothing applied) any counted per-lot key whose LOT# has no FG record AND is not a 6-digit ddmmyy date (`_unknown_lot_typos`), so a typo cannot invent a lot. Tests: `python3 -m unittest tests.test_count_new_lot`. Not built (deliberate): a Mass Balance raw-side organic filter (organic ingredients are already
 separable by name).
 
 **Second pass the same day — "keep it as simple as possible, we are a tiny company" (Jeremy).**

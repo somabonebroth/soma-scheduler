@@ -3103,6 +3103,11 @@ def complete_audit(audit_id):
 
     audit["results"].update(data.get("results", {}))
     kind = audit["kind"]
+    if kind == "fg":
+        bad = _unknown_lot_typos(audit["results"])
+        if bad:
+            return jsonify({"error": "Not a LOT#: " + ", ".join(bad)
+                            + ". A LOT# is the Best Before date as 6 digits (ddmmyy)."}), 400
     adjustments = []
 
     if kind == "rm":
@@ -3232,6 +3237,31 @@ def _apply_rm_audit(audit):
         })
 
     return adjustments
+
+
+def _unknown_lot_typos(results):
+    """LOT#s in a count's per-lot results that Soma has no stock record of
+    AND that are not a valid ddmmyy date. A counted lot not on record becomes
+    new stock under that number (the go-live count, 2026-10-01), so a typo
+    there would invent a lot no case carries — refuse it instead."""
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    known = {(_sku_key(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")), f.get("lot") or "")
+             for f in fg}
+    bad = []
+    for key, result in (results or {}).items():
+        if "@@" not in key or result.get("counted") in (None, 0, "0"):
+            continue
+        sku_key, lot = key.split("@@", 1)
+        if (sku_key, lot) in known:
+            continue
+        try:
+            datetime.strptime(lot, "%d%m%y")
+            ok = len(lot) == 6
+        except ValueError:
+            ok = False
+        if not ok:
+            bad.append(lot or "(blank)")
+    return bad
 
 
 def _apply_fg_audit(audit):
