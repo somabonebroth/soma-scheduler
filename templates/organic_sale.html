@@ -36,6 +36,31 @@
 details.os-hand summary { cursor: pointer; font-size: 13px; color: var(--dark); margin-top: 12px; }
 .os-done { text-align: center; }
 .os-done .big { font-size: 40px; }
+/* Bottom bar: the running total and the one action, always in reach at the pile. */
+body { padding-bottom: 96px; }
+.os-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; background: var(--card-bg); border-top: 1px solid var(--border); box-shadow: 0 -2px 12px rgba(0,0,0,0.08); padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+.os-bar-in { max-width: 640px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
+.os-bar-in #os-summary { flex: 1; min-width: 0; font-size: 14px; color: var(--text-light); line-height: 1.35; }
+.os-bar-in #os-summary b { color: var(--dark); font-size: 17px; }
+.os-bar-in .btn { flex: none; font-size: 16px; padding: 12px 18px; }
+.os-bar-in .btn:disabled { opacity: .45; }
+/* Review sheet */
+.os-sheet { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,0.45); display: none; align-items: flex-end; justify-content: center; }
+.os-sheet.open { display: flex; }
+.os-sheet-in { background: var(--card-bg); width: 100%; max-width: 640px; max-height: 88vh; overflow-y: auto; border-radius: var(--r-xl) var(--r-xl) 0 0; padding: 20px 18px calc(18px + env(safe-area-inset-bottom)); }
+.os-sheet h2 { margin: 0 0 4px; }
+.os-rv-meta { font-size: 13px; color: var(--text-light); line-height: 1.6; margin-bottom: 12px; }
+.os-rv-meta b { color: var(--dark); }
+.os-rv-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-light); margin: 14px 0 4px; }
+.os-rv { list-style: none; margin: 0; padding: 0; }
+.os-rv li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.os-rv li small { display: block; color: var(--text-light); font-size: 12px; }
+.os-rv li .n { font-weight: 700; color: var(--dark); white-space: nowrap; }
+.os-rv-total { display: flex; justify-content: space-between; font-size: 16px; font-weight: 700; color: var(--dark); margin: 12px 0 16px; }
+.os-rv-btns { display: flex; gap: 10px; }
+.os-rv-btns .btn { flex: 1; font-size: 16px; padding: 13px; }
+.os-draft { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--action-green-bg); color: var(--action-green); border-radius: var(--r-md); padding: 10px 12px; font-size: 13px; margin-bottom: 14px; }
+.os-draft button { background: none; border: none; color: var(--dark); text-decoration: underline; font: inherit; cursor: pointer; flex: none; }
 </style>
 </head>
 <body>
@@ -45,6 +70,7 @@ details.os-hand summary { cursor: pointer; font-size: 13px; color: var(--dark); 
     <div class="header-right"><a href="/" class="header-btn">⌂ Dashboard</a></div>
 </div>
 <div class="main os-main" id="os-root">
+    <div id="os-draft-note"></div>
     <div class="card">
         <h2>1. Order</h2>
         <label class="os-field">Buyer <select id="os-buyer" onchange="osBuyerChanged()"><option value="">Loading…</option></select></label>
@@ -75,13 +101,13 @@ details.os-hand summary { cursor: pointer; font-size: 13px; color: var(--dark); 
         <div id="os-plain"><p class="os-muted">Pick a buyer to see their products.</p></div>
     </div>
 
-    <div class="card">
-        <h2>4. Record</h2>
-        <div class="os-total" id="os-summary" style="margin-top:0;"></div>
-        <div id="os-msg"></div>
-        <button class="btn btn-primary os-big" id="os-save" onclick="osSave()" style="margin-top:12px;">Record sale</button>
-    </div>
+    <div id="os-msg"></div>
 </div>
+<div class="os-bar" id="os-bar"><div class="os-bar-in">
+    <div id="os-summary"></div>
+    <button class="btn btn-primary" id="os-save" onclick="osReview()">Review &amp; record</button>
+</div></div>
+<div class="os-sheet" id="os-sheet" onclick="if(event.target===this)osCloseReview()"><div class="os-sheet-in" id="os-sheet-in"></div></div>
 <script src="/static/vendor/jsqr/jsQR.js"></script>
 <script>
 // Organic Sale (sales.add_organic_scan_order). Scanned cases are resolved on
@@ -102,6 +128,8 @@ function osEsc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function osKey(r) { return r.sku_key + '@@' + r.lot; }
+// Product name without the brand prefix: "Organic Chicken Bone Broth · SS-750ML".
+function osName(r) { return r.recipe ? r.recipe + (r.format ? ' · ' + r.format : '') : (r.name || ''); }
 function osBuyer() { return osBuyers.find(b => b.id === document.getElementById('os-buyer').value); }
 function osOnList(skuKey) {
     const b = osBuyer();
@@ -140,7 +168,7 @@ function osAddCase(r) {
     }
     osTally[k] = have + 1;
     osBeep(true);
-    osStatus('+1 ' + r.name + ' · LOT# ' + r.lot + ' (' + osTally[k] + ')', 'ok');
+    osStatus('+1 ' + osName(r) + ' · LOT# ' + r.lot + ' (' + osTally[k] + ')', 'ok');
     osRender();
 }
 
@@ -236,7 +264,7 @@ function osRender() {
     const rows = osOrganic.filter(r => osTally[osKey(r)]);
     document.getElementById('os-tally').innerHTML = rows.map(r => {
         const k = osKey(r);
-        return '<li><div class="what">' + osEsc(r.name) + '<small>LOT# ' + osEsc(r.lot)
+        return '<li><div class="what">' + osEsc(osName(r)) + '<small>LOT# ' + osEsc(r.lot)
             + (osOnList(r.sku_key) ? '' : ' &middot; not on this buyer\'s price list') + '</small></div>'
             + '<button class="os-icon-btn" aria-label="Remove one case" onclick="osChangeCase(' + osOrganic.indexOf(r) + ', -1)">&minus;</button>'
             + '<div class="n">' + osTally[k] + '</div></li>';
@@ -246,7 +274,7 @@ function osRender() {
 
     // By-hand list
     document.getElementById('os-hand-list').innerHTML = osOrganic.length ? osOrganic.map(r =>
-        '<li><div class="what">' + osEsc(r.name) + '<small>LOT# ' + osEsc(r.lot) + ' &middot; ' + r.cases + ' cases on record</small></div>'
+        '<li><div class="what">' + osEsc(osName(r)) + '<small>LOT# ' + osEsc(r.lot) + ' &middot; ' + r.cases + ' cases on record</small></div>'
         + '<button class="os-icon-btn" aria-label="Add one case" onclick="osAddCase(osOrganic[' + osOrganic.indexOf(r) + '])">+</button></li>'
     ).join('') : '<li class="os-muted">No organic stock on record.</li>';
 
@@ -258,7 +286,7 @@ function osRender() {
     } else {
         const inStock = osPlain.filter(r => (b.skus || []).some(s => s.sku_key === r.sku_key) && r.held >= 12);
         box.innerHTML = inStock.length ? inStock.map(r =>
-            '<div class="os-plain"><div class="what">' + osEsc(r.name) + '<small>' + Math.floor(r.held / 12) + ' cases in stock</small></div>'
+            '<div class="os-plain"><div class="what">' + osEsc(osName(r)) + '<small>' + Math.floor(r.held / 12) + ' cases in stock</small></div>'
             + '<button class="os-icon-btn" aria-label="One case less" onclick="osChangePlain(' + osPlain.indexOf(r) + ', -1)">&minus;</button>'
             + '<div class="n">' + (osPlainQty[r.sku_key] || 0) + '</div>'
             + '<button class="os-icon-btn" aria-label="One case more" onclick="osChangePlain(' + osPlain.indexOf(r) + ', 1)">+</button></div>'
@@ -266,10 +294,81 @@ function osRender() {
     }
 
     const plainCases = Object.values(osPlainQty).reduce((a, x) => a + x, 0);
-    document.getElementById('os-summary').innerHTML = (orgCases || plainCases)
-        ? '<b>' + orgCases + '</b> organic + <b>' + plainCases + '</b> other = <b>' + (orgCases + plainCases) + '</b> cases (' + (orgCases + plainCases) * 12 + ' jars)'
-        : 'Nothing added yet.';
+    const total = orgCases + plainCases;
+    document.getElementById('os-summary').innerHTML = total
+        ? '<b>' + total + '</b> case' + (total === 1 ? '' : 's') + '<br>' + orgCases + ' organic &middot; ' + plainCases + ' other'
+        : 'Nothing added yet';
+    document.getElementById('os-save').disabled = !total;
+    osSaveDraft();
 }
+
+// ── Unsaved scans survive a locked phone or a reload ─────────────────
+// Kept on THIS phone only (localStorage) until the sale is recorded or
+// cleared. On reload, lines are re-checked against current stock.
+const OS_DRAFT = 'soma.organicSale.draft';
+// True until the saved draft has been read back: the page's first draw (an
+// empty list) must not overwrite the draft it is about to restore.
+let osRestoring = true;
+
+function osHasWork() {
+    return Object.keys(osTally).length > 0 || Object.keys(osPlainQty).length > 0;
+}
+
+function osSaveDraft() {
+    if (osRestoring) return;
+    try {
+        if (!osHasWork()) { localStorage.removeItem(OS_DRAFT); return; }
+        localStorage.setItem(OS_DRAFT, JSON.stringify({
+            buyer: document.getElementById('os-buyer').value, loc: document.getElementById('os-loc').value,
+            date: document.getElementById('os-date').value, po: document.getElementById('os-po').value,
+            tally: osTally, plain: osPlainQty, at: new Date().toISOString(),
+        }));
+    } catch (e) {}
+}
+
+function osClearDraft() {
+    try { localStorage.removeItem(OS_DRAFT); } catch (e) {}
+}
+
+function osRestoreDraft() {
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem(OS_DRAFT) || 'null'); } catch (e) {}
+    if (!d) { osRestoring = false; return; }
+    if (d.buyer && osBuyers.some(b => b.id === d.buyer)) {
+        document.getElementById('os-buyer').value = d.buyer;
+        osBuyerChanged();
+        document.getElementById('os-loc').value = d.loc || '';
+    }
+    if (d.date) document.getElementById('os-date').value = d.date;
+    document.getElementById('os-po').value = d.po || '';
+    Object.keys(d.tally || {}).forEach(k => {
+        const r = osOrganic.find(x => osKey(x) === k);
+        if (r) osTally[k] = Math.min(d.tally[k], r.cases);
+    });
+    Object.keys(d.plain || {}).forEach(k => {
+        const r = osPlain.find(x => x.sku_key === k);
+        if (r && osOnList(k)) osPlainQty[k] = Math.min(d.plain[k], Math.floor(r.held / 12));
+    });
+    osRestoring = false;
+    osRender();
+    if (osHasWork()) {
+        const n = Object.values(osTally).reduce((a, x) => a + x, 0) + Object.values(osPlainQty).reduce((a, x) => a + x, 0);
+        const when = new Date(d.at).toLocaleTimeString('en-CA', {hour: 'numeric', minute: '2-digit'});
+        document.getElementById('os-draft-note').innerHTML = '<div class="os-draft"><span>Picked up where you left off: '
+            + n + ' case' + (n === 1 ? '' : 's') + ', saved at ' + osEsc(when) + '</span><button onclick="osDiscard()">Start over</button></div>';
+    }
+}
+
+function osDiscard() {
+    if (osHasWork() && !confirm('Clear everything scanned and added so far?')) return;
+    osTally = {}; osPlainQty = {};   // so the leave-page warning does not fire
+    osClearDraft();
+    window.location.reload();
+}
+
+window.addEventListener('beforeunload', e => {
+    if (osHasWork()) { e.preventDefault(); e.returnValue = ''; }
+});
 
 function osBuyerChanged() {
     const b = osBuyer();
@@ -283,44 +382,87 @@ function osBuyerChanged() {
     osRender();
 }
 
-async function osSave() {
+// ── Review, then record ──────────────────────────────────────────────
+function osOrder() {
     const b = osBuyer();
+    const locIdx = document.getElementById('os-loc').value;
+    return {
+        b: b,
+        loc: b && locIdx !== '' ? (b.locations || [])[+locIdx] : null,
+        cases: osOrganic.filter(r => osTally[osKey(r)]).map(r => ({r: r, n: osTally[osKey(r)]})),
+        lines: osPlain.filter(r => osPlainQty[r.sku_key]).map(r => ({r: r, n: osPlainQty[r.sku_key]})),
+    };
+}
+
+function osReview() {
+    const o = osOrder();
     const msg = document.getElementById('os-msg');
     msg.innerHTML = '';
-    if (!b) { msg.innerHTML = '<div class="os-warn">Pick a buyer first.</div>'; return; }
-    const cases = osOrganic.filter(r => osTally[osKey(r)]).map(r => ({sku_key: r.sku_key, lot: r.lot, cases: osTally[osKey(r)]}));
-    const lines = Object.keys(osPlainQty).map(k => ({sku_key: k, cases: osPlainQty[k]}));
-    if (!cases.length && !lines.length) { msg.innerHTML = '<div class="os-warn">Scan a case or add a product first.</div>'; return; }
-    const locIdx = document.getElementById('os-loc').value;
-    const loc = locIdx !== '' ? (b.locations || [])[+locIdx] : null;
-    const btn = document.getElementById('os-save');
+    if (!o.b) {
+        msg.innerHTML = '<div class="os-warn">Pick a buyer first (at the top).</div>';
+        window.scrollTo({top: 0, behavior: 'smooth'});
+        return;
+    }
+    if (!o.cases.length && !o.lines.length) return;
+    osStopCamera();
+    const total = o.cases.reduce((a, c) => a + c.n, 0) + o.lines.reduce((a, l) => a + l.n, 0);
+    const date = document.getElementById('os-date').value, po = document.getElementById('os-po').value.trim();
+    const item = (name, sub, n) => '<li><span>' + osEsc(name) + (sub ? '<small>' + sub + '</small>' : '') + '</span><span class="n">' + n + ' case' + (n === 1 ? '' : 's') + '</span></li>';
+    document.getElementById('os-sheet-in').innerHTML = '<h2>Check before recording</h2>'
+        + '<div class="os-rv-meta"><b>' + osEsc(o.b.name) + '</b>' + (o.loc ? ' &middot; ' + osEsc(o.loc.name) : '')
+        + '<br>Delivery ' + osEsc(date || 'not set') + (po ? ' &middot; PO ' + osEsc(po) : '') + '</div>'
+        + (o.cases.length ? '<div class="os-rv-head">Organic (scanned)</div><ul class="os-rv">'
+            + o.cases.map(c => item(osName(c.r), 'LOT# ' + osEsc(c.r.lot) + (osOnList(c.r.sku_key) ? '' : ' &middot; no price on this buyer\'s list'), c.n)).join('') + '</ul>' : '')
+        + (o.lines.length ? '<div class="os-rv-head">Other products (oldest stock first)</div><ul class="os-rv">'
+            + o.lines.map(l => item(osName(l.r), '', l.n)).join('') + '</ul>' : '')
+        + '<div class="os-rv-total"><span>Total</span><span>' + total + ' cases &middot; ' + (total * 12) + ' jars</span></div>'
+        + '<div id="os-rv-msg"></div>'
+        + '<div class="os-rv-btns"><button class="btn btn-outline" onclick="osCloseReview()">Back</button>'
+        + '<button class="btn btn-primary" id="os-confirm" onclick="osConfirm()">Record sale</button></div>';
+    document.getElementById('os-sheet').classList.add('open');
+}
+
+function osCloseReview() {
+    document.getElementById('os-sheet').classList.remove('open');
+}
+
+async function osConfirm() {
+    const o = osOrder();
+    const btn = document.getElementById('os-confirm'), msg = document.getElementById('os-rv-msg');
     btn.disabled = true; btn.textContent = 'Recording…';
+    msg.innerHTML = '';
     try {
         const res = await fetch('/api/organic/sales/organic-order', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                buyer_id: b.id, sale_date: document.getElementById('os-date').value,
+                buyer_id: o.b.id, sale_date: document.getElementById('os-date').value,
                 po_number: document.getElementById('os-po').value.trim(),
-                location_name: loc ? loc.name || '' : '', location_address: loc ? loc.address || '' : '',
-                cases: cases, lines: lines,
+                location_name: o.loc ? o.loc.name || '' : '', location_address: o.loc ? o.loc.address || '' : '',
+                cases: o.cases.map(c => ({sku_key: c.r.sku_key, lot: c.r.lot, cases: c.n})),
+                lines: o.lines.map(l => ({sku_key: l.r.sku_key, cases: l.n})),
             }),
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
-            msg.innerHTML = '<div class="os-warn"><b>' + osEsc(data.error || 'Not saved') + '.</b> '
+            msg.innerHTML = '<div class="os-warn" style="margin:0 0 12px;"><b>' + osEsc(data.error || 'Not saved') + '.</b> '
                 + osEsc((data.details || []).join('; ')) + '</div>';
             btn.disabled = false; btn.textContent = 'Record sale';
             return;
         }
-        osStopCamera();
-        const total = cases.reduce((a, c) => a + c.cases, 0) + lines.reduce((a, l) => a + l.cases, 0);
+        const total = o.cases.reduce((a, c) => a + c.n, 0) + o.lines.reduce((a, l) => a + l.n, 0);
+        osTally = {}; osPlainQty = {};
+        osClearDraft();
+        osCloseReview();
+        document.getElementById('os-bar').style.display = 'none';
+        document.body.style.paddingBottom = '0';
         document.getElementById('os-root').innerHTML = '<div class="card os-done"><div class="big">&#10004;</div>'
-            + '<h2>Sale recorded</h2><p class="os-muted">' + osEsc(b.name) + ' &middot; ' + total + ' cases</p>'
+            + '<h2>Sale recorded</h2><p class="os-muted">' + osEsc(o.b.name) + ' &middot; ' + total + ' cases</p>'
             + '<a class="btn btn-primary os-big" style="display:block;text-decoration:none;margin:14px 0 10px;" target="_blank" href="/api/organic/sales/'
             + encodeURIComponent(data.slip_sale_id) + '/packing-slip">Print packing slip</a>'
             + '<a class="btn btn-outline os-big" style="display:block;text-decoration:none;" href="/organic-sale">New organic sale</a></div>';
+        window.scrollTo(0, 0);
     } catch (e) {
-        msg.innerHTML = '<div class="os-warn">Network error: ' + osEsc(e.message) + '. Nothing was saved.</div>';
+        msg.innerHTML = '<div class="os-warn" style="margin:0 0 12px;">Network error: ' + osEsc(e.message) + '. Nothing was saved; your scans are still here.</div>';
         btn.disabled = false; btn.textContent = 'Record sale';
     }
 }
@@ -338,7 +480,10 @@ async function osSave() {
     }
     document.getElementById('os-buyer').innerHTML = '<option value="">Pick a buyer</option>'
         + osBuyers.map(b => '<option value="' + osEsc(b.id) + '">' + osEsc(b.name) + '</option>').join('');
+    ['os-loc', 'os-date', 'os-po'].forEach(id => document.getElementById(id).addEventListener('input', osSaveDraft));
+    document.getElementById('os-loc').addEventListener('change', osSaveDraft);
     osRender();
+    osRestoreDraft();
 })();
 </script>
 </body>

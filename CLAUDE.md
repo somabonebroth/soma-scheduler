@@ -55,6 +55,16 @@ sales.py            — Flask Blueprint (731 lines, extracted 2026-06-03): the 7
                       `entry: "organic_sale"`. Rows are built by `_order_line_record`, shared
                       with `add_sale_order`, so the slip / Organic Lots / trace read both the
                       same. Tests: `python3 -m unittest tests.test_organic_sale`.
+                      **Phone UX (2026-10-01):** a fixed bottom bar carries the running case
+                      total + "Review & record"; recording goes through a review sheet (buyer,
+                      delivery, PO, every scanned line with LOT#, other lines, total) — the
+                      camera stops while it is open so nothing scans behind it. The in-progress
+                      order is kept in THIS phone's localStorage (`soma.organicSale.draft`) so
+                      a locked phone or reload resumes it (re-checked against current stock;
+                      "Start over" clears it); `osRestoring` starts TRUE so the page's first
+                      empty draw cannot wipe the draft before it is read back (that bug was
+                      caught in testing). Leaving with unsaved lines asks first. Names are
+                      `recipe · format` (`osName`; sale-stock rows carry recipe/format).
                       **Go-live switch (2026-10-01): Organic Sale is the ONLY way organic
                       stock is sold.** `add_organic_sale` (incl. the legacy fg_id path) and
                       `add_sale_order` refuse any organic SKU with `ORGANIC_USE_SCAN` —
