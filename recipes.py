@@ -334,7 +334,67 @@ def update_recipe(name):
                     logger.warning("Could not notify Ripe of sku_key rename: %s", e)
                     cascade["ripe_products"] = "unreachable"
 
-    return jsonify({"success": True, "name": new_name, "cascade": cascade})
+    return jsonify({"success": True, "name": new_name, "cascade": cascade,
+                    "cert_mismatch": _cert_mismatch(new_name)})
+
+
+def _norm_cert(c):
+    return (c or "").strip().lower()
+
+
+def _cert_rows(recipe_name):
+    """(recipe, sku_key, FG rows of that SKU, sale rows of that SKU)."""
+    recipe = app.load_recipes().get(recipe_name) or {}
+    key = _sku_key((recipe.get("brand") or "").strip(), recipe_name,
+                   _normalize_format((recipe.get("format") or "").strip()))
+    fg = _load_json(app.ORGANIC_FG_PATH, [])
+    sales = _load_json(app.ORGANIC_SALES_PATH, [])
+    match = lambda r: _sku_key(r.get("brand", ""), r.get("recipe", ""), r.get("format", "")) == key
+    return recipe, fg, [f for f in fg if match(f)], sales, [s for s in sales if match(s)]
+
+
+def _cert_mismatch(recipe_name):
+    """Finished-goods batches of this recipe whose stored certification
+    differs from the recipe's. A batch keeps the certification it was made
+    with, so fixing a recipe card does not fix stock already made — and the
+    organic checks (Record Sale refusal, Organic Lots, the per-LOT count) all
+    read the batch, not the recipe. None when everything agrees."""
+    recipe, _, rows, _, _ = _cert_rows(recipe_name)
+    want = _norm_cert(recipe.get("certification"))
+    off = [f for f in rows if _norm_cert(f.get("certification")) != want]
+    if not off:
+        return None
+    return {"batches": len(off),
+            "from": sorted({(f.get("certification") or "").strip() or "None" for f in off}),
+            "to": (recipe.get("certification") or "").strip() or "None"}
+
+
+@recipes_bp.route("/api/recipes/<path:name>/apply-certification", methods=["POST"])
+@manager_required
+def apply_recipe_certification(name):
+    """Set every finished-goods batch AND sale row of this recipe's SKU to the
+    recipe's current certification (2026-10-01). For correcting a product that
+    was marked with the wrong certification — never for a real change of
+    certification going forward, which must leave past batches as they were
+    made. Each corrected row keeps `certification_was` + `certification_corrected_at`
+    so the correction is visible on the record."""
+    if name not in app.load_recipes():
+        return jsonify({"error": f"Recipe '{name}' not found"}), 404
+    recipe, fg, fg_rows, sales, sale_rows = _cert_rows(name)
+    cert = (recipe.get("certification") or "").strip()
+    now = datetime.now().isoformat()
+    counts = {"finished_goods": 0, "sales": 0}
+    for label, rows in (("finished_goods", fg_rows), ("sales", sale_rows)):
+        for r in rows:
+            if _norm_cert(r.get("certification")) != _norm_cert(cert):
+                r.setdefault("certification_was", r.get("certification", ""))
+                r["certification"] = cert
+                r["certification_corrected_at"] = now
+                counts[label] += 1
+    _save_json(app.ORGANIC_FG_PATH, fg)
+    _save_json(app.ORGANIC_SALES_PATH, sales)
+    logger.info("Certification of %s set to %r on %s", name, cert, counts)
+    return jsonify({"success": True, "certification": cert, "updated": counts})
 
 
 @recipes_bp.route("/api/recipes/<path:name>", methods=["DELETE"])

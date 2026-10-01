@@ -516,6 +516,21 @@ async function saveEdit(){
     try{resData=await res.json();}catch(e){resData={error:'Server error'};}
     if(!res.ok){alert(resData.error||'Save failed');return;}
     closeModal('edit-modal');recipes=await(await fetch('/api/recipes')).json();await loadOrder();await loadRecipeCheck();renderList();checkMigration();
+    // Stock already made keeps the certification it was made with. If it
+    // disagrees with the recipe, offer the correction (2026-10-01) — only for a
+    // product that was marked wrong, never for a real change going forward.
+    const mm = !isAdding && resData.cert_mismatch;
+    if (mm && mm.batches) {
+        const ok = confirm(mm.batches + ' batch' + (mm.batches === 1 ? '' : 'es') + ' of ' + newName
+            + ' already made ' + (mm.batches === 1 ? 'is' : 'are') + ' marked "' + mm.from.join('", "') + '", but this recipe says "' + mm.to + '".\n\n'
+            + 'Correct ' + (mm.batches === 1 ? 'it (and its' : 'them (and their') + ' sale records) to "' + mm.to + '"?\n\n'
+            + 'Only do this if the product was never really "' + mm.from.join('" or "') + '". If its certification has genuinely changed, press Cancel so past batches stay as they were made.');
+        if (ok) {
+            const r2 = await fetch('/api/recipes/' + encodeURIComponent(newName) + '/apply-certification', {method: 'POST'});
+            const d2 = await r2.json().catch(() => ({}));
+            alert(r2.ok ? 'Corrected ' + d2.updated.finished_goods + ' batch' + (d2.updated.finished_goods === 1 ? '' : 'es') + ' and ' + d2.updated.sales + ' sale record' + (d2.updated.sales === 1 ? '' : 's') + '.' : (d2.error || 'Correction failed'));
+        }
+    }
     // Show cascade summary if a rename/rebrand updated downstream records
 
 
