@@ -2580,8 +2580,16 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data, create_
                                     f"the adjustment from Finished Goods."),
                     })
 
+        # Organic stock holds FULL CASES only (Jeremy, 2026-09-29/10-01): the
+        # kitchen enters every jar; the remainder below 12 never enters organic
+        # stock — those jars are sold as hot cups under a non-certified label.
+        # Recorded on the batch (jars_counted / loose_jars) so its Organic Lots
+        # folder still balances against the kitchen's count. Raw deduction and
+        # the run's amount_produced keep the full count (the batch made them).
+        is_organic = (recipe_data.get("certification") or "").strip().lower() == "organic"
+        fg_qty = (amount // 12) * 12 if is_organic else amount
         if amount > 0:
-            new_remaining = max(0, amount - already_sold)
+            new_remaining = max(0, fg_qty - already_sold)
             new_fg = {
                 "id": fg_id,
                 "run_id": run["id"],
@@ -2590,7 +2598,7 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data, create_
                 "format": recipe_data.get("format", ""),
                 "certification": (recipe_data.get("certification") or "").strip(),
                 "lot": expiry_lot,
-                "quantity_produced": amount,
+                "quantity_produced": fg_qty,
                 "quantity_remaining": new_remaining,
                 "vessel": vessel,
                 "week_id": finish_week_id,
@@ -2600,11 +2608,17 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data, create_
                 "created_at": existing_fg.get("created_at") if existing_fg else datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat(),
             }
+            if is_organic:
+                new_fg["jars_counted"] = amount
+                new_fg["loose_jars"] = amount - fg_qty
             if existing_fg:
                 # Update in place — but explicitly clear last_adjusted_at since
                 for k, v in new_fg.items():
                     existing_fg[k] = v
                 existing_fg.pop("last_adjusted_at", None)
+                if not is_organic:
+                    existing_fg.pop("jars_counted", None)
+                    existing_fg.pop("loose_jars", None)
             else:
                 fg.append(new_fg)
         else:

@@ -180,6 +180,10 @@ function olRenderFolder(f) {
         h += '<tr><td class="name" colspan="4">' + olEsc(s.name) + '</td></tr>'
             + '<tr><td class="num">' + olJars(s.made + s.added) + '</td><td class="num">' + olJars(s.sold)
             + '</td><td class="num">' + olJars(s.reduced) + '</td><td class="num">' + olJars(s.held) + '</td></tr>';
+        if (s.hot_cups) {
+            h += '<tr><td colspan="4" class="ol-item-meta" style="text-align:left;">Kitchen counted ' + (s.made + s.hot_cups)
+                + ' &middot; ' + s.hot_cups + ' loose jar' + (s.hot_cups === 1 ? '' : 's') + ' to hot cups (not certified)</td></tr>';
+        }
         if (s.unrecorded) unrecorded.push(olEsc(s.name) + ': ' + (s.unrecorded > 0 ? s.unrecorded + ' jars missing' : (-s.unrecorded) + ' jars extra'));
     });
     h += '</tbody></table></div><p class="ol-item-meta" style="margin:8px 0 0;">All figures in jars.</p>';

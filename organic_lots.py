@@ -134,10 +134,13 @@ def build_folders(fg, runs, sales, adjustments, materials, photo_ids):
             s = skus.setdefault(key, {
                 "sku_key": key,
                 "name": _sku_display(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")),
-                "made": 0, "added": 0, "sold": 0, "reduced": 0, "held": 0,
+                "made": 0, "added": 0, "sold": 0, "reduced": 0, "held": 0, "hot_cups": 0,
             })
             if f.get("run_id"):
                 s["made"] += int(f.get("quantity_produced") or 0)
+                # Jars counted by the kitchen beyond full cases: never organic
+                # stock, sold as hot cups under a non-certified label.
+                s["hot_cups"] += int(f.get("loose_jars") or 0)
             else:
                 s["added"] += int(f.get("quantity_produced") or 0)
             s["held"] += int(f.get("quantity_remaining") or 0)
