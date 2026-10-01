@@ -6,26 +6,25 @@
 <title>Organic Lots · Soma</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
-/* Organic Lots (organic_lots.py). Figure-first: a folder opens on four big
-   numbers (made / sold / reduced / held) in cases, then the balance check,
-   then In and Out. Prints as one clean record per LOT#. */
-.ol-main { max-width: 1000px; margin: 0 auto; }
+/* Organic Lots (organic_lots.py). Figure-first and quiet: a folder opens on
+   four numbers in cases (made / sold / reduced / held), one line saying
+   whether they add up, then In and Out as plain lists. Words only where a
+   number cannot speak for itself. Prints as one clean record per LOT#. */
+.ol-main { max-width: 960px; margin: 0 auto; }
 .ol-mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: 1px; }
-.ol-muted { font-size: 13px; color: var(--text-light); line-height: 1.5; }
+.ol-muted { font-size: 13px; color: var(--text-light); line-height: 1.5; margin: 0; }
 .ol-small { font-size: 12px; color: var(--text-light); }
 
 /* ── List ── */
-.ol-top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-bottom: 18px; }
-.ol-top .ol-muted { flex: 1 1 320px; margin: 0; }
-.ol-search { flex: 0 1 240px; padding: 10px 12px; font-size: 16px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--white); min-width: 0; }
-.ol-heading { font-size: 11px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 1px; margin: 22px 0 10px; border-left: 3px solid var(--accent); padding-left: 8px; }
-.ol-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
-.ol-folder { display: flex; flex-direction: column; gap: 8px; text-align: left; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px 18px; cursor: pointer; font: inherit; color: var(--text); transition: border-color .15s, box-shadow .15s; }
-.ol-folder:hover { border-color: var(--accent); box-shadow: 0 2px 10px rgba(74,103,65,0.12); }
+.ol-search { width: 100%; max-width: 320px; padding: 10px 12px; font-size: 16px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--white); margin-bottom: 4px; }
+.ol-heading { font-size: 11px; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 10px; }
+.ol-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.ol-folder { display: flex; flex-direction: column; gap: 8px; text-align: left; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 14px 16px; cursor: pointer; font: inherit; color: var(--text); transition: border-color .15s; }
+.ol-folder:hover { border-color: var(--accent); }
 .ol-folder .row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.ol-folder .lot { font-size: 22px; font-weight: 700; color: var(--dark); }
-.ol-folder .big { font-size: 15px; font-weight: 700; color: var(--dark); }
-.ol-bar { height: 6px; background: var(--row-alt); border-radius: 3px; overflow: hidden; }
+.ol-folder .lot { font-size: 20px; font-weight: 700; color: var(--dark); }
+.ol-folder .big { font-size: 14px; font-weight: 700; color: var(--dark); white-space: nowrap; }
+.ol-bar { height: 4px; background: var(--row-alt); border-radius: 2px; overflow: hidden; }
 .ol-bar span { display: block; height: 100%; background: var(--accent); }
 .ol-folder .skus { font-size: 12px; color: var(--text-light); line-height: 1.5; }
 details.ol-closed > summary { cursor: pointer; list-style: none; }
@@ -33,57 +32,61 @@ details.ol-closed > summary::-webkit-details-marker { display: none; }
 .ol-empty { text-align: center; padding: 32px 20px; color: var(--text-light); font-size: 14px; }
 
 /* ── Folder ── */
-.pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 10px; vertical-align: middle; letter-spacing: 0; }
+.pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 10px; vertical-align: middle; }
 .pill.held { background: var(--action-green-bg); color: var(--action-green); }
 .pill.closed { background: var(--row-alt); color: var(--grey-dark); }
-.ol-bar-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.ol-bar-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .ol-back { background: none; border: none; color: var(--dark); font: inherit; font-size: 14px; cursor: pointer; padding: 6px 0; }
-.ol-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
-.ol-title { font-size: 28px; font-weight: 700; color: var(--dark); margin: 0; }
-.ol-dates { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 6px; }
-.ol-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
-.ol-stat { background: var(--bg); border-radius: var(--r-md); padding: 12px 14px; }
+.ol-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.ol-title { font-size: 26px; font-weight: 700; color: var(--dark); margin: 0; }
+.ol-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+.ol-stat { background: var(--bg); border-radius: var(--r-md); padding: 10px 12px; }
 .ol-stat .k { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-light); }
-.ol-stat .v { font-size: 26px; font-weight: 700; color: var(--dark); line-height: 1.15; margin-top: 4px; }
+.ol-stat .v { font-size: 26px; font-weight: 700; color: var(--dark); line-height: 1.2; margin-top: 2px; }
+.ol-stat .v small { font-size: 13px; font-weight: 600; color: var(--text-light); margin-left: 3px; }
 .ol-stat .u { font-size: 12px; color: var(--text-light); }
 .ol-stat.held { background: var(--action-green-bg); }
 .ol-stat.held .v { color: var(--action-green); }
-.ol-check { display: flex; align-items: flex-start; gap: 8px; margin-top: 14px; padding: 10px 12px; border-radius: var(--r-md); font-size: 13px; line-height: 1.5; }
-.ol-check.ok { background: var(--action-green-bg); color: var(--action-green); }
-.ol-check.bad { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark); }
-.ol-section-note { font-size: 13px; color: var(--text-light); margin: -4px 0 14px; }
+.ol-check { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font-size: 13px; color: var(--text-light); }
+.ol-check .ok { color: var(--action-green); font-weight: 600; }
+.ol-alert { margin-top: 12px; padding: 10px 12px; border-radius: var(--r-md); background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark); font-size: 13px; line-height: 1.5; }
 .ol-table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .ol-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.ol-table th { text-align: left; padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-light); background: var(--row-alt); border-bottom: 1px solid var(--border); white-space: nowrap; }
-.ol-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.ol-table th { text-align: left; padding: 6px 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--text-light); font-weight: 600; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.ol-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .ol-table tr:last-child td { border-bottom: none; }
 .ol-table .num { text-align: right; white-space: nowrap; }
-.ol-table .cases { display: block; font-size: 11px; color: var(--text-light); }
-.ol-table tr.here td { font-weight: 600; }
-.ol-per th, .ol-per td.num { width: 25%; }
-.ol-per tr.name td { font-weight: 600; color: var(--dark); border-bottom: none; padding-bottom: 0; }
-.ol-item { border: 1px solid var(--border); border-radius: var(--r-md); padding: 14px 16px; margin-bottom: 12px; }
-.ol-item:last-child { margin-bottom: 0; }
-.ol-item-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 10px; }
-.ol-item-head .who { font-size: 15px; font-weight: 700; color: var(--dark); }
+.ol-table .sub { display: block; font-size: 11px; color: var(--text-light); }
+.ol-per { margin-top: 14px; }
+.ol-per th.num, .ol-per td.num { width: 25%; }
+.ol-per tr.name td { font-weight: 600; color: var(--dark); border-bottom: none; padding-bottom: 0; padding-top: 10px; }
+.ol-group { margin-top: 16px; }
+.ol-group:first-of-type { margin-top: 0; }
+.ol-group-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin-bottom: 4px; }
+.ol-group-head b { color: var(--dark); }
+.ol-rows { list-style: none; margin: 0; padding: 0; }
+.ol-rows li { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.ol-rows li:last-child { border-bottom: none; }
+.ol-rows .who { font-weight: 700; color: var(--dark); }
+.ol-rows .amt { text-align: right; white-space: nowrap; font-weight: 700; color: var(--dark); }
+.ol-rows .amt.minus { color: var(--action-red); }
+.ol-rows .links { display: block; font-weight: 400; font-size: 12px; margin-top: 2px; }
+.ol-rows .links a, .ol-rows .links button { color: var(--text-light); background: none; border: none; padding: 0; font: inherit; cursor: pointer; text-decoration: underline; }
 .ol-chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 10px; background: var(--row-alt); color: var(--dark); white-space: nowrap; }
-.ol-chip.green { background: var(--action-green-bg); color: var(--action-green); }
 .ol-chip.red { background: var(--action-red-bg); color: var(--action-red); }
-.ol-batches { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.ol-batches li { font-size: 13px; color: var(--text); }
+.ol-link { font-size: 13px; color: var(--dark); }
 .ol-btn { font-size: 13px; text-decoration: none; padding: 7px 14px; }
-.ol-warn { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark); border-radius: var(--r-md); padding: 8px 12px; font-size: 13px; margin-top: 10px; }
 @media (max-width: 600px) {
   .ol-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .ol-title { font-size: 24px; }
-  .ol-search { flex: 1 1 100%; }
+  .ol-title { font-size: 22px; }
+  .ol-search { max-width: none; }
 }
 @media print {
   .header, .ol-bar-top, .ol-noprint { display: none !important; }
   body { background: #fff; }
   .main { padding: 0; }
   .card { box-shadow: none; border: 1px solid #999; break-inside: avoid; }
-  .ol-item { break-inside: avoid; }
+  .ol-rows li, .ol-group { break-inside: avoid; }
 }
 </style>
 </head>
@@ -141,14 +144,12 @@ function olCaseWord(n) { return n % 12 ? '' : (n === 12 ? 'case' : 'cases'); }
 // ── List ─────────────────────────────────────────────────────────────
 function olFolderCard(f) {
     const pct = f.made ? Math.round(100 * f.held / f.made) : 0;
+    const held = f.status === 'held';
     return '<button class="ol-folder" onclick="location.hash=\'' + encodeURIComponent(f.lot) + '\'">'
         + '<div class="row"><span class="lot ol-mono">' + olEsc(f.lot) + '</span>'
-        + '<span class="pill ' + f.status + '">' + (f.status === 'held' ? 'Held' : 'Closed') + '</span></div>'
-        + '<div class="row"><span class="big">' + (f.status === 'held' ? olCases(f.held) + ' ' + olCaseWord(f.held) + ' held' : 'All gone') + '</span>'
-        + '<span class="ol-small">of ' + olCases(f.made) + '</span></div>'
-        + '<div class="ol-bar"><span style="width:' + pct + '%"></span></div>'
+        + '<span class="big">' + (held ? Math.floor(f.held / 12) + ' <span class="ol-small">of ' + Math.floor(f.made / 12) + ' cases</span>' : '<span class="ol-small">Closed</span>') + '</span></div>'
+        + (held ? '<div class="ol-bar"><span style="width:' + pct + '%"></span></div>' : '')
         + '<div class="skus">' + f.skus.map(s => olEsc(olProduct(s))).join('<br>') + '</div>'
-        + (f.batch_date ? '<div class="ol-small">Batch ' + olEsc(olDate(f.batch_date)) + '</div>' : '')
         + '</button>';
 }
 
@@ -156,8 +157,7 @@ function olFolderCard(f) {
 // the box keeps focus and the cursor.
 function olRenderList() {
     if (!document.getElementById('ol-search')) {
-        document.getElementById('ol-root').innerHTML = '<div class="ol-top"><p class="ol-muted">One folder per organic LOT#: the invoices that went in, what was made, and every sale and reduction that came out. A folder <b>closes</b> when nothing is left.</p>'
-            + '<input class="ol-search" id="ol-search" type="search" placeholder="Find a LOT# or product" autocomplete="off"></div>'
+        document.getElementById('ol-root').innerHTML = '<input class="ol-search" id="ol-search" type="search" placeholder="Find a LOT# or product" autocomplete="off">'
             + '<div id="ol-list"></div>';
         const box = document.getElementById('ol-search');
         box.value = olQuery;
@@ -179,115 +179,118 @@ function olRenderCards() {
         h += '<div class="card"><div class="ol-empty">No lot matches “' + olEsc(olQuery) + '”.</div></div>';
     }
     if (held.length) {
-        h += '<div class="ol-heading">Held (' + held.length + ')</div><div class="ol-grid">' + held.map(olFolderCard).join('') + '</div>';
+        h += '<div class="ol-heading">On the shelf · ' + held.length + '</div><div class="ol-grid">' + held.map(olFolderCard).join('') + '</div>';
     }
     if (closed.length) {
-        h += '<details class="ol-closed"' + (q ? ' open' : '') + '><summary><div class="ol-heading">Closed (' + closed.length + ') &#9662;</div></summary>'
+        h += '<details class="ol-closed"' + (q ? ' open' : '') + '><summary><div class="ol-heading">Closed · ' + closed.length + ' &#9662;</div></summary>'
             + '<div class="ol-grid">' + closed.map(olFolderCard).join('') + '</div></details>';
     }
     document.getElementById('ol-list').innerHTML = h;
 }
 
 // ── Folder ───────────────────────────────────────────────────────────
+// Whole cases big; loose jars, when there are any, small underneath.
 function olStat(label, jars, cls) {
+    const loose = jars % 12;
     return '<div class="ol-stat' + (cls ? ' ' + cls : '') + '"><div class="k">' + label + '</div>'
-        + '<div class="v">' + olCases(jars) + '</div><div class="u">' + (olCaseWord(jars) ? olCaseWord(jars) + ' &middot; ' : '') + jars.toLocaleString() + ' jars</div></div>';
+        + '<div class="v">' + Math.floor(jars / 12).toLocaleString() + '<small>cases</small></div>'
+        + (loose ? '<div class="u">+ ' + loose + ' jar' + (loose === 1 ? '' : 's') + '</div>' : '') + '</div>';
+}
+
+// A table cell: cases, loose jars underneath.
+function olCell(jars) {
+    const loose = jars % 12;
+    return '<td class="num">' + Math.floor(jars / 12).toLocaleString()
+        + (loose ? '<span class="sub">+ ' + loose + ' jar' + (loose === 1 ? '' : 's') + '</span>' : '') + '</td>';
 }
 
 function olSummaryHtml(f) {
     const sum = k => f.skus.reduce((a, s) => a + s[k], 0);
     const made = sum('made') + sum('added'), sold = sum('sold'), reduced = sum('reduced'), hot = sum('hot_cups');
+    const bb = olBestBefore(f.lot);
     let h = '<div class="card"><div class="ol-head"><h1 class="ol-title"><span class="ol-mono">LOT# ' + olEsc(f.lot) + '</span></h1>'
         + '<span class="pill ' + f.status + '">' + (f.status === 'held' ? 'Held' : 'Closed') + '</span></div>'
-        + '<div class="ol-dates ol-muted">'
-        + (olBestBefore(f.lot) ? '<span>Best before <b>' + olEsc(olBestBefore(f.lot)) + '</b></span>' : '')
-        + (f.batch_date ? '<span>Batch started <b>' + olEsc(olDate(f.batch_date)) + '</b></span>' : '')
-        + '<span>' + f.skus.map(s => olEsc(olProduct(s))).join(' &middot; ') + '</span></div>'
+        + '<p class="ol-muted" style="margin-top:4px;">'
+        + (f.skus.length === 1 ? olEsc(olProduct(f.skus[0])) + (bb ? ' &middot; ' : '') : '')
+        + (bb ? 'Best before ' + olEsc(bb) : '') + '</p>'
         + '<div class="ol-stats">' + olStat('Made', made) + olStat('Sold', sold) + olStat('Reduced', reduced) + olStat('Held', f.held, 'held') + '</div>';
-    if (hot) {
-        h += '<p class="ol-muted" style="margin:10px 0 0;">The kitchen counted ' + (sum('made') + hot).toLocaleString() + ' jars; '
-            + hot + ' loose jar' + (hot === 1 ? '' : 's') + ' went to hot cups (not certified) and never entered organic stock.</p>';
-    }
     if (f.skus.length > 1) {
         // Product name on its own row, its four numbers underneath: reads on a
         // phone, where a five-column table squeezes the names to one word a line.
-        h += '<div class="ol-table-wrap" style="margin-top:14px;"><table class="ol-table ol-per"><thead><tr><th class="num">Made</th><th class="num">Sold</th><th class="num">Reduced</th><th class="num">Held</th></tr></thead><tbody>'
-            + f.skus.map(s => '<tr class="name"><td colspan="4">' + olEsc(olProduct(s))
-                + (s.hot_cups ? ' <span class="ol-small">&middot; + ' + s.hot_cups + ' loose to hot cups</span>' : '') + '</td></tr><tr>'
-                + ['made', 'sold', 'reduced', 'held'].map(k => {
-                    const v = k === 'made' ? s.made + s.added : s[k];
-                    return '<td class="num">' + olCases(v) + '<span class="cases">' + v + ' jars</span></td>';
-                }).join('') + '</tr>').join('')
-            + '</tbody></table></div><p class="ol-small" style="margin:6px 0 0;">Cases, with jars underneath.</p>';
+        h += '<div class="ol-table-wrap"><table class="ol-table ol-per"><thead><tr><th class="num">Made</th><th class="num">Sold</th><th class="num">Reduced</th><th class="num">Held</th></tr></thead><tbody>'
+            + f.skus.map(s => '<tr class="name"><td colspan="4">' + olEsc(olProduct(s)) + '</td></tr><tr>'
+                + olCell(s.made + s.added) + olCell(s.sold) + olCell(s.reduced) + olCell(s.held) + '</tr>').join('')
+            + '</tbody></table></div>';
     }
     const off = f.skus.filter(s => s.unrecorded);
-    h += off.length
-        ? '<div class="ol-check bad"><span>&#9888;</span><span>Stock changed with nothing on record to explain it (usually a lot corrected by hand): '
-            + off.map(s => olEsc(olProduct(s)) + ' ' + (s.unrecorded > 0 ? s.unrecorded + ' jars missing' : (-s.unrecorded) + ' jars extra')).join('; ') + '.</span></div>'
-        : '<div class="ol-check ok"><span>&#10003;</span><span>Adds up: made &minus; sold &minus; reduced = held.</span></div>';
+    if (off.length) {
+        h += '<div class="ol-alert">&#9888; Stock changed with nothing on record: '
+            + off.map(s => olEsc(olProduct(s)) + ', ' + (s.unrecorded > 0 ? s.unrecorded + ' jars missing' : (-s.unrecorded) + ' jars extra')).join('; ') + '.</div>';
+    }
+    if (!off.length || hot) {
+        h += '<div class="ol-check">' + (off.length ? '' : '<span class="ok">&#10003; Adds up</span>')
+            + (hot ? '<span>' + hot + ' loose jar' + (hot === 1 ? '' : 's') + ' went to hot cups, not organic stock</span>' : '') + '</div>';
+    }
     return h + '</div>';
 }
 
 function olInHtml(f) {
     let h = '<div class="card"><h2>In</h2>';
-    if (f.batches.length) {
-        h += '<ul class="ol-batches">' + f.batches.map(b => '<li><b>' + olEsc(b.recipe) + '</b> &middot; ' + olEsc(b.vessel)
-            + (b.start_date ? ' <span class="ol-small">&middot; started ' + olEsc(olDate(b.start_date)) + '</span>' : '') + '</li>').join('') + '</ul>';
-    }
-    f.added.forEach(a => {
-        h += '<p class="ol-muted" style="margin:0 0 10px;"><b>' + olEsc(a.label) + ':</b> ' + olCases(a.quantity) + ' ' + olCaseWord(a.quantity) + ' of ' + olEsc(olProduct({recipe: a.recipe, format: a.format, name: a.sku}))
-            + (a.date ? ' &middot; ' + olEsc(olDate(a.date)) : '') + '</p>';
-    });
-    if (!f.invoices.length && !f.no_lot.length) {
-        h += '<p class="ol-muted">' + (f.batches.length ? 'No raw lots on record for this batch.' : 'This stock was not made by a batch on record, so there are no invoices to show.') + '</p>';
-    }
+    const rows = f.batches.map(b => '<li><span><span class="who">' + olEsc(b.recipe) + '</span><span class="ol-small"> &middot; ' + olEsc(b.vessel) + '</span></span>'
+            + '<span class="ol-small">' + (b.start_date ? 'started ' + olEsc(olDate(b.start_date)) : '') + '</span></li>')
+        .concat(f.added.map(a => '<li><span><span class="who">' + olEsc(a.label) + '</span><span class="ol-small"> &middot; '
+            + olEsc(olProduct({recipe: a.recipe, format: a.format, name: a.sku})) + (a.date ? ' &middot; ' + olEsc(olDate(a.date)) : '') + '</span></span>'
+            + '<span class="amt">' + olCases(a.quantity) + ' ' + olCaseWord(a.quantity) + '</span></li>'));
+    if (rows.length) h += '<ul class="ol-rows">' + rows.join('') + '</ul>';
+    if (f.invoices.length) h += '<div class="ol-heading">Ingredients</div>';
     f.invoices.forEach(inv => {
-        h += '<div class="ol-item"><div class="ol-item-head"><span><span class="who">' + olEsc(inv.supplier || 'Unknown supplier') + '</span> '
-            + '<span class="ol-small">received ' + olEsc(olDate(inv.date_received)) + '</span></span>'
+        h += '<div class="ol-group"><div class="ol-group-head"><span><b>' + olEsc(inv.opening_count ? 'From opening stock' : (inv.supplier || 'Unknown supplier')) + '</b> '
+            + '<span class="ol-small">' + olEsc(olDate(inv.date_received)) + '</span></span>'
             + (inv.photo_id
-                ? '<a class="btn btn-outline ol-btn ol-noprint" target="_blank" href="/api/organic/raw-materials/receipt-photo/' + encodeURIComponent(inv.photo_id) + '">&#128206; Invoice</a>'
-                : inv.opening_count ? '<span class="ol-chip">Opening count</span>' : '<span class="ol-chip red">No invoice on file</span>')
-            + '</div><div class="ol-table-wrap"><table class="ol-table"><thead><tr><th>Ingredient</th><th>Supplier LOT#</th><th class="num">Used</th></tr></thead><tbody>'
+                ? '<a class="ol-link ol-noprint" target="_blank" href="/api/organic/raw-materials/receipt-photo/' + encodeURIComponent(inv.photo_id) + '">&#128206; Invoice</a>'
+                : inv.opening_count ? '' : '<span class="ol-chip red">No invoice on file</span>')
+            + '</div><div class="ol-table-wrap"><table class="ol-table"><tbody>'
             + inv.lines.map(l => '<tr><td>' + olEsc(l.item)
-                + (f.batches.length > 1 ? '<span class="cases">' + olEsc(l.vessel) + '</span>' : '') + '</td>'
+                + (f.batches.length > 1 ? '<span class="sub">' + olEsc(l.vessel) + '</span>' : '') + '</td>'
                 + '<td class="ol-mono">' + olEsc(l.supplier_lot) + '</td>'
                 + '<td class="num">' + olEsc(l.quantity) + ' ' + olEsc(l.unit) + '</td></tr>').join('')
-            + '</tbody></table></div>'
-            + (inv.opening_count ? '<p class="ol-small" style="margin:8px 0 0;">An opening stock count, not a delivery, so there is no invoice.</p>' : '')
-            + '</div>';
+            + '</tbody></table></div></div>';
     });
     if (f.no_lot.length) {
-        h += '<div class="ol-warn">Used with no raw lot on record (short at the time): '
+        h += '<div class="ol-alert">Used with no raw lot on record: '
             + f.no_lot.map(l => olEsc(l.item) + ' ' + olEsc(l.quantity) + ' ' + olEsc(l.unit)).join(', ') + '</div>';
     }
+    if (!rows.length && !f.invoices.length && !f.no_lot.length) h += '<p class="ol-muted">Nothing on record.</p>';
     return h + '</div>';
 }
 
 function olOutHtml(f) {
     let h = '<div class="card"><h2>Out</h2>';
-    if (!f.out.length) h += '<p class="ol-muted">Nothing has left this lot yet.</p>';
+    if (!f.out.length) return h + '<p class="ol-muted">Nothing has left this lot yet.</p></div>';
+    h += '<ul class="ol-rows">';
     f.out.forEach(o => {
         if (o.kind === 'sale') {
-            h += '<div class="ol-item"><div class="ol-item-head"><span><span class="who">' + olEsc(o.buyer || 'Sale') + '</span> '
-                + '<span class="ol-chip green">' + olCases(o.jars) + ' ' + olCaseWord(o.jars) + ' from this lot</span></span>'
-                + '<span class="ol-noprint" style="display:flex;gap:8px;flex-wrap:wrap;">'
-                + '<button class="btn btn-outline ol-btn" onclick="olEmailSlip(this, \'' + encodeURIComponent(o.slip_sale_id) + '\')">&#9993; Email slip</button>'
-                + '<a class="btn btn-outline ol-btn" target="_blank" href="/sales/' + encodeURIComponent(o.slip_sale_id) + '/packing-slip">Packing slip</a></span></div>'
-                + '<div class="ol-dates ol-small" style="margin:-4px 0 10px;"><span>Shipped ' + olEsc(olDate(o.date)) + '</span>'
-                + (o.delivery_date && o.delivery_date !== o.date ? '<span>Delivery ' + olEsc(olDate(o.delivery_date)) + '</span>' : '')
-                + (o.po_number ? '<span>PO ' + olEsc(o.po_number) + '</span>' : '') + '</div>'
-                + '<div class="ol-table-wrap"><table class="ol-table"><thead><tr><th>Whole order</th><th class="num">Cases</th><th>LOT#</th></tr></thead><tbody>'
-                + o.lines.map(l => '<tr' + (l.from_this_lot ? ' class="here"' : '') + '><td>' + olEsc(olProduct(l)) + '</td>'
-                    + '<td class="num">' + olCases(l.quantity) + '</td><td class="ol-mono">' + olEsc(l.lots.join(', ') || 'FIFO') + '</td></tr>').join('')
-                + '</tbody></table></div><p class="ol-small" style="margin:6px 0 0;">Lines from this lot in bold.</p></div>';
+            const mine = o.lines.filter(l => l.from_this_lot), other = o.lines.filter(l => !l.from_this_lot);
+            const meta = [olDate(o.date)];
+            if (o.delivery_date && o.delivery_date !== o.date) meta.push('delivers ' + olDate(o.delivery_date));
+            if (o.po_number) meta.push('PO ' + o.po_number);
+            h += '<li><span><span class="who">' + olEsc(o.buyer || 'Sale') + '</span>'
+                + '<span class="ol-small" style="display:block;">' + meta.map(olEsc).join(' &middot; ') + '</span>'
+                + (f.skus.length > 1 ? '<span class="ol-small" style="display:block;">' + mine.map(l => olEsc(olProduct(l))).join(', ') + '</span>' : '')
+                + (other.length ? '<span class="ol-small" style="display:block;">Same order: '
+                    + other.map(l => olEsc(olProduct(l)) + ' ' + olCases(l.quantity) + ' ' + olCaseWord(l.quantity)).join(', ') + '</span>' : '')
+                + '</span><span class="amt">' + olCases(o.jars) + ' ' + olCaseWord(o.jars)
+                + '<span class="links ol-noprint"><a target="_blank" href="/sales/' + encodeURIComponent(o.slip_sale_id) + '/packing-slip">Slip</a> &middot; '
+                + '<button onclick="olEmailSlip(this, \'' + encodeURIComponent(o.slip_sale_id) + '\')">Email</button></span></span></li>';
         } else {
-            h += '<div class="ol-item"><div class="ol-item-head"><span><span class="who">' + olEsc(o.reason || 'Reduced') + '</span> '
-                + '<span class="ol-chip red">&minus;' + olCases(o.jars) + ' ' + olCaseWord(o.jars) + '</span></span>'
-                + '<span class="ol-small">' + olEsc(olDate(o.date)) + '</span></div>'
-                + '<div class="ol-small">' + olEsc(olProduct({recipe: o.recipe, format: o.format, name: o.sku})) + (o.notes ? ' &middot; ' + olEsc(o.notes) : '') + '</div></div>';
+            h += '<li><span><span class="who">' + olEsc(o.reason || 'Reduced') + '</span>'
+                + '<span class="ol-small" style="display:block;">' + olEsc(olDate(o.date))
+                + (f.skus.length > 1 ? ' &middot; ' + olEsc(olProduct({recipe: o.recipe, format: o.format, name: o.sku})) : '')
+                + (o.notes ? ' &middot; ' + olEsc(o.notes) : '') + '</span></span>'
+                + '<span class="amt minus">&minus;' + olCases(o.jars) + ' ' + olCaseWord(o.jars) + '</span></li>';
         }
     });
-    return h + '</div>';
+    return h + '</ul></div>';
 }
 
 // Send a recorded sale's packing slip to the organic email list (Company
@@ -309,7 +312,7 @@ async function olEmailSlip(btn, saleId) {
 function olRenderFolder(f) {
     document.getElementById('ol-root').innerHTML =
         '<div class="ol-bar-top"><button class="ol-back" onclick="location.hash=\'\'">&larr; All organic lots</button>'
-        + '<button class="btn btn-outline ol-btn" onclick="window.print()">&#128424; Print folder</button></div>'
+        + '<button class="btn btn-outline ol-btn" onclick="window.print()">&#128424; Print</button></div>'
         + olSummaryHtml(f) + olInHtml(f) + olOutHtml(f);
     window.scrollTo(0, 0);
 }
