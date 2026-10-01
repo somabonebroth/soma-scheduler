@@ -728,8 +728,14 @@ def _send_email(recipients, subject, body, attachments=()):
         msg.attach(att)
     host = os.environ.get("SMTP_HOST", "smtp.fastmail.com")
     port = int(os.environ.get("SMTP_PORT", "587"))
-    with smtplib.SMTP(host, port, timeout=20) as server:
-        server.ehlo()
-        server.starttls()
-        server.login(user, password)
-        server.sendmail(user, recipients, msg.as_string())
+    try:
+        with smtplib.SMTP(host, port, timeout=20) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(user, password)
+            server.sendmail(user, recipients, msg.as_string())
+    except smtplib.SMTPAuthenticationError:
+        raise RuntimeError("The email login was rejected. Check SMTP_USER and SMTP_PASS on Render "
+                           "(Fastmail needs an app password, not the account password)")
+    except (OSError, smtplib.SMTPException) as e:
+        raise RuntimeError(f"Could not reach the email server ({e})")
