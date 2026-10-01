@@ -116,5 +116,18 @@ class SlipEmail(unittest.TestCase):
         self.assertEqual(self.c.get("/api/organic/sales/nope/packing-slip").status_code, 404)
 
 
+    def test_email_slip_again(self):
+        with mock.patch.object(sales, "_send_email", side_effect=OSError("SMTP down")):
+            sale_id = self.sell().get_json()["slip_sale_id"]       # the automatic email failed
+        with mock.patch.object(sales, "_send_email") as send:
+            r = self.c.post(f"/api/organic/sales/{sale_id}/email-slip")
+        self.assertEqual((r.status_code, r.get_json()["sent"]), (200, True))
+        self.assertTrue(send.call_args.args[3][0][1].startswith(b"%PDF"))
+        self.assertEqual(self.c.post("/api/organic/sales/nope/email-slip").status_code, 404)
+        self.set_emails("")
+        r = self.c.post(f"/api/organic/sales/{sale_id}/email-slip")
+        self.assertEqual((r.status_code, r.get_json()["reason"]), (400, "no_recipients"))
+
+
 if __name__ == "__main__":
     unittest.main()

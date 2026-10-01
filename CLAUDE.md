@@ -77,6 +77,10 @@ sales.py            — Flask Blueprint (731 lines, extracted 2026-06-03): the 7
                       bookkeeping report uses; read at call time). A bad address in the setting
                       is skipped and reported via `field_errors` on the company-info PATCH, so
                       it never blocks the other settings saving. Tests: `tests.test_slip_email`.
+                      The done screen also says when NO addresses are set (it was silent —
+                      the first live sale looked like a lost email). `POST /api/organic/sales/
+                      <id>/email-slip` re-sends a recorded order's slip ("Email slip" on each
+                      sale in Organic Lots).
                       **Go-live switch (2026-10-01): Organic Sale is the ONLY way organic
                       stock is sold.** `add_organic_sale` (incl. the legacy fg_id path) and
                       `add_sale_order` refuse any organic SKU with `ORGANIC_USE_SCAN` —

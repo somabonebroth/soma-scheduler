@@ -691,6 +691,21 @@ def _email_organic_slip(rows):
         return {"sent": False, "error": str(e), "to": recipients}
 
 
+@sales_bp.route("/api/organic/sales/<sale_id>/email-slip", methods=["POST"])
+@manager_required
+def email_slip_again(sale_id):
+    """Email an already-recorded order's packing slip to the organic list —
+    for a sale whose automatic email failed or went before addresses were set."""
+    sales = _load_json(app.ORGANIC_SALES_PATH, [])
+    sale = next((s for s in sales if s.get("id") == sale_id), None)
+    if not sale:
+        return jsonify({"sent": False, "error": "Sale not found"}), 404
+    rows = [s for s in sales if s.get("order_id") and s.get("order_id") == sale.get("order_id")] or [sale]
+    rows.sort(key=lambda s: s.get("created_at", ""))
+    result = _email_organic_slip(rows)
+    return jsonify(result), (200 if result.get("sent") else 502 if result.get("error") else 400)
+
+
 @sales_bp.route("/api/organic/slip-email/test", methods=["POST"])
 @manager_required
 def test_organic_slip_email():

@@ -459,9 +459,10 @@ async function osConfirm() {
         const em = data.email || {};
         const emailLine = em.sent
             ? '<p class="os-muted">&#9993; Packing slip emailed to ' + osEsc((em.to || []).join(', ')) + '</p>'
-            : em.reason === 'no_recipients' ? ''
+            : em.reason === 'no_recipients'
+                ? '<p class="os-muted">No packing slip email sent: no addresses are set in <a href="/company-settings#organic-email">Company Settings &rarr; Organic Sale</a>.</p>'
             : '<div class="os-warn" style="text-align:left;">The sale is saved, but the packing slip email did not send'
-                + (em.error ? ': ' + osEsc(em.error) : '') + '. Print or forward it from the button below.</div>';
+                + (em.error ? ': ' + osEsc(em.error) : '') + '. Once that is fixed, use <b>Email slip</b> on this sale in Organic Lots, or print it below.</div>';
         document.getElementById('os-root').innerHTML = '<div class="card os-done"><div class="big">&#10004;</div>'
             + '<h2>Sale recorded</h2><p class="os-muted">' + osEsc(o.b.name) + ' &middot; ' + total + ' cases</p>' + emailLine
             + '<a class="btn btn-primary os-big" style="display:block;text-decoration:none;margin:14px 0 10px;" target="_blank" href="/api/organic/sales/'
