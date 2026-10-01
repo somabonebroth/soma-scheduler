@@ -3,14 +3,14 @@
 Eighth step of the app.py split (CLAUDE.md "Pending architectural work"), third
 inventory slice. Scope: the read-mostly audit/traceability routes —
 reconcile-raw (page + run preview/apply), organic trace, the organic recipe
-check, and mass-balance (api + page). (stock-exceptions was removed 2026-09-22:
+check. (mass-balance was removed 2026-10-01 — Organic Lots balances each LOT#. stock-exceptions was removed 2026-09-22:
 the Daily Summary raises each exception on its own day with its own read, and
 the all-time list had no other reader.)
 
 Pattern (matches buyers/recipes/sales/finished_goods/raw_materials): PURE
 routes-move — every helper and constant stays in app.py, reached via `import app`
 + app.-qualification. This deliberately includes the AUDIT-CRITICAL engines
-_rebuild_raw_material_consumption (the reconcile replay), _compute_mass_balance,
+_rebuild_raw_material_consumption (the reconcile replay)
 and _sale_touches_fg: these are now only called by routes in this blueprint, but
 they carry the consumption-chain invariants, so they stay in app.py rather than
 being relocated (safest; a silent move could corrupt audit output). _run_start_date_str
@@ -290,23 +290,6 @@ def organic_recipe_check():
     """GET /api/organic/recipe-check - organic recipes naming a non-organic
     ingredient (see organic_recipe_issues). Read-only."""
     return jsonify(organic_recipe_issues(app.load_recipes()))
-
-
-@audit_tools_bp.route("/api/organic/mass-balance", methods=["GET"])
-@manager_required
-def organic_mass_balance():
-    """GET /api/organic/mass-balance - opening+received-consumed vs current (raw + FG)."""
-    to = (request.args.get("to") or "").strip() or datetime.now().strftime("%Y-%m-%d")
-    frm = (request.args.get("from") or "").strip() or (datetime.now().strftime("%Y") + "-01-01")
-    organic_only = (request.args.get("organic_only") or "").lower() in ("1", "true", "yes", "on")
-    return jsonify(app._compute_mass_balance(frm, to, organic_only))
-
-
-@audit_tools_bp.route("/mass-balance")
-@manager_required
-def mass_balance_page():
-    """Render the mass-balance report page."""
-    return render_template("mass_balance.html")
 
 
 # ── Audit pack (2026-09-22) ──────────────────────────────────────────────────

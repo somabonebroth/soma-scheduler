@@ -632,7 +632,7 @@ def adjust_raw_materials():
     Negative adjustments FIFO-deduct from existing lots of that ingredient
     (oldest date_received first, never below zero on any lot); positive
     adjustments add a dedicated ADJ- lot. Each non-zero line is written to the
-    adjustments ledger (kind 'raw_manual') so mass-balance reconciles it as
+    adjustments ledger (kind 'raw_manual') so the correction is on record as
     loss/correction. Mirrors the FG audit's per-item FIFO drain (_apply_fg_audit).
 
     This is the ONLY raw-materials route that lowers `remaining` outside the

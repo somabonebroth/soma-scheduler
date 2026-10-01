@@ -4,7 +4,7 @@ Sixth step of the app.py split (CLAUDE.md "Pending architectural work"), and the
 first slice of the large "inventory" domain. Scope: the 10 finished-goods routes
 (/api/organic/finished-goods*): list/update/delete, lot-adjust, baseline (+bulk),
 manual add/subtract, grouped, and per-SKU detail. The rest of inventory (raw
-materials, sku-meta, and the audit-critical reconcile/trace/mass-balance tools)
+materials, sku-meta, and the audit-critical reconcile/trace tools)
 stays in app.py for later, separate steps.
 
 Pattern (matches buyers/recipes/sales): routes move, shared helpers STAY. The FG

@@ -53,7 +53,6 @@
   <div><h1>FG Reconciliation</h1><p>Per-lot finished-goods drift &mdash; expected vs actual stock</p></div>
   <div class="header-right">
     <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button><button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button></div>
-    <a class="header-btn" href="/mass-balance">Mass balance</a>
     <a class="header-btn" href="/admin/fg-reset">Zero-day reset</a>
     <a class="header-btn" href="/">⌂ Dashboard</a>
   </div>
@@ -107,7 +106,7 @@ function render(d){
   else{
     h += '<table><tr><th class="left">Product</th><th class="left">Cert</th><th>Produced</th><th>Σ Sales</th><th>Σ Sub</th><th>Expected</th><th>Actual</th><th>Drift</th><th>Attributed</th><th>Unexplained</th></tr>';
     d.skus.forEach(r => {
-      const off = r.offsetting_internal_drift ? '<span class="badge warn" title="Per-lot errors net to zero at SKU level — hidden in the mass balance">offsetting</span>' : '';
+      const off = r.offsetting_internal_drift ? '<span class="badge warn" title="Per-lot errors net to zero at SKU level — hidden in SKU totals">offsetting</span>' : '';
       const tier = r.tier === 'organic'
         ? '<span class="badge" style="background:#1b5e20;color:#fff;" title="Lot-controlled: lots are captured at the sale, so per-lot drift is real">ORG · per-lot</span>'
         : '<span class="badge" style="background:#eee;color:#666;" title="SKU-level: the per-lot split is a FIFO estimate — judge this SKU at the total, not per lot">SKU-level</span>';
@@ -171,7 +170,7 @@ function render(d){
   h += '<p class="note"><strong>Reading this:</strong> for each FG lot, <strong>Expected = Produced − recorded Sales − recorded manual Subtracts</strong>, compared to the actual remaining stock. '
      + '<strong>Drift ≠ 0</strong> means the lot changed without a matching record. <strong>Cause</strong>: <em>manual_adjust</em> = a hand edit (direct set / lot-adjust / audit recount) that left no per-lot record; '
      + '<em>baseline_drift</em> = a day-zero / manual / audit-baseline lot drew down oddly; <em>unexplained</em> = no recorded explanation at all (an unrecorded sale, a delete that didn’t restore, or an in-place sale edit) — these are the rows to investigate. '
-     + 'Unlike the mass balance, this is per-lot, so it catches errors that cancel out within a SKU (the <span class="badge warn">offsetting</span> badge). '
+     + 'Unlike SKU totals, this is per-lot, so it catches errors that cancel out within a SKU (the <span class="badge warn">offsetting</span> badge). '
      + '<strong>Tier:</strong> <span class="badge" style="background:#1b5e20;color:#fff;">ORG · per-lot</span> SKUs are lot-controlled (real lots captured at the sale) — trust their per-lot drift. <span class="badge" style="background:#eee;color:#666;">SKU-level</span> SKUs have a FIFO-estimated lot split — judge those at the SKU total, where per-lot noise cancels.</p>';
 
   document.getElementById('results').innerHTML = h;

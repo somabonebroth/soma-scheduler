@@ -14,8 +14,8 @@ ledger record — the silent paths `update_finished_good` (direct set),
 `adjust_lot_remaining` (lot delta), `edit_organic_sale` (in-place, breakdown not
 rewritten), a non-restoring delete, or an unrecorded sale.
 
-This is deliberately different from app._compute_mass_balance, which is SKU-level
-and date-ranged: a per-fg check surfaces *offsetting* errors inside one SKU (a
+This is deliberately different from a SKU-level, date-ranged total (the mass
+balance, removed 2026-10-01): a per-fg check surfaces *offsetting* errors inside one SKU (a
 silent +5 on lot A and -5 on lot B that net to zero at SKU level) and dangling
 references (sales/adjustments pointing at a deleted fg_id). It is the scope-finder
 for the zero-day reset below.
