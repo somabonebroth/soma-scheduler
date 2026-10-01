@@ -869,6 +869,7 @@ bugs were found and **fixed**:
 - `CLOVER_API_TOKEN` — Merchant Dashboard API token with `Orders: read` + `Inventory: read` scopes
 - `CLOVER_MERCHANT_ID` — alphanumeric merchant identifier (e.g. `2KC4HPQ71T6W1`), NOT the numerical MID used by card processors
 - `CLOVER_API_BASE` — optional; defaults to `https://api.clover.com/v3`
+- `SMTP_FROM` — optional (2026-10-01): the address mail is sent AS (e.g. the `wholesale@` alias). `SMTP_USER` must be the real Fastmail ACCOUNT login — an alias cannot log in (Fastmail 535). Used by `helpers._send_email` (Organic Sale slips); the bookkeeping report in ripe_orders.py still sends as SMTP_USER.
 - `SMTP_USER` / `SMTP_PASS` — Fastmail account for the monthly bookkeeping report
   (2026-09-10; copy the values from the Ripe service — same account). `SMTP_HOST`/
   `SMTP_PORT` optional (default `smtp.fastmail.com`:587)

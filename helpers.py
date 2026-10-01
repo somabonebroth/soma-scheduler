@@ -692,7 +692,10 @@ def _parse_organic_qr(text):
 
 # ── Email (2026-10-01) ───────────────────────────────────────────────────
 # Sent through the same Fastmail account as the monthly bookkeeping report
-# (SMTP_USER / SMTP_PASS on Render; host/port optional). Read at call time so
+# (SMTP_USER / SMTP_PASS on Render; host/port optional). SMTP_USER must be the
+# Fastmail ACCOUNT login — an alias cannot log in. SMTP_FROM (optional) is the
+# address mail is sent AS, e.g. the wholesale@ alias of that account; it
+# defaults to SMTP_USER. Read at call time so
 # setting the env vars needs no code change. ripe_orders keeps its own copy
 # for the bookkeeping report — that module shares a contract with Ripe.
 _EMAIL_RE = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$")
@@ -717,8 +720,9 @@ def _send_email(recipients, subject, body, attachments=()):
     user, password = os.environ.get("SMTP_USER", ""), os.environ.get("SMTP_PASS", "")
     if not user or not password:
         raise RuntimeError("Email is not set up on the server (SMTP_USER / SMTP_PASS)")
+    sender = os.environ.get("SMTP_FROM", "").strip() or user
     msg = MIMEMultipart()
-    msg["From"] = user
+    msg["From"] = sender
     msg["To"] = ", ".join(recipients)
     msg["Subject"] = subject
     msg.attach(MIMEText(body, "plain"))
@@ -733,9 +737,9 @@ def _send_email(recipients, subject, body, attachments=()):
             server.ehlo()
             server.starttls()
             server.login(user, password)
-            server.sendmail(user, recipients, msg.as_string())
+            server.sendmail(sender, recipients, msg.as_string())
     except smtplib.SMTPAuthenticationError:
-        raise RuntimeError("The email login was rejected. Check SMTP_USER and SMTP_PASS on Render "
-                           "(Fastmail needs an app password, not the account password)")
+        raise RuntimeError("The email login was rejected. On Render, SMTP_USER must be the Fastmail "
+                           "account login (not an alias) and SMTP_PASS an app password made for that account")
     except (OSError, smtplib.SMTPException) as e:
         raise RuntimeError(f"Could not reach the email server ({e})")
