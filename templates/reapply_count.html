@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Re-apply Today's Count · Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.rc-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.rc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rc-table th { text-align: left; padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-light); background: var(--row-alt); border-bottom: 1px solid var(--border); }
+.rc-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.rc-table .num { text-align: right; white-space: nowrap; }
+.rc-table .fix { font-weight: 700; color: var(--action-red); }
+.rc-note { font-size: 13px; color: var(--text-light); line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="header">
+    <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+    <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Re-apply Today's Count</p></div>
+    <div class="header-right" style="display:flex;align-items:center;gap:8px;"><a href="/organic-lots" class="header-btn">Organic Lots</a><a href="/" class="header-btn">⌂ Dashboard</a></div>
+</div>
+<div class="main">
+    <div class="card">
+        <h2>Put back what a restart undid</h2>
+        <p class="rc-note">Until 1 Oct 2026, every time Soma restarted it put back jars that a stock count had removed from a production batch. This page takes each lot your count reduced <b>today</b> back to what the count left it at, less anything sold or reduced from it since. It only removes jars; it never adds any. Nothing changes until you press Apply, and pressing it again does nothing once the numbers are right.</p>
+        <div id="rc-body" class="rc-note">Loading…</div>
+    </div>
+</div>
+<script>
+function rcEsc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function rcLoad() {
+    const body = document.getElementById('rc-body');
+    let rows;
+    try {
+        rows = (await (await fetch('/admin/reapply-count/run')).json()).rows || [];
+    } catch (e) {
+        body.textContent = 'Could not load the plan: ' + e.message;
+        return;
+    }
+    if (!rows.length) {
+        body.innerHTML = '<p>No lot was reduced by a count today, so there is nothing to re-apply.</p>';
+        return;
+    }
+    const todo = rows.filter(r => r.remove > 0);
+    body.innerHTML = '<div class="rc-wrap"><table class="rc-table"><thead><tr><th>Product</th><th>LOT#</th>'
+        + '<th class="num">Counted</th><th class="num">Sold since</th><th class="num">Should hold</th><th class="num">Soma holds</th><th class="num">Remove</th></tr></thead><tbody>'
+        + rows.map(r => '<tr><td>' + rcEsc(r.name) + '</td><td>' + rcEsc(r.lot) + '</td>'
+            + '<td class="num">' + r.counted + '</td><td class="num">' + (r.sold_since + r.reduced_since) + '</td>'
+            + '<td class="num">' + r.should_hold + '</td><td class="num">' + r.holds + '</td>'
+            + '<td class="num' + (r.remove ? ' fix' : '') + '">' + (r.remove ? '&minus;' + r.remove : '&#10003;') + '</td></tr>').join('')
+        + '</tbody></table></div><p>All figures in jars.</p>'
+        + (todo.length
+            ? '<button class="btn btn-primary" id="rc-apply" onclick="rcApply()">Apply: remove ' + todo.reduce((a, r) => a + r.remove, 0) + ' jars from ' + todo.length + ' lot' + (todo.length === 1 ? '' : 's') + '</button>'
+            : '<p><b>Every lot already matches your count. Nothing to do.</b></p>');
+}
+
+async function rcApply() {
+    const btn = document.getElementById('rc-apply');
+    btn.disabled = true; btn.textContent = 'Applying…';
+    const res = await fetch('/admin/reapply-count/run', {method: 'POST'});
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || !d.success) { alert(d.error || 'Failed'); btn.disabled = false; return; }
+    await rcLoad();
+}
+
+rcLoad();
+</script>
+</body>
+</html>
