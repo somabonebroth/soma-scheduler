@@ -66,6 +66,15 @@
   <tr><td><strong>{{ li.name }}</strong><span class="ps-sub">{{ li.format }}</span><span class="ps-sku">{{ li.sku }}</span></td><td class="r qty">{{ li.cases }}</td><td class="r qty">{{ li.units }}</td></tr>
   {% endfor %}{% endif %}{% endfor %}
   <tr class="totals"><td>Totals</td><td class="r">{{ ns.tc }}</td><td class="r">{{ ns.tu }}</td></tr>
+  {# Packing supplies (2026-10-01): Ripe-side add-ons — boxes, wraps. Not
+     stock, not in items, so they sit below the broth totals and never count
+     toward cases/units. Quantity label comes pre-formatted from Ripe. #}
+  {% if order.supplies %}
+  <tr class="grp-hdr grp-ot"><td colspan="3">PACKING SUPPLIES</td></tr>
+  {% for sup in order.supplies %}
+  <tr><td><strong>{{ sup.label }}</strong></td><td class="r qty" colspan="2">{{ sup.qty_label }}</td></tr>
+  {% endfor %}
+  {% endif %}
   </tbody>
 </table>
 <div class="ps-foot">
