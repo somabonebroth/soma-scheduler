@@ -282,6 +282,13 @@ def add_organic_sale():
         else:
             return jsonify({"error": "Either sku_key, fg_id, or recipe required"}), 400
 
+    # Go-live 2026-10-01: organic stock leaves ONLY through Organic Sale, where
+    # every case is scanned so its real LOT# is on the sale.
+    legacy_fg = next((f for f in fg if f.get("id") == fg_id), None) if fg_id and not sku_key else None
+    if (sku_key and _is_organic_sku(fg, sku_key)) or (
+            legacy_fg and (legacy_fg.get("certification") or "").strip().lower() == "organic"):
+        return jsonify({"error": ORGANIC_USE_SCAN}), 400
+
     sale_lots = []   # records what was deducted
     brand = recipe = fmt = ""
 
@@ -427,6 +434,16 @@ def add_sale_order():
 
     buyer        = (data.get("buyer") or "").strip()
 
+    # Go-live 2026-10-01: refuse the WHOLE order if any line is organic — this
+    # route keeps the lines that work, so a per-line skip would quietly ship an
+    # order without its organic product.
+    for line in lines:
+        key = (line.get("sku_key") or "").strip() or (
+            _sku_key(line.get("brand", ""), line.get("recipe", ""), line.get("format", ""))
+            if line.get("recipe") else "")
+        if key and _is_organic_sku(fg, key):
+            return jsonify({"error": ORGANIC_USE_SCAN, "details": [key]}), 400
+
     order_id = "ORD-" + datetime.now().strftime("%Y%m%d%H%M%S")
 
     saved_ids   = []
@@ -496,6 +513,9 @@ def add_sale_order():
         "saved":    len(saved_ids),
         "errors":   errors,
     })
+
+
+ORGANIC_USE_SCAN = "Organic products are sold through Organic Sale, where each case is scanned"
 
 
 def _is_organic_sku(fg, sku_key):

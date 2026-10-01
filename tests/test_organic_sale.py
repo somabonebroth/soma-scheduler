@@ -115,5 +115,35 @@ class Route(unittest.TestCase):
         self.assertNotIn("deducted_at", row)
 
 
+    # Go-live 2026-10-01: Record Sale's routes refuse organic stock.
+    def test_record_sale_order_refuses_any_organic_line(self):
+        r = self.c.post("/api/organic/sales/order", json={
+            "buyer": "Nature's Emporium", "sale_date": "2026-10-01",
+            "lines": [{"sku_key": PLAIN, "quantity": 12}, {"sku_key": ORG, "quantity": 12}]})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Organic Sale", r.get_json()["error"])
+        self.assertEqual(self.sales(), [])  # the plain line was NOT saved either
+        self.assertEqual(self.remaining(), {"o1": 48, "o2": 240, "p1": 24, "p2": 300})
+
+    def test_record_sale_order_refuses_organic_named_by_recipe(self):
+        r = self.c.post("/api/organic/sales/order", json={
+            "buyer": "x", "lines": [{"brand": "Soma", "recipe": "Organic Chicken Bone Broth",
+                                     "format": "SS-750ML", "quantity": 12}]})
+        self.assertEqual(r.status_code, 400)
+
+    def test_single_sale_refuses_organic(self):
+        for body in ({"sku_key": ORG, "quantity": 12}, {"fg_id": "o1", "quantity": 12},
+                     {"sku_key": ORG, "quantity": 12, "allocated_lots": [{"lot": "210927", "quantity": 12}]}):
+            r = self.c.post("/api/organic/sales", json=dict(body, buyer="x", sale_date="2026-10-01"))
+            self.assertEqual(r.status_code, 400, body)
+        self.assertEqual(self.sales(), [])
+
+    def test_single_sale_still_sells_plain(self):
+        r = self.c.post("/api/organic/sales", json={"sku_key": PLAIN, "quantity": 12, "buyer": "x",
+                                                     "sale_date": "2026-10-01"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self.remaining()["p1"], 12)
+
+
 if __name__ == "__main__":
     unittest.main()

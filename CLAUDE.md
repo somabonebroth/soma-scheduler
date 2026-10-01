@@ -54,8 +54,14 @@ sales.py            — Flask Blueprint (731 lines, extracted 2026-06-03): the 7
                       stamps `deducted_at` (stock leaves now; `sale_date` = delivery) and
                       `entry: "organic_sale"`. Rows are built by `_order_line_record`, shared
                       with `add_sale_order`, so the slip / Organic Lots / trace read both the
-                      same. Tests: `python3 -m unittest tests.test_organic_sale`. Record Sale
-                      does NOT yet refuse organic SKUs — that is the go-live switch.
+                      same. Tests: `python3 -m unittest tests.test_organic_sale`.
+                      **Go-live switch (2026-10-01): Organic Sale is the ONLY way organic
+                      stock is sold.** `add_organic_sale` (incl. the legacy fg_id path) and
+                      `add_sale_order` refuse any organic SKU with `ORGANIC_USE_SCAN` —
+                      `/order` refuses the WHOLE order, because it otherwise keeps the lines
+                      that work and would ship the order minus its organic product. The
+                      Record Sale modal shows organic rows as an "Organic Sale →" link (the
+                      per-LOT stepper panel, `loadLotPanel` and `_rsAlloc`, are deleted).
 finished_goods.py   — Flask Blueprint (542 lines, extracted 2026-06-03): the 10
                       finished-goods routes (/api/organic/finished-goods*) + the
                       inventory tail folded in later: sku-meta (update_sku_meta,
@@ -808,9 +814,9 @@ bugs were found and **fixed**:
    under the SKU is Organic" test); the Shopify/Clover commits SKIP an organic SKU (stock
    untouched, not imported) and report it under `organic_skipped[]` + `errors[]` — skip, not
    refuse-the-week, because the cron never retries an old week. The FG count drains organic
-   per LOT (see the Organic Certification section). STILL convention-only: both manual sales
-   *add* paths choose allocation-vs-FIFO on whether `allocated_lots` was sent, NOT on the cert
-   flag — no server guard requires an organic sale to carry an allocation.
+   per LOT (see the Organic Certification section). **Closed 2026-10-01:** both manual sales
+   add paths now REFUSE organic SKUs; organic stock leaves only through Organic Sale
+   (`/api/organic/sales/organic-order`), where each case is scanned to its LOT#.
 
 ---
 

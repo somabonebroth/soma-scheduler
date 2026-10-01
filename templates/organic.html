@@ -611,8 +611,6 @@ body.inv-page .modal-actions {
 .rs-row.rs-sku .rs-qty input[type="number"] { font-size: 14px; font-weight: 600; padding: 8px 4px; }
 .rs-row.rs-sku.has-qty { background: var(--action-blue-bg); }
 .rs-badge-org { font-size: 9px; background: var(--dark); color: var(--white); padding: 1px 5px; border-radius: 3px; vertical-align: middle; margin-left: 4px; }
-.rs-packed { display: block; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-light); }
-.rs-lot-panel { background: var(--green-tint); border-bottom: 1px solid var(--border); padding: 6px 12px 8px 24px; font-size: 12px; color: var(--text-light); }
 .rs-actions { align-items: center; }
 .rs-total { margin-right: auto; font-size: 13px; color: var(--text-light); }
 .rs-total b { color: var(--dark); }
@@ -2271,7 +2269,6 @@ var _rsLastSaleId = null;  // track last saved sale for doc export
 var _rsBuyers = [];
 var _rsFgGrouped = [];  // current FG inventory snapshot for stock display
 var _rsCertMap = {};    // sku_key -> certification (to flag organic lines)
-var _rsAlloc = {};      // organic: sku_key -> {lot: units packed}
 
 async function openRecordSaleModal(){
     var today = new Date().toISOString().split('T')[0];
@@ -2358,8 +2355,6 @@ function goToSaleStep2(){
     var grid = document.getElementById('sale-sku-grid');
     var stockMap = {};
     _rsCertMap = {};
-    _rsAlloc = {};
-    var _rsOrgToLoad = [];   // organic rows whose lot panels need fetching
     _rsFgGrouped.forEach(function(row){
         stockMap[row.sku_key] = row.total_remaining || 0;
         _rsCertMap[row.sku_key] = row.certification || '';
@@ -2404,23 +2399,16 @@ function goToSaleStep2(){
             var row = document.createElement('div');
             row.className = 'rs-row rs-sku' + (idx % 2 ? ' alt' : '') + (outOfStock ? ' out' : '');
 
-            if(isOrg && !outOfStock){
-                // ORGANIC: no plain qty box — the packer builds the order by
-                // allocating from the actual physical LOTs below (qty = the sum).
+            if(isOrg){
+                // ORGANIC (go-live 2026-10-01): sold ONLY through Organic Sale,
+                // where each case is scanned so its real LOT# is recorded. The
+                // server refuses an organic line here too.
                 row.innerHTML =
                     '<div class="rs-name">'+escHtml(sku.display||sku.recipe)
                     +'<span class="rs-badge-org">ORGANIC</span></div>'
-                    +'<div class="rs-stock">'+stock+' u</div>'
-                    +'<div class="rs-qty"><span class="rs-packed">0 packed</span>'
-                    +'<input type="hidden" data-rs-sku="'+escHtml(sku.sku_key)+'"></div>';
+                    +'<div class="rs-stock">'+(outOfStock?'Out':stock+' u')+'</div>'
+                    +'<div class="rs-qty"><a href="/organic-sale" style="font-size:12px;font-weight:600;color:var(--accent);white-space:nowrap;">Organic Sale &rarr;</a></div>';
                 grid.appendChild(row);
-                var panel = document.createElement('div');
-                panel.className = 'rs-lot-panel';
-                panel.textContent = 'Loading lots…';
-                grid.appendChild(panel);
-                _rsOrgToLoad.push({sku: sku.sku_key, panel: panel,
-                                   packed: row.querySelector('.rs-packed'),
-                                   hidden: row.querySelector('input[data-rs-sku]')});
             } else {
                 row.innerHTML =
                     '<div class="rs-name">'+escHtml(sku.display||sku.recipe)+'</div>'
@@ -2431,12 +2419,12 @@ function goToSaleStep2(){
         });
     });
 
-    // −/+ steppers on the plain qty boxes (hidden inputs excluded by type).
+    // −/+ steppers on the qty boxes.
     grid.querySelectorAll('input[type="number"][data-rs-sku]').forEach(attachQtyStepper);
 
-    // Running total in the footer. Typing, the −/+ buttons and the organic lot
-    // steppers all dispatch a bubbling 'input' on their [data-rs-sku] box, so
-    // one delegated listener covers every path. Wired once per grid element.
+    // Running total in the footer. Typing and the −/+ buttons both dispatch a
+    // bubbling 'input' on their [data-rs-sku] box, so one delegated listener
+    // covers every path. Wired once per grid element.
     if(!grid.dataset.totalWired){
         grid.addEventListener('input', rsUpdateRunningTotal);
         grid.dataset.totalWired = '1';
@@ -2445,12 +2433,9 @@ function goToSaleStep2(){
 
     document.getElementById('sale-step1').style.display = 'none';
     document.getElementById('sale-step2').style.display = '';
-
-    // Fetch + render the per-LOT allocation steppers for each organic SKU.
-    _rsOrgToLoad.forEach(function(t){ loadLotPanel(t.sku, t.panel, t.packed, t.hidden); });
 }
 
-// Sum every [data-rs-sku] box (plain + organic hidden) into the footer line and
+// Sum every [data-rs-sku] box into the footer line and
 // tint the rows that carry a quantity so a long list reads at a glance.
 function rsUpdateRunningTotal(){
     var units = 0, products = 0;
@@ -2498,75 +2483,6 @@ function attachQtyStepper(input){
     wrap.appendChild(mk('+', 1));
 }
 
-// Render the available-lots steppers for one organic SKU. The packer +/- adds
-// units per physical LOT to match what they pack; the hidden qty input and the
-// "N packed" label track the running sum.
-async function loadLotPanel(sku, panelEl, packedEl, hiddenEl){
-    var lots;
-    try {
-        var d = await (await fetch('/api/organic/finished-goods/sku/' + encodeURIComponent(sku))).json();
-        lots = (d.lots || []).filter(function(l){ return (l.remaining || 0) > 0; });
-    } catch(e){ panelEl.textContent = 'Could not load lots.'; return; }
-    if(!lots.length){ panelEl.textContent = 'No lots in stock for this organic SKU.'; return; }
-
-    panelEl.innerHTML = '';
-    var hint = document.createElement('div');
-    hint.style.cssText = 'font-size:11px;color:var(--text-light);margin-bottom:4px;';
-    hint.textContent = 'Allocate the units you physically packed, by LOT:';
-    panelEl.appendChild(hint);
-
-    function recompute(){
-        var a = _rsAlloc[sku] || {};
-        var sum = 0;
-        Object.keys(a).forEach(function(k){ sum += a[k]; });
-        packedEl.textContent = sum + ' packed';
-        packedEl.style.color = sum > 0 ? 'var(--accent)' : 'var(--text-light)';
-        hiddenEl.value = sum > 0 ? sum : '';
-    }
-
-    lots.forEach(function(l){
-        var avail = l.remaining || 0;
-        var lot = l.lot || '';
-        var r = document.createElement('div');
-        r.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #eef3ee;';
-        var label = document.createElement('span');
-        label.style.cssText = 'flex:1;font-size:12px;color:var(--text);';
-        label.innerHTML = 'LOT <b>' + escHtml(lot || '—') + '</b>'
-            + (l.best_before ? ' · exp ' + escHtml(l.best_before) : '')
-            + ' <span style="color:var(--text-light);">· ' + avail + ' avail</span>';
-        const cnt = document.createElement('input');
-        cnt.type = 'number'; cnt.inputMode = 'numeric';
-        cnt.min = '0'; cnt.max = String(avail); cnt.step = '1';
-        cnt.value = '0';
-        cnt.style.fontWeight = '600';
-        // Single write path: typing AND the −/+ buttons (attachQtyStepper below
-        // dispatches 'input') both land here, same clamp [0, avail].
-        function setLot(val, syncBox){
-            if(!_rsAlloc[sku]) _rsAlloc[sku] = {};
-            const clamped = Math.max(0, Math.min(avail, Math.floor(val) || 0));
-            _rsAlloc[sku][lot] = clamped;
-            if(syncBox) cnt.value = String(clamped);
-            recompute();
-        }
-        cnt.addEventListener('focus', function(){ cnt.select(); });
-        // While typing: keep the running total live, but only rewrite the box if
-        // the typed value is out of range (so a cleared box stays clear mid-edit).
-        cnt.addEventListener('input', function(){
-            if(cnt.value === '') { setLot(0, false); return; }
-            const typed = parseInt(cnt.value, 10);
-            if(isNaN(typed)) { setLot(0, false); return; }
-            setLot(typed, typed < 0 || typed > avail);
-        });
-        cnt.addEventListener('blur', function(){
-            cnt.value = String((_rsAlloc[sku] && _rsAlloc[sku][lot]) || 0);
-        });
-        r.appendChild(label); r.appendChild(cnt);
-        attachQtyStepper(cnt);
-        cnt.parentNode.style.cssText += ';width:112px;flex:none;';
-        panelEl.appendChild(r);
-    });
-}
-
 async function submitRecordSale(){
     var date = document.getElementById('sale-date-modal').value;
     var buyerId = document.getElementById('sale-buyer-select').value;
@@ -2594,13 +2510,6 @@ async function submitRecordSale(){
                 quantity:   qty,
                 unit_price: (skuInfo.price != null ? parseFloat(skuInfo.price) : null),
             };
-            // Organic lines carry the packer's actual LOT allocation (qty = its sum).
-            if((_rsCertMap[skuKey] || '').toLowerCase() === 'organic'){
-                var a = _rsAlloc[skuKey] || {};
-                line.allocated_lots = Object.keys(a)
-                    .filter(function(k){ return a[k] > 0; })
-                    .map(function(k){ return {lot: k, quantity: a[k]}; });
-            }
             lines.push(line);
         }
     });
