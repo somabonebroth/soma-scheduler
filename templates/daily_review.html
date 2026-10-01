@@ -44,6 +44,11 @@ summary.dr-head::-webkit-details-marker { display: none; }
 .dr-chev { width: 8px; height: 8px; border-right: 2px solid var(--text-light); border-bottom: 2px solid var(--text-light); transform: rotate(-45deg); transition: transform .15s; flex-shrink: 0; align-self: center; margin-left: 8px; }
 .dr-title + .dr-chev { margin-left: auto; }
 .dr-section[open] > summary .dr-chev { transform: rotate(45deg); }
+.dr-ahead { margin-top: 22px; }
+.dr-ahead > summary { cursor: pointer; list-style: none; margin: 0 0 8px; }
+.dr-ahead > summary::-webkit-details-marker { display: none; }
+.dr-ahead-n { margin-left: 10px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-light); }
+.dr-ahead[open] > summary .dr-chev { transform: rotate(45deg); }
 .dr-section:not([open]) > summary.dr-head { border-bottom: none; }
 
 /* Per-section tone: each of the three sections carries its own colour so the
@@ -371,7 +376,11 @@ let aheadRows = [];
 function aheadHtml(days){
     if (!days || !days.length) return '';
     aheadRows = [];
-    let html = '<div class="dr-sublabel" style="margin-top:22px;">Print ahead &mdash; next 2 days</div>'
+    // Collapsed by default: printing ahead is the occasional job, not the morning's.
+    const count = days.reduce((n, d) => n + d.rows.length, 0);
+    let html = '<details class="dr-ahead"><summary class="dr-sublabel">Print ahead &mdash; next 2 days'
+        + '<span class="dr-ahead-n">' + count + ' label' + (count === 1 ? '' : 's') + '</span>'
+        + '<span class="dr-chev" aria-hidden="true"></span></summary>'
         + '<div class="dr-stampnote" style="margin:0 0 10px;">From the schedule, before the jars are counted. '
         + 'If a batch changes, print its label again on the day.</div>';
     html += days.map(d => {
@@ -394,7 +403,7 @@ function aheadHtml(days){
         return '<div class="dr-totals" style="margin:14px 0 8px;"><span>Labelling <b>' + esc(d.label_day_name)
             + '</b></span><span>LOT# <b>' + esc(d.lot) + '</b></span><span>batched ' + esc(d.batched_name) + '</span></div>'
             + rows;
-    }).join('');
+    }).join('') + '</details>';
     return html;
 }
 
