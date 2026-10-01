@@ -134,7 +134,6 @@ def build_folders(fg, runs, sales, adjustments, materials, photo_ids):
             s = skus.setdefault(key, {
                 "sku_key": key,
                 "name": _sku_display(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")),
-                "brand": f.get("brand", ""), "recipe": f.get("recipe", ""), "format": f.get("format", ""),
                 "made": 0, "added": 0, "sold": 0, "reduced": 0, "held": 0,
             })
             if f.get("run_id"):
