@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Packing Slip · {{ s.buyer_name }}</title>
+<link rel="stylesheet" href="/static/style.css">
+{% include '_packing_slip_head.html' %}
+</head>
+<body class="inv-page">
+{# The packing slip for a recorded sale (manual or Organic Sale) as a page,
+   so it prints from a phone: a PDF opened from the home-screen app on iOS
+   has no print control. Same data as the PDF (sales._packing_slip_data). #}
+<div class="ps-ctrl">
+  <button onclick="window.print()" class="btn btn-primary">&#128424; Print (4&times;6 label)</button>
+  <a href="/api/organic/sales/{{ s.sale_id }}/packing-slip" class="btn btn-outline">PDF</a>
+  <a href="javascript:history.length > 1 ? history.back() : (location.href = '/')" class="btn btn-outline">&larr; Back</a>
+</div>
+<main>
+<div class="ps-head">
+  <div>
+    <img src="/static/logo.png" alt="{{ s.company.name or 'Soma Bone Broth' }}">
+    <div class="ps-co">
+      <strong>{{ s.company.name or 'Soma Bone Broth' }}</strong>
+      {% for f in ['address', 'city', 'phone', 'email', 'website'] %}{% if s.company[f] %}<br>{{ s.company[f] }}{% endif %}{% endfor %}
+    </div>
+  </div>
+  <div>
+    <div class="ps-title">Packing Slip</div>
+    <div class="ps-printed">Printed {{ today }}</div>
+  </div>
+</div>
+<div class="ps-info" style="margin-top:6pt;">
+  <div class="wide"><div class="lbl">Ship to</div><div class="val">
+    <strong>{{ s.buyer_name }}</strong>
+    {% for v in [s.buyer_contact, s.buyer_address, s.buyer_phone, s.buyer_email] %}{% if v %}<br><span class="sub">{{ v }}</span>{% endif %}{% endfor %}
+  </div></div>
+  <div><div class="lbl">Date</div><div class="val">{{ s.sale_date }}</div></div>
+  <div><div class="lbl">PO #</div><div class="val">{{ s.po }}</div></div>
+  <div class="wide"><div class="lbl">Order ref</div><div class="val">{{ s.ref }}</div></div>
+</div>
+<table class="ps-tbl">
+  <thead>
+    <tr class="ps-runhead"><th colspan="3">{{ s.buyer_name }} · {{ s.ref }}</th></tr>
+    <tr><th>Product</th><th>LOT #</th><th class="r">Qty</th></tr>
+  </thead>
+  <tbody>
+  {% for ln in s.lines %}
+  <tr><td><strong>{{ ln.product }}</strong>{% if ln.format %}<span class="ps-sub">{{ ln.format }}</span>{% endif %}</td>
+      <td>{{ ln.lot }}</td><td class="r qty">{{ ln.qty }}</td></tr>
+  {% endfor %}
+  <tr class="totals"><td colspan="3" class="r">Total {{ s.total_units }} units ({{ s.total_cases }} cases)</td></tr>
+  </tbody>
+</table>
+<div class="ps-foot">
+  Thank you for your business.{% if s.company.registration %} | Reg: {{ s.company.registration }}{% endif %}
+</div>
+</main>
+</body>
+</html>

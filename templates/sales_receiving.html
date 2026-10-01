@@ -525,7 +525,7 @@ async function loadSales(){
     container.querySelectorAll('[data-slip-id]').forEach(function(btn){
         btn.addEventListener('click',function(e){
             e.stopPropagation();
-            window.open('/api/organic/sales/'+this.getAttribute('data-slip-id')+'/packing-slip','_blank');
+            window.open('/sales/'+this.getAttribute('data-slip-id')+'/packing-slip','_blank');
         });
     });
 }

@@ -269,7 +269,7 @@ function olOutHtml(f) {
                 + '<span class="ol-chip green">' + olCases(o.jars) + ' ' + olCaseWord(o.jars) + ' from this lot</span></span>'
                 + '<span class="ol-noprint" style="display:flex;gap:8px;flex-wrap:wrap;">'
                 + '<button class="btn btn-outline ol-btn" onclick="olEmailSlip(this, \'' + encodeURIComponent(o.slip_sale_id) + '\')">&#9993; Email slip</button>'
-                + '<a class="btn btn-outline ol-btn" target="_blank" href="/api/organic/sales/' + encodeURIComponent(o.slip_sale_id) + '/packing-slip">Packing slip</a></span></div>'
+                + '<a class="btn btn-outline ol-btn" target="_blank" href="/sales/' + encodeURIComponent(o.slip_sale_id) + '/packing-slip">Packing slip</a></span></div>'
                 + '<div class="ol-dates ol-small" style="margin:-4px 0 10px;"><span>Shipped ' + olEsc(olDate(o.date)) + '</span>'
                 + (o.delivery_date && o.delivery_date !== o.date ? '<span>Delivery ' + olEsc(olDate(o.delivery_date)) + '</span>' : '')
                 + (o.po_number ? '<span>PO ' + olEsc(o.po_number) + '</span>' : '') + '</div>'

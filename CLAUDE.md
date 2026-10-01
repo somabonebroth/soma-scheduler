@@ -77,6 +77,12 @@ sales.py            — Flask Blueprint (731 lines, extracted 2026-06-03): the 7
                       bookkeeping report uses; read at call time). A bad address in the setting
                       is skipped and reported via `field_errors` on the company-info PATCH, so
                       it never blocks the other settings saving. Tests: `tests.test_slip_email`.
+                      **Printable slip page (2026-10-01):** `GET /sales/<sale_id>/packing-slip`
+                      (`sale_packing_slip.html`, shares `_packing_slip_head.html`, `?print=1`)
+                      is what every Print packing slip button opens — a PDF opened from the
+                      home-screen app on iOS has NO print/share control. Page and PDF both read
+                      `_packing_slip_data`, so they can never differ; the PDF stays for email +
+                      the page's PDF button. Tests: `tests.test_slip_page`.
                       The done screen also says when NO addresses are set (it was silent —
                       the first live sale looked like a lost email). `POST /api/organic/sales/
                       <id>/email-slip` re-sends a recorded order's slip ("Email slip" on each

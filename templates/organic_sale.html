@@ -465,8 +465,8 @@ async function osConfirm() {
                 + (em.error ? ': ' + osEsc(em.error) : '') + '. Once that is fixed, use <b>Email slip</b> on this sale in Organic Lots, or print it below.</div>';
         document.getElementById('os-root').innerHTML = '<div class="card os-done"><div class="big">&#10004;</div>'
             + '<h2>Sale recorded</h2><p class="os-muted">' + osEsc(o.b.name) + ' &middot; ' + total + ' cases</p>' + emailLine
-            + '<a class="btn btn-primary os-big" style="display:block;text-decoration:none;margin:14px 0 10px;" target="_blank" href="/api/organic/sales/'
-            + encodeURIComponent(data.slip_sale_id) + '/packing-slip">Print packing slip</a>'
+            + '<a class="btn btn-primary os-big" style="display:block;text-decoration:none;margin:14px 0 10px;" href="/sales/'
+            + encodeURIComponent(data.slip_sale_id) + '/packing-slip?print=1">Print packing slip</a>'
             + '<a class="btn btn-outline os-big" style="display:block;text-decoration:none;" href="/organic-sale">New organic sale</a></div>';
         window.scrollTo(0, 0);
     } catch (e) {

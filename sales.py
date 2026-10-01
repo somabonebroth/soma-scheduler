@@ -813,10 +813,10 @@ def delete_organic_sale(sale_id):
     return jsonify({"success": True})
 
 
-def _packing_slip_pdf(sale_id):
-    """(pdf_bytes, filename) of the packing slip for a sale's whole order, or
-    None if the sale does not exist. One builder for the slip button and the
-    Organic Sale email, so they can never differ."""
+def _packing_slip_data(sale_id):
+    """Everything the packing slip shows for a sale's whole order, or None if
+    the sale does not exist. ONE read for both renderings — the PDF (email,
+    desktop) and the HTML page (prints from a phone) — so they can never differ."""
     sales = _load_json(app.ORGANIC_SALES_PATH, [])
     sale = next((s for s in sales if s.get("id") == sale_id), None)
     if not sale:
@@ -838,6 +838,48 @@ def _packing_slip_pdf(sale_id):
     buyer_contact = sale.get("location_name") or ""
     buyer_phone = buyer_rec.get("phone") or ""
     buyer_email = buyer_rec.get("email") or ""
+
+    # One row per LOT drawn (organic and new-shape sales), else one per line.
+    lines = []
+    for line in order_lines:
+        product = ((line.get("brand","")+" " if line.get("brand") else "") + (line.get("recipe") or "")).strip()
+        fmt = line.get("format") or ""
+        for lot in (line.get("lots") or [{"lot": line.get("fg_lot"), "quantity": line.get("quantity")}]):
+            lines.append({"product": product, "format": fmt,
+                          "lot": lot.get("lot") or "—", "qty": int(lot.get("quantity") or 0)})
+    total_units = sum(l["qty"] for l in lines)
+
+    sale_date = sale.get("sale_date") or "—"
+    safe_buyer = "".join(c for c in buyer_name if c.isalnum() or c in "-_ ")[:20]
+    return {
+        "sale_id": sale_id,
+        "company": company,
+        "buyer_name": buyer_name, "buyer_contact": buyer_contact,
+        "buyer_address": buyer_address, "buyer_phone": buyer_phone,
+        "buyer_email": buyer_email,
+        "sale_date": sale_date,
+        "po": sale.get("po_number") or sale.get("case_lot") or "—",
+        "ref": sale_id[-10:],
+        "lines": lines,
+        "total_units": total_units,
+        "total_cases": total_units // 12,
+        "filename": f"packing-slip-{safe_buyer}-{sale_date}.pdf",
+    }
+
+
+def _packing_slip_pdf(sale_id):
+    """(pdf_bytes, filename) of the packing slip for a sale's whole order, or
+    None if the sale does not exist. Used by the Organic Sale email and the
+    PDF download; reads `_packing_slip_data`, as the HTML slip does."""
+    d = _packing_slip_data(sale_id)
+    if d is None:
+        return None
+    company = d["company"]
+    buyer_name = d["buyer_name"]
+    buyer_contact = d["buyer_contact"]
+    buyer_address = d["buyer_address"]
+    buyer_phone = d["buyer_phone"]
+    buyer_email = d["buyer_email"]
 
     from reportlab.lib import colors
     from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
@@ -902,9 +944,9 @@ def _packing_slip_pdf(sale_id):
         _ps("Normal", fontSize=14, fontName="Helvetica-Bold", leading=16, spaceAfter=3)))
 
     # Ship To, then Date / Ref / PO on one row beneath it
-    sale_date = sale.get("sale_date") or "—"
-    po        = sale.get("po_number") or sale.get("case_lot") or "—"
-    ref       = sale_id[-10:]
+    sale_date = d["sale_date"]
+    po        = d["po"]
+    ref       = d["ref"]
 
     lbl = _ps("Normal", fontSize=7, fontName="Helvetica-Bold", leading=9)
     val = _ps("Normal", fontSize=10, leading=12)
@@ -946,27 +988,12 @@ def _packing_slip_pdf(sale_id):
 
     # FORMAT sits under the product name — a fourth column does not fit 4in.
     rows = [[Paragraph("PRODUCT", hdr_l), Paragraph("LOT #", hdr_c), Paragraph("QTY", hdr_c)]]
-    total_units = 0
-
-    def _product_cell(line):
-        lp = ((line.get("brand","")+" " if line.get("brand") else "") + (line.get("recipe") or "")).strip()
-        lf = line.get("format") or ""
-        return Paragraph(f'<b>{lp}</b>' + (f'<br/><font size="8.5">{lf}</font>' if lf else ""), cell_l)
-
-    for line in order_lines:
-        ll  = line.get("lots") or []
-        if ll:
-            for lot in ll:
-                qty = int(lot.get("quantity") or 0)
-                total_units += qty
-                rows.append([_product_cell(line),
-                             Paragraph(lot.get("lot") or "—", cell_c), Paragraph(str(qty), qty_s)])
-        else:
-            qty = int(line.get("quantity") or 0)
-            total_units += qty
-            rows.append([_product_cell(line),
-                         Paragraph(line.get("fg_lot") or "—", cell_c), Paragraph(str(qty), qty_s)])
-    total_cases = total_units // 12
+    for ln in d["lines"]:
+        cell = Paragraph(f'<b>{ln["product"]}</b>'
+                         + (f'<br/><font size="8.5">{ln["format"]}</font>' if ln["format"] else ""), cell_l)
+        rows.append([cell, Paragraph(ln["lot"], cell_c), Paragraph(str(ln["qty"]), qty_s)])
+    total_units = d["total_units"]
+    total_cases = d["total_cases"]
     rows.append([Paragraph(f"TOTAL&nbsp;&nbsp;{total_units} units  ({total_cases} cases)", tot_s), "", ""])
 
     rc = len(rows)
@@ -992,8 +1019,20 @@ def _packing_slip_pdf(sale_id):
 
     doc.build(story)
     buf.seek(0)
-    safe_buyer = "".join(c for c in buyer_name if c.isalnum() or c in "-_ ")[:20]
-    return buf.getvalue(), f"packing-slip-{safe_buyer}-{sale_date}.pdf"
+    return buf.getvalue(), d["filename"]
+
+
+@sales_bp.route("/sales/<sale_id>/packing-slip", methods=["GET"])
+@manager_required
+def packing_slip_page(sale_id):
+    """The packing slip as a web page with a Print button. A PDF opened from
+    the home-screen app on an iPhone has no share or print control, so the
+    phone prints this page instead; the PDF stays for email and download."""
+    d = _packing_slip_data(sale_id)
+    if d is None:
+        return "Sale not found", 404
+    return render_template("sale_packing_slip.html", s=d,
+                           today=datetime.now().strftime("%Y-%m-%d"))
 
 
 @sales_bp.route("/api/organic/sales/<sale_id>/packing-slip", methods=["GET"])

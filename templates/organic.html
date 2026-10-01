@@ -940,7 +940,7 @@ body.inv-page .modal-actions {
                 <div id="sale-doc-buttons" style="display:none;background:var(--action-green-bg);border-radius:8px;padding:14px;margin-bottom:14px;">
                     <div style="font-size:13px;font-weight:600;color:var(--action-green);margin-bottom:10px;">&#10003; Sale recorded &mdash; export documents:</div>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                        <button class="btn btn-primary" id="sale-packing-slip-btn" onclick="openPackingSlip()" style="background:var(--info);border-color:var(--info);">&#128196; Packing Slip PDF</button>
+                        <button class="btn btn-primary" id="sale-packing-slip-btn" onclick="openPackingSlip()" style="background:var(--info);border-color:var(--info);">&#128424; Print Packing Slip</button>
                         <button class="btn-outline" id="sale-qbo-btn" onclick="downloadQBO()">&#128190; QBO Invoice CSV</button>
                     </div>
                 </div>
@@ -2570,7 +2570,7 @@ async function submitRecordSale(){
 
 function openPackingSlip(){
     if(!_rsLastSaleId) return;
-    window.open('/api/organic/sales/'+_rsLastSaleId+'/packing-slip', '_blank');
+    window.open('/sales/'+_rsLastSaleId+'/packing-slip?print=1', '_blank');
 }
 
 function downloadQBO(){
