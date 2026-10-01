@@ -312,7 +312,7 @@ function openApproveModal(orderId, e) {
   _approveOrderId = orderId;
   // Default to tomorrow
   const d = new Date(); d.setDate(d.getDate() + 1);
-  document.getElementById('approve-date').value = d.toISOString().split('T')[0];
+  document.getElementById('approve-date').value = d.toLocaleDateString('en-CA');
   document.getElementById('approve-error').style.display = 'none';
   document.getElementById('approve-success').style.display = 'none';
   document.getElementById('approve-modal-actions').style.display = 'flex';
@@ -397,7 +397,7 @@ async function doDecline(orderId, e) {
 async function doFulfill(orderId, e) {
   e.stopPropagation();
   if (!confirm('Mark this order as DELIVERED?\n\nOnly do this once the courier has CONFIRMED delivery — not when the pickup is booked. The buyer will see "Delivered ✓" on their order.')) return;
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toLocaleDateString('en-CA');
   const dateInput = prompt('Delivery date (YYYY-MM-DD):', today);
   if (dateInput === null) return;
   const body = {action: 'fulfill'};

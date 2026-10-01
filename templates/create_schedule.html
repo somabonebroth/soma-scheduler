@@ -123,7 +123,7 @@ function getCurrentMonday() {
     mon.setDate(today.getDate() + diff);
     return mon;
 }
-function formatDate(d) { return d.toISOString().split('T')[0]; }
+function formatDate(d) { return d.toLocaleDateString('en-CA'); }
 function getMonday(dateStr) {
     var d = new Date(dateStr + 'T00:00:00');
     var day = d.getDay();

@@ -108,6 +108,14 @@
 .prod-grid .dash-btn .icon { font-size: 34px; }
 .prod-grid .dash-btn .label { font-size: 16px; }
 .dash-btn.full { grid-column: 1 / -1; }
+/* Quick Actions — the phone's reason to open the dashboard, so on a phone they
+   sit right under the Daily Summary instead of a screen and a half down. */
+.qa-block { display: grid; gap: 16px; }
+@media (max-width: 600px) {
+    .review-btn { order: -2; }
+    .qa-block { order: -1; }
+    .qa-block .dash-btn { padding: 16px 14px; gap: 4px; }
+}
 .dash-btn.placeholder { opacity: 0.45; cursor: default; border-style: dashed; }
 .dash-btn.placeholder:hover { transform: none; box-shadow: none; border-color: var(--border); }
 .dash-btn.tile-green { background: var(--action-green-bg); border-color: var(--green-light); border-left-color: var(--action-green); }
@@ -271,6 +279,7 @@
             <a href="/weekly-schedule" class="dash-btn"><span class="icon">&#128197;</span><span class="label">Weekly Schedule</span><span class="sublabel">View current week</span></a>
             <div class="dash-btn highlight" onclick="goToDay(0)" style="cursor:pointer;"><span class="icon">&#9654;</span><span class="label">Today's Production</span><span class="sublabel" id="today-label">Loading...</span></div>
         </div>
+        <div class="qa-block">
         <div class="section-label">Quick Actions</div>
         <div class="dash-row">
             <div class="dash-btn" onclick="openReceiveModal()" style="background:var(--action-green);border-color:var(--action-green);cursor:pointer;">
@@ -288,6 +297,7 @@
                 <span class="label" style="color:var(--white);">Organic Sale</span>
                 <span class="sublabel" style="color:rgba(255,255,255,0.75);">Scan organic cases</span>
             </a>
+        </div>
         </div>
         <div class="section-label">Buyer Portals</div>
         {% include "_portal_tiles.html" %}
@@ -404,7 +414,7 @@
 <script>
 var DAYNAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 async function doLogout(){await fetch('/api/logout',{method:'POST'});window.location.href='/login';}
-function getWeekId(date){var d=new Date(date);var day=d.getDay();var diff=day===0?-6:1-day;d.setDate(d.getDate()+diff);return d.toISOString().split('T')[0];}
+function getWeekId(date){var d=new Date(date);var day=d.getDay();var diff=day===0?-6:1-day;d.setDate(d.getDate()+diff);return d.toLocaleDateString('en-CA');}
 function getDayIdx(date){var day=date.getDay();return day===0?6:day-1;}
 async function goToDay(offset){var target=new Date();target.setDate(target.getDate()+offset);var weekId=getWeekId(target);var dayIdx=getDayIdx(target);var res=await fetch('/api/schedule/'+weekId);var data=await res.json();if(!data.schedule){alert('No schedule created for this week.');return;}var dayData=data.schedule[String(dayIdx)]||{};var hasP=Object.values(dayData).some(function(v){return v;});if(!hasP){alert('No production scheduled for '+DAYNAMES[target.getDay()]+'.');return;}window.location.href='/daily-production/'+weekId+'/'+dayIdx;}
 async function loadDayLabels(){
@@ -512,7 +522,7 @@ loadProdBadge();
 async function openDashSaleModal(){
     document.getElementById('dash-sale-form').style.display = 'block';
     document.getElementById('dash-sale-success').style.display = 'none';
-    var today = new Date().toISOString().split('T')[0];
+    var today = new Date().toLocaleDateString('en-CA');
     document.getElementById('dash-sale-date').value = today;
     document.getElementById('dash-sale-msg').style.display = 'none';
     try {
@@ -670,7 +680,7 @@ function dashSaleNext(){
 <script>
 // Receive Inventory modal
 async function openReceiveModal(){
-  var today = new Date().toISOString().split('T')[0];
+  var today = new Date().toLocaleDateString('en-CA');
   document.getElementById('dash-receive-date').value = today;
   document.getElementById('dash-receive-msg').style.display = 'none';
   try {

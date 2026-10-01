@@ -181,7 +181,7 @@ function mondayOf(d) {
   if (isNaN(t)) return null;
   const off = (t.getDay() + 6) % 7;          // Mon=0
   t.setDate(t.getDate() - off);
-  return t.toISOString().slice(0, 10);
+  return t.toLocaleDateString('en-CA');
 }
 
 function checkAnyWeek() {

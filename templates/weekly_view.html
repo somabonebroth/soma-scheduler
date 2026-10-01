@@ -103,7 +103,7 @@ function getCurrentMonday() {
     mon.setDate(today.getDate() + diff);
     return mon;
 }
-function formatDate(d) { return d.toISOString().split('T')[0]; }
+function formatDate(d) { return d.toLocaleDateString('en-CA'); }
 
 function getWeekId() {
     var params = new URLSearchParams(window.location.search);
@@ -175,7 +175,7 @@ async function loadWeek(weekId) {
         try {
             var prevWeekDate = new Date(weekId + 'T00:00:00');
             prevWeekDate.setDate(prevWeekDate.getDate() - 7);
-            var prevWeekId = prevWeekDate.toISOString().slice(0, 10);
+            var prevWeekId = prevWeekDate.toLocaleDateString('en-CA');
             var prevRes = await fetch('/api/schedule/' + prevWeekId);
             var prevData = await prevRes.json();
             if (prevData && prevData.schedule) {

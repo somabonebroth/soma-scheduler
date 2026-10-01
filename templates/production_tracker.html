@@ -75,7 +75,7 @@ var currentView='week';
 var MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 function getCurrentMonday(){var t=new Date();var d=t.getDay();var diff=d===0?-6:1-d;var m=new Date(t);m.setDate(t.getDate()+diff);return m;}
-function formatDate(d){return d.toISOString().split('T')[0];}
+function formatDate(d){return d.toLocaleDateString('en-CA');}
 
 function setView(v){
     currentView=v;

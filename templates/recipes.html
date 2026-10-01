@@ -679,7 +679,7 @@ async function downloadAllRecipes(btn){
         if(!res.ok){var err=await res.json().catch(function(){return{};});alert(err.error||'Download failed');return;}
         var blob=await res.blob();
         var url=URL.createObjectURL(blob);
-        var today=new Date().toISOString().slice(0,10);
+        var today=new Date().toLocaleDateString('en-CA');
         var a=document.createElement('a');a.href=url;a.download='All_Recipes_'+today+'.pdf';a.click();
         URL.revokeObjectURL(url);
     }catch(e){alert('Download failed');}

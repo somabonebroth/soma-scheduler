@@ -398,7 +398,7 @@ function openApproveModal(orderId, paymentKey, e) {
   }
   // Default to tomorrow
   var d = new Date(); d.setDate(d.getDate() + 1);
-  document.getElementById('approve-date').value = d.toISOString().split('T')[0];
+  document.getElementById('approve-date').value = d.toLocaleDateString('en-CA');
   document.getElementById('approve-error').style.display = 'none';
   document.getElementById('approve-success').style.display = 'none';
   document.getElementById('approve-modal-actions').style.display = 'flex';

@@ -744,7 +744,7 @@ body.inv-page .modal-actions {
         width: 100%;
     }
 
-    /* Tab bar — 6 tabs, shrink further on mobile */
+    /* Tab bar — shrink on mobile */
     .tab-btn { padding: 10px 10px; font-size: 11px; white-space: nowrap; }
 
     /* FG action button row — stack on very narrow */
@@ -783,19 +783,16 @@ body.inv-page .modal-actions {
     #fg-adj-grid-header > div:nth-child(2) { display: none; }
 }
 
-/* Extra small phones (< 390px) */
+/* Extra small phones — three tabs share the row, labels stay readable */
 @media (max-width: 390px) {
-    .tab-btn { padding: 8px 8px; font-size: 10px; min-height: 38px; }
+    .tab-btn { flex: 1; padding: 9px 4px; font-size: 11px; min-height: 40px; white-space: normal; line-height: 1.2; }
     body.inv-page .card { padding: 12px; }
     body.inv-page .card h2 { font-size: 14px; }
-    /* Hide label text on smallest tabs, keep tappable */
-    .tab-btn:not(.active) { color: transparent; position: relative; min-width: 28px; }
-    .tab-btn:not(.active)::after { 
-        content: '●'; color: var(--text-light); 
-        position: absolute; left: 50%; transform: translateX(-50%);
-        font-size: 8px; top: 50%; margin-top: -4px;
-    }
-    .tab-btn.active { color: var(--white); }
+}
+/* iOS Safari zooms the page when a focused field's text is under 16px. */
+@media (max-width: 768px) {
+    .modal input, .modal select, .modal textarea { font-size: 16px !important; }
+    .modal-actions button, .modal-actions .btn { max-width: 100%; }
 }
 .repair-note { font-size: 12px; color: var(--text-light); line-height: 1.5; margin: 4px 4px 0; }
 .repair-note a { color: var(--dark); }
@@ -1761,7 +1758,7 @@ function collectLots(){
 
 function clearInvoiceForm(){
     document.getElementById('inv-supplier').value='';
-    document.getElementById('inv-date').value=new Date().toISOString().split('T')[0];
+    document.getElementById('inv-date').value=new Date().toLocaleDateString('en-CA');
     document.getElementById('inv-file').value='';
     var container=document.getElementById('inv-lots-container');
     container.innerHTML='<div class="inv-lot-row" style="display:flex;gap:6px;margin-bottom:4px;"><input class="inv-lot" placeholder="LOT#" style="flex:1;"></div>';
@@ -2094,7 +2091,7 @@ function onInvUnitChange(idx){ _updateInvConv(idx); }
 
 async function openAddInventoryModal(){
     // Set today's date
-    var today = new Date().toISOString().split('T')[0];
+    var today = new Date().toLocaleDateString('en-CA');
     document.getElementById('add-inv-date').value = today;
     document.getElementById('add-inv-step1-msg').textContent = '';
     document.getElementById('add-inv-step2-msg').textContent = '';
@@ -2274,7 +2271,7 @@ var _rsFgGrouped = [];  // current FG inventory snapshot for stock display
 var _rsCertMap = {};    // sku_key -> certification (to flag organic lines)
 
 async function openRecordSaleModal(){
-    var today = new Date().toISOString().split('T')[0];
+    var today = new Date().toLocaleDateString('en-CA');
     document.getElementById('sale-date-modal').value = today;
     document.getElementById('sale-po-modal').value = '';
     document.getElementById('sale-step1-msg').textContent = '';
@@ -3761,7 +3758,7 @@ async function editLotRemaining(skuKey,lot,current){
 // Sell form (modal) — pre-fills with the SKU you clicked
 // ── Inventory Adjustment Modal ─────────────────────────────────────────
 async function openAdjustmentModal(){
-    var today = new Date().toISOString().split('T')[0];
+    var today = new Date().toLocaleDateString('en-CA');
     document.getElementById('adj-date').value = today;
     document.getElementById('adj-notes').value = '';
     document.getElementById('adj-status').textContent = '';
@@ -3845,7 +3842,7 @@ document.addEventListener('DOMContentLoaded',function(){
     // −/+ steppers on the static manual add/subtract qty boxes
     attachQtyStepper(document.getElementById('manual-add-qty'));
     attachQtyStepper(document.getElementById('manual-sub-qty'));
-    var today=new Date().toISOString().split('T')[0];
+    var today=new Date().toLocaleDateString('en-CA');
     var saleDateEl=document.getElementById('sale-date-modal');
     if(saleDateEl) saleDateEl.value=today;
 

@@ -90,7 +90,7 @@ let _ovGrain = 'week';
 function ovMondayIso(){
     const t = new Date(); const d = t.getDay(); const m = new Date(t);
     m.setDate(t.getDate() + (d === 0 ? -6 : 1 - d));
-    return m.toISOString().split('T')[0];
+    return m.toLocaleDateString('en-CA');
 }
 
 function ovSetGrain(g){
