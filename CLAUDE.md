@@ -747,6 +747,8 @@ Freeze by run-id, NOT `completed_at` (a first-time post-reset completion has sta
 finished_goods+events from a snapshot (`restore_reset_archive`, re-archives current as
 `pre_restore_*` first).
 
+**CRITICAL — the boot backfill is CREATE-ONLY (fixed 2026-10-01).** `_backfill_organic_finished_goods` runs at EVERY startup and calls `_check_organic_completion` for every past finish day. Until this fix it ran the FULL update, which sets an existing batch's `quantity_remaining` to produced − sold — so every deploy silently undid every recorded reduction on a production batch (stock-count shortages, breakage via manual-subtract, `lot-adjust`), restoring the jars and clearing `last_adjusted_at`. Found the day of the organic go-live count, after deploys had already reverted that count's shortages. Now the backfill passes `create_only=True` and `_complete_organic_run` skips any run whose FG entry exists. The tablet save path is unchanged (a corrected jar count still rewrites the batch, with its existing warning). Never let a startup task rewrite stock. Tests: `python3 -m unittest tests.test_backfill_create_only`. A reverted reduction shows in Organic Lots as "N jars extra" (unrecorded < 0).
+
 **FG LOT# = production(start) date + 365** (`_complete_organic_run`), matching the case
 label which `/api/label` prints as production+365. (Was finish+365, which put the system
 one day ahead of the case on any batch produced one day / packaged the next.)

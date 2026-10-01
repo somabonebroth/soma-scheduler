@@ -2403,7 +2403,7 @@ def _deduct_run_ingredients(recipe_data, vessel, recipe_name, amount, eligible_m
     return ingredients_used, warnings
 
 
-def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
+def _complete_organic_run(finish_week_id, finish_day_idx, produced_data, create_only=False):
     """Process organic production amounts entered on the FINISH day.
 
     Semantic: 'Amount Produced' entered on day D is the output of the recipe
@@ -2415,6 +2415,12 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
          with LOT# = production(start) date + 365 days, matching the case label
     Idempotent: re-saving updates in place. Sales already made against an
     edited entry are preserved (quantity_remaining = new_qty - already_sold).
+
+    create_only=True (the boot backfill) only CREATES a missing finished-goods
+    entry and never rewrites one that exists. Before 2026-10-01 the backfill
+    re-ran the full update on every restart, resetting each batch's remaining
+    to produced - sold — silently undoing every recorded reduction on it
+    (stock-count shortages, breakage, hand corrections) at every deploy.
     """
     runs = _load_json(ORGANIC_RUNS_PATH, [])
     materials = _load_json(ORGANIC_RAW_PATH, [])
@@ -2487,6 +2493,8 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data):
         # finish_week + finish_day + vessel)
         fg_id = f"fg_{finish_week_id}_{finish_day_idx}_{vessel}"
         existing_fg = next((f for f in fg if f.get("id") == fg_id), None)
+        if create_only and existing_fg:
+            continue  # backfill: this batch already has its record — leave it alone
 
         # If amount is 0 and no prior FG exists, skip entirely (no production)
         if amount <= 0 and not existing_fg:
@@ -4144,7 +4152,7 @@ def _check_organic_schedule(week_id, schedule):
 # ── Hook: Complete organic runs when daily production is filed ─────────
 
 
-def _check_organic_completion(finish_week_id, finish_day_idx, checklist_data):
+def _check_organic_completion(finish_week_id, finish_day_idx, checklist_data, create_only=False):
     """When daily production is saved on the FINISH day, process any organic
     runs that were scheduled on the PREVIOUS day (which are now finishing).
     Returns a list of warning dicts for the UI to surface."""
@@ -4155,7 +4163,8 @@ def _check_organic_completion(finish_week_id, finish_day_idx, checklist_data):
         for r in runs
     )
     if has_organic:
-        return _complete_organic_run(finish_week_id, finish_day_idx, checklist_data) or []
+        return _complete_organic_run(finish_week_id, finish_day_idx, checklist_data,
+                                     create_only=create_only) or []
     return []
 
 
@@ -4168,9 +4177,10 @@ if not os.path.exists(CCP_MASTER_PATH):
 
 
 def _backfill_organic_finished_goods():
-    """One-time, idempotent: scan past checklists and build finished goods entries
-    for organic production where they're missing. Safe to run on every startup
-    because _complete_organic_run is idempotent (updates in place).
+    """Runs at every startup: scan past checklists and build finished goods
+    entries for production where they're MISSING. create_only — an existing
+    entry is never rewritten here (see _complete_organic_run), so a restart
+    cannot undo a recorded reduction.
 
     For every existing organic run, looks at the FINISH day's checklist (run start
     day + 1, with cross-week Sunday→Monday). If that checklist has a 'produced'
@@ -4211,7 +4221,7 @@ def _backfill_organic_finished_goods():
         if not (checklist or {}).get("produced"):
             continue
         try:
-            _check_organic_completion(fw, fd, checklist)
+            _check_organic_completion(fw, fd, checklist, create_only=True)
             backfilled += 1
         except Exception:
             pass
