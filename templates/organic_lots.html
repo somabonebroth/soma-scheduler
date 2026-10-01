@@ -128,12 +128,15 @@ function olProduct(x) {
     return x.recipe ? x.recipe + (x.format ? ' · ' + x.format : '') : (x.name || '');
 }
 
-// Cases first (a case is 12 jars), jars underneath.
+// Cases first (a case is 12 jars), jars underneath. Loose jars carry their
+// own unit ("6 cases + 6 jars"): a bare "6 + 6" read as twelve cases.
 function olCases(n) {
     const c = Math.floor(n / 12), loose = n % 12;
-    return c.toLocaleString() + (loose ? ' + ' + loose : '');
+    if (!loose) return c.toLocaleString();
+    return c.toLocaleString() + ' ' + (c === 1 ? 'case' : 'cases') + ' + ' + loose + ' jar' + (loose === 1 ? '' : 's');
 }
-function olCaseWord(n) { return Math.floor(n / 12) === 1 && n % 12 === 0 ? 'case' : 'cases'; }
+// The unit to print after olCases — empty when olCases already named it.
+function olCaseWord(n) { return n % 12 ? '' : (n === 12 ? 'case' : 'cases'); }
 
 // ── List ─────────────────────────────────────────────────────────────
 function olFolderCard(f) {
@@ -188,7 +191,7 @@ function olRenderCards() {
 // ── Folder ───────────────────────────────────────────────────────────
 function olStat(label, jars, cls) {
     return '<div class="ol-stat' + (cls ? ' ' + cls : '') + '"><div class="k">' + label + '</div>'
-        + '<div class="v">' + olCases(jars) + '</div><div class="u">' + olCaseWord(jars) + ' &middot; ' + jars.toLocaleString() + ' jars</div></div>';
+        + '<div class="v">' + olCases(jars) + '</div><div class="u">' + (olCaseWord(jars) ? olCaseWord(jars) + ' &middot; ' : '') + jars.toLocaleString() + ' jars</div></div>';
 }
 
 function olSummaryHtml(f) {
