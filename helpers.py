@@ -51,6 +51,7 @@ _DEFAULT_COMPANY_INFO = {
     "fzbb_small_lead_days":  3,    # min days notice for FZ/BB ≤ threshold
     "fzbb_large_lead_days":  7,    # min days notice for FZ/BB ≥ threshold
     "fzbb_large_threshold":  8,    # cases at which large lead time applies
+    "organic_slip_emails": "",     # comma-separated: every Organic Sale emails its packing slip here (2026-10-01)
 }
 
 
@@ -686,3 +687,49 @@ def _parse_organic_qr(text):
     if len(parts) != 3 or parts[0] != ORGANIC_QR_PREFIX or not parts[1] or len(parts[2]) != 6:
         return None
     return parts[1], parts[2]
+
+
+
+# ── Email (2026-10-01) ───────────────────────────────────────────────────
+# Sent through the same Fastmail account as the monthly bookkeeping report
+# (SMTP_USER / SMTP_PASS on Render; host/port optional). Read at call time so
+# setting the env vars needs no code change. ripe_orders keeps its own copy
+# for the bookkeeping report — that module shares a contract with Ripe.
+_EMAIL_RE = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$")
+
+
+def _parse_emails(text):
+    """(valid, invalid) address lists from a comma/semicolon/space separated string."""
+    parts = [p.strip() for p in re.split(r"[,;\s]+", text or "") if p.strip()]
+    valid, invalid = [], []
+    for p in parts:
+        (valid if _EMAIL_RE.match(p) else invalid).append(p)
+    return list(dict.fromkeys(valid)), invalid
+
+
+def _send_email(recipients, subject, body, attachments=()):
+    """Send a plain-text email with optional attachments [(filename, bytes, subtype)].
+    Raises RuntimeError if email is not set up, or the SMTP error on failure."""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.application import MIMEApplication
+    user, password = os.environ.get("SMTP_USER", ""), os.environ.get("SMTP_PASS", "")
+    if not user or not password:
+        raise RuntimeError("Email is not set up on the server (SMTP_USER / SMTP_PASS)")
+    msg = MIMEMultipart()
+    msg["From"] = user
+    msg["To"] = ", ".join(recipients)
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain"))
+    for filename, data, subtype in attachments:
+        att = MIMEApplication(data, _subtype=subtype)
+        att.add_header("Content-Disposition", "attachment", filename=filename)
+        msg.attach(att)
+    host = os.environ.get("SMTP_HOST", "smtp.fastmail.com")
+    port = int(os.environ.get("SMTP_PORT", "587"))
+    with smtplib.SMTP(host, port, timeout=20) as server:
+        server.ehlo()
+        server.starttls()
+        server.login(user, password)
+        server.sendmail(user, recipients, msg.as_string())

@@ -455,8 +455,15 @@ async function osConfirm() {
         osCloseReview();
         document.getElementById('os-bar').style.display = 'none';
         document.body.style.paddingBottom = '0';
+        // The email goes after the sale is saved; it can fail without the sale failing.
+        const em = data.email || {};
+        const emailLine = em.sent
+            ? '<p class="os-muted">&#9993; Packing slip emailed to ' + osEsc((em.to || []).join(', ')) + '</p>'
+            : em.reason === 'no_recipients' ? ''
+            : '<div class="os-warn" style="text-align:left;">The sale is saved, but the packing slip email did not send'
+                + (em.error ? ': ' + osEsc(em.error) : '') + '. Print or forward it from the button below.</div>';
         document.getElementById('os-root').innerHTML = '<div class="card os-done"><div class="big">&#10004;</div>'
-            + '<h2>Sale recorded</h2><p class="os-muted">' + osEsc(o.b.name) + ' &middot; ' + total + ' cases</p>'
+            + '<h2>Sale recorded</h2><p class="os-muted">' + osEsc(o.b.name) + ' &middot; ' + total + ' cases</p>' + emailLine
             + '<a class="btn btn-primary os-big" style="display:block;text-decoration:none;margin:14px 0 10px;" target="_blank" href="/api/organic/sales/'
             + encodeURIComponent(data.slip_sale_id) + '/packing-slip">Print packing slip</a>'
             + '<a class="btn btn-outline os-big" style="display:block;text-decoration:none;" href="/organic-sale">New organic sale</a></div>';

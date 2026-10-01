@@ -64,6 +64,19 @@
     <div class="ff"><label>Notes</label><textarea id="ci-notes" rows="2" oninput="dCI()" style="resize:vertical;"></textarea></div>
   </div>
 
+  <!-- Organic Sale email (2026-10-01) -->
+  <div class="scard" id="organic-email">
+    <h3>Organic Sale</h3>
+    <div class="ff"><label for="ci-slip-emails">Email organic packing slips to</label>
+      <input id="ci-slip-emails" type="text" inputmode="email" autocomplete="off" placeholder="you@example.com, books@example.com" oninput="dCI('slip')">
+    </div>
+    <p style="font-size:12px;color:var(--text-light);margin:6px 0 10px;line-height:1.5;">Every Organic Sale emails its packing slip (PDF) to these addresses the moment it is recorded. Separate several with commas. Leave empty to send nothing.</p>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <button type="button" class="btn btn-outline" style="font-size:13px;" onclick="testSlipEmail()">Send test email</button>
+      <span id="slip-status" style="font-size:13px;"></span>
+    </div>
+  </div>
+
   <!-- Ripe Portal -->
   <div class="scard" id="ripe">
     <h3>Ripe Portal</h3>
@@ -139,6 +152,7 @@ async function loadCI() {
   G('ci-city').value    = d.city    || '';
   G('ci-reg').value     = d.registration || '';
   G('ci-notes').value   = d.notes   || '';
+  G('ci-slip-emails').value = d.organic_slip_emails || '';
   G('ci-buf').value     = d.ripe_inventory_buffer !== undefined ? d.ripe_inventory_buffer : 12;
   renderCredits(Array.isArray(d.ripe_credits) ? d.ripe_credits : []);
   renderPromos(Array.isArray(d.ripe_monthly_promos) ? d.ripe_monthly_promos : []);
@@ -152,7 +166,8 @@ async function loadCI() {
 var _ciSection = null;   // 'credits' | 'promos' | null — where the last edit happened
 function dCI(section) {
   _ciSection = section || null;
-  if (_ciSection) creditStatus(_ciSection, 'Saving…', 'pending');
+  if (_ciSection === 'slip') slipStatus('Saving…');
+  else if (_ciSection) creditStatus(_ciSection, 'Saving…', 'pending');
   clearTimeout(_ciT); _ciT = setTimeout(saveCI, 800);
 }
 function creditStatus(section, text, cls) {
@@ -163,12 +178,30 @@ function creditStatus(section, text, cls) {
   if (cls !== 'pending') el._t = setTimeout(function(){ el.textContent=''; el.className='credit-status'; }, 3500);
 }
 
+function slipStatus(text, colour) {
+  var el = G('slip-status');
+  el.textContent = text; el.style.color = colour || 'var(--text-light)';
+}
+
+async function testSlipEmail() {
+  clearTimeout(_ciT); await saveCI();          // test what is in the box now
+  slipStatus('Sending…');
+  var d = {};
+  try {
+    var r = await fetch('/api/organic/slip-email/test', {method: 'POST'});
+    d = await r.json();
+  } catch (e) { d = {ok: false, error: 'No connection'}; }
+  slipStatus(d.ok ? '✓ Test sent to ' + d.to.join(', ') : '✗ ' + (d.error || 'Not sent'),
+             d.ok ? 'var(--action-green)' : 'var(--action-red)');
+}
+
 async function saveCI() {
   var p = {
     name: G('ci-name').value, phone: G('ci-phone').value,
     email: G('ci-email').value, website: G('ci-website').value,
     address: G('ci-address').value, city: G('ci-city').value,
     registration: G('ci-reg').value, notes: G('ci-notes').value,
+    organic_slip_emails: G('ci-slip-emails').value,
     ripe_inventory_buffer:       parseInt(G('ci-buf').value)            || 0,
     ripe_credits:                scrapeCredits(),
     ripe_monthly_promos:         scrapePromos(),
@@ -186,6 +219,13 @@ async function saveCI() {
     var ind = G('save-indicator');
     ind.style.display = 'inline';
     setTimeout(function(){ ind.style.display='none'; }, 2000);
+    if (section === 'slip') {
+      var fe = {};
+      try { fe = (await res.clone().json()).field_errors || {}; } catch (e) {}
+      if (fe.organic_slip_emails) slipStatus('✗ ' + fe.organic_slip_emails, 'var(--action-red)');
+      else slipStatus('✓ Saved', 'var(--action-green)');
+      section = null;   // nothing below applies to the email field
+    }
     if (section) {
       creditStatus(section, section === 'promos' ? '✓ Saved — Ripe sees it on its next order' : '✓ Saved — Ripe sees it on its next order');
       flashRows(section === 'promos' ? '#promos-list .credit-row' : '#credits-list .credit-row');
@@ -195,6 +235,8 @@ async function saveCI() {
       renderPromoMonth(Array.isArray(info.ripe_credits) ? info.ripe_credits : []);
     } catch (e) {}
     if (section) loadCreditHistory();
+  } else if (section === 'slip') {
+    slipStatus('✗ Not saved — check the connection and try again', 'var(--action-red)');
   } else if (section) {
     creditStatus(section, '✗ Not saved — check the connection and try again', 'err');
   }

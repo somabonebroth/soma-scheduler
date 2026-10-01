@@ -65,6 +65,18 @@ sales.py            — Flask Blueprint (731 lines, extracted 2026-06-03): the 7
                       empty draw cannot wipe the draft before it is read back (that bug was
                       caught in testing). Leaving with unsaved lines asks first. Names are
                       `recipe · format` (`osName`; sale-stock rows carry recipe/format).
+                      **Packing slip email (2026-10-01):** every recorded Organic Sale emails
+                      its slip PDF to Company Settings' `organic_slip_emails` (comma list,
+                      "Organic Sale" card; Send test email = `POST /api/organic/slip-email/test`).
+                      `_email_organic_slip` runs AFTER the sale is saved and never raises — the
+                      response carries `email: {sent, to}` / `{sent:false, error}` / `{reason:
+                      "no_recipients"}` and the done screen says which. The PDF comes from
+                      `_packing_slip_pdf(sale_id)`, extracted from `get_packing_slip` so the
+                      button and the email are one builder. Mail goes through
+                      `helpers._send_email` (SMTP_USER/SMTP_PASS — the Fastmail account the
+                      bookkeeping report uses; read at call time). A bad address in the setting
+                      is skipped and reported via `field_errors` on the company-info PATCH, so
+                      it never blocks the other settings saving. Tests: `tests.test_slip_email`.
                       **Go-live switch (2026-10-01): Organic Sale is the ONLY way organic
                       stock is sold.** `add_organic_sale` (incl. the legacy fg_id path) and
                       `add_sale_order` refuse any organic SKU with `ORGANIC_USE_SCAN` —

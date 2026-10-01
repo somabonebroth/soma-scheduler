@@ -42,6 +42,8 @@ from helpers import (
     _in_date_window,
     _organic_sku_code,
     _sku_display,
+    _parse_emails,
+    _send_email,
 )
 
 import app
@@ -654,8 +656,56 @@ def add_organic_scan_order():
     _save_json(app.ORGANIC_SALES_PATH, sales)
     _save_json(app.ORGANIC_FG_PATH, fg)
     _add_contact("buyer", data["buyer"])
+    # The sale is saved; the email comes after and can never undo or block it.
+    email = _email_organic_slip(new_rows)
     return jsonify({"success": True, "order_id": order_id, "ids": [r["id"] for r in new_rows],
-                    "slip_sale_id": new_rows[0]["id"]})
+                    "slip_sale_id": new_rows[0]["id"], "email": email})
+
+
+def _email_organic_slip(rows):
+    """Email an Organic Sale's packing slip (PDF) to Company Settings'
+    organic_slip_emails (2026-10-01). Returns what happened for the done
+    screen; never raises — a failed email must not look like a failed sale."""
+    recipients, _ = _parse_emails(_load_company_info().get("organic_slip_emails", ""))
+    if not recipients:
+        return {"sent": False, "reason": "no_recipients"}
+    try:
+        built = _packing_slip_pdf(rows[0]["id"])
+        if built is None:
+            return {"sent": False, "error": "packing slip not found"}
+        pdf, filename = built
+        first = rows[0]
+        lines = "\n".join(
+            f"  {r['recipe']} {r['format']}: {r['quantity'] // 12} case(s)"
+            + (f"  LOT# {', '.join(l['lot'] for l in r.get('lots') or [])}" if r.get("lots") else "")
+            for r in rows)
+        po = f" · PO {first['po_number']}" if first.get("po_number") else ""
+        body = (f"Organic sale recorded for {first['buyer']}{po}.\n"
+                f"Delivery date: {first['sale_date']}\n\n{lines}\n\n"
+                "The packing slip is attached.\n\n— Soma Bone Broth (sent automatically by Soma)\n")
+        _send_email(recipients, f"Packing slip · {first['buyer']}{po} · {first['sale_date']}",
+                    body, [(filename, pdf, "pdf")])
+        return {"sent": True, "to": recipients}
+    except Exception as e:   # noqa: BLE001 — reported on screen, never fatal
+        app.logger.warning("Organic slip email failed: %s", e)
+        return {"sent": False, "error": str(e), "to": recipients}
+
+
+@sales_bp.route("/api/organic/slip-email/test", methods=["POST"])
+@manager_required
+def test_organic_slip_email():
+    """Send a test message to the organic packing-slip list, so the setup can
+    be checked before a real sale depends on it."""
+    recipients, invalid = _parse_emails(_load_company_info().get("organic_slip_emails", ""))
+    if not recipients:
+        return jsonify({"ok": False, "error": "Add at least one address first"}), 400
+    try:
+        _send_email(recipients, "Test · Soma organic packing slips",
+                    "This is a test from Soma. Organic Sale packing slips will be emailed to "
+                    + ", ".join(recipients) + ".\n")
+    except Exception as e:   # noqa: BLE001
+        return jsonify({"ok": False, "error": str(e)}), 502
+    return jsonify({"ok": True, "to": recipients})
 
 
 @sales_bp.route("/api/organic/sales/<sale_id>", methods=["PATCH"])
@@ -748,14 +798,14 @@ def delete_organic_sale(sale_id):
     return jsonify({"success": True})
 
 
-@sales_bp.route("/api/organic/sales/<sale_id>/packing-slip", methods=["GET"])
-@manager_required
-def get_packing_slip(sale_id):
-    """GET .../packing-slip - render a packing-slip PDF for a sale/order."""
+def _packing_slip_pdf(sale_id):
+    """(pdf_bytes, filename) of the packing slip for a sale's whole order, or
+    None if the sale does not exist. One builder for the slip button and the
+    Organic Sale email, so they can never differ."""
     sales = _load_json(app.ORGANIC_SALES_PATH, [])
     sale = next((s for s in sales if s.get("id") == sale_id), None)
     if not sale:
-        return jsonify({"error": "Sale not found"}), 404
+        return None
 
     # Collect all lines for this order (order_id groups multi-SKU transactions)
     order_id = sale.get("order_id")
@@ -928,8 +978,20 @@ def get_packing_slip(sale_id):
     doc.build(story)
     buf.seek(0)
     safe_buyer = "".join(c for c in buyer_name if c.isalnum() or c in "-_ ")[:20]
-    return send_file(buf, mimetype="application/pdf", as_attachment=False,
-                     download_name=f"packing-slip-{safe_buyer}-{sale_date}.pdf")
+    return buf.getvalue(), f"packing-slip-{safe_buyer}-{sale_date}.pdf"
+
+
+@sales_bp.route("/api/organic/sales/<sale_id>/packing-slip", methods=["GET"])
+@manager_required
+def get_packing_slip(sale_id):
+    """GET .../packing-slip - render a packing-slip PDF for a sale/order."""
+    built = _packing_slip_pdf(sale_id)
+    if built is None:
+        return jsonify({"error": "Sale not found"}), 404
+    import io as _io
+    pdf, filename = built
+    return send_file(_io.BytesIO(pdf), mimetype="application/pdf", as_attachment=False,
+                     download_name=filename)
 
 
 @sales_bp.route("/api/organic/sales/<sale_id>/qbo-csv", methods=["GET"])

@@ -84,6 +84,7 @@ from helpers import (
     _record_adjustment,
     _runs_using_raw_material,
     _organic_qr_payload,
+    _parse_emails,
     _save_json,
     _section_for_ingredient,
     _sku_display,
@@ -3675,6 +3676,7 @@ def update_company_info():
                          "fzbb_small_lead_days", "fzbb_large_lead_days",
                          "fzbb_large_threshold"}
     promos_changed = False
+    field_errors = {}   # a bad field is skipped and reported; the rest still saves
     for k, v in data.items():
         if k not in allowed:
             continue
@@ -3692,6 +3694,12 @@ def update_company_info():
         elif k == "ripe_monthly_promos":
             info["ripe_monthly_promos"] = _sanitize_monthly_promos(v)
             promos_changed = True
+        elif k == "organic_slip_emails":
+            valid, invalid = _parse_emails(v if isinstance(v, str) else "")
+            if invalid:
+                field_errors[k] = "Not an email address: " + ", ".join(invalid)
+                continue
+            info[k] = ", ".join(valid)
         elif k in _numeric_int_keys:
             try:
                 info[k] = max(0, int(v))
@@ -3705,7 +3713,7 @@ def update_company_info():
         # removed promo's balance is kept as a one-time credit.
         _renew_monthly_credits(info)
     _save_json(COMPANY_INFO_PATH, info)
-    return jsonify({"ok": True, "info": info})
+    return jsonify({"ok": True, "info": info, "field_errors": field_errors})
 
 # ── Organic: Sales ───────────────────────────────────────────────────
 # The sales routes now live in sales.py (sales_bp). What stays here is shared:
