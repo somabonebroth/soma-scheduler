@@ -797,6 +797,8 @@ body.inv-page .modal-actions {
     }
     .tab-btn.active { color: var(--white); }
 }
+.repair-note { font-size: 12px; color: var(--text-light); line-height: 1.5; margin: 4px 4px 0; }
+.repair-note a { color: var(--dark); }
 </style>
 </head>
 <body class="inv-page">
@@ -835,6 +837,7 @@ body.inv-page .modal-actions {
             </div>
             <div id="rm-table-container"><div class="empty-state">Loading...</div></div>
         </div>
+        <p class="repair-note">Repair, only if raw stock looks wrong: <a href="/admin/reconcile-raw">Rebuild raw balances</a> replays every completed batch and rewrites the raw books (it shows you a preview first).</p>
     </div>
 
     <!-- TAB 2: Production Runs -->
@@ -855,7 +858,7 @@ body.inv-page .modal-actions {
                 <a href="/audits" class="btn btn-outline" style="font-size:13px;text-decoration:none;margin-left:auto;">🗂 History</a>
                 <a href="/audit/fg" class="btn btn-outline" style="font-size:13px;text-decoration:none;">📋 Audit Inventory</a>
             </div>
-            <p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Inventory is grouped by brand. Click a row for LOT detail. Sales draw from the oldest LOT first (FIFO) and auto-generate a packing slip.</p>
+            <p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Inventory is grouped by brand. Click a row for LOT detail. Sales draw from the oldest LOT first (FIFO); organic products are sold only through Organic Sale, where each case is scanned to its LOT#.</p>
             <div class="filter-bar" style="margin-bottom:14px;">
                 <button class="filter-btn active" data-fg-filter="all" onclick="setFgFilter('all',this)">All</button>
                 <button class="filter-btn" data-fg-filter="Organic" onclick="setFgFilter('Organic',this)">Organic</button>
@@ -864,6 +867,7 @@ body.inv-page .modal-actions {
             </div>
             <div id="fg-container"><div class="empty-state">Loading...</div></div>
         </div>
+        <p class="repair-note">Repair, only if stock looks wrong: <a href="/admin/fg-reconcile">Check finished goods for drift</a> compares every lot with its sales and adjustments (read-only).</p>
     </div>
 
     <!-- Record Sale Modal — 2-step: buyer → SKU grid -->

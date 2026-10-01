@@ -134,6 +134,7 @@ def build_folders(fg, runs, sales, adjustments, materials, photo_ids):
             s = skus.setdefault(key, {
                 "sku_key": key,
                 "name": _sku_display(f.get("brand", ""), f.get("recipe", ""), f.get("format", "")),
+                "recipe": f.get("recipe", ""), "format": f.get("format", ""),
                 "made": 0, "added": 0, "sold": 0, "reduced": 0, "held": 0, "hot_cups": 0,
             })
             if f.get("run_id"):
@@ -179,6 +180,7 @@ def build_folders(fg, runs, sales, adjustments, materials, photo_ids):
                 inv["photo_id"] = inv["photo_id"] or photo
                 inv["lines"].append(used)
         added = [{"sku": skus[fg_to_sku[f.get("id")]]["name"],
+                  "recipe": f.get("recipe", ""), "format": f.get("format", ""),
                   "label": _ADDED_LABELS[_added_kind(f)],
                   "quantity": int(f.get("quantity_produced") or 0),
                   "date": _day(f.get("reset_at") or f.get("created_at"))}
@@ -201,6 +203,7 @@ def build_folders(fg, runs, sales, adjustments, materials, photo_ids):
             for s in sorted(order_lines, key=lambda s: s.get("created_at", "")):
                 lines.append({
                     "name": _sku_display(s.get("brand", ""), s.get("recipe", ""), s.get("format", "")),
+                    "recipe": s.get("recipe", ""), "format": s.get("format", ""),
                     "quantity": int(s.get("quantity") or 0),
                     "lots": [le.get("lot", "") for le in (s.get("lots") or []) if le.get("lot")]
                             or ([s["fg_lot"]] if s.get("fg_lot") else []),
@@ -226,7 +229,8 @@ def build_folders(fg, runs, sales, adjustments, materials, photo_ids):
                 for fid, q in took.items():
                     skus[fg_to_sku[fid]]["reduced"] += q
                     out.append({"kind": "reduction", "date": _day(adj.get("created_at")),
-                                "sku": skus[fg_to_sku[fid]]["name"], "jars": q,
+                                "sku": skus[fg_to_sku[fid]]["name"], "recipe": skus[fg_to_sku[fid]]["recipe"],
+                                "format": skus[fg_to_sku[fid]]["format"], "jars": q,
                                 "reason": adj.get("reason", ""), "notes": adj.get("notes", "")})
             elif adj.get("kind") == "audit_fg" and adj.get("lot") == lot and int(adj.get("diff") or 0) < 0:
                 key = _sku_key(adj.get("brand", ""), adj.get("recipe", ""), adj.get("format", ""))
@@ -234,7 +238,8 @@ def build_folders(fg, runs, sales, adjustments, materials, photo_ids):
                     q = -int(adj["diff"])
                     skus[key]["reduced"] += q
                     out.append({"kind": "reduction", "date": _day(adj.get("created_at")),
-                                "sku": skus[key]["name"], "jars": q,
+                                "sku": skus[key]["name"], "recipe": skus[key]["recipe"],
+                                "format": skus[key]["format"], "jars": q,
                                 "reason": "Stock count found fewer", "notes": ""})
         out.sort(key=lambda o: o["date"])
 

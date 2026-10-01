@@ -6,36 +6,40 @@
 <title>Organic Certification · Soma</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
-/* Dashboard button styles (mirrored from dashboard.html so this page is self-contained) */
-.dashboard-grid { display: grid; gap: 16px; margin-top: 8px; }
-.dash-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
-.dash-btn { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 28px 20px; text-align: center; cursor: pointer; transition: all 0.2s; text-decoration: none; color: var(--text); display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.dash-btn:hover { border-color: var(--accent); box-shadow: 0 2px 12px rgba(74,103,65,0.15); transform: translateY(-2px); }
-.dash-btn .icon { font-size: 28px; }
-.dash-btn .label { font-size: 14px; font-weight: 600; color: var(--dark); }
-.dash-btn .sublabel { font-size: 11px; color: var(--text-light); }
-.dash-btn { position: relative; }
-.dash-btn .step { position: absolute; top: 8px; left: 8px; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; line-height: 1; }
-.empty-state { text-align: center; padding: 28px 20px; color: var(--text-light); font-size: 14px; line-height: 1.6; }
-.repair { font-size: 13px; color: var(--text-light); line-height: 1.6; margin: 8px 0 0; }
-.repair a { color: var(--dark); }
-.section-label { font-size: 11px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 1px; margin-top: 16px; margin-bottom: 6px; border-left: 3px solid var(--accent); padding-left: 8px; }
-.section-note { font-size: 12px; color: var(--text-light); margin: 0 0 8px; }
-/* Card descriptions — same size/colour as .oc-intro for a consistent type scale. */
+/* Organic Certification (reshaped 2026-10-01): Organic Lots is the answer to
+   "organic in = organic out", so it leads; then the supplier certificates to
+   watch, the audit pack for an inspection, and one line of everyday tools. */
+.oc-main { max-width: 1100px; margin: 0 auto; }
+.oc-hero { display: flex; align-items: center; gap: 18px; padding: 22px 24px; margin-bottom: 20px; background: var(--card-bg); border: 1px solid var(--border); border-left: 5px solid var(--accent); border-radius: var(--r-lg); text-decoration: none; color: var(--text); transition: border-color .15s, box-shadow .15s; }
+.oc-hero:hover { border-color: var(--accent); box-shadow: 0 2px 12px rgba(74,103,65,0.15); }
+.oc-hero .icon { font-size: 36px; line-height: 1; flex: none; }
+.oc-hero .body { flex: 1; min-width: 0; }
+.oc-hero .title { font-size: 20px; font-weight: 700; color: var(--dark); }
+.oc-hero .desc { font-size: 13px; color: var(--text-light); line-height: 1.5; margin-top: 3px; }
+.oc-hero .stats { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 13px; color: var(--text-light); }
+.oc-hero .stats b { color: var(--dark); font-size: 16px; }
+.oc-hero .go { font-size: 22px; color: var(--accent); flex: none; }
+.card { margin-bottom: 20px; }
 .card-desc { font-size: 13px; line-height: 1.5; color: var(--text-light); margin: 0 0 14px; }
-.oc-intro { margin: 0 0 4px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
-.oc-intro strong { color: var(--dark); }
-/* Page-local table + badge (mirrored from organic.html so this page stays self-contained). */
-.count-badge { font-size: 12px; font-weight: 500; color: var(--text-light); background: var(--row-alt); padding: 3px 10px; border-radius: 10px; margin-left: 6px; }
+.count-badge { font-size: 12px; font-weight: 500; color: var(--text-light); background: var(--row-alt); padding: 3px 10px; border-radius: 10px; margin-left: 6px; vertical-align: middle; }
+.empty-state { text-align: center; padding: 24px 20px; color: var(--text-light); font-size: 14px; line-height: 1.6; }
 .inv-table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.inv-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
-.inv-table th { text-align: left; padding: 10px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-light); background: var(--row-alt); border-bottom: 1px solid var(--border); }
-.inv-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
-.inv-table tr:nth-child(even) { background: var(--row-alt); }
+.inv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.inv-table th { text-align: left; padding: 9px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-light); background: var(--row-alt); border-bottom: 1px solid var(--border); white-space: nowrap; }
+.inv-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.inv-table tr:last-child td { border-bottom: none; }
 .ap-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 .ap-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-light); }
-.ap-form input[type=date] { padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
-.ap-form .ap-check { flex-direction: row; align-items: center; gap: 6px; font-size: 13px; color: var(--text); padding-bottom: 8px; }
+.ap-form input[type=date] { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 14px; background: var(--white); }
+.ap-form .ap-check { flex-direction: row; align-items: center; gap: 6px; font-size: 13px; color: var(--text); padding-bottom: 9px; }
+.oc-tools-label { font-size: 11px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 1px; margin: 4px 0 10px; }
+.oc-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.oc-tools a { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 13px; color: var(--dark); background: var(--card-bg); border: 1px solid var(--border); border-radius: 999px; text-decoration: none; }
+.oc-tools a:hover { border-color: var(--accent); }
+@media (max-width: 600px) {
+  .oc-hero { padding: 18px; gap: 14px; }
+  .oc-hero .go { display: none; }
+}
 </style>
 </head>
 <body>
@@ -47,15 +51,32 @@
         <a href="/" class="header-btn">⌂ Dashboard</a>
     </div>
 </div>
-<div class="main">
-    <!-- Organic Lots (organic_lots.py) — one folder per organic LOT#. -->
-    <a href="/organic-lots" class="dash-btn" style="margin-bottom:24px;flex-direction:row;justify-content:flex-start;text-align:left;padding:20px;">
+<div class="main oc-main">
+    <!-- Organic Lots (organic_lots.py) — one folder per organic LOT#: it answers
+         "does organic in equal organic out?", so it leads the page. -->
+    <a href="/organic-lots" class="oc-hero">
         <span class="icon">&#128193;</span>
-        <span><span class="label" style="display:block;">Organic Lots</span><span class="sublabel">One folder per LOT#: the invoices that went in, what was made, every sale out, and what is still held.</span></span>
+        <span class="body">
+            <span class="title">Organic Lots</span>
+            <span class="desc" style="display:block;">One folder per LOT#: the invoices that went in, what was made, every sale out, and what is still held.</span>
+            <span class="stats" id="oc-lot-stats"></span>
+        </span>
+        <span class="go">&rarr;</span>
     </a>
+
+    <!-- Supplier certificates — read-only view of each supplier's
+         `certificates` list (edited on Buyers & Suppliers, incl. the ones a
+         distributor holds for its suppliers). Status comes from the server
+         (suppliers._cert_status) so both pages agree. -->
+    <div class="card" id="supplier-certs">
+        <h2>Supplier Certificates <span class="count-badge" id="sc-count">—</span></h2>
+        <p class="card-desc">Every certificate on file, including the ones distributors hold for their suppliers. The Daily Summary asks for a renewal 14 days before expiry.</p>
+        <div id="sc-container"><div class="empty-state">Loading…</div></div>
+    </div>
+
     <!-- Audit pack — one PDF for the inspector (audit_tools.audit_pack_pdf).
          Batches are chosen by START date, the date their LOT# is made from. -->
-    <div class="card" id="audit-pack" style="margin-bottom:24px;">
+    <div class="card" id="audit-pack">
         <h2>Audit Pack</h2>
         <p class="card-desc">One PDF to hand an inspector: the recipes that ran, the CCP plan, a completed checklist as the worked example, and every batch in the period traced from supplier lot to buyer.</p>
         <form class="ap-form" id="ap-form">
@@ -65,38 +86,15 @@
             <button type="submit" class="btn btn-primary">Download PDF</button>
         </form>
     </div>
-    <div class="dashboard-grid">
-        <p class="oc-intro">An organic audit asks four things. Each one has a page that answers it.</p>
-        <div class="section-label">The four questions</div>
-        <div class="dash-row">
-            <a href="#supplier-certs" class="dash-btn"><span class="step">1</span><span class="icon">&#128203;</span><span class="label">Are your suppliers' certificates current?</span><span class="sublabel">The card below. Expiry dates and certificates are kept on Buyers &amp; Suppliers.</span></a>
-            <a href="/sales-receiving#receiving" class="dash-btn"><span class="step">2</span><span class="icon">&#128230;</span><span class="label">Show me receiving records with lot numbers</span><span class="sublabel">Every delivery with supplier, LOT# and invoice, on the Sales &amp; Receiving Record.</span></a>
-        </div>
-        <div class="dash-row" style="margin-top:12px;">
-            <a href="/sales-receiving#trace" class="dash-btn"><span class="step">3</span><span class="icon">&#128270;</span><span class="label">Trace one lot, forward or back</span><span class="sublabel">A supplier LOT# forward to batches, finished goods and sales, or an FG LOT# back to its raw lots.</span></a>
-            <a href="/organic-lots" class="dash-btn"><span class="step">4</span><span class="icon">&#128193;</span><span class="label">Does organic in equal organic out?</span><span class="sublabel">Organic Lots: every LOT# shows what was made, sold, reduced and is still held &mdash; and adds up.</span></a>
-        </div>
-        <div class="section-label">Keep the numbers honest</div>
-        <p class="section-note">Organic Lots are only as good as the stock figures behind them. Count now and then; organic finished goods are counted one LOT at a time.</p>
-        <div class="dash-row">
-            <a href="/audit/fg" class="dash-btn"><span class="icon">&#128269;</span><span class="label">Count Finished Goods</span><span class="sublabel">Physical count against the books. This is the count that covers your certified product.</span></a>
-            <a href="/audit/rm" class="dash-btn"><span class="icon">&#128269;</span><span class="label">Count Raw Materials</span><span class="sublabel">Physical count of raw materials against the books.</span></a>
-            <a href="/audits" class="dash-btn"><span class="icon">&#128220;</span><span class="label">Stock Count History</span><span class="sublabel">Past counts, with dates and what changed.</span></a>
-            <a href="/certifications" class="dash-btn"><span class="icon">&#128209;</span><span class="label">Documents</span><span class="sublabel">Your own organic certificate and compliance paperwork.</span></a>
-        </div>
-        <p class="repair"><strong>Repair tools, only if the numbers look wrong:</strong>
-            <a href="/admin/reconcile-raw">Rebuild raw balances</a> (replays every completed batch; rewrites the raw books) &middot;
-            <a href="/admin/fg-reconcile">Check finished goods for drift</a> (read-only, lot by lot; the zero-day reset is behind it).</p>
-    </div>
 
-    <!-- Supplier certificates — read-only view of each supplier's
-         `certificates` list (edited on Buyers & Suppliers, incl. the ones a
-         distributor holds for its suppliers). Status comes from the server
-         (suppliers._cert_status) so both pages agree. -->
-    <div class="card" id="supplier-certs" style="margin-top:24px;">
-        <h2>Supplier Certificates <span class="count-badge" id="sc-count">—</span></h2>
-        <p class="card-desc">Every certificate on file, including the ones distributors hold for their suppliers. Expiry dates and PDFs are kept on Buyers &amp; Suppliers; the Daily Summary asks for a renewal 14 days before expiry.</p>
-        <div id="sc-container"><div class="empty-state">Loading…</div></div>
+    <div class="oc-tools-label">Other tools</div>
+    <div class="oc-tools">
+        <a href="/audit/fg">&#128269; Count Finished Goods</a>
+        <a href="/audit/rm">&#128269; Count Raw Materials</a>
+        <a href="/audits">&#128220; Stock Count History</a>
+        <a href="/certifications">&#128209; Documents</a>
+        <a href="/sales-receiving#trace">&#128270; Trace a supplier lot</a>
+        <a href="/sales-receiving#receiving">&#128230; Receiving records</a>
     </div>
 </div>
 <script>
@@ -166,6 +164,19 @@ async function loadSupplierCerts() {
   }
 }
 loadSupplierCerts();
+
+// ── Organic Lots at a glance (same feed as the Organic Lots page) ──
+(async function () {
+  const el = document.getElementById('oc-lot-stats');
+  try {
+    const folders = (await (await fetch('/api/organic-lots')).json()).folders || [];
+    const held = folders.filter(function (f) { return f.status === 'held'; });
+    const jars = held.reduce(function (a, f) { return a + f.held; }, 0);
+    el.innerHTML = '<span><b>' + held.length + '</b> lot' + (held.length === 1 ? '' : 's') + ' held</span>'
+      + '<span><b>' + jars.toLocaleString() + '</b> jars (' + Math.floor(jars / 12).toLocaleString() + ' cases) on the shelf</span>'
+      + '<span><b>' + (folders.length - held.length) + '</b> closed</span>';
+  } catch (e) { /* the link still works without the numbers */ }
+})();
 
 // ── Audit pack: default to the last 90 days, download as a plain GET ──
 (function () {
