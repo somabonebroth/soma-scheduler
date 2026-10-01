@@ -217,6 +217,7 @@ function productionHtml(p){
         body += '<div class="dr-totals"><span>Kitchen sign-off: <b>' + esc(p.kitchen_signoff) + '</b></span></div>';
     }
     body += issuesHtml(p.issues);
+    if (offset === 1) body += aheadHtml(brief.upcoming_labels);
     return section(1, "What's getting labelled today", p.total_jars ? p.total_jars + ' jars' : '', body, 'green');
 }
 
@@ -358,6 +359,43 @@ function checklistsHtml(c){
     const done = (c.ccp.completed ? 1 : 0) + (cl.signed ? 1 : 0) + (fcl.exists && fcl.signed ? 1 : 0);
     const of = 2 + (fcl.exists ? 1 : 0);
     return section(3, 'Completed checklists and cleaning', done + ' of ' + of + ' signed', body, 'amber');
+}
+
+// Print ahead: the next two labelling days, for when the office prints the
+// weekend's labels early. Those jars are not counted yet, so the products
+// come from the SCHEDULE (one row per product, the vessels beside it) and
+// the LOT# from the batch start day — the same rule the batch will carry.
+// Shown only when viewing yesterday: from an earlier day "ahead" is history.
+let aheadRows = [];
+
+function aheadHtml(days){
+    if (!days || !days.length) return '';
+    aheadRows = [];
+    let html = '<div class="dr-sublabel" style="margin-top:22px;">Print ahead &mdash; next 2 days</div>'
+        + '<div class="dr-stampnote" style="margin:0 0 10px;">From the schedule, before the jars are counted. '
+        + 'If a batch changes, print its label again on the day.</div>';
+    html += days.map(d => {
+        let rows;
+        if (!d.rows.length) {
+            rows = '<div class="dr-empty">Nothing scheduled to batch on ' + esc(d.batched_name) + '.</div>';
+        } else {
+            rows = '<div class="dr-scroll"><table class="dr-table"><tr>'
+                + '<th>Product</th><th>Vessel</th><th class="num"></th></tr>'
+                + d.rows.map(r => {
+                    const i = aheadRows.push(Object.assign({}, r, {lot: d.lot, production_date: d.production_date})) - 1;
+                    return '<tr><td>' + esc(r.item)
+                        + (r.certification ? ' <span class="dr-tag">' + esc(r.certification) + '</span>' : '')
+                        + '</td><td>' + esc(r.vessels.join(', ')) + '</td>'
+                        + '<td class="num"><button class="dr-labelbtn" id="ahead-lbl-' + i
+                        + '" onclick="lpPrintLabel(aheadRows[' + i + '], this)">Label</button></td></tr>';
+                  }).join('')
+                + '</table></div>';
+        }
+        return '<div class="dr-totals" style="margin:14px 0 8px;"><span>Labelling <b>' + esc(d.label_day_name)
+            + '</b></span><span>LOT# <b>' + esc(d.lot) + '</b></span><span>batched ' + esc(d.batched_name) + '</span></div>'
+            + rows;
+    }).join('');
+    return html;
 }
 
 // Sections 2 and 3 start collapsed: the labelling panel is the morning's

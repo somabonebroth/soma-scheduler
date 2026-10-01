@@ -1,7 +1,8 @@
 {# The labelling panel — lot cards with the mirrored hot-stamp guide, the
    per-product table, and the totals strip. Label buttons render only when
    the caller asks — lpBodyHtml({labels: true}) — and only the Daily Summary
-   does: it is the ONE place a case label is printed (2026-09-29).
+   does: it is the ONE place a case label is printed (2026-09-29) — its
+   "Print ahead" list (next two labelling days) prints through lpPrintLabel.
    Shared by daily_review.html (Daily Summary section 1) and the FOH
    dashboard (extracted 2026-08-26 so the two can never drift).
    Usage: include this once, then lpSetData(production, dateIso) and inject
@@ -76,8 +77,12 @@ function lpLotsHtml(p){
 
 async function lpGenerateLabel(idx){
     const r = lpProd && lpProd.rows[idx];
-    if (!r) return;
-    const btn = document.getElementById('lp-lbl-' + idx);
+    if (r) await lpPrintLabel(r, document.getElementById('lp-lbl-' + idx));
+}
+
+// One case label for a product + LOT#. Also used by the Daily Summary's
+// "Print ahead" list (schedule rows), so every label goes through one call.
+async function lpPrintLabel(r, btn){
     if (btn) { btn.disabled = true; btn.textContent = '…'; }
     try {
         const res = await fetch('/api/label', {

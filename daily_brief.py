@@ -27,7 +27,7 @@ from datetime import datetime, date, timedelta
 
 from flask import Blueprint, request, jsonify, session, redirect, url_for, render_template
 
-from helpers import _load_json, _sku_display
+from helpers import _load_json, _sku_display, _lot_for_batch_date, VESSELS
 import app
 import production
 import cleaning
@@ -276,6 +276,58 @@ def _production_section(on):
         "finish_notes": (day or {}).get("finish_notes", []),
         "day_note": (day or {}).get("notes", ""),
     }
+
+
+def _upcoming_labels(on, days=2, load_schedule=None, recipes=None):
+    """Labels for the NEXT `days` labelling days after the one section 1 covers
+    — so management can print ahead for the weekend team (2026-10-01).
+
+    Section 1 for date `on` is the jars COUNTED on `on`, labelled the morning
+    after. Jars labelled on day L were counted on L-1 and STARTED on L-2, so
+    the next labelling days (on+2, on+3, ...) are batches started on `on`,
+    on+1, ... Those jars are not counted yet, so there are no finished goods to
+    read: products come from the SCHEDULE and the LOT# from the one rule
+    (helpers._lot_for_batch_date on the start day) — the same number the run
+    and its finished goods will carry. No jar counts; one label per product
+    (how many to print is set in the printer's app). Read-only.
+    """
+    load_schedule = load_schedule or app.load_schedule
+    recipes = recipes if recipes is not None else app.load_recipes()
+    cache = {}
+    out = []
+    for i in range(days):
+        started = on + timedelta(days=i)
+        label_day = on + timedelta(days=i + 2)
+        week_id, day_idx = _week_coords(started)
+        if week_id not in cache:
+            cache[week_id] = load_schedule(week_id) or {}
+        day = ((cache[week_id].get("schedule") or {}).get(str(day_idx)) or {})
+        products = {}
+        for vessel in VESSELS:
+            name = day.get(vessel)
+            if not isinstance(name, str) or not name.strip():
+                continue
+            rec = recipes.get(name) or {}
+            if not rec:
+                continue
+            brand, fmt = rec.get("brand", ""), rec.get("format", "")
+            row = products.setdefault((brand, name, fmt), {
+                "item": _sku_display(brand, name, fmt),
+                "brand": brand, "recipe": name, "format": fmt,
+                "certification": (rec.get("certification") or "").strip(),
+                "vessels": [],
+            })
+            row["vessels"].append(vessel)
+        out.append({
+            "label_day": label_day.isoformat(),
+            "label_day_name": label_day.strftime("%A %d %B"),
+            "batched_on": started.isoformat(),
+            "batched_name": started.strftime("%A %d %B"),
+            "lot": _lot_for_batch_date(started),
+            "production_date": started.strftime("%d/%m/%Y"),
+            "rows": sorted(products.values(), key=lambda r: r["item"]),
+        })
+    return out
 
 
 def _portal_orders(on):
@@ -626,7 +678,11 @@ def get_daily_brief():
     Read-only: every field is re-read from existing records, nothing is written.
     """
     on = _parse_date(request.args.get("date")) or (date.today() - timedelta(days=1))
-    return jsonify(_build_brief(on))
+    brief = _build_brief(on)
+    # Here, not in _build_brief: the pending-review scan builds up to 60
+    # briefs and has no use for a look ahead.
+    brief["upcoming_labels"] = _upcoming_labels(on)
+    return jsonify(brief)
 
 
 @daily_brief_bp.route("/api/labelling-today", methods=["GET"])
