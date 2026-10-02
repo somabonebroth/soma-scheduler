@@ -23,7 +23,9 @@
 .ol-folder { display: flex; flex-direction: column; gap: 12px; text-align: left; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px 18px; cursor: pointer; font: inherit; color: var(--text); transition: border-color .15s, box-shadow .15s; }
 .ol-folder:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(0, 0, 0, .05); }
 .ol-folder .row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.ol-folder .lot { font-size: 21px; font-weight: 700; color: var(--dark); }
+.ol-folder .lot { display: inline-flex; align-items: center; gap: 9px; font-size: 21px; font-weight: 700; color: var(--dark); }
+.ol-folder .lot svg { width: 22px; height: 22px; flex: none; color: var(--accent); }
+.ol-folder.closed .lot svg { color: var(--grey-light); }
 /* Held cases is the number you open the page for: as big as the LOT#. */
 .ol-folder .big { font-size: 21px; font-weight: 700; color: var(--action-green); white-space: nowrap; line-height: 1; }
 .ol-folder .big .of { font-size: 13px; font-weight: 500; color: var(--text-light); margin-left: 4px; }
@@ -187,11 +189,14 @@ function olCases(n) {
 function olCaseWord(n) { return n % 12 ? '' : (n === 12 ? 'case' : 'cases'); }
 
 // ── List ─────────────────────────────────────────────────────────────
+// A folder outline before each LOT#: the card opens a folder.
+const OL_FOLDER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">'
+    + '<path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.6l2 2.5h8.4A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></svg>';
 function olFolderCard(f) {
     const pct = f.made ? Math.round(100 * f.held / f.made) : 0;
     const held = f.status === 'held';
     return '<button class="ol-folder' + (held ? '' : ' closed') + '" onclick="location.hash=\'' + encodeURIComponent(f.lot) + '\'">'
-        + '<div class="row"><span class="lot ol-mono">' + olEsc(f.lot) + '</span>'
+        + '<div class="row"><span class="lot ol-mono">' + OL_FOLDER_ICON + olEsc(f.lot) + '</span>'
         + (held ? '<span class="big">' + Math.floor(f.held / 12) + '<span class="of">of ' + Math.floor(f.made / 12) + ' cases</span></span>'
                 : '<span class="closed-tag">Closed</span>') + '</div>'
         + (held ? '<div class="ol-bar"><span style="width:' + pct + '%"></span></div>' : '')
