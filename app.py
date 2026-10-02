@@ -1982,38 +1982,6 @@ _ripe_init_paths(INVENTORY_DIR)  # wire Ripe orders sale logic to Soma's invento
 _retail_init_paths(INVENTORY_DIR)  # wire SBBC retail orders sale logic likewise
 
 
-def _autotag_existing_organic_data():
-    """One-time data tag: stamp existing pre-merge entries with
-    certification: 'Organic'.
-
-    Before the merge, the system only tracked organic production, so any
-    existing record without a certification field is by definition organic.
-    Idempotent — only touches records that lack the certification field.
-    Runs once per file at startup.
-    """
-    files_to_check = [
-        ORGANIC_RAW_PATH, ORGANIC_RUNS_PATH, ORGANIC_FG_PATH, ORGANIC_SALES_PATH
-    ]
-    for path in files_to_check:
-        if not os.path.exists(path):
-            continue
-        try:
-            data = _load_json(path, [])
-            if not isinstance(data, list):
-                continue
-            changed = 0
-            for entry in data:
-                if not isinstance(entry, dict):
-                    continue
-                if "certification" not in entry:
-                    entry["certification"] = "Organic"
-                    changed += 1
-            if changed:
-                _save_json(path, data)
-                print(f"[autotag] Stamped 'Organic' on {changed} entries in {path}")
-        except Exception as e:
-            print(f"[autotag] Failed for {path}: {e}")
-
 # Per-path threading locks — one lock per file, created on demand.
 
 
@@ -3871,7 +3839,6 @@ def _buyer_resolver(buyers_list):
 
 # ── Startup data migrations ─────────────────────────────────────────────────
 _migrate_legacy_sales()
-_autotag_existing_organic_data()
 
 # ── Organic: Search / Trace ──────────────────────────────────────────
 
