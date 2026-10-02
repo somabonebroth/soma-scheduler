@@ -3,10 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Certifications · Soma</title>
+<title>Certificates &amp; Documents · Soma</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
 .cert-wrap { max-width:860px; margin:0 auto; padding:24px 16px 60px; }
+.cert-wrap.drag { outline: 2px dashed var(--accent); outline-offset: -6px; border-radius: 12px; }
 .cert-grid { display:grid; gap:10px; }
 .cert-card { background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:16px 18px; display:flex; align-items:center; gap:14px; transition:box-shadow .15s; }
 .cert-card:hover { box-shadow:0 2px 10px rgba(0,0,0,.07); }
@@ -39,22 +40,21 @@
 <body class="inv-page">
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-  <div class="header-text"><h1>Certifications</h1><p>Soma Bone Broth</p></div>
+  <div class="header-text"><h1>Certificates &amp; Documents</h1><p>Soma Bone Broth</p></div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button><button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button></div>
     <a href="/" class="header-btn">⌂ Dashboard</a>
   </div>
 </div>
-<div class="cert-wrap">
+<!-- A file can still be dropped anywhere on the page (2026-10-01: the big
+     drop zone became one button). -->
+<div class="cert-wrap" id="drop-zone"
+     ondragover="event.preventDefault();this.classList.add('drag')"
+     ondragleave="this.classList.remove('drag')"
+     ondrop="handleDrop(event)">
 
-  <!-- Upload zone -->
-  <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()"
-       ondragover="event.preventDefault();this.classList.add('drag')"
-       ondragleave="this.classList.remove('drag')"
-       ondrop="handleDrop(event)">
-    <div class="uz-icon">📂</div>
-    <div class="uz-text">Click to upload or drag &amp; drop</div>
-    <div class="uz-sub">PDF, JPG, PNG — any certification or compliance document</div>
+  <div style="margin-bottom:16px;">
+    <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">+ Add document</button>
   </div>
   <input type="file" id="file-input" style="display:none" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="startUpload(this.files[0])">
 
@@ -104,7 +104,7 @@ async function loadDocs() {
 
 function renderDocs(docs) {
   if (!docs.length) {
-    document.getElementById('cert-list').innerHTML = '<div class="empty">No documents uploaded yet. Drag and drop or click to add your first certification.</div>';
+    document.getElementById('cert-list').innerHTML = '<div class="empty">No documents yet.</div>';
     return;
   }
   // Group by category

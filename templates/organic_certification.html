@@ -32,14 +32,13 @@
 .ap-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-light); }
 .ap-form input[type=date] { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 14px; background: var(--white); }
 .ap-form .ap-check { flex-direction: row; align-items: center; gap: 6px; font-size: 13px; color: var(--text); padding-bottom: 9px; }
-.oc-tools-label { font-size: 11px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 1px; margin: 4px 0 10px; }
-.oc-tools { display: flex; flex-wrap: wrap; gap: 8px; }
-.oc-tools a { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 13px; color: var(--dark); background: var(--card-bg); border: 1px solid var(--border); border-radius: 999px; text-decoration: none; }
-.oc-tools a:hover { border-color: var(--accent); }
 @media (max-width: 600px) {
   .oc-hero { padding: 18px; gap: 14px; }
   .oc-hero .go { display: none; }
 }
+.oc-links { font-size: 13px; color: var(--text-light); line-height: 2; margin: 4px 2px 0; }
+.oc-links a { color: var(--dark); font-weight: 600; text-decoration: none; }
+.oc-links a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -58,7 +57,6 @@
         <span class="icon">&#128193;</span>
         <span class="body">
             <span class="title">Organic Lots</span>
-            <span class="desc" style="display:block;">One folder per LOT#: the invoices that went in, what was made, every sale out, and what is still held.</span>
             <span class="stats" id="oc-lot-stats"></span>
         </span>
         <span class="go">&rarr;</span>
@@ -70,7 +68,6 @@
          (suppliers._cert_status) so both pages agree. -->
     <div class="card" id="supplier-certs">
         <h2>Supplier Certificates <span class="count-badge" id="sc-count">—</span></h2>
-        <p class="card-desc">Every certificate on file, including the ones distributors hold for their suppliers. The Daily Summary asks for a renewal 14 days before expiry.</p>
         <div id="sc-container"><div class="empty-state">Loading…</div></div>
     </div>
 
@@ -78,7 +75,6 @@
          Batches are chosen by START date, the date their LOT# is made from. -->
     <div class="card" id="audit-pack">
         <h2>Audit Pack</h2>
-        <p class="card-desc">One PDF to hand an inspector: the recipes that ran, the CCP plan, a completed checklist as the worked example, and every batch in the period traced from supplier lot to buyer.</p>
         <form class="ap-form" id="ap-form">
             <label>From <input type="date" id="ap-from" required></label>
             <label>To <input type="date" id="ap-to" required></label>
@@ -87,14 +83,12 @@
         </form>
     </div>
 
-    <div class="oc-tools-label">Other tools</div>
-    <div class="oc-tools">
-        <a href="/audit/fg">&#128269; Count Finished Goods</a>
-        <a href="/audit/rm">&#128269; Count Raw Materials</a>
-        <a href="/audits">&#128220; Stock Count History</a>
-        <a href="/certifications">&#128209; Documents</a>
-        <a href="/sales-receiving#trace">&#128270; Trace a supplier lot</a>
-        <a href="/sales-receiving#receiving">&#128230; Receiving records</a>
+    <div class="oc-links">
+        <a href="/audit/fg">Count finished goods</a> &middot;
+        <a href="/audit/rm">Count raw materials</a> &middot;
+        <a href="/audits">Stock count history</a> &middot;
+        <a href="/certifications">Certificates &amp; Documents</a> &middot;
+        <a href="/sales-receiving#trace">Search &amp; Trace</a>
     </div>
 </div>
 <script>
@@ -139,11 +133,20 @@ async function loadSupplierCerts() {
     if (n('expiring')) parts.push(n('expiring') + ' expiring');
     if (n('none')) parts.push(n('none') + ' not recorded');
     badge.textContent = parts.length ? parts.join(' · ') : 'all current';
+    // Only what needs action shows here (2026-10-01); the full list is on
+    // Buyers & Suppliers.
+    const needs = rows.filter(function (r) { return r.c.status !== 'current'; });
+    const edit = '<div style="margin-top:10px;"><a href="/contacts?tab=suppliers" class="btn btn-outline" style="font-size:13px;text-decoration:none;">Edit suppliers &rarr;</a></div>';
+    if (!needs.length) {
+      badge.textContent = '';
+      box.innerHTML = '<div style="color:var(--action-green);font-weight:600;font-size:14px;">&#10003; All ' + rows.length + ' certificate' + (rows.length === 1 ? '' : 's') + ' current</div>' + edit;
+      return;
+    }
     const label = { expired: 'Expired', renew: 'Request renewal', expiring: 'Expiring', current: 'Current', none: 'Not recorded' };
     const colour = { expired: 'var(--action-red)', renew: 'var(--action-red)', expiring: 'var(--amber-text-dark)', current: 'var(--action-green)', none: 'var(--text-light)' };
     box.innerHTML = '<div class="inv-table-wrap"><table class="inv-table"><thead><tr><th>Supplier</th>'
       + '<th>Certificate</th><th>Expiry</th><th>Status</th><th>PDF</th></tr></thead><tbody>'
-      + rows.map(function (r) {
+      + needs.map(function (r) {
           const s = r.s, c = r.c, st = c.status || 'none';
           const url = c.file ? '/api/suppliers/' + encodeURIComponent(s.id) + '/certificates/' + encodeURIComponent(c.id) + '/file'
             : c.doc_id ? '/api/certifications/' + encodeURIComponent(c.doc_id) + '/download' : '';
@@ -156,8 +159,7 @@ async function loadSupplierCerts() {
             + '<td style="color:' + colour[st] + ';font-weight:600;">' + label[st] + '</td>'
             + '<td>' + doc + '</td></tr>';
         }).join('')
-      + '</tbody></table></div>'
-      + '<div style="margin-top:10px;"><a href="/contacts?tab=suppliers" class="btn btn-outline" style="font-size:13px;text-decoration:none;">Edit suppliers &rarr;</a></div>';
+      + '</tbody></table></div>' + edit;
   } catch (e) {
     badge.textContent = '—';
     box.innerHTML = '<div class="empty-state">Could not load suppliers.</div>';

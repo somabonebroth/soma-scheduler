@@ -743,6 +743,8 @@ RESET marker (cutover + frozen run ids). The drift check and the reset are untou
 
 **Sales & Receiving declutter (2026-10-01):** no intro sentences or extra Inventory button; search is one live box (no Search/Clear buttons); trace results LINK — an organic FG LOT# to `/organic-lots#<LOT>`, a sale to its packing slip, a delivery line to its invoice; date bar = presets + "Custom…" (dates apply on change, no Apply). A sale order row = buyer · date · PO · cases (+ jars) · $ (`line_total`, else qty × price); opened, ONE "Packing slip" link and a quiet Delete per line. The per-line Edit sale was REMOVED (Jeremy never used it); `PATCH /api/organic/sales/<id>` stays but has no caller on this page.
 
+**Organic Certification hub, fourth trim (2026-10-01):** no card sentences; Supplier Certificates lists ONLY certificates needing action (expired / renew / expiring / not recorded), else "✓ All N certificates current" — the full list is Buyers & Suppliers; the pills became one line of text links (Count finished goods · Count raw materials · Stock count history · Certificates & Documents · Search & Trace). The documents page is titled "Certificates & Documents" everywhere; its drop zone became a "+ Add document" button (drop anywhere on the page still uploads).
+
 **Search & Trace is implemented ONCE** (`sales_receiving.html`, `doTrace`/`doTraceDebounced`) since 2026-09-22 — the second copy on `organic_certification.html` was deleted; the hub links to `/sales-receiving#trace`. Keep it that way.
 
 ---
