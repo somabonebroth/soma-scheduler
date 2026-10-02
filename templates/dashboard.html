@@ -282,11 +282,11 @@
         <div class="qa-block">
         <div class="section-label">Quick Actions</div>
         <div class="dash-row">
-            <div class="dash-btn" onclick="openReceiveModal()" style="background:var(--action-green);border-color:var(--action-green);cursor:pointer;">
+            <a href="/receive" class="dash-btn" style="background:var(--action-green);border-color:var(--action-green);">
                 <span class="icon" style="color:var(--white);">&#128230;</span>
                 <span class="label" style="color:var(--white);">Receive Inventory</span>
                 <span class="sublabel" style="color:rgba(255,255,255,0.75);">Record a supplier delivery</span>
-            </div>
+            </a>
             <a href="/record-sale" class="dash-btn" style="background:var(--action-blue);border-color:var(--action-blue);">
                 <span class="icon" style="color:var(--white);">&#128176;</span>
                 <span class="label" style="color:var(--white);">Record Sale</span>
@@ -514,90 +514,8 @@ loadProdBadge();
 // with the FOH dashboard, 2026-08-26).
 
 </script>
-<style>
-.dash-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center;}
-.dash-modal-overlay.open{display:flex;}
-.dash-modal{background:var(--white);border-radius:16px;width:100%;max-width:400px;margin:16px;padding:28px 24px;position:relative;}
-.dash-modal h2{font-size:17px;font-weight:700;color:#1a1a1a;margin:0 0 4px;}
-.dash-modal p{font-size:13px;color:var(--grey);margin:0 0 20px;}
-.dash-modal-field{margin-bottom:14px;}
-.dash-modal-field label{font-size:11px;font-weight:600;color:var(--grey);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:6px;}
-.dash-modal-field input,.dash-modal-field select{width:100%;box-sizing:border-box;padding:12px;border:1px solid var(--grey-border);border-radius:8px;font-size:15px;background:var(--white);}
-.dash-modal-err{font-size:13px;color:var(--action-red);display:none;margin-bottom:8px;}
-.dash-modal-success{background:var(--action-green-bg);border:1px solid var(--green-light);border-radius:10px;padding:16px;text-align:center;display:none;}
-.dash-modal-success .check{font-size:36px;margin-bottom:6px;}
-.dash-modal-success p{font-size:14px;color:var(--action-green);font-weight:600;margin:0;}
-.dash-modal-success small{font-size:12px;color:#388e3c;}
-.dash-modal-actions{display:flex;gap:10px;margin-top:4px;}
-.dash-modal-actions button{flex:1;padding:13px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
-.dm-cancel{background:var(--white);border:1px solid var(--grey-border);color:var(--text);}
-.dm-primary-green{background:var(--action-green);border:none;color:var(--white);}
-</style>
-
-<!-- Receive Inventory modal -->
-<div class="dash-modal-overlay" id="dash-receive-modal">
-  <div class="dash-modal">
-    <button onclick="closeDashReceiveModal()" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:var(--grey);">&times;</button>
-    <div id="dash-receive-form">
-      <h2>&#128230; Receive Inventory</h2>
-      <p>Select supplier and delivery date to continue entering received items.</p>
-      <div class="dash-modal-field">
-        <label>Date Received</label>
-        <input type="date" id="dash-receive-date">
-      </div>
-      <div class="dash-modal-field">
-        <label>Supplier</label>
-        <select id="dash-receive-supplier">
-          <option value="">— Select supplier —</option>
-        </select>
-      </div>
-      <div class="dash-modal-err" id="dash-receive-msg"></div>
-      <div class="dash-modal-actions">
-        <button class="dm-cancel" onclick="closeDashReceiveModal()">Cancel</button>
-        <button class="dm-primary-green" onclick="dashReceiveNext()">Next →</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <script>
-// Receive Inventory modal
-async function openReceiveModal(){
-  var today = new Date().toLocaleDateString('en-CA');
-  document.getElementById('dash-receive-date').value = today;
-  document.getElementById('dash-receive-msg').style.display = 'none';
-  try {
-    var res = await fetch('/api/suppliers');
-    var suppliers = await res.json();
-    var sel = document.getElementById('dash-receive-supplier');
-    sel.innerHTML = '<option value="">— Select supplier —</option>';
-    suppliers.forEach(function(s){
-      var o = document.createElement('option');
-      o.value = s.id + '|' + encodeURIComponent(s.name);
-      o.textContent = s.name;
-      sel.appendChild(o);
-    });
-  } catch(e){}
-  document.getElementById('dash-receive-modal').classList.add('open');
-}
-function closeDashReceiveModal(){
-  document.getElementById('dash-receive-modal').classList.remove('open');
-}
-function dashReceiveNext(){
-  var date = document.getElementById('dash-receive-date').value;
-  var supplierVal = document.getElementById('dash-receive-supplier').value;
-  var msg = document.getElementById('dash-receive-msg');
-  if(!date){ msg.textContent='Please select a date.'; msg.style.display='block'; return; }
-  if(!supplierVal){ msg.textContent='Please select a supplier.'; msg.style.display='block'; return; }
-  msg.style.display='none';
-  closeDashReceiveModal();
-  var parts = supplierVal.split('|');
-  var supplierId = parts[0];
-  var supplierName = decodeURIComponent(parts[1] || '');
-  var params = '?action=receive&date='+encodeURIComponent(date)+'&supplier_id='+encodeURIComponent(supplierId)+'&supplier_name='+encodeURIComponent(supplierName);
-  window.location.href = '/organic' + params;
-}
-
 // Data backup — prompts for manager password, downloads zip of DATA_DIR
 async function downloadBackup(){
   var pwd = prompt('Manager password to authorize backup download:');
@@ -629,11 +547,6 @@ async function downloadBackup(){
     alert('Backup failed: ' + e.message);
   }
 }
-
-// Close modals on backdrop click
-document.getElementById('dash-receive-modal').addEventListener('click', function(e){
-  if(e.target === this) closeDashReceiveModal();
-});
 
 </script>
 {% endif %}

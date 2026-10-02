@@ -71,6 +71,16 @@ def manager_required(f):
     return decorated
 
 
+@raw_materials_bp.route("/receive")
+@manager_required
+def receive_page():
+    """Receive Inventory (2026-10-01): a supplier delivery on the phone —
+    supplier, one card per ingredient (LOT#, quantity, unit), invoice photo,
+    save. Same two calls as the Inventory page's Add Inventory form
+    (raw-materials/bulk, then receipt-photo on the first saved line)."""
+    return render_template("receive.html")
+
+
 @raw_materials_bp.route("/api/organic/ingredients", methods=["GET"])
 @manager_required
 def organic_ingredients():

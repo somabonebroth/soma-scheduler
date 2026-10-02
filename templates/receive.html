@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Receive Inventory · Soma</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+/* Phone-first, same shape as Record Sale (organic_sale.html): cards, 16px
+   fields so Safari never zooms, one action in a bar at the bottom. */
+.rc-main { max-width: 640px; margin: 0 auto; }
+.rc-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-light); margin-bottom: 12px; }
+.rc-field select, .rc-field input { font-size: 16px; padding: 10px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--white); color: var(--text); width: 100%; min-width: 0; box-sizing: border-box; }
+.rc-muted { font-size: 13px; color: var(--text-light); }
+.rc-item { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.rc-item:last-child { border-bottom: none; }
+.rc-item.has-qty .rc-name { color: var(--action-green); }
+.rc-name { font-size: 15px; font-weight: 600; color: var(--dark); margin-bottom: 8px; }
+.rc-inputs { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.rc-inputs input, .rc-inputs select { font-size: 16px; padding: 10px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--white); color: var(--text); width: 100%; min-width: 0; box-sizing: border-box; }
+.rc-inputs select { width: auto; padding: 10px 6px; }
+.rc-unit { font-size: 15px; color: var(--text-light); padding: 0 6px; }
+.rc-conv { font-size: 12px; color: var(--action-green); margin-top: 4px; min-height: 0; }
+.rc-photo-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.rc-photo-btns .btn { font-size: 15px; padding: 12px; }
+.rc-preview { display: none; align-items: center; gap: 10px; }
+.rc-preview img { height: 64px; width: auto; border-radius: var(--r-sm); border: 1px solid var(--border); }
+.rc-preview .what { flex: 1; min-width: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rc-warn { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark); border-radius: var(--r-md); padding: 8px 12px; font-size: 13px; margin-top: 8px; }
+.rc-done { text-align: center; }
+.rc-done .big { font-size: 40px; }
+.rc-big { display: block; width: 100%; box-sizing: border-box; font-size: 17px; padding: 14px; text-decoration: none; text-align: center; }
+body { padding-bottom: 96px; }
+.rc-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; background: var(--card-bg); border-top: 1px solid var(--border); box-shadow: 0 -2px 12px rgba(0,0,0,0.08); padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+.rc-bar-in { max-width: 640px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
+.rc-bar-in #rc-summary { flex: 1; min-width: 0; font-size: 14px; color: var(--text-light); line-height: 1.35; }
+.rc-bar-in #rc-summary b { color: var(--dark); font-size: 17px; }
+.rc-bar-in .btn { flex: none; font-size: 16px; padding: 12px 18px; background: var(--action-green); border-color: var(--action-green); }
+.rc-bar-in .btn:disabled { opacity: .45; }
+</style>
+</head>
+<body>
+<div class="header">
+    <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
+    <div class="header-text"><h1>Receive Inventory</h1><p>Soma Bone Broth</p></div>
+    <div class="header-right"><a href="/" class="header-btn">⌂ Dashboard</a></div>
+</div>
+<div class="main rc-main" id="rc-root">
+    <div class="card">
+        <h2>1. Delivery</h2>
+        <label class="rc-field">Supplier <select id="rc-supplier" onchange="rcSupplierChanged()"><option value="">Loading…</option></select></label>
+        <label class="rc-field">Date received <input type="date" id="rc-date"></label>
+    </div>
+
+    <div class="card">
+        <h2>2. What arrived</h2>
+        <p class="rc-muted" style="margin-top:0;">Leave the quantity blank for anything not in this delivery.</p>
+        <div id="rc-items"><p class="rc-muted">Pick a supplier to see their ingredients.</p></div>
+    </div>
+
+    <div class="card">
+        <h2>3. Invoice</h2>
+        <input type="file" id="rc-photo-camera" accept="image/*" capture="environment" style="display:none;" onchange="rcPhotoPicked(this)">
+        <input type="file" id="rc-photo-file" accept="image/*,application/pdf" style="display:none;" onchange="rcPhotoPicked(this)">
+        <div class="rc-photo-btns" id="rc-photo-btns">
+            <button type="button" class="btn btn-outline" onclick="document.getElementById('rc-photo-camera').click()">📷 Take photo</button>
+            <button type="button" class="btn btn-outline" onclick="document.getElementById('rc-photo-file').click()">📁 Choose file</button>
+        </div>
+        <div class="rc-preview" id="rc-preview">
+            <img id="rc-thumb" alt="" style="display:none;">
+            <div class="what" id="rc-photo-name"></div>
+            <button type="button" class="btn btn-outline" onclick="rcClearPhoto()" style="font-size:14px;padding:8px 12px;">Remove</button>
+        </div>
+    </div>
+
+    <div id="rc-msg"></div>
+</div>
+<div class="rc-bar" id="rc-bar"><div class="rc-bar-in">
+    <div id="rc-summary"></div>
+    <button class="btn btn-primary" id="rc-save" onclick="rcSave()">Save delivery</button>
+</div></div>
+<script>
+// Receive Inventory — the phone page for a supplier delivery. Writes through
+// the same endpoints as the Inventory page's Add Inventory form, so a delivery
+// saved here and one saved there are identical records.
+let rcSuppliers = [];
+let rcPhoto = null;
+
+// Quantities may be typed in the invoice's unit; they are converted to the
+// ingredient's stored unit before saving (same table as organic.html).
+const RC_WEIGHT = {kg: 1, g: 0.001, lbs: 0.45359237};
+const RC_VOLUME = {L: 1, ml: 0.001};
+function rcUnits(canon) {
+    if (canon in RC_WEIGHT) return ['kg', 'g', 'lbs'];
+    if (canon in RC_VOLUME) return ['L', 'ml'];
+    return null;
+}
+function rcConvert(qty, from, to) {
+    if (from === to) return qty;
+    if (from in RC_WEIGHT && to in RC_WEIGHT) return qty * RC_WEIGHT[from] / RC_WEIGHT[to];
+    if (from in RC_VOLUME && to in RC_VOLUME) return qty * RC_VOLUME[from] / RC_VOLUME[to];
+    return qty;
+}
+function rcEsc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function rcSupplier() { return rcSuppliers.find(s => s.id === document.getElementById('rc-supplier').value); }
+
+function rcSupplierChanged() {
+    const s = rcSupplier();
+    const box = document.getElementById('rc-items');
+    if (!s) {
+        box.innerHTML = '<p class="rc-muted">Pick a supplier to see their ingredients.</p>';
+    } else if (!(s.ingredients || []).length) {
+        box.innerHTML = '<p class="rc-muted">No ingredients are assigned to ' + rcEsc(s.name)
+            + '. Add them in <a href="/contacts?tab=suppliers">Buyers &amp; Suppliers</a>.</p>';
+    } else {
+        box.innerHTML = s.ingredients.map((ing, i) => {
+            const units = rcUnits(ing.unit);
+            const unit = units
+                ? '<select data-unit="' + i + '" aria-label="Unit">' + units.map(u => '<option' + (u === ing.unit ? ' selected' : '') + '>' + u + '</option>').join('') + '</select>'
+                : '<span class="rc-unit">' + rcEsc(ing.unit) + '</span>';
+            return '<div class="rc-item" data-item="' + i + '"><div class="rc-name">' + rcEsc(ing.name) + '</div>'
+                + '<div class="rc-inputs"><input type="text" data-lot="' + i + '" placeholder="Supplier LOT#" autocomplete="off" autocapitalize="characters">'
+                + '<input type="number" data-qty="' + i + '" placeholder="Qty" step="any" min="0" inputmode="decimal">' + unit + '</div>'
+                + '<div class="rc-conv" data-conv="' + i + '"></div></div>';
+        }).join('');
+    }
+    rcUpdate();
+}
+
+// One pass over the rows: conversion hints, row highlight, the bar's count.
+function rcLines() {
+    const s = rcSupplier();
+    if (!s) return [];
+    const out = [];
+    (s.ingredients || []).forEach((ing, i) => {
+        const qty = parseFloat((document.querySelector('[data-qty="' + i + '"]') || {}).value);
+        const unitEl = document.querySelector('[data-unit="' + i + '"]');
+        const from = unitEl ? unitEl.value : ing.unit;
+        const conv = document.querySelector('[data-conv="' + i + '"]');
+        const row = document.querySelector('[data-item="' + i + '"]');
+        const ok = !isNaN(qty) && qty > 0;
+        if (row) row.classList.toggle('has-qty', ok);
+        const canonQty = ok ? Math.round(rcConvert(qty, from, ing.unit) * 10000) / 10000 : 0;
+        if (conv) conv.textContent = ok && from !== ing.unit ? '= ' + canonQty + ' ' + ing.unit : '';
+        if (ok) out.push({
+            item: ing.name, unit: ing.unit, quantity: canonQty, supplier: s.name,
+            supplier_lot: ((document.querySelector('[data-lot="' + i + '"]') || {}).value || '').trim(),
+            date_received: document.getElementById('rc-date').value,
+        });
+    });
+    return out;
+}
+
+function rcUpdate() {
+    const n = rcLines().length;
+    document.getElementById('rc-summary').innerHTML = n
+        ? '<b>' + n + '</b> item' + (n === 1 ? '' : 's') + (rcPhoto ? ' &middot; invoice attached' : '<br>Invoice still needed')
+        : 'Nothing entered yet';
+    document.getElementById('rc-save').disabled = !n;
+}
+
+function rcPhotoPicked(input) {
+    const f = input.files && input.files[0];
+    if (!f) return;
+    rcPhoto = f;
+    document.getElementById(input.id === 'rc-photo-camera' ? 'rc-photo-file' : 'rc-photo-camera').value = '';
+    document.getElementById('rc-photo-name').textContent = f.name;
+    const thumb = document.getElementById('rc-thumb');
+    if (f.type.startsWith('image/')) {
+        const r = new FileReader();
+        r.onload = e => { thumb.src = e.target.result; thumb.style.display = ''; };
+        r.readAsDataURL(f);
+    } else {
+        thumb.style.display = 'none';
+    }
+    document.getElementById('rc-preview').style.display = 'flex';
+    document.getElementById('rc-photo-btns').style.display = 'none';
+    rcUpdate();
+}
+
+function rcClearPhoto() {
+    rcPhoto = null;
+    ['rc-photo-camera', 'rc-photo-file'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('rc-preview').style.display = 'none';
+    document.getElementById('rc-photo-btns').style.display = '';
+    rcUpdate();
+}
+
+function rcWarn(html) {
+    document.getElementById('rc-msg').innerHTML = html ? '<div class="rc-warn">' + html + '</div>' : '';
+    if (html) document.getElementById('rc-msg').scrollIntoView({behavior: 'smooth', block: 'center'});
+}
+
+async function rcSave() {
+    const lines = rcLines();
+    const date = document.getElementById('rc-date').value;
+    if (!date) return rcWarn('Set the date received.');
+    if (!lines.length) return rcWarn('Enter a quantity for at least one ingredient.');
+    if (!rcPhoto) return rcWarn('Attach a photo of the invoice or packing slip.');
+    rcWarn('');
+    const btn = document.getElementById('rc-save');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+        const res = await fetch('/api/organic/raw-materials/bulk', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({entries: lines, baseline: false}),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error((data.error || 'Save failed') + (data.details ? ': ' + data.details.join('; ') : ''));
+        // The invoice is stored on the delivery's first line (helpers._delivery_id).
+        const ids = data.ids || (data.entries || []).map(e => e.id);
+        let photoErr = '';
+        if (ids.length) {
+            const fd = new FormData();
+            fd.append('photo', rcPhoto);
+            const pr = await fetch('/api/organic/raw-materials/receipt-photo/' + encodeURIComponent(ids[0]), {method: 'POST', body: fd});
+            if (!pr.ok) { let pe = {}; try { pe = await pr.json(); } catch (e) {} photoErr = pe.error || ('HTTP ' + pr.status); }
+        }
+        const s = rcSupplier();
+        rcSuppliers = [];   // nothing left unsaved: no leave-page warning
+        document.getElementById('rc-bar').style.display = 'none';
+        document.body.style.paddingBottom = '0';
+        document.getElementById('rc-root').innerHTML = '<div class="card rc-done"><div class="big">&#10004;</div>'
+            + '<h2>Delivery saved</h2><p class="rc-muted">' + rcEsc(s ? s.name : '') + ' &middot; ' + lines.length + ' item' + (lines.length === 1 ? '' : 's') + '</p>'
+            + (photoErr ? '<div class="rc-warn" style="text-align:left;">The items are saved, but the invoice did not upload: ' + rcEsc(photoErr)
+                + '. Attach it from the Receiving list on <a href="/sales-receiving#receiving">Sales &amp; Receiving</a>.</div>' : '')
+            + '<a class="btn btn-primary rc-big" style="margin:14px 0 10px;background:var(--action-green);border-color:var(--action-green);" href="/receive">Receive another</a>'
+            + '<a class="btn btn-outline rc-big" href="/organic?tab=raw">Raw materials</a></div>';
+        window.scrollTo(0, 0);
+    } catch (e) {
+        rcWarn('<b>Nothing was saved.</b> ' + rcEsc(e.message));
+        btn.disabled = false; btn.textContent = 'Save delivery';
+    }
+}
+
+window.addEventListener('beforeunload', e => {
+    if (rcSuppliers.length && rcLines().length) { e.preventDefault(); e.returnValue = ''; }
+});
+
+(async function () {
+    document.getElementById('rc-date').value = new Date().toLocaleDateString('en-CA');
+    try {
+        rcSuppliers = await (await fetch('/api/suppliers')).json();
+    } catch (e) {
+        rcWarn('Could not load suppliers: ' + rcEsc(e.message));
+    }
+    document.getElementById('rc-supplier').innerHTML = '<option value="">Pick a supplier</option>'
+        + rcSuppliers.map(s => '<option value="' + rcEsc(s.id) + '">' + rcEsc(s.name) + '</option>').join('');
+    document.getElementById('rc-items').addEventListener('input', rcUpdate);
+    document.getElementById('rc-items').addEventListener('change', rcUpdate);
+    document.getElementById('rc-date').addEventListener('input', rcUpdate);
+    rcUpdate();
+})();
+</script>
+</body>
+</html>
