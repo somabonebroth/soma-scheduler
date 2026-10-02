@@ -170,15 +170,26 @@ body.inv-page .btn-sm:hover { background: var(--row-alt); border-color: #b8b8a8;
     body.inv-page .card { padding: 12px; }
     body.inv-page .card h2 { font-size: 14px; }
 }
+.sr-order { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 6px; }
+.sr-order summary { padding: 10px 14px; background: #f9f9f7; cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sr-order summary::-webkit-details-marker { display: none; }
+.sr-who { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; font-size: 13px; }
+.sr-who span { font-size: 11px; color: var(--text-light); }
+.sr-num { font-size: 12px; color: var(--dark); font-weight: 600; white-space: nowrap; }
+.sr-body { padding: 8px 14px 12px; }
+.sr-slip { display: inline-block; font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 6px; }
+.sr-del { font-size: 11px; color: var(--text-light); }
+.sr-del:hover { color: var(--danger); }
+.inv-table td.r, .inv-table th.r { text-align: right; }
+#trace-results a { color: var(--accent); font-weight: 600; }
 </style>
 </head>
 <body class="inv-page">
 <div class="header">
     <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-    <div class="header-text"><h1>Sales &amp; Receiving Record</h1><p>Every sale and every supplier delivery, with search &amp; trace</p></div>
+    <div class="header-text"><h1>Sales &amp; Receiving Record</h1><p>Soma Bone Broth</p></div>
     <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button><button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button></div>
-    <a href="/organic" class="header-btn">&#128230; Inventory</a>
     <a href="/" class="header-btn">⌂ Dashboard</a>
   </div>
 </div>
@@ -186,11 +197,8 @@ body.inv-page .btn-sm:hover { background: var(--row-alt); border-color: #b8b8a8;
     <!-- Search & Trace — top -->
     <div class="card" id="trace">
         <h2>Search &amp; Trace</h2>
-        <p>Search by supplier, buyer, product name, LOT#, or date. Searches ALL records, ignoring the date range below.</p>
-        <div class="search-bar" style="margin-bottom:0;">
-            <input id="trace-query" placeholder="Supplier, buyer, product, LOT#, or date…" style="flex:1;" oninput="doTraceDebounced()">
-            <button class="btn btn-primary" onclick="doTrace()">Search</button>
-            <button class="btn btn-outline" onclick="document.getElementById('trace-query').value='';doTrace()" style="font-size:13px;">Clear</button>
+        <div class="search-bar" style="margin-bottom:0;position:relative;">
+            <input id="trace-query" type="search" placeholder="Supplier, buyer, product, LOT# or date — all records" style="flex:1;" oninput="doTraceDebounced()">
         </div>
         <div id="trace-results" style="margin-top:12px;"></div>
     </div>
@@ -204,24 +212,22 @@ body.inv-page .btn-sm:hover { background: var(--row-alt); border-color: #b8b8a8;
             <button class="range-btn" data-days="365">1 year</button>
             <button class="range-btn" data-days="all">All time</button>
         </div>
-        <span class="range-label">or</span>
-        <input type="date" id="range-from" aria-label="From date">
-        <span class="range-label">to</span>
-        <input type="date" id="range-to" aria-label="To date">
-        <button class="btn btn-outline btn-tiny" id="range-apply">Apply</button>
-        <span class="range-note" id="range-note"></span>
+        <button class="range-btn" id="range-custom-btn" type="button">Custom…</button>
+        <span id="range-custom" style="display:none;align-items:center;gap:6px;">
+            <input type="date" id="range-from" aria-label="From date">
+            <span class="range-label">to</span>
+            <input type="date" id="range-to" aria-label="To date">
+        </span>
     </div>
 
     <div class="card" id="receiving">
         <h2>Receiving <span class="count-badge" id="receiving-count">—</span></h2>
-        <p>Supplier deliveries recorded via Add Inventory, within the date range above.</p>
         <div id="receiving-container"><div class="empty-state">Loading...</div></div>
     </div>
 
     <!-- Sales Transactions -->
     <div class="card" id="sales">
         <h2>Sales <span class="count-badge" id="sales-count">—</span></h2>
-        <p>Sales drawn from finished goods inventory, within the date range above.</p>
         <div id="sales-container"><div class="empty-state">Loading...</div></div>
     </div>
 </div>
@@ -238,34 +244,6 @@ body.inv-page .btn-sm:hover { background: var(--row-alt); border-color: #b8b8a8;
     </div>
 </div>
 
-<!-- Sale Edit Modal -->
-<div class="modal-overlay" id="sale-edit-modal" style="z-index:300;">
-  <div class="modal" style="max-width:400px;">
-    <h3 style="margin:0 0 14px;font-size:16px;">Edit Sale</h3>
-    <div class="form-field" style="margin-bottom:12px;">
-      <label>Sale Date</label>
-      <input type="date" id="se-date" style="width:100%;box-sizing:border-box;">
-    </div>
-    <div class="form-field" style="margin-bottom:12px;">
-      <label>Buyer</label>
-      <input type="text" id="se-buyer" style="width:100%;box-sizing:border-box;">
-    </div>
-    <div class="form-field" style="margin-bottom:12px;">
-      <label>Quantity (units)</label>
-      <input type="number" id="se-qty" min="0" step="1" style="width:100%;box-sizing:border-box;">
-      <div style="font-size:11px;color:var(--text-light);margin-top:3px;">Changing quantity adjusts FG inventory by the difference.</div>
-    </div>
-    <div class="form-field" style="margin-bottom:14px;">
-      <label>PO #</label>
-      <input type="text" id="se-po" style="width:100%;box-sizing:border-box;">
-    </div>
-    <div id="se-msg" style="font-size:13px;color:var(--action-red);margin-bottom:8px;display:none;"></div>
-    <div style="display:flex;gap:10px;">
-      <button class="btn btn-outline" onclick="closeSaleEditModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitSaleEdit()" style="background:var(--info);border-color:var(--info);">Save Changes</button>
-    </div>
-  </div>
-</div>
 
 <script>
 // ── Shared helpers (verbatim copies of the ones in organic.html) ──
@@ -355,7 +333,7 @@ function renderMonthGroups(txs, renderGroup, countLabel, openAll){
     });
     return html;
 }
-function _salesCount(n){ return n+' sale'+(n===1?'':'s'); }
+function _salesCount(n){ return n+' order'+(n===1?'':'s'); }
 function _deliveriesCount(n){ return n+' deliver'+(n===1?'y':'ies'); }
 
 async function loadSales(){
@@ -368,12 +346,22 @@ async function loadSales(){
     var pendingPmt=data.filter(function(s){return s.payment_pending===true && s.deducted!==false;});
     var settled=data.filter(function(s){return s.deducted!==false && !s.payment_pending;});
 
+    function saleValue(s){
+        if(s.line_total!=null) return +s.line_total||0;
+        return (s.quantity||0)*(+(s.unit_price||s.price)||0);
+    }
+    function money(v){ return '$'+Math.round(v).toLocaleString(); }
+    // Quantities read in cases, loose jars after (a case is 12 jars).
+    function cases(n){ n=n||0; var c=Math.floor(n/12), j=n%12; return (c?c+' cs':'')+(c&&j?' + ':'')+(j?j+' jar'+(j===1?'':'s'):'')||'0'; }
+
     if(countEl){
         var su=settled.reduce(function(a,s){return a+(s.quantity||0);},0);
-        countEl.textContent=settled.length+' sale'+(settled.length===1?'':'s')+' • '+su+' units';
+        var sv=settled.reduce(function(a,s){return a+saleValue(s);},0);
+        var orders=groupSales(settled).length;
+        countEl.textContent=orders+' order'+(orders===1?'':'s')+' · '+Math.floor(su/12).toLocaleString()+' cases · '+money(sv);
     }
 
-    function fmtProd(s){ return escSku(((s.brand?s.brand+' ':'')+s.recipe+(s.format?' '+s.format:'')).trim()); }
+    function fmtProd(s){ return escSku(s.recipe+(s.format?' · '+s.format:'')); }
     function fmtLots(s){ return escSku((s.lots&&s.lots.length)?s.lots.map(function(l){return l.lot;}).filter(Boolean).join(', '):(s.fg_lot||'—')); }
 
     function groupSales(rows){
@@ -450,21 +438,16 @@ async function loadSales(){
     function renderSettled(txs){
         return txs.map(function(tx){
             var u=tx.items.reduce(function(a,s){return a+(s.quantity||0);},0);
-            var h='<details style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:6px;">';
-            h+='<summary style="padding:10px 14px;background:#f9f9f7;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px;">';
-            h+='<span style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">';
-            h+='<span style="font-size:13px;font-weight:600;">'+escHtml(tx.buyer)+'</span>';
-            h+='<span style="font-size:11px;color:var(--text-light);">'+escHtml(tx.date)+'</span>';
-            if(tx.order_id) h+='<span style="font-size:10px;background:#f0f0ef;color:var(--text-light);padding:1px 6px;border-radius:10px;">'+escHtml(tx.order_id)+'</span>';
-            h+='</span><span style="font-size:11px;color:var(--text-light);white-space:nowrap;">'+u+' units</span></summary>';
-            h+='<div style="padding:8px 14px 12px;"><table class="inv-table" style="font-size:12px;"><tr><th>Product</th><th>LOT#(s)</th><th>Qty</th><th></th></tr>';
+            var v=tx.items.reduce(function(a,s){return a+saleValue(s);},0);
+            var po=(tx.items.find(function(s){return s.po_number;})||{}).po_number;
+            var h='<details class="sr-order">';
+            h+='<summary><span class="sr-who"><b>'+escHtml(tx.buyer)+'</b><span>'+escHtml(tx.date)+(po?' · PO '+escHtml(po):'')+'</span></span>';
+            h+='<span class="sr-num">'+cases(u)+(v?' · '+money(v):'')+'</span></summary>';
+            h+='<div class="sr-body"><a href="/sales/'+encodeURIComponent(tx.items[0].id)+'/packing-slip" target="_blank" class="sr-slip">Packing slip</a>';
+            h+='<table class="inv-table" style="font-size:12px;"><tr><th>Product</th><th>LOT#</th><th class="r">Qty</th><th></th></tr>';
             tx.items.forEach(function(s){
-                h+='<tr><td>'+fmtProd(s)+'</td><td>'+fmtLots(s)+'</td><td>'+s.quantity+'</td>'
-                  +'<td style="white-space:nowrap;">'
-                  +'<button class="btn-sm" style="font-size:10px;padding:4px 7px;margin-right:3px;" data-slip-id="'+escHtml(s.id)+'" title="Print packing slip">📋</button>'
-                  +'<button class="btn-sm" style="font-size:10px;padding:4px 7px;margin-right:3px;" data-edit-sale="'+escHtml(s.id)+'" data-edit-qty="'+s.quantity+'" data-edit-date="'+(s.sale_date||'')+'" data-edit-buyer="'+escHtml(s.buyer||'')+'" data-edit-po="'+escHtml(s.po_number||'')+'" title="Edit sale">✏</button>'
-                  +'<button class="btn-danger" style="font-size:10px;padding:4px 7px;" data-del-sale="'+escHtml(s.id)+'">Del</button>'
-                  +'</td></tr>';
+                h+='<tr><td>'+fmtProd(s)+'</td><td>'+fmtLots(s)+'</td><td class="r">'+cases(s.quantity)+'</td>'
+                  +'<td class="r"><a href="#" class="sr-del" data-del-sale="'+escHtml(s.id)+'">Delete</a></td></tr>';
             });
             h+='</table></div></details>';
             return h;
@@ -502,19 +485,7 @@ async function loadSales(){
 
     container.innerHTML=html;
     container.querySelectorAll('[data-del-sale]').forEach(function(btn){
-        btn.addEventListener('click',function(){deleteSale(this.getAttribute('data-del-sale'));});
-    });
-    container.querySelectorAll('[data-edit-sale]').forEach(function(btn){
-        btn.addEventListener('click',function(e){
-            e.stopPropagation();
-            openSaleEditModal(
-                this.getAttribute('data-edit-sale'),
-                this.getAttribute('data-edit-qty'),
-                this.getAttribute('data-edit-date'),
-                this.getAttribute('data-edit-buyer'),
-                this.getAttribute('data-edit-po')
-            );
-        });
+        btn.addEventListener('click',function(e){e.preventDefault();deleteSale(this.getAttribute('data-del-sale'));});
     });
     container.querySelectorAll('[data-settle-ids]').forEach(function(btn){
         btn.addEventListener('click',function(e){
@@ -522,53 +493,6 @@ async function loadSales(){
             manualSettleAll(this.getAttribute('data-settle-ids').split(',').filter(Boolean));
         });
     });
-    container.querySelectorAll('[data-slip-id]').forEach(function(btn){
-        btn.addEventListener('click',function(e){
-            e.stopPropagation();
-            window.open('/sales/'+this.getAttribute('data-slip-id')+'/packing-slip','_blank');
-        });
-    });
-}
-
-var _saleEditId = null;
-function openSaleEditModal(id, qty, date, buyer, po){
-    _saleEditId = id;
-    document.getElementById('se-date').value = date || '';
-    document.getElementById('se-buyer').value = buyer || '';
-    document.getElementById('se-qty').value = qty || '';
-    document.getElementById('se-po').value = po || '';
-    document.getElementById('se-msg').style.display = 'none';
-    document.getElementById('sale-edit-modal').classList.add('active');
-}
-function closeSaleEditModal(){
-    document.getElementById('sale-edit-modal').classList.remove('active');
-}
-async function submitSaleEdit(){
-    if(!_saleEditId) return;
-    var patch = {
-        sale_date: document.getElementById('se-date').value,
-        buyer: document.getElementById('se-buyer').value.trim(),
-        quantity: parseInt(document.getElementById('se-qty').value) || 0,
-        po_number: document.getElementById('se-po').value.trim(),
-    };
-    var msg = document.getElementById('se-msg');
-    try {
-        var res = await fetch('/api/organic/sales/'+_saleEditId, {
-            method:'PATCH', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify(patch)
-        });
-        var data = await res.json();
-        if(res.ok){
-            closeSaleEditModal();
-            loadSales();
-        } else {
-            msg.textContent = data.error || 'Failed to save changes.';
-            msg.style.display = 'block';
-        }
-    } catch(e) {
-        msg.textContent = 'Network error.';
-        msg.style.display = 'block';
-    }
 }
 
 async function manualSettleAll(ids){
@@ -598,6 +522,16 @@ function doTraceDebounced(){
     _traceDebounceTimer = setTimeout(doTrace, 350);
 }
 
+// Trace results are links (2026-10-01): an organic LOT# opens its Organic Lots
+// folder, a sale its packing slip, a delivery line its invoice.
+var photoIdsAll = new Set();
+function trProd(x){ return escHtml((x.recipe||'')+(x.format?' · '+x.format:'')); }
+function trLot(f){
+    var lot=escHtml(f.lot||'');
+    return /organic/i.test(f.certification||'') && f.lot
+        ? '<a href="/organic-lots#'+encodeURIComponent(f.lot)+'">LOT# '+lot+' &rarr;</a>'
+        : 'LOT# '+lot;
+}
 async function doTrace(){
     var q=document.getElementById('trace-query').value.trim();
     var container=document.getElementById('trace-results');
@@ -659,7 +593,7 @@ async function doTrace(){
                     html += '<div style="font-size:13px;padding:2px 0 2px 10px;">→ Used in: '+escHtml(r.day_name||'')+' '+escHtml(r.week_id||'')+' · '+escHtml(r.vessel||'')+' · '+escHtml((r.brand?r.brand+'-':'')+r.recipe)+' (Batch LOT# '+escHtml(r.lot||'')+')</div>';
                 });
                 (L.finished_goods||[]).forEach(function(f){
-                    html += '<div style="font-size:13px;padding:2px 0 2px 20px;color:#2e7d32;">↳ Produced: '+escHtml((f.brand?f.brand+'-':'')+f.recipe+' '+(f.format||''))+' · FG LOT# '+escHtml(f.lot||'')+'</div>';
+                    html += '<div style="font-size:13px;padding:2px 0 2px 20px;color:#2e7d32;">↳ Produced: '+trProd(f)+' · '+trLot(f)+'</div>';
                 });
                 (L.sales||[]).forEach(function(s){
                     var prod=(s.brand?s.brand+' ':'')+s.recipe+(s.format?' '+s.format:'');
@@ -673,7 +607,7 @@ async function doTrace(){
         }
         if(hasFGTrace){
             fgData.finished_goods.forEach(function(f){
-                html += '<div style="font-size:13px;padding:4px 0;">FG: '+escHtml((f.brand?f.brand+'-':'')+f.recipe+' '+f.format)+' · LOT# '+escHtml(f.lot)+'</div>';
+                html += '<div style="font-size:13px;padding:4px 0;">'+trProd(f)+' · '+trLot(f)+'</div>';
             });
         }
         html += '</div>';
@@ -682,9 +616,10 @@ async function doTrace(){
     // Receiving matches
     if(matchedRM.length){
         html += '<div style="margin-bottom:14px;"><div style="font-size:12px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Receiving Matches</div>';
-        html += '<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Ingredient</th><th>Supplier</th><th>LOT#</th><th>Qty</th></tr>';
+        html += '<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Ingredient</th><th>Supplier</th><th>LOT#</th><th>Qty</th><th></th></tr>';
         matchedRM.slice(0,20).forEach(function(r){
-            html += '<tr><td>'+(r.date_received||'')+'</td><td>'+escHtml(r.item||'')+'</td><td>'+escHtml(r.supplier||'')+'</td><td>'+escHtml(r.supplier_lot||'')+'</td><td>'+(r.remaining!==undefined?r.remaining:r.quantity)+' '+escHtml(r.unit||'')+'</td></tr>';
+            html += '<tr><td>'+(r.date_received||'')+'</td><td>'+escHtml(r.item||'')+'</td><td>'+escHtml(r.supplier||'')+'</td><td>'+escHtml(r.supplier_lot||'')+'</td><td>'+(r.remaining!==undefined?r.remaining:r.quantity)+' '+escHtml(r.unit||'')+'</td>'
+                +'<td>'+(photoIdsAll.has(r.delivery_id)||photoIdsAll.has(r.id)?'<a href="/api/organic/raw-materials/receipt-photo/'+encodeURIComponent(r.id)+'" target="_blank">Invoice</a>':'')+'</td></tr>';
         });
         html += '</table></div></div>';
     }
@@ -692,11 +627,11 @@ async function doTrace(){
     // Sales matches
     if(matchedSales.length){
         html += '<div><div style="font-size:12px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Sales Matches</div>';
-        html += '<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Product</th><th>Buyer</th><th>LOT#</th><th>Qty</th></tr>';
+        html += '<div class="inv-table-wrap"><table class="inv-table"><tr><th>Date</th><th>Product</th><th>Buyer</th><th>LOT#</th><th>Qty</th><th></th></tr>';
         matchedSales.slice(0,20).forEach(function(s){
             var lots=(s.lots||[]).map(function(l){return l.lot;}).filter(Boolean).join(', ')||s.fg_lot||'';
-            var prod=(s.brand?s.brand+' ':'')+s.recipe+(s.format?' '+s.format:'');
-            html += '<tr><td>'+(s.sale_date||'')+'</td><td>'+escHtml(prod.trim())+'</td><td>'+escHtml(s.buyer||'')+'</td><td>'+escHtml(lots)+'</td><td>'+(s.quantity||'')+'</td></tr>';
+            html += '<tr><td>'+(s.sale_date||'')+'</td><td>'+trProd(s)+'</td><td>'+escHtml(s.buyer||'')+'</td><td>'+escHtml(lots)+'</td><td>'+(s.quantity||'')+'</td>'
+                +'<td><a href="/sales/'+encodeURIComponent(s.id)+'/packing-slip" target="_blank">Slip</a></td></tr>';
         });
         html += '</table></div></div>';
     }
@@ -714,6 +649,7 @@ async function loadReceiving(){
     var data = await res.json();
     var photoIds = new Set([]);
     try { photoIds = new Set(((await photoRes.json()).ids) || []); } catch(e) {}
+    photoIdsAll = photoIds;
     var container = document.getElementById('receiving-container');
     var countEl = document.getElementById('receiving-count');
     var deliveries = data.filter(function(r){ return !r.migration_baseline && !r.adjustment; });
@@ -793,7 +729,7 @@ function rangeQuery() {
 }
 
 function describeRange() {
-    const note = document.getElementById('range-note');
+    const note = document.getElementById('range-note');   // removed 2026-10-01; kept null-safe
     if (!note) return;
     if (!_rangeFrom && !_rangeTo) { note.textContent = 'Showing every record on file.'; return; }
     note.textContent = 'Showing ' + (_rangeFrom || 'the beginning') + ' to ' + (_rangeTo || 'today') + '.';
@@ -811,20 +747,28 @@ function applyRange(from, to, activeBtn) {
 }
 
 function initRange() {
-    document.querySelectorAll('.range-btn').forEach(function (btn) {
+    document.querySelectorAll('.range-btn[data-days]').forEach(function (btn) {
         btn.addEventListener('click', function () {
+            document.getElementById('range-custom').style.display = 'none';
             const d = btn.dataset.days;
             document.getElementById('range-from').value = '';
             document.getElementById('range-to').value = '';
             applyRange(d === 'all' ? '' : isoDaysAgo(parseInt(d, 10)), '', btn);
         });
     });
-    document.getElementById('range-apply').addEventListener('click', function () {
-        const f = document.getElementById('range-from').value;
-        const t = document.getElementById('range-to').value;
-        if (f && t && f > t) { alert('The "from" date is after the "to" date.'); return; }
-        if (!f && !t) { alert('Pick at least one date, or use a preset.'); return; }
-        applyRange(f, t, null);
+    // Custom range: reveal the two dates; either one changing applies it.
+    const customBtn = document.getElementById('range-custom-btn');
+    customBtn.addEventListener('click', function () {
+        document.getElementById('range-custom').style.display = 'inline-flex';
+    });
+    ['range-from', 'range-to'].forEach(function (id) {
+        document.getElementById(id).addEventListener('change', function () {
+            const f = document.getElementById('range-from').value;
+            const t = document.getElementById('range-to').value;
+            if (!f && !t) return;
+            if (f && t && f > t) { alert('The "from" date is after the "to" date.'); return; }
+            applyRange(f, t, customBtn);
+        });
     });
     // Default: the last 90 days. Deliberately a real default rather than "all"
     // — the page previously loaded every record ever on every visit.
