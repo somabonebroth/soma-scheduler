@@ -1386,6 +1386,22 @@ def api_sales_by_buyer():
         by_buyer[buyer]["by_sku"][sku]["units"]   += qty
         by_buyer[buyer]["by_sku"][sku]["revenue"] += revenue_this
 
+    # Clover's non-jar items (hot cups, creams, …) are money only, kept per
+    # day in clover_days.json — add them to SOMA (Clover) as one line.
+    if not buyers_q or buyers_q.lower() == CLOVER_BUYER.lower():
+        for d in _load_json(CLOVER_DAYS_PATH, []):
+            dollars = float(d.get("extra_revenue") or 0)
+            if not dollars or (cutoff and (d.get("day_id") or "") < cutoff.isoformat()):
+                continue
+            b = by_buyer.setdefault(CLOVER_BUYER, {"buyer": CLOVER_BUYER, "orders": set(),
+                                                   "units": 0, "revenue": 0.0, "by_sku": {}})
+            b["orders"].add("ORD-CLOVER-" + d.get("day_id", ""))
+            b["revenue"] += dollars
+            line = b["by_sku"].setdefault("clover-other", {
+                "sku": "clover-other", "recipe": "Other retail items",
+                "format": "hot cups, creams, …", "units": 0, "revenue": 0.0})
+            line["revenue"] += dollars
+
     result = []
     for b_data in sorted(by_buyer.values(), key=lambda x: -x["revenue"]):
         skus = sorted(b_data["by_sku"].values(), key=lambda s: -s["units"])
@@ -4576,72 +4592,57 @@ def clover_preview():
         return jsonify({"error": str(e)}), 500
 
 
-def _clover_commit_for_week(week_id):
-    """Worker shared by /admin/clover-commit and the cron internal route.
-    Returns (response_dict, http_status_code). Pure function — no decorators,
-    no request access. Callers handle auth.
+# Clover is imported DAILY since 2026-10-02 (Jeremy: "Soma sales accurate and
+# daily"). Each completed day writes:
+#   - sale rows for the SOMA- jar SKUs, FIFO-deducted from FG exactly as the
+#     weekly import does (rows carry day_id + week_id, order ORD-CLOVER-<day>);
+#   - ONE entry in clover_days.json with the money that is NOT on a sale row:
+#     hot cups, creams and every other non-SOMA or SKU-less item, plus any jar
+#     SKU that could not be recorded (no stock, unmapped). That file never
+#     touches stock and nothing inventory-side reads it — it exists so the
+#     sales charts can show Clover's whole day.
+# The weekly path stays for weeks before the switch and refuses a week that
+# has any daily import, and the daily path refuses a week the weekly import
+# already wrote, so the two can never count the same sale twice.
+CLOVER_DAYS_PATH = os.path.join(INVENTORY_DIR, "clover_days.json")
+CLOVER_BUYER = "SOMA (Clover)"
 
-    Mirrors _shopify_commit_for_week exactly except for: which importer
-    module is called, which env vars are read, the channel name, the
-    buyer name, and the order_id prefix. Kept as a deliberate duplicate
-    (rather than an abstracted helper) so each channel's behavior is
-    readable end-to-end in one place.
-    """
-    if not validate_week_id(week_id):
-        return {"error": "Invalid or missing 'week' parameter"}, 400
 
-    token = os.environ.get("CLOVER_API_TOKEN", "").strip()
-    merchant_id = os.environ.get("CLOVER_MERCHANT_ID", "").strip()
-    api_base = os.environ.get("CLOVER_API_BASE", "").strip() or None
-    if not (token and merchant_id):
-        return {"error": "Clover config missing in environment"}, 500
+def _clover_env():
+    """(token, merchant_id, api_base) from the environment."""
+    return (os.environ.get("CLOVER_API_TOKEN", "").strip(),
+            os.environ.get("CLOVER_MERCHANT_ID", "").strip(),
+            os.environ.get("CLOVER_API_BASE", "").strip() or None)
 
-    try:
-        recipes = _load_json(RECIPES_PATH, {})
-        preview = clover_importer.preview_week(
-            week_id, recipes, token, merchant_id, api_base=api_base
-        )
-    except Exception as e:
-        logger.exception("Clover commit: preview phase failed for %s", week_id)
-        return {"error": str(e)}, 500
 
-    if preview["unparseable"]:
-        return {
-            "error": "Unparseable SKUs in this week; refusing to commit",
-            "unparseable": preview["unparseable"],
-        }, 400
+def _clover_weekly_rows_exist(sales, week_id):
+    """True when the WEEKLY import already wrote Clover rows for this week
+    (weekly rows have a week_id and no day_id)."""
+    return any(s.get("channel") == "clover" and s.get("week_id") == week_id
+               and not s.get("day_id") for s in sales)
 
-    unmapped = [m for m in preview["matched"] if not m["exists_in_soma"]]
-    if unmapped:
-        return {
-            "error": "Some Clover SKUs do not map to existing Soma recipes; "
-                     "refusing to commit",
-            "unmapped": [{"sku": m["sku"], "attempted_key": m["soma_key"]}
-                         for m in unmapped],
-        }, 400
 
-    if not preview["matched"]:
-        return {
-            "ok": True,
-            "message": "No SKUs to commit for this week",
-            "week_id": week_id,
-            "preview": preview,
-        }, 200
+def _clover_days_in_week(week_id):
+    """day_ids of daily Clover imports that fall in this Mon–Sun week."""
+    return sorted(d.get("day_id") for d in _load_json(CLOVER_DAYS_PATH, [])
+                  if d.get("week_id") == week_id and d.get("day_id"))
 
-    BUYER_NAME = "SOMA (Clover)"
+
+def _clover_write_sales(matched_list, sales, fg, *, period_field, period_id,
+                        week_id, order_id, sale_date):
+    """FIFO-deduct each matched SOMA SKU from FG and append its sale row.
+
+    Shared by the weekly and the daily import so both deduct one way.
+    Idempotent on (channel, period_field, sku_key). Mutates `sales` and `fg`
+    in place; the caller saves. Returns (created, skipped_idempotent, errors,
+    organic_skipped)."""
     CHANNEL = "clover"
-    sale_date = preview["range_end"][:10]
-    order_id = f"ORD-CLOVER-{week_id}"
-
-    sales = _load_json(ORGANIC_SALES_PATH, [])
-    fg = _load_json(ORGANIC_FG_PATH, [])
-
     created = []
     skipped_idempotent = []
     errors = []
     organic_skipped = []
 
-    for matched in preview["matched"]:
+    for matched in matched_list:
         sku_str = matched["sku"]
         soma_key = matched["soma_key"]
         brand = matched["brand"]
@@ -4657,7 +4658,7 @@ def _clover_commit_for_week(week_id):
         already = next(
             (s for s in sales
              if s.get("channel") == CHANNEL
-             and s.get("week_id") == week_id
+             and s.get(period_field) == period_id
              and s.get("sku_key") == soma_key),
             None,
         )
@@ -4680,10 +4681,9 @@ def _clover_commit_for_week(week_id):
                and (f.get("certification") or "").strip().lower() == "organic"
                for f in fg):
             msg = ("Organic-certified SKU (lot-tracked) — not imported. Record it via "
-                   "Manage Inventory → Record Sale with a packer lot allocation, and "
-                   "remove the SKU from the channel.")
+                   "Record Sale, and remove the SKU from the channel.")
             logger.warning("%s import %s: organic SKU %s skipped (%s units)",
-                           CHANNEL, week_id, sku_str, quantity)
+                           CHANNEL, period_id, sku_str, quantity)
             organic_skipped.append({"sku": sku_str, "soma_key": soma_key, "quantity": quantity})
             errors.append({"sku": sku_str, "error": msg})
             continue
@@ -4755,7 +4755,7 @@ def _clover_commit_for_week(week_id):
             "fg_id": (sale_lots[0]["fg_ids"][0]
                       if len(sale_lots) == 1 and len(sale_lots[0]["fg_ids"]) == 1
                       else ""),
-            "buyer": BUYER_NAME,
+            "buyer": CLOVER_BUYER,
             "sale_date": sale_date,
             "case_lot": "",
             "po_number": "",
@@ -4764,21 +4764,90 @@ def _clover_commit_for_week(week_id):
             "week_id": week_id,
             "source_order_ids": order_ids,
         }
+        if period_field == "day_id":
+            sale["day_id"] = period_id
         sales.append(sale)
         created.append(sale)
+
+    return created, skipped_idempotent, errors, organic_skipped
+
+
+def _clover_commit_for_week(week_id):
+    """Worker shared by /admin/clover-commit and the weekly cron route.
+    Returns (response_dict, http_status_code). Callers handle auth.
+
+    Only for weeks before the daily import began (2026-10-02): a week with
+    any daily import is refused (200, nothing written) so nothing counts twice.
+    """
+    if not validate_week_id(week_id):
+        return {"error": "Invalid or missing 'week' parameter"}, 400
+
+    daily = _clover_days_in_week(week_id)
+    if daily:
+        return {
+            "ok": True,
+            "message": "Clover is imported daily for this week — nothing to do",
+            "week_id": week_id,
+            "daily_imports": daily,
+        }, 200
+
+    token, merchant_id, api_base = _clover_env()
+    if not (token and merchant_id):
+        return {"error": "Clover config missing in environment"}, 500
+
+    try:
+        recipes = _load_json(RECIPES_PATH, {})
+        preview = clover_importer.preview_week(
+            week_id, recipes, token, merchant_id, api_base=api_base
+        )
+    except Exception as e:
+        logger.exception("Clover commit: preview phase failed for %s", week_id)
+        return {"error": str(e)}, 500
+
+    if preview["unparseable"]:
+        return {
+            "error": "Unparseable SKUs in this week; refusing to commit",
+            "unparseable": preview["unparseable"],
+        }, 400
+
+    unmapped = [m for m in preview["matched"] if not m["exists_in_soma"]]
+    if unmapped:
+        return {
+            "error": "Some Clover SKUs do not map to existing Soma recipes; "
+                     "refusing to commit",
+            "unmapped": [{"sku": m["sku"], "attempted_key": m["soma_key"]}
+                         for m in unmapped],
+        }, 400
+
+    if not preview["matched"]:
+        return {
+            "ok": True,
+            "message": "No SKUs to commit for this week",
+            "week_id": week_id,
+            "preview": preview,
+        }, 200
+
+    sale_date = preview["range_end"][:10]
+    order_id = f"ORD-CLOVER-{week_id}"
+
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    created, skipped_idempotent, errors, organic_skipped = _clover_write_sales(
+        preview["matched"], sales, fg, period_field="week_id", period_id=week_id,
+        week_id=week_id, order_id=order_id, sale_date=sale_date)
 
     if created:
         _save_json(ORGANIC_SALES_PATH, sales)
         _save_json(ORGANIC_FG_PATH, fg)
-        _add_contact("buyer", BUYER_NAME)
+        _add_contact("buyer", CLOVER_BUYER)
 
     return {
         "ok": True,
         "week_id": week_id,
         "order_id": order_id,
         "sale_date": sale_date,
-        "buyer": BUYER_NAME,
-        "channel": CHANNEL,
+        "buyer": CLOVER_BUYER,
+        "channel": "clover",
         "created_count": len(created),
         "skipped_count": len(skipped_idempotent),
         "error_count": len(errors),
@@ -4787,6 +4856,159 @@ def _clover_commit_for_week(week_id):
         "errors": errors,
         "organic_skipped": organic_skipped,
     }, 200
+
+
+def _toronto_today():
+    """Today's date in America/Toronto (the server runs in UTC)."""
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("America/Toronto")).date()
+    except Exception:
+        return datetime.now().date()
+
+
+def _clover_other_items(preview):
+    """Group the day's non-jar lines (no SKU, or not a SOMA- SKU) by name."""
+    items = {}
+    for x in preview.get("skipped_no_sku") or []:
+        label = (x.get("name") or "").strip() or "(untitled)"
+        it = items.setdefault(label, {"name": label, "quantity": 0, "revenue": 0.0})
+        it["quantity"] += int(x.get("quantity") or 0)
+        it["revenue"] += float(x.get("revenue") or 0)
+    for x in preview.get("skipped_other_brands") or []:
+        label = (x.get("sku") or "").strip() or "(untitled)"
+        it = items.setdefault(label, {"name": label, "quantity": 0, "revenue": 0.0})
+        it["quantity"] += int(x.get("quantity") or 0)
+        it["revenue"] += float(x.get("revenue") or 0)
+    out = [{**it, "revenue": round(it["revenue"], 2)} for it in items.values()]
+    out.sort(key=lambda it: -it["revenue"])
+    return out
+
+
+def _clover_commit_for_day(day_id):
+    """Import ONE completed Toronto day from Clover. Returns (body, status).
+
+    Jar SKUs become sale rows and leave FG (the weekly rules, via
+    _clover_write_sales). Everything else Clover sold that day — hot cups,
+    creams, any line with no SOMA- SKU — and any jar line that could not be
+    recorded is kept as money only, in clover_days.json (`extra_revenue`).
+    Unlike the weekly commit, one bad SKU does not refuse the day: it is
+    reported in `errors`, its money is still counted, and re-running the day
+    after fixing it imports just that SKU (idempotent per SKU)."""
+    try:
+        day = datetime.strptime(day_id or "", "%Y-%m-%d").date()
+    except ValueError:
+        return {"error": "Invalid or missing 'day' parameter; expected YYYY-MM-DD"}, 400
+    if day >= _toronto_today():
+        # A day still trading would be marked done with half its sales.
+        return {"error": "Only a finished day can be imported"}, 400
+    week_id = (day - timedelta(days=day.weekday())).strftime("%Y-%m-%d")
+
+    sales = _load_json(ORGANIC_SALES_PATH, [])
+    if _clover_weekly_rows_exist(sales, week_id):
+        return {
+            "ok": True,
+            "message": "This week was already imported weekly — nothing to do",
+            "day_id": day_id, "week_id": week_id,
+        }, 200
+
+    token, merchant_id, api_base = _clover_env()
+    if not (token and merchant_id):
+        return {"error": "Clover config missing in environment"}, 500
+    try:
+        recipes = _load_json(RECIPES_PATH, {})
+        preview = clover_importer.preview_day(
+            day_id, recipes, token, merchant_id, api_base=api_base)
+    except Exception as e:
+        logger.exception("Clover daily import: preview failed for %s", day_id)
+        return {"error": str(e)}, 502
+
+    errors = [{"sku": u["sku"], "error": "SKU does not parse: " + u.get("error", "")}
+              for u in preview["unparseable"]]
+    importable = []
+    for m in preview["matched"]:
+        if m["exists_in_soma"]:
+            importable.append(m)
+        else:
+            errors.append({"sku": m["sku"],
+                           "error": "No Soma recipe for " + m["soma_key"]})
+
+    fg = _load_json(ORGANIC_FG_PATH, [])
+    created, skipped_idempotent, write_errors, organic_skipped = _clover_write_sales(
+        importable, sales, fg, period_field="day_id", period_id=day_id,
+        week_id=week_id, order_id=f"ORD-CLOVER-{day_id}", sale_date=day_id)
+    errors.extend(write_errors)
+    if created:
+        _save_json(ORGANIC_SALES_PATH, sales)
+        _save_json(ORGANIC_FG_PATH, fg)
+        _add_contact("buyer", CLOVER_BUYER)
+
+    # Money not carried by a sale row: the non-jar items, plus jar SKUs that
+    # have no row for this day (errors above). Recomputed from scratch on every
+    # run, so a re-run after a fix moves that money onto the new sale row.
+    on_file = {s.get("sku_key") for s in sales
+               if s.get("channel") == "clover" and s.get("day_id") == day_id}
+    other_items = _clover_other_items(preview)
+    unrecorded = [{"name": m["sku"], "quantity": m["quantity"],
+                   "revenue": round(float(m.get("revenue") or 0), 2)}
+                  for m in preview["matched"] if m["soma_key"] not in on_file]
+    unrecorded += [{"name": u["sku"], "quantity": u["quantity"],
+                    "revenue": round(float(u.get("revenue") or 0), 2)}
+                   for u in preview["unparseable"]]
+    other_revenue = round(sum(i["revenue"] for i in other_items), 2)
+    unrecorded_revenue = round(sum(i["revenue"] for i in unrecorded), 2)
+    jar_revenue = round(sum(float(m.get("revenue") or 0) for m in preview["matched"])
+                        + sum(float(u.get("revenue") or 0) for u in preview["unparseable"]), 2)
+
+    entry = {
+        "channel": "clover",
+        "day_id": day_id,
+        "week_id": week_id,
+        "imported_at": datetime.now().isoformat(),
+        "order_count": preview.get("order_count", 0),
+        "jar_revenue": jar_revenue,
+        "other_revenue": other_revenue,
+        "unrecorded_revenue": unrecorded_revenue,
+        # What the sales charts add on top of the sale rows.
+        "extra_revenue": round(other_revenue + unrecorded_revenue, 2),
+        "total_revenue": round(jar_revenue + other_revenue, 2),
+        "other_items": other_items,
+        "unrecorded_items": unrecorded,
+        "errors": errors,
+    }
+    days = [d for d in _load_json(CLOVER_DAYS_PATH, []) if d.get("day_id") != day_id]
+    days.append(entry)
+    days.sort(key=lambda d: d.get("day_id") or "")
+    _save_json(CLOVER_DAYS_PATH, days)
+
+    return {
+        "ok": True,
+        "day_id": day_id,
+        "week_id": week_id,
+        "buyer": CLOVER_BUYER,
+        "channel": "clover",
+        "created_count": len(created),
+        "skipped_count": len(skipped_idempotent),
+        "error_count": len(errors),
+        "created": created,
+        "skipped_idempotent": skipped_idempotent,
+        "errors": errors,
+        "organic_skipped": organic_skipped,
+        "day": entry,
+    }, 200
+
+
+def _clover_extra_revenue_by_day():
+    """{date: dollars} Clover sold that is NOT on a sale row (hot cups, creams,
+    unrecordable jars) — what the sales charts add for the Soma channel."""
+    out = {}
+    for d in _load_json(CLOVER_DAYS_PATH, []):
+        try:
+            day = datetime.strptime(d.get("day_id") or "", "%Y-%m-%d").date()
+            out[day] = out.get(day, 0.0) + float(d.get("extra_revenue") or 0)
+        except (ValueError, TypeError):
+            continue
+    return out
 
 
 @app.route("/admin/clover-commit", methods=["POST"])
@@ -4828,6 +5050,77 @@ def clover_internal_import_last_week():
     body, status = _clover_commit_for_week(week_id)
     body["computed_week_id"] = week_id
     return jsonify(body), status
+
+
+@app.route("/admin/clover-commit-day", methods=["POST"])
+@manager_required
+def clover_commit_day():
+    """Import one finished day from Clover by hand (?day=YYYY-MM-DD).
+    Safe to re-run: jar SKUs already on file are skipped, the money-only
+    day entry is rebuilt."""
+    body, status = _clover_commit_for_day((request.args.get("day") or "").strip())
+    return jsonify(body), status
+
+
+@app.route("/admin/clover-days")
+@manager_required
+def clover_days():
+    """The daily Clover import log, newest first (?n= days, default 14)."""
+    try:
+        n = max(1, min(int(request.args.get("n") or 14), 120))
+    except ValueError:
+        n = 14
+    days = sorted(_load_json(CLOVER_DAYS_PATH, []),
+                  key=lambda d: d.get("day_id") or "", reverse=True)
+    return jsonify({"days": days[:n]})
+
+
+CLOVER_CATCHUP_DAYS = 7
+
+
+@app.route("/api/internal/clover-import-day", methods=["POST"])
+def clover_internal_import_day():
+    """Called by the DAILY Render Cron Job (X-Internal-Key).
+
+    Imports yesterday (Toronto) and catches up any of the last
+    CLOVER_CATCHUP_DAYS days with no import on file, so a missed run heals
+    itself. `?day=YYYY-MM-DD` imports that one day instead. Non-2xx when any
+    day failed, so `curl -f` marks the cron run failed."""
+    provided = (request.headers.get("X-Internal-Key") or "").strip()
+    internal_key = (os.environ.get("INTERNAL_API_KEY") or "").strip()
+    import hmac as _hmac
+    if not internal_key or not _hmac.compare_digest(
+        provided.encode(), internal_key.encode()
+    ):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    one = (request.args.get("day") or "").strip()
+    if one:
+        targets = [one]
+    else:
+        today = _toronto_today()
+        done = {d.get("day_id") for d in _load_json(CLOVER_DAYS_PATH, [])}
+        yesterday = (today - timedelta(days=1)).strftime("%Y-%m-%d")
+        targets = [yesterday] + [
+            (today - timedelta(days=i)).strftime("%Y-%m-%d")
+            for i in range(2, CLOVER_CATCHUP_DAYS + 1)
+            if (today - timedelta(days=i)).strftime("%Y-%m-%d") not in done]
+
+    results = []
+    failed = False
+    for day_id in targets:
+        logger.info("Clover daily import firing for %s", day_id)
+        body, status = _clover_commit_for_day(day_id)
+        failed = failed or status >= 400
+        results.append({
+            "day_id": day_id, "status": status,
+            "message": body.get("message") or body.get("error"),
+            "created_count": body.get("created_count"),
+            "error_count": body.get("error_count"),
+            "extra_revenue": (body.get("day") or {}).get("extra_revenue"),
+            "errors": body.get("errors"),
+        })
+    return jsonify({"ok": not failed, "results": results}), (502 if failed else 200)
 
 
 @app.route("/admin/clover-import")

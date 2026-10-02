@@ -559,6 +559,12 @@ def get_sales_by_channel():
         cell = by_day.setdefault(day, {}).setdefault(_sales_channel(s, resolve), [0, 0.0])
         cell[0] += qty
         cell[1] += revenue
+    # Clover's hot cups, creams and other non-jar items are money only — kept
+    # per day in clover_days.json, never as sale rows — and belong to Soma.
+    for day, dollars in app._clover_extra_revenue_by_day().items():
+        if start_date <= day <= end_date and dollars:
+            cell = by_day.setdefault(day, {}).setdefault("soma", [0, 0.0])
+            cell[1] += dollars
 
     today = datetime.now().date()
     out = []

@@ -52,6 +52,10 @@
   .bucket h4 { font-size: 12px; margin: 0 0 4px; color: var(--dark); }
   .bucket p { font-size: 12px; color: var(--text-light); margin: 0 0 8px; line-height: 1.5; }
 .cp-note summary { cursor: pointer; margin-bottom: 6px; }
+  .cd-h { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-light); margin: 18px 0 8px; }
+  .cd-row { cursor: pointer; }
+  .cd-items td, td.cd-items { background: var(--bg); font-size: 12px; }
+  .cd-err { color: var(--action-red); font-size: 12px; }
 </style>
 </head>
 <body class="inv-page">
@@ -77,6 +81,15 @@
     <code>read_all_orders</code> scope, so older weeks may come back empty.
   </details>
 
+  <h3 class="cd-h">Clover · daily</h3>
+  <div class="anyweek">
+    <input id="cd-day" type="date">
+    <button class="btn btn-primary btn-sm" onclick="importCloverDay()">Import day</button>
+  </div>
+  <div id="cd-out"></div>
+  <div id="cd-days" style="margin-bottom:24px;"></div>
+
+  <h3 class="cd-h">By week</h3>
   <div class="anyweek">
     <label for="aw-ch">Week:</label>
     <select id="aw-ch"><option value="shopify">Shopify</option><option value="clover">Clover</option></select>
@@ -321,6 +334,67 @@ async function reconcile(channel, week, target) {
 }
 
 loadWeeks();
+
+// Clover is imported DAILY since 2026-10-02 (nightly cron + catch-up). Jars
+// leave stock as sale rows; hot cups, creams etc. are kept as money only.
+let cdDays = [];
+async function loadCloverDays() {
+  const host = document.getElementById('cd-days');
+  try {
+    const r = await fetch('/admin/clover-days?n=14');
+    const d = await r.json();
+    cdDays = d.days || [];
+    if (!cdDays.length) { host.innerHTML = '<div class="msg">No daily imports yet.</div>'; return; }
+    host.innerHTML = '<table><thead><tr><th>Day</th><th class="num">Orders</th><th class="num">Jars</th>'
+      + '<th class="num">Other items</th><th class="num">Total</th><th></th></tr></thead><tbody>'
+      + cdDays.map(function (x, i) {
+          const errs = (x.errors || []).length;
+          return '<tr class="cd-row" onclick="toggleCloverDay(' + i + ')"><td>' + esc(x.day_id) + '</td>'
+            + '<td class="num">' + (x.order_count || 0) + '</td>'
+            + '<td class="num">' + money(x.jar_revenue) + '</td>'
+            + '<td class="num">' + money(x.other_revenue) + '</td>'
+            + '<td class="num"><b>' + money(x.total_revenue) + '</b></td>'
+            + '<td>' + (errs ? '<span class="cd-err">' + errs + ' not recorded</span>' : '') + '</td></tr>'
+            + '<tr id="cd-x-' + i + '" style="display:none;"><td colspan="6" class="cd-items"></td></tr>';
+        }).join('') + '</tbody></table>';
+  } catch (e) {
+    host.innerHTML = '<div class="msg msg-err">' + esc(e.message) + '</div>';
+  }
+}
+
+function toggleCloverDay(i) {
+  const row = document.getElementById('cd-x-' + i);
+  if (row.style.display !== 'none') { row.style.display = 'none'; return; }
+  const x = cdDays[i];
+  const items = (x.other_items || []).map(function (it) {
+    return esc(it.name) + ' × ' + it.quantity + ' · ' + money(it.revenue);
+  }).join('<br>') || 'No other items.';
+  const errs = (x.errors || []).map(function (e) {
+    return '<div class="cd-err">' + esc(e.sku) + ': ' + esc(e.error) + '</div>';
+  }).join('');
+  row.firstChild.innerHTML = items + errs;
+  row.style.display = '';
+}
+
+async function importCloverDay() {
+  const day = document.getElementById('cd-day').value;
+  if (!day) { alert('Pick a day first.'); return; }
+  if (!confirm('Import Clover sales for ' + day + '? Jar sales deduct finished goods.')) return;
+  const out = document.getElementById('cd-out');
+  out.innerHTML = '<div class="msg">Importing ' + esc(day) + '…</div>';
+  try {
+    const r = await fetch('/admin/clover-commit-day?day=' + encodeURIComponent(day), {method: 'POST', credentials: 'same-origin'});
+    const d = await r.json();
+    if (!r.ok) { out.innerHTML = '<div class="msg msg-err">' + esc(d.error || ('HTTP ' + r.status)) + '</div>'; return; }
+    out.innerHTML = '<div class="msg"><b>' + (d.message ? esc(d.message)
+      : (d.created_count || 0) + ' jar SKU(s) imported · ' + (d.skipped_count || 0) + ' already on file · '
+        + money((d.day || {}).total_revenue) + ' total') + '</b></div>';
+    loadCloverDays();
+  } catch (e) {
+    out.innerHTML = '<div class="msg msg-err">' + esc(e.message) + '</div>';
+  }
+}
+loadCloverDays();
 
 // Data Backup (moved from the dashboard's Data & Imports row, 2026-10-02).
 async function downloadBackup(){

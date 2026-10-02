@@ -435,9 +435,9 @@ def preview_week(week_id, recipes_data, token, merchant_id, api_base=None):
 def preview_day(day_id, recipes_data, token, merchant_id, api_base=None):
     """One day's orders, same shape as preview_week plus `day_id`.
 
-    Read-only reporting for the Daily Review. There is deliberately no daily
-    commit: the weekly import remains the only path that writes sales and
-    deducts FG, so this can never double-count against it.
+    Read-only. Feeds the Daily Review AND, since 2026-10-02, the daily
+    import (app._clover_commit_for_day), which writes the sales — so the two
+    can never disagree about a day.
     """
     start_ms, end_ms = day_range_ms(day_id)
     orders = fetch_orders(token, merchant_id, start_ms, end_ms, api_base=api_base)
