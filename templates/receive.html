@@ -239,8 +239,30 @@ window.addEventListener('beforeunload', e => {
     if (rcSuppliers.length && rcLines().length) { e.preventDefault(); e.returnValue = ''; }
 });
 
+// ?item=&date= — opened from the Daily Summary's "Record delivery" link for an
+// ingredient used with no delivery on record: date the delivery on the batch
+// day (so Rebuild Raw Balances counts it) and pick the supplier who carries it.
+const rcParams = new URLSearchParams(location.search);
+const rcWantItem = (rcParams.get('item') || '').trim().toLowerCase();
+
+function rcPrefill() {
+    if (!rcWantItem) return;
+    const carriers = rcSuppliers.filter(s => (s.ingredients || []).some(ing => (ing.name || '').trim().toLowerCase() === rcWantItem));
+    if (carriers.length === 1) {
+        document.getElementById('rc-supplier').value = carriers[0].id;
+        rcSupplierChanged();
+        const i = carriers[0].ingredients.findIndex(ing => (ing.name || '').trim().toLowerCase() === rcWantItem);
+        const qty = document.querySelector('[data-qty="' + i + '"]');
+        if (qty) { qty.closest('.rc-item').scrollIntoView({block: 'center'}); qty.focus(); }
+    } else {
+        rcWarn('Recording a delivery of <b>' + rcEsc(rcParams.get('item')) + '</b>. '
+            + (carriers.length ? 'Pick the supplier it came from.' : 'No supplier lists this ingredient — add it to the supplier in Buyers &amp; Suppliers first.'));
+    }
+}
+
 (async function () {
-    document.getElementById('rc-date').value = new Date().toLocaleDateString('en-CA');
+    document.getElementById('rc-date').value = /^\d{4}-\d{2}-\d{2}$/.test(rcParams.get('date') || '')
+        ? rcParams.get('date') : new Date().toLocaleDateString('en-CA');
     try {
         rcSuppliers = await (await fetch('/api/suppliers')).json();
     } catch (e) {
@@ -252,6 +274,7 @@ window.addEventListener('beforeunload', e => {
     document.getElementById('rc-items').addEventListener('change', rcUpdate);
     document.getElementById('rc-date').addEventListener('input', rcUpdate);
     rcUpdate();
+    rcPrefill();
 })();
 </script>
 </body>

@@ -97,6 +97,8 @@ summary.dr-head::-webkit-details-marker { display: none; }
 .dr-sublabel.attn::before { background: var(--action-red) !important; }
 .dr-issue { display: flex; align-items: flex-start; gap: 9px; padding: 8px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
 .dr-issue:last-child { border-bottom: none; }
+.dr-issue-links { display: block; margin-top: 4px; font-weight: 600; }
+.dr-issue-links a { color: var(--action-green); }
 .dr-lvl { font-size: 9.5px; font-weight: 700; padding: 2px 7px; border-radius: 8px; white-space: nowrap; flex-shrink: 0; margin-top: 1px; }
 .dr-lvl.high { background: var(--action-red-bg); border: 1px solid var(--action-red); color: var(--action-red); }
 .dr-lvl.medium { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark, var(--amber-text)); }
@@ -161,7 +163,10 @@ function issuesHtml(list){
     if (!list.length) return '';
     return '<div class="dr-sublabel attn">Needs attention</div>' + list.map(i =>
         '<div class="dr-issue"><span class="dr-lvl ' + i.level + '">'
-        + (i.level === 'high' ? 'Issue' : 'Check') + '</span><span>' + esc(i.text) + '</span></div>').join('');
+        + (i.level === 'high' ? 'Issue' : 'Check') + '</span><span>' + esc(i.text)
+        + ((i.links || []).length ? '<span class="dr-issue-links">' + i.links.map(l =>
+            '<a href="' + esc(l.href) + '">' + esc(l.label) + '</a>').join(' · ') + '</span>' : '')
+        + '</span></div>').join('');
 }
 
 function notesHtml(list){

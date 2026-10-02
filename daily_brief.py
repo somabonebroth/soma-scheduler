@@ -23,6 +23,7 @@ Manager-only throughout: this is the HOO's desk, not the production tablet.
 import logging
 import os
 from functools import wraps
+from urllib.parse import urlencode
 from datetime import datetime, date, timedelta
 
 from flask import Blueprint, request, jsonify, session, redirect, url_for, render_template
@@ -122,6 +123,59 @@ def _stock_exceptions_section(on):
                 "shortfall": used.get("quantity_used"),
                 "unit": used.get("unit", ""),
             })
+    return out
+
+
+def _made_in_house(ex):
+    """Ingredients the kitchen makes itself (the garlic-ginger adjunct) are
+    never received from a supplier, so a "short" marker on them is not a
+    missing delivery. Recognised by the Adjunct unit or the word in the name."""
+    return ((ex.get("unit") or "").strip().lower() == "adjunct"
+            or "adjunct" in (ex.get("ingredient") or "").lower())
+
+
+def _fmt_qty(q):
+    try:
+        q = float(q or 0)
+    except (TypeError, ValueError):
+        return str(q)
+    return ("%d" % q) if q == int(q) else ("%.2f" % q).rstrip("0").rstrip(".")
+
+
+def _missing_delivery_issues(exceptions, on):
+    """One "Check" per ingredient the day's batches used MORE of than was ever
+    received (2026-10-02, replacing one red "Issue" per batch line).
+
+    The ingredient was in the kitchen — the broth was made — so what is
+    missing is the receiving record. The fix is to enter that delivery dated
+    on or before the batch day, then Rebuild Raw Balances (replay re-checks
+    every batch), which clears the flag. A paperwork gap, not food safety:
+    level medium. In-house ingredients are left out (_made_in_house)."""
+    grouped = {}
+    for ex in exceptions:
+        if _made_in_house(ex):
+            continue
+        g = grouped.setdefault((ex.get("ingredient") or "", ex.get("unit") or ""),
+                               {"qty": 0.0, "recipes": []})
+        try:
+            g["qty"] += float(ex.get("shortfall") or 0)
+        except (TypeError, ValueError):
+            pass
+        if ex.get("recipe") and ex["recipe"] not in g["recipes"]:
+            g["recipes"].append(ex["recipe"])
+    out = []
+    for (ingredient, unit), g in sorted(grouped.items()):
+        out.append({
+            "level": "medium",
+            "text": "%s: %s %s more used than was ever received%s. A delivery wasn't entered." % (
+                ingredient, _fmt_qty(g["qty"]), unit,
+                (" (" + ", ".join(g["recipes"]) + ")") if g["recipes"] else ""),
+            "links": [
+                {"label": "Record delivery",
+                 "href": "/receive?" + urlencode({"item": ingredient, "date": on.isoformat()})},
+                {"label": "Then rebuild raw balances", "href": "/admin/reconcile-raw"},
+            ],
+        })
     return out
 
 
@@ -252,10 +306,7 @@ def _production_section(on):
             notes.append({"source": fn["vessel"], "text": fn["note"]})
         if day.get("scheduled") and not day.get("kitchen_signoff"):
             issues.append({"level": "high", "text": "No kitchen sign-off on the production record"})
-    for ex in exceptions:
-        issues.append({"level": "high",
-                       "text": "%s made with insufficient %s on file (short %s %s)" % (
-                           ex["recipe"], ex["ingredient"], ex["shortfall"], ex["unit"])})
+    issues.extend(_missing_delivery_issues(exceptions, on))
 
     return {
         "completed": bool(day),
@@ -633,7 +684,10 @@ def _build_brief(on):
     actions = []
     for area, sec in (("Checklists", checks), ("Production", prod), ("Sales & Receiving", txn)):
         for i in sec["issues"]:
-            actions.append({"level": i["level"], "area": area, "text": i["text"]})
+            action = {"level": i["level"], "area": area, "text": i["text"]}
+            if i.get("links"):
+                action["links"] = i["links"]
+            actions.append(action)
     actions.sort(key=lambda a: 0 if a["level"] == "high" else 1)
 
     notes = prod["notes"] + txn["notes"] + checks["notes"]
