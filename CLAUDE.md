@@ -44,8 +44,8 @@ sales.py            — Flask Blueprint (731 lines, extracted 2026-06-03): the 7
                       (which re-asked the same questions inside organic.html) are gone — one
                       "Record Sale" tile. Soma sells wholesale CASES only (Jeremy, 2026-10-02): the
                       loose-jar link is gone and Manage Inventory's "Record sale" button now opens
-                      /record-sale; the old jar-level modal survives only behind `/organic?action=sell`
-                      (no link reaches it). Every sale
+                      /record-sale; the old jar-level Record Sale modal was DELETED from organic.html
+                      (−515 lines) and `/organic?action=sell` now redirects to /record-sale. Every sale
                       recorded there emails its slip (settings card renamed "Packing slip email",
                       same `organic_slip_emails` key + `#organic-email` anchor).
                       **Organic Sale (2026-09-30):** `/organic-sale` (templates/organic_sale.html,
