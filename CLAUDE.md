@@ -1064,6 +1064,8 @@ Render is connected to `github.com/somabonebroth/soma-scheduler` and auto-deploy
 
 ## Pending architectural work
 
+**Administration rows are TITLE ONLY (2026-10-02, Jeremy):** each row is one link, no sub-link chips. Order: Recipes, Inventory, Sales & Receiving, Organic Certification, Ripe, then Completed Production, Analytics, Buyers & Suppliers, Cleaning Records, Settings, Data & Imports. Pages that were reachable only by a chip got a header button on their parent: Sales by Buyer ↔ Production, Ripe Orders → Retail Pack Queue + Ripe credits, Company Settings → CCP Checklist, Shopify & Clover → Data Backup (`downloadBackup` moved there from the dashboard). This supersedes the row audit's "every row keeps a page pill".
+
 ### UX simplification / two-role split — IN PROGRESS (started 2026-08-18)
 
 Goal: two logins, two dashboards. `APP_PASSWORD` → production role (kitchen tablet:

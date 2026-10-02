@@ -58,7 +58,7 @@
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
   <div class="header-text"><h1>Shopify &amp; Clover</h1><p>Soma Bone Broth</p></div>
-  <div class="header-right"><a href="/" class="header-btn">⌂ Dashboard</a></div>
+  <div class="header-right" style="display:flex;align-items:center;gap:8px;"><button type="button" class="header-btn" onclick="downloadBackup()">Data Backup</button><a href="/" class="header-btn">⌂ Dashboard</a></div>
 </div>
 
 <div class="cp-wrap">
@@ -321,6 +321,38 @@ async function reconcile(channel, week, target) {
 }
 
 loadWeeks();
+
+// Data Backup (moved from the dashboard's Data & Imports row, 2026-10-02).
+async function downloadBackup(){
+  var pwd = prompt('Manager password to authorize backup download:');
+  if(!pwd) return;
+  try {
+    var res = await fetch('/api/admin/backup', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({password: pwd}),
+    });
+    if(!res.ok){
+      var err = await res.json().catch(function(){ return {error: 'Backup failed'}; });
+      alert(err.error || 'Backup failed (HTTP ' + res.status + ')');
+      return;
+    }
+    var blob = await res.blob();
+    var disposition = res.headers.get('Content-Disposition') || '';
+    var match = disposition.match(/filename="?([^";]+)"?/);
+    var filename = match ? match[1] : 'soma-backup.zip';
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch(e){
+    alert('Backup failed: ' + e.message);
+  }
+}
 </script>
 </body>
 </html>
