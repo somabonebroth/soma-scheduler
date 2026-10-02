@@ -232,6 +232,15 @@ body.inv-page .cert-badge {
 .status.loading { display: block; background: var(--warning); color: var(--warning-text); border-left: 4px solid #d4a72c; }
 
 /* Production runs */
+.run-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 4px 0 12px; }
+.run-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.run-table td.r { text-align: right; white-space: nowrap; }
+.run-table td.mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+.run-row.done { cursor: pointer; }
+.run-row.done:hover td { background: var(--row-alt); }
+.run-done { color: var(--text-light); font-size: 11px; }
+.run-sched { font-size: 11px; color: var(--text-light); }
+.run-detail-row td { background: var(--row-alt); font-size: 12px; }
 .run-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
 .run-header { padding: 14px 18px; font-size: 13px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; cursor: pointer; min-height: 50px; }
 .run-header.scheduled { background: var(--warning); }
@@ -788,6 +797,7 @@ body.inv-page .modal-actions {
     .modal input, .modal select, .modal textarea { font-size: 16px !important; }
     .modal-actions button, .modal-actions .btn { max-width: 100%; margin-left: 0 !important; }
 }
+.rm-showall { display: block; margin: 10px auto 0; background: none; border: none; color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; }
 .repair-note { font-size: 12px; color: var(--text-light); line-height: 1.5; margin: 4px 4px 0; }
 .repair-note a { color: var(--dark); }
 </style>
@@ -795,7 +805,7 @@ body.inv-page .modal-actions {
 <body class="inv-page">
 <div class="header">
     <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-    <div class="header-text"><h1>Inventory</h1><p>Raw materials, production runs & finished goods</p></div>
+    <div class="header-text"><h1>Inventory</h1><p>Soma Bone Broth</p></div>
     <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button><button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button></div>
     <a href="/" class="header-btn">⌂ Dashboard</a>
@@ -814,20 +824,18 @@ body.inv-page .modal-actions {
         <div class="card" style="padding-bottom:18px;">
             <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
                 <button class="btn btn-primary" onclick="openAddInventoryModal()" style="background:var(--action-green);border-color:var(--action-green);">&#128230; Add Inventory</button>
-                <button class="btn-outline" onclick="openAdjustmentModal()" style="font-size:13px;">&#9881; Adjust Inventory</button>
-                <button class="btn-outline" onclick="addCustomIngredient()" style="font-size:13px;">+ New Ingredient</button>
-                <a href="/audits" class="btn btn-outline" style="font-size:13px;text-decoration:none;margin-left:auto;">🗂 History</a>
-                <a href="/audit/rm" class="btn btn-outline" style="font-size:13px;text-decoration:none;">📋 Audit Inventory</a>
+                <button class="btn-outline" onclick="openAdjustmentModal()" style="font-size:13px;">Adjust</button>
+                <a href="/audit/rm" class="btn btn-outline" style="font-size:13px;text-decoration:none;margin-left:auto;">Count stock</a>
             </div>
             <div id="rm-status" class="status" style="margin-top:8px;"></div>
         </div>
         <div class="card">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
                 <h2 style="border-bottom:none;padding-bottom:0;margin-bottom:0;">Current Inventory <span class="count-badge" id="rm-count">—</span></h2>
-                <button class="btn-outline" onclick="openSectionsModal()" title="Organize ingredients into sections" style="font-size:12px;padding:8px 14px;min-height:38px;">⚙ Edit Sections</button>
             </div>
             <div id="rm-table-container"><div class="empty-state">Loading...</div></div>
         </div>
+        <p class="repair-note">Set up: <a href="#" onclick="addCustomIngredient();return false;">New ingredient</a> &middot; <a href="#" onclick="openSectionsModal();return false;">Edit sections</a></p>
         <p class="repair-note">Repair, only if raw stock looks wrong: <a href="/admin/reconcile-raw">Rebuild raw balances</a> replays every completed batch and rewrites the raw books (it shows you a preview first).</p>
     </div>
 
@@ -835,7 +843,6 @@ body.inv-page .modal-actions {
     <div class="tab-content" id="tab-runs">
         <div class="card">
             <h2>Production Runs <span class="count-badge" id="runs-count">—</span></h2>
-            <p>Every recipe scheduled in any week appears here as a tracked production run. Raw materials are deducted when daily production is marked complete. Runs are grouped by week (most recent first) — completed runs collapse into a dropdown by default.</p>
             <div id="runs-container"><div class="empty-state">Loading...</div></div>
         </div>
     </div>
@@ -844,12 +851,11 @@ body.inv-page .modal-actions {
     <div class="tab-content" id="tab-fg">
         <div class="card" style="padding-bottom:18px;">
             <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;">
-                <button class="btn btn-primary" onclick="openRecordSaleModal()" style="background:var(--info);border-color:var(--info);">&#128176; Record Sale</button>
-                <button class="btn-outline" onclick="openFgAdjustModal()" style="font-size:13px;">&#9881; Adjust Inventory</button>
-                <a href="/audits" class="btn btn-outline" style="font-size:13px;text-decoration:none;margin-left:auto;">🗂 History</a>
-                <a href="/audit/fg" class="btn btn-outline" style="font-size:13px;text-decoration:none;">📋 Audit Inventory</a>
+                <button class="btn btn-primary" onclick="openRecordSaleModal()" style="background:var(--info);border-color:var(--info);">&#128176; Record sale (jars)</button>
+                <button class="btn-outline" onclick="openFgAdjustModal()" style="font-size:13px;">Adjust</button>
+                <button class="btn-outline" id="par-edit-btn" onclick="toggleParEdit()" style="font-size:13px;">Edit PAR levels</button>
+                <a href="/audit/fg" class="btn btn-outline" style="font-size:13px;text-decoration:none;margin-left:auto;">Count stock</a>
             </div>
-            <p style="font-size:12px;color:var(--text-light);margin-bottom:12px;">Inventory is grouped by brand. Click a row for LOT detail. Sales draw from the oldest LOT first (FIFO); organic products are sold only on Record Sale, where each case is scanned to its LOT#.</p>
             <div class="filter-bar" style="margin-bottom:14px;">
                 <button class="filter-btn active" data-fg-filter="all" onclick="setFgFilter('all',this)">All</button>
                 <button class="filter-btn" data-fg-filter="Organic" onclick="setFgFilter('Organic',this)">Organic</button>
@@ -1162,6 +1168,10 @@ body.inv-page .modal-actions {
                     <label id="prompt-label" style="display:none;"></label>
                     <input id="prompt-input" type="text" inputmode="text" autocomplete="off">
                 </div>
+                <div class="form-field" id="prompt-reason-field" style="grid-column: 1 / -1;display:none;">
+                    <label>Reason</label>
+                    <select id="prompt-reason"></select>
+                </div>
             </div>
             <div id="prompt-error" style="font-size:12px;color:var(--danger);margin-top:8px;display:none;"></div>
             <div class="modal-actions">
@@ -1391,6 +1401,8 @@ function mobileConfirm(message, opts){
 // `validate` is an optional function(value) -> string|null. Return a string to
 // show as an error; return null/undefined to accept the value.
 // Resolves to the trimmed string, or null if cancelled.
+// Why a hand correction was made — logged with it (2026-10-01).
+const EDIT_REASONS = ['Recount', 'Breakage', 'Spillage', 'Spoilage', 'Sample', 'Data entry error', 'Other'];
 function mobilePrompt(message, opts){
     opts = opts || {};
     return new Promise(function(resolve){
@@ -1406,6 +1418,16 @@ function mobilePrompt(message, opts){
         input.setAttribute('type', opts.type || 'text');
         if(opts.step) input.setAttribute('step', opts.step); else input.removeAttribute('step');
         if(opts.min !== undefined) input.setAttribute('min', opts.min); else input.removeAttribute('min');
+        // opts.reasons: a quantity change is logged with WHY (2026-10-01);
+        // the chosen reason is left in mobilePrompt.reason for the caller.
+        var reasonField = document.getElementById('prompt-reason-field');
+        var reasonSel = document.getElementById('prompt-reason');
+        if(opts.reasons){
+            reasonSel.innerHTML = opts.reasons.map(function(r){ return '<option>'+r+'</option>'; }).join('');
+            reasonField.style.display = '';
+        } else {
+            reasonField.style.display = 'none';
+        }
         var errorEl = document.getElementById('prompt-error');
         errorEl.style.display = 'none';
         errorEl.textContent = '';
@@ -1425,6 +1447,7 @@ function mobilePrompt(message, opts){
                 var err = opts.validate(value);
                 if(err){ errorEl.textContent = err; errorEl.style.display = 'block'; return; }
             }
+            mobilePrompt.reason = opts.reasons ? reasonSel.value : '';
             cleanup(value);
         }
         okBtn.onclick = onOk;
@@ -1496,6 +1519,7 @@ function toggleRMSection(sectionId){
     loadRawMaterials();
 }
 
+var _rmShowAll = false;
 async function loadRawMaterials(){
     var [rowsRes, sectionsRes] = await Promise.all([
         fetch('/api/organic/raw-materials/grouped'),
@@ -1508,12 +1532,17 @@ async function loadRawMaterials(){
     if(countEl){
         var stocked = rows.filter(function(r){return(r.total_remaining||0)>0;}).length;
         var totalLots = rows.reduce(function(a,r){return a+(r.lot_count||0);},0);
-        countEl.textContent = stocked+' stocked / '+rows.length+' ingredients • '+totalLots+' lot'+(totalLots===1?'':'s');
+        countEl.textContent = stocked+' in stock · '+totalLots+' lot'+(totalLots===1?'':'s');
     }
     if(!rows.length){
         container.innerHTML = '<div class="empty-state">No ingredients found.<br>Recipes must define ingredients before they appear here. Use <strong>+ New Ingredient</strong> to add custom items.</div>';
         return;
     }
+
+    // Ingredients never received and empty sections stay hidden unless asked
+    // for (2026-10-01) — they were most of the list and none of the stock.
+    var hiddenCount = rows.filter(function(r){ return r.catalog_only; }).length;
+    if(!_rmShowAll) rows = rows.filter(function(r){ return !r.catalog_only; });
 
     // Group rows by section_id
     var bySection = {};
@@ -1536,6 +1565,7 @@ async function loadRawMaterials(){
     sectionOrder.forEach(function(sec){
         var items = bySection[sec.id] || [];
         var isEmpty = items.length === 0;
+        if(isEmpty && !_rmShowAll) return;
         var isCollapsed = !!collapsed[sec.id];
         var greyed = isEmpty ? 'opacity:0.45;' : '';
 
@@ -1559,6 +1589,9 @@ async function loadRawMaterials(){
         html += '</div>';
     });
 
+    if(hiddenCount || _rmShowAll)
+        html += '<button type="button" class="rm-showall" onclick="_rmShowAll=!_rmShowAll;loadRawMaterials();">'
+            + (_rmShowAll ? 'Hide ingredients never received' : 'Show all ingredients (' + hiddenCount + ' never received)') + '</button>';
     container.innerHTML = html;
     attachRMClickDelegationOnce();
     if(expandedRMKey){
@@ -1572,7 +1605,7 @@ function renderRMRow(r){
     var isExpanded = (expandedRMKey === key);
     var outOfStock = (r.total_remaining||0) <= 0;
     var rowOpacity = outOfStock ? 'opacity:0.55;' : '';
-    var baselineBadge = r.has_baseline ? '<span class="baseline-badge">BASELINE</span>' : '';
+    var baselineBadge = '';
     var stockBadge = '';
     if(outOfStock && r.lot_count > 0){
         stockBadge = '<span style="display:inline-block;font-size:10px;font-weight:700;background:#f5f5f0;color:#999;border:1px solid #d0d0c8;padding:2px 8px;border-radius:10px;letter-spacing:0.4px;margin-left:8px;vertical-align:middle;">DEPLETED</span>';
@@ -1687,8 +1720,9 @@ async function editRMRemaining(id,item,unit,current){
     var input = await mobilePrompt(
         'Current: '+current+(unit?' '+unit:''),
         {
-            title: 'Adjust remaining',
+            title: 'Correct remaining',
             label: item+(unit?' ('+unit+')':''),
+            reasons: EDIT_REASONS,
             defaultValue: String(current),
             type: 'number',
             inputmode: 'decimal',
@@ -1706,7 +1740,7 @@ async function editRMRemaining(id,item,unit,current){
     var n=parseFloat(input);
     var res=await fetch('/api/organic/raw-materials/'+encodeURIComponent(id),{
         method:'PUT',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({remaining:n}),
+        body:JSON.stringify({remaining:n, reason:mobilePrompt.reason}),
     });
     var data=await res.json();
     if(!data.success){alert(data.error||'Update failed');return;}
@@ -3164,11 +3198,11 @@ var expandedCompletedWeeks={};
 // Tracks which individual run cards are expanded (showing full detail).
 var expandedRuns={};
 
-function toggleCompletedWeek(weekId){
-    // The button passes a URL-encoded week_id; decode for safety though
+function toggleCompletedWeek(weekId, wasOpen){
+    // The header passes a URL-encoded week_id; decode for safety though
     // current week_ids only contain digits and dashes.
     try{weekId=decodeURIComponent(weekId);}catch(e){}
-    expandedCompletedWeeks[weekId]=!expandedCompletedWeeks[weekId];
+    expandedCompletedWeeks[weekId]=!wasOpen;
     loadRuns();
 }
 
@@ -3205,28 +3239,32 @@ function getCurrentWeekId(){
     return y+'-'+m+'-'+d;
 }
 
-function renderRunCard(run){
+// One table row per run (2026-10-01; was a big card each). A completed run
+// opens to show what it consumed — the part of this tab that isn't already on
+// the Weekly Schedule.
+function renderRunRow(run){
     var keyId=run.id||(run.week_id+'_'+run.day_idx+'_'+run.vessel);
-    var isOpen=!!expandedRuns[keyId];
-    var hdrClass=run.status==='completed'?'run-header completed':'run-header scheduled';
-    var statusLabel=run.status==='completed'?'Completed':'Scheduled';
-    var html='<div class="run-card"><div class="'+hdrClass+'" onclick="toggleRun(\''+escSku(keyId)+'\')">';
-    html+='<span>'+escSku(run.day_name||'')+' — '+escSku(run.vessel||'')+' — '+(run.brand?escSku(run.brand)+' - ':'')+escSku(run.recipe||'')+'</span>';
-    html+='<span><span class="organic-badge">'+statusLabel+'</span> LOT# '+escSku(run.lot||'')+'</span>';
-    html+='</div><div class="run-body'+(isOpen?' open':'')+'">';
-    html+='<div class="run-detail"><strong>Week:</strong> '+escSku(run.week_id||'')+'</div>';
-    if(run.amount_produced)html+='<div class="run-detail"><strong>Amount Produced:</strong> '+run.amount_produced+' units</div>';
-    if(run.ingredients_used&&run.ingredients_used.length){
-        html+='<div class="run-detail"><strong>Raw Materials Used:</strong></div><ul class="ing-list">';
-        run.ingredients_used.forEach(function(ing){
-            var flag=ing.negative?'<span class="flag"> ⚠ INSUFFICIENT STOCK</span>':'';
-            var unitPart=ing.unit?(' '+ing.unit):'';
-            html+='<li>'+ing.quantity_used+unitPart+' × '+escSku(ing.item||'')+' (LOT: '+escSku(ing.supplier_lot||'')+')'+flag+'</li>';
-        });
-        html+='</ul>';
+    var done=run.status==='completed';
+    var isOpen=done&&!!expandedRuns[keyId];
+    var html='<tr class="run-row'+(done?' done':'')+'"'+(done?' onclick="toggleRun(\''+escSku(keyId)+'\')"':'')+'>'
+        +'<td>'+escSku((run.day_name||'').slice(0,3))+'</td><td>'+escSku(run.vessel||'')+'</td>'
+        +'<td>'+escSku(run.recipe||'')+'</td><td class="mono">'+escSku(run.lot||'')+'</td>'
+        +'<td class="r">'+(done?(run.amount_produced?run.amount_produced+' jars ':'')+'<span class="run-done">'+(isOpen?'▲':'▼')+'</span>':'<span class="run-sched">Scheduled</span>')+'</td></tr>';
+    if(isOpen){
+        html+='<tr class="run-detail-row"><td colspan="5">';
+        if(run.ingredients_used&&run.ingredients_used.length){
+            html+='<ul class="ing-list">';
+            run.ingredients_used.forEach(function(ing){
+                var flag=ing.negative?'<span class="flag"> ⚠ INSUFFICIENT STOCK</span>':'';
+                html+='<li>'+ing.quantity_used+(ing.unit?' '+ing.unit:'')+' × '+escSku(ing.item||'')+' (LOT: '+escSku(ing.supplier_lot||'')+')'+flag+'</li>';
+            });
+            html+='</ul>';
+        } else {
+            html+='<span style="color:var(--text-light);">No raw materials recorded.</span>';
+        }
+        if(run.completed_at) html+='<div style="color:var(--text-light);margin-top:4px;">Completed '+run.completed_at.substring(0,16).replace('T',' ')+'</div>';
+        html+='</td></tr>';
     }
-    if(run.completed_at)html+='<div class="run-detail"><strong>Completed:</strong> '+run.completed_at.substring(0,16).replace('T',' ')+'</div>';
-    html+='</div></div>';
     return html;
 }
 
@@ -3236,70 +3274,35 @@ async function loadRuns(){
     var container=document.getElementById('runs-container');
     var countEl=document.getElementById('runs-count');
     if(countEl){
-        var sched=data.filter(function(r){return r.status==='scheduled';}).length;
         var done=data.filter(function(r){return r.status==='completed';}).length;
-        countEl.textContent=sched+' scheduled • '+done+' completed';
+        countEl.textContent=done+' completed';
     }
-    if(!data.length){container.innerHTML='<div class="empty-state">No production runs yet.<br>Schedule a recipe and runs will appear here.</div>';return;}
+    if(!data.length){container.innerHTML='<div class="empty-state">No production runs yet.</div>';return;}
 
-    // Group by week_id
     var byWeek={};
     data.forEach(function(run){
         var w=run.week_id||'(no week)';
-        if(!(w in byWeek))byWeek[w]={scheduled:[], completed:[]};
-        if(run.status==='completed')byWeek[w].completed.push(run);
-        else byWeek[w].scheduled.push(run);
+        (byWeek[w]=byWeek[w]||[]).push(run);
     });
-
-    // Sort weeks: most recent first
     var weeks=Object.keys(byWeek).sort(function(a,b){return b.localeCompare(a);});
     var currentWeek=getCurrentWeekId();
-
-    // Day order for sorting runs within a week (Mon=0 ... Sun=6)
     function dayKey(r){return (r.day_idx==null?99:r.day_idx)+(r.vessel||'');}
 
     var html='';
-    weeks.forEach(function(weekId){
-        var w=byWeek[weekId];
-        w.scheduled.sort(function(a,b){return dayKey(a).localeCompare(dayKey(b));});
-        w.completed.sort(function(a,b){return dayKey(a).localeCompare(dayKey(b));});
-        var isCurrentWeek=(weekId===currentWeek);
-        var rangeLabel=formatWeekRange(weekId);
-        var totalRuns=w.scheduled.length+w.completed.length;
-
+    weeks.forEach(function(weekId,i){
+        var runs=byWeek[weekId].sort(function(a,b){return dayKey(a).localeCompare(dayKey(b));});
+        var done=runs.filter(function(r){return r.status==='completed';}).length;
+        // The current (or newest) week is open; older weeks fold away.
+        var isOpen=(weekId in expandedCompletedWeeks)?expandedCompletedWeeks[weekId]:(weekId===currentWeek||(i===0&&weeks.indexOf(currentWeek)<0));
         html+='<div class="run-week-section">';
-        var weekHdrClass=isCurrentWeek?'run-week-header current':'run-week-header';
-        html+='<div class="'+weekHdrClass+'">';
-        html+='<span>'+(isCurrentWeek?'📅 Current Week — ':'')+escSku(rangeLabel)+'</span>';
-        html+='<span class="run-week-meta">'+totalRuns+' run'+(totalRuns===1?'':'s')+'</span>';
-        html+='</div>';
-
-        // Scheduled runs first (visible by default)
-        w.scheduled.forEach(function(run){
-            html+=renderRunCard(run);
-        });
-
-        // Completed runs collapsed under a dropdown
-        if(w.completed.length){
-            var weekKey=encodeURIComponent(weekId);
-            var openDone=!!expandedCompletedWeeks[weekId];
-            html+='<button class="run-completed-toggle" onclick="toggleCompletedWeek(\''+weekKey+'\')">';
-            html+=(openDone?'▼ Hide':'▶ Show')+' '+w.completed.length+' completed run'+(w.completed.length===1?'':'s');
-            html+='</button>';
-            if(openDone){
-                html+='<div class="run-completed-list">';
-                w.completed.forEach(function(run){
-                    html+=renderRunCard(run);
-                });
-                html+='</div>';
-            }
-        } else if(!w.scheduled.length){
-            html+='<p style="font-size:12px;color:var(--text-light);font-style:italic;padding:8px 0;">No runs in this week.</p>';
+        html+='<div class="run-week-header'+(weekId===currentWeek?' current':'')+'" style="cursor:pointer;" onclick="toggleCompletedWeek(\''+encodeURIComponent(weekId)+'\','+isOpen+')">';
+        html+='<span>'+(isOpen?'▼ ':'▶ ')+(weekId===currentWeek?'This week — ':'')+escSku(formatWeekRange(weekId))+'</span>';
+        html+='<span class="run-week-meta">'+done+' of '+runs.length+' done</span></div>';
+        if(isOpen){
+            html+='<table class="run-table"><tbody>'+runs.map(renderRunRow).join('')+'</tbody></table>';
         }
-
         html+='</div>';
     });
-
     container.innerHTML=html;
 }
 
@@ -3308,6 +3311,19 @@ var fgSkus=[];
 var expandedSku=null;
 var _fgCollapsedBrands={};
 var _fgDefaultCollapsed=true;
+var _parEdit=false;   // PAR boxes show only in "Edit PAR levels" mode (2026-10-01)
+function toggleParEdit(){
+    _parEdit=!_parEdit;
+    var b=document.getElementById('par-edit-btn');
+    if(b){ b.textContent=_parEdit?'Done editing PAR':'Edit PAR levels'; b.classList.toggle('active',_parEdit); }
+    loadFinishedGoods();
+}
+// Stock in cases, loose jars after: "26 cases + 4 jars".
+function fgCases(n){
+    n=n||0; var c=Math.floor(n/12), j=n%12;
+    return '<div class="fg-qty'+(n<=0?' negative':'')+'" style="font-size:16px;font-weight:700;line-height:1;">'+c+'</div>'
+        +'<div style="font-size:10px;color:var(--text-light);">case'+(c===1?'':'s')+(j?' + '+j+' jar'+(j===1?'':'s'):'')+'</div>';
+}
 
 function escSku(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function escHtml(s){return escSku(s);}
@@ -3361,6 +3377,8 @@ async function loadFinishedGoods(){
         byBrand[b].push(s);
     });
 
+    // One brand: open it — a collapsed single row was a click on every visit.
+    _fgDefaultCollapsed = brandOrder.length > 1;
     var html='';
     brandOrder.forEach(function(brand){
         var brandSafe=escSku(brand);
@@ -3373,16 +3391,16 @@ async function loadFinishedGoods(){
         html+='<div class="fg-brand-header" data-fg-brand="'+brandSafe+'" style="cursor:pointer;">';
         html+='<span class="fg-brand-toggle">'+(isCollapsed?'▶':'▼')+'</span>';
         html+='<span class="fg-brand-name">'+brandSafe+'</span>';
-        html+='<span class="fg-brand-meta">'+inStock+' in stock · '+brandUnits+' units</span>';
+        html+='<span class="fg-brand-meta">'+inStock+' in stock · '+Math.floor(brandUnits/12)+' cases</span>';
         html+='</div>';
         html+='<div class="fg-brand-body" id="'+brandId+'" style="'+(isCollapsed?'display:none;':'')+'">';
         skus.forEach(function(s){
             var keyAttr=encodeURIComponent(s.sku_key);
-            var displaySafe=escSku(s.display);
+            var displaySafe=escSku(s.recipe ? s.recipe+(s.format?' · '+s.format:'') : s.display);
             var isExpanded=(expandedSku===s.sku_key);
             var outOfStock=(s.total_remaining||0)<=0;
             var hasHistory=(s.lot_count||0)>0;
-            var baselineBadge=s.has_baseline?'<span class="baseline-badge">BASELINE</span>':'';
+            var baselineBadge='';
             var stockBadge='';
             if(outOfStock){
                 stockBadge='<span style="display:inline-block;font-size:10px;font-weight:700;background:#f5f5f0;color:#999;border:1px solid #d0d0c8;padding:2px 8px;border-radius:10px;letter-spacing:0.4px;margin-left:8px;vertical-align:middle;">OUT</span>';
@@ -3418,28 +3436,26 @@ async function loadFinishedGoods(){
 
             // Name + meta block
             html+='<div class="fg-info" style="flex:1;min-width:160px;">';
-            html+='<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;"><strong>'+displaySafe+'</strong>'+certBadge(s.certification)+baselineBadge+stockBadge+parWarningBadge+'</div>';
-            html+='<div style="font-size:11px;color:var(--text-light);margin-top:3px;">'+lotNote+(s.total_produced?' • '+s.total_produced+' produced lifetime':'')+'</div>';
-            html+='<div style="font-size:10px;color:#b8b8b0;font-family:ui-monospace,monospace;margin-top:2px;user-select:all;" title="Soma SKU Key — copy into Ripe portal">'+escSku(s.sku_key)+'</div>';
+            html+='<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;"><strong title="'+escSku(s.sku_key)+'">'+displaySafe+'</strong>'+certBadge(s.certification)+baselineBadge+stockBadge+parWarningBadge+'</div>';
+            html+='<div style="font-size:11px;color:var(--text-light);margin-top:3px;">'+lotNote+'</div>';
             html+='</div>';
 
             // Stock pill
             html+='<div style="display:flex;flex-direction:column;align-items:flex-end;min-width:72px;">';
-            html+='<div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;">Stock</div>';
-            html+='<div class="fg-qty'+(outOfStock?' negative':'')+'" style="font-size:16px;font-weight:700;line-height:1;">'+s.total_remaining+'</div>';
-            html+='<div style="font-size:10px;color:var(--text-light);">units</div>';
+            html+=fgCases(s.total_remaining);
             html+='</div>';
 
-            // PAR block
+            // PAR block — only in "Edit PAR levels" mode
+            if(_parEdit){
             html+='<div style="min-width:120px;">';
-            html+='<div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">PAR Level</div>';
+            html+='<div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">PAR (jars)</div>';
             html+='<div style="display:flex;align-items:center;gap:6px;">';
             html+='<input type="number" class="sku-par-input" data-sku-key="'+keyAttr+'" min="0" step="1" value="'+escHtml(String(parVal))+'" placeholder="—" '+(parNoPar?'disabled':'')+' style="width:60px;padding:6px 8px;border:1px solid '+(parBelowPar?'#f57f17':'var(--border)')+';border-radius:6px;font-size:13px;font-weight:600;background:'+(parNoPar?'#f5f5f0':parBelowPar?'#fff8e1':'#fff')+';'+(parNoPar?'opacity:0.45;':'')+'">';
             html+='<label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text-light);cursor:pointer;white-space:nowrap;">';
             html+='<input type="checkbox" class="sku-nopar-cb" data-sku-key="'+keyAttr+'" '+(parNoPar?'checked':'')+' style="width:13px;height:13px;cursor:pointer;accent-color:var(--accent);"> No PAR';
             html+='</label></div>';
-            // parBar removed for UI simplicity
             html+='</div>';
+            }
 
 
 
@@ -3720,8 +3736,9 @@ async function editLotRemaining(skuKey,lot,current){
     var input = await mobilePrompt(
         'Current: '+current+' units',
         {
-            title: 'Adjust remaining',
+            title: 'Correct remaining',
             label: 'LOT '+lot,
+            reasons: EDIT_REASONS,
             defaultValue: String(current),
             type: 'number',
             inputmode: 'numeric',
@@ -3739,7 +3756,7 @@ async function editLotRemaining(skuKey,lot,current){
     var n=parseInt(input);
     var res=await fetch('/api/organic/finished-goods/lot-adjust',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({sku_key:skuKey,lot:lot,new_remaining:n}),
+        body:JSON.stringify({sku_key:skuKey,lot:lot,new_remaining:n,reason:mobilePrompt.reason}),
     });
     var data=await res.json();
     if(!data.success){alert(data.error||'Update failed');return;}

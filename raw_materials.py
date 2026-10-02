@@ -768,9 +768,23 @@ def update_raw_material(entry_id):
         new_remaining = float(data.get("remaining"))
     except (ValueError, TypeError):
         return jsonify({"error": "remaining must be a number"}), 400
+    previous = entry.get("remaining")
     entry["remaining"] = round(new_remaining, 4)
     entry["last_adjusted_at"] = datetime.now().isoformat()
     _save_json(app.ORGANIC_RAW_PATH, materials)
+    # Logged with its reason since 2026-10-01 (was a silent overwrite).
+    if previous != entry["remaining"]:
+        _record_adjustment({
+            "id": "rm_edit_" + datetime.now().strftime("%Y%m%d%H%M%S"),
+            "kind": "raw_lot_edit",
+            "raw_material_id": entry_id,
+            "item": entry.get("item", ""), "unit": entry.get("unit", ""),
+            "supplier_lot": entry.get("supplier_lot", ""),
+            "from": previous, "to": entry["remaining"],
+            "reason": (data.get("reason") or "Correction").strip(),
+            "notes": (data.get("notes") or "").strip(),
+            "created_at": entry["last_adjusted_at"],
+        })
     return jsonify({"success": True, "entry": entry})
 
 

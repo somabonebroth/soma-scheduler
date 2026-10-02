@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Inventory Audit · Soma</title>
+<title>Stock Count · Soma</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
 * { box-sizing: border-box; }
@@ -180,17 +180,18 @@ body.audit-page { background: var(--bg); overflow-x: hidden; }
 <div class="screen active" id="screen-cats">
   <div class="audit-header">
     <div>
-      <div class="audit-header h1" id="audit-title">Inventory Audit</div>
+      <div class="audit-header h1" id="audit-title">Stock count</div>
       <div class="sub" id="audit-sub">Select categories to count</div>
     </div>
     <button class="header-exit" onclick="exitAudit()">✕ Exit</button>
   </div>
   <div id="resume-area"></div>
   <div class="cat-screen">
-    <div class="cat-title" id="cat-title">What are you auditing today?</div>
+    <div class="cat-title" id="cat-title">What are you counting?</div>
     <div class="cat-sub" id="cat-sub-text">Select the categories to include. Tap to toggle.</div>
     <div class="cat-grid" id="cat-grid"></div>
-    <button class="start-btn" id="start-btn" onclick="startAudit()">Start Audit</button>
+    <button class="start-btn" id="start-btn" onclick="startAudit()">Start count</button>
+    <a href="/audits" style="display:block;text-align:center;margin-top:14px;font-size:13px;color:var(--text-light);">Stock count history</a>
   </div>
 </div>
 
@@ -198,7 +199,7 @@ body.audit-page { background: var(--bg); overflow-x: hidden; }
 <div class="screen" id="screen-item">
   <div class="audit-header">
     <div>
-      <div class="audit-header h1" id="item-audit-title">Audit</div>
+      <div class="audit-header h1" id="item-audit-title">Count</div>
       <div class="sub" id="progress-text">Item 1 of 1</div>
     </div>
     <button class="header-exit" onclick="saveAndExit()">Save &amp; Exit</button>
@@ -215,7 +216,7 @@ body.audit-page { background: var(--bg); overflow-x: hidden; }
 <!-- ── Complete ── -->
 <div class="screen" id="screen-complete">
   <div class="audit-header">
-    <div><div class="audit-header h1">Audit Complete</div></div>
+    <div><div class="audit-header h1">Count complete</div></div>
     <button class="header-exit" onclick="window.location='/'">⌂ Dashboard</button>
   </div>
   <div class="complete-screen" id="complete-body"></div>
@@ -231,9 +232,9 @@ var _results = {};  // item_id → {counted}
 // ── Init ─────────────────────────────────────────────────────────────
 async function init() {
   document.getElementById('audit-title').textContent =
-    KIND === 'rm' ? 'Raw Materials Audit' : 'Finished Goods Audit';
+    KIND === 'rm' ? 'Count raw materials' : 'Count finished goods';
   document.getElementById('item-audit-title').textContent =
-    KIND === 'rm' ? 'Raw Materials Audit' : 'Finished Goods Audit';
+    KIND === 'rm' ? 'Count raw materials' : 'Count finished goods';
   document.getElementById('audit-sub').textContent =
     KIND === 'rm' ? 'Select a section to count' : 'Select a brand to count';
   document.getElementById('cat-title').textContent =
@@ -327,7 +328,7 @@ async function startAudit() {
     body: JSON.stringify(body),
   });
   var d = await res.json();
-  if (!d.ok) { alert('Failed to start audit'); btn.disabled=false; btn.textContent='Start Audit'; return; }
+  if (!d.ok) { alert('Failed to start audit'); btn.disabled=false; btn.textContent='Start count'; return; }
   _audit   = d.audit;
   _results = {};
   showItemScreen();
@@ -709,7 +710,7 @@ function showComplete(adjCount, audit) {
   var adjs = (audit && audit.adjustments) ? audit.adjustments : [];
   var html =
     '<div class="complete-icon">✅</div>'
-    +'<div class="complete-title">Audit Complete</div>'
+    +'<div class="complete-title">Count complete</div>'
     +'<div class="complete-sub">'+(adjs.length||0)+' adjustment'+(adjs.length===1?'':'s')+' applied to inventory</div>';
 
   if (adjs.length) {

@@ -111,7 +111,14 @@ def adjust_lot_remaining():
     """Set the total remaining quantity for a LOT within a SKU. Body:
     {sku_key, lot, new_remaining}. The delta from current is distributed across
     underlying FG entries (same LOT can span multiple kettles).
-    Used for manual stock corrections (loss, breakage, recount)."""
+    Used for manual stock corrections (loss, breakage, recount).
+
+    Since 2026-10-01 every change is LOGGED with a reason (body: reason, notes):
+    a decrease as a `subtract` adjustment with `drained` (the same shape the
+    Adjust button writes, so Organic Lots and the drift check read it as a
+    recorded reduction); an increase as `lot_increase` with `added_to`.
+    Before this, a hand correction left no log line and Organic Lots showed it
+    as "unrecorded"."""
     data = request.json or {}
     sku_key = (data.get("sku_key") or "").strip()
     lot = (data.get("lot") or "").strip()
@@ -147,6 +154,8 @@ def adjust_lot_remaining():
         return jsonify({"success": True, "current_total": current_total,
                         "new_total": new_remaining, "warnings": warnings})
 
+    now = datetime.now().isoformat()
+    moved = []
     if delta < 0:
         # Reducing — drain from entries in order until delta absorbed
         to_remove = -delta
@@ -156,16 +165,32 @@ def adjust_lot_remaining():
             avail = int(f.get("quantity_remaining") or 0)
             take = min(avail, to_remove)
             f["quantity_remaining"] = avail - take
-            f["last_adjusted_at"] = datetime.now().isoformat()
+            f["last_adjusted_at"] = now
             to_remove -= take
+            if take:
+                moved.append({"fg_id": f.get("id"), "lot": lot, "quantity": take})
     else:
         # don't try to redistribute proportionally because the user's intent
         # is "the LOT total should be N", and the bucket is logically one).
         first = matching[0]
         first["quantity_remaining"] = int(first.get("quantity_remaining") or 0) + delta
-        first["last_adjusted_at"] = datetime.now().isoformat()
+        first["last_adjusted_at"] = now
+        moved.append({"fg_id": first.get("id"), "lot": lot, "quantity": delta})
 
     _save_json(app.ORGANIC_FG_PATH, fg)
+    f0 = matching[0]
+    record = {
+        "id": "adj_" + datetime.now().strftime("%Y%m%d%H%M%S") + str(abs(delta)),
+        "kind": "subtract" if delta < 0 else "lot_increase",
+        "source": "lot_edit",
+        "recipe": f0.get("recipe", ""), "brand": f0.get("brand", ""), "format": f0.get("format", ""),
+        "sku_key": sku_key, "lot": lot, "quantity": abs(delta),
+        "reason": (data.get("reason") or "Correction").strip(),
+        "notes": (data.get("notes") or "").strip(),
+        "created_at": now,
+    }
+    record["drained" if delta < 0 else "added_to"] = moved
+    _record_adjustment(record)
     return jsonify({"success": True, "previous_total": current_total,
                     "new_total": new_remaining, "warnings": warnings})
 

@@ -232,6 +232,16 @@ def build_folders(fg, runs, sales, adjustments, materials, photo_ids):
                                 "sku": skus[fg_to_sku[fid]]["name"], "recipe": skus[fg_to_sku[fid]]["recipe"],
                                 "format": skus[fg_to_sku[fid]]["format"], "jars": q,
                                 "reason": adj.get("reason", ""), "notes": adj.get("notes", "")})
+            elif adj.get("kind") == "lot_increase":
+                # A recount that found more (the lot Edit Qty, 2026-10-01): IN, not OUT.
+                for d in adj.get("added_to") or []:
+                    if d.get("fg_id") in fg_ids:
+                        s = skus[fg_to_sku[d["fg_id"]]]
+                        q = int(d.get("quantity") or 0)
+                        s["added"] += q
+                        added.append({"sku": s["name"], "recipe": s["recipe"], "format": s["format"],
+                                      "label": "Correction: " + (adj.get("reason") or "found more"),
+                                      "quantity": q, "date": _day(adj.get("created_at"))})
             elif adj.get("kind") == "audit_fg" and adj.get("lot") == lot and int(adj.get("diff") or 0) < 0:
                 key = _sku_key(adj.get("brand", ""), adj.get("recipe", ""), adj.get("format", ""))
                 if key in skus:

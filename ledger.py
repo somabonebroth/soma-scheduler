@@ -89,7 +89,7 @@ def compute_fg_reconciliation():
 
     def out(fid):
         if fid not in outflow:
-            outflow[fid] = {"sales": 0, "manual_sub": 0}
+            outflow[fid] = {"sales": 0, "manual_sub": 0, "manual_add": 0}
         return outflow[fid]
 
     orphans = []          # ledger references to a fg_id that no longer exists
@@ -165,6 +165,11 @@ def compute_fg_reconciliation():
     for a in adjustments:
         if cutover and (a.get("created_at") or "")[:10] < cutover:
             continue  # pre-reset adjustment — baked into the counted opening
+        if a.get("kind") == "lot_increase":
+            # A logged recount that found more on an existing lot (2026-10-01).
+            for d in (a.get("added_to") or []):
+                if d.get("fg_id") in fg_ids:
+                    out(d["fg_id"])["manual_add"] += _int(d.get("quantity"))
         if a.get("kind") == "subtract":
             for d in (a.get("drained") or []):
                 fid = d.get("fg_id")
@@ -180,19 +185,19 @@ def compute_fg_reconciliation():
     sku_agg = {}
     for f in fg:
         fid = f.get("id")
-        o = outflow.get(fid, {"sales": 0, "manual_sub": 0})
+        o = outflow.get(fid, {"sales": 0, "manual_sub": 0, "manual_add": 0})
         actual = _int(f.get("quantity_remaining"))
 
         produced_raw = f.get("quantity_produced")
         if produced_raw is None:
             # Never manufacture false drift on a legacy entry with no produced field.
-            produced = actual + o["sales"] + o["manual_sub"]
+            produced = actual + o["sales"] + o["manual_sub"] - o.get("manual_add", 0)
             produced_inferred = True
         else:
             produced = _int(produced_raw)
             produced_inferred = False
 
-        expected = produced - o["sales"] - o["manual_sub"]
+        expected = produced + o.get("manual_add", 0) - o["sales"] - o["manual_sub"]
         drift = actual - expected
 
         is_baseline = bool(f.get("migration_baseline") or f.get("manual_addition")
