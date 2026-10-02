@@ -517,7 +517,7 @@ def add_sale_order():
     })
 
 
-ORGANIC_USE_SCAN = "Organic products are sold through Organic Sale, where each case is scanned"
+ORGANIC_USE_SCAN = "Organic products are sold on the Record Sale page, where each case is scanned"
 
 
 def _is_organic_sku(fg, sku_key):
@@ -528,10 +528,13 @@ def _is_organic_sku(fg, sku_key):
                for f in fg)
 
 
+@sales_bp.route("/record-sale")
 @sales_bp.route("/organic-sale")
 @manager_required
 def organic_sale_page():
-    """Organic Sale: scan organic cases on the phone, add the rest, one order."""
+    """Record Sale (was Organic Sale until 2026-10-01): every wholesale order on
+    the phone — products in cases, organic cases scanned to their LOT#.
+    /organic-sale stays as an alias for old links and home-screen bookmarks."""
     return render_template("organic_sale.html")
 
 

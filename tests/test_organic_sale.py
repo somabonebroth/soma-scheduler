@@ -121,7 +121,7 @@ class Route(unittest.TestCase):
             "buyer": "Nature's Emporium", "sale_date": "2026-10-01",
             "lines": [{"sku_key": PLAIN, "quantity": 12}, {"sku_key": ORG, "quantity": 12}]})
         self.assertEqual(r.status_code, 400)
-        self.assertIn("Organic Sale", r.get_json()["error"])
+        self.assertIn("each case is scanned", r.get_json()["error"])
         self.assertEqual(self.sales(), [])  # the plain line was NOT saved either
         self.assertEqual(self.remaining(), {"o1": 48, "o2": 240, "p1": 24, "p2": 300})
 

@@ -303,7 +303,7 @@ async function olEmailSlip(btn, saleId) {
     try { d = await (await fetch('/api/organic/sales/' + saleId + '/email-slip', {method: 'POST'})).json(); }
     catch (e) { d = {error: 'No connection'}; }
     alert(d.sent ? 'Packing slip emailed to ' + (d.to || []).join(', ')
-        : d.reason === 'no_recipients' ? 'No addresses are set in Company Settings → Organic Sale.'
+        : d.reason === 'no_recipients' ? 'No addresses are set in Company Settings → Packing slip email.'
         : 'Not sent: ' + (d.error || 'unknown error'));
     btn.disabled = false;
     btn.innerHTML = was;

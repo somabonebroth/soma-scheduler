@@ -287,15 +287,10 @@
                 <span class="label" style="color:var(--white);">Receive Inventory</span>
                 <span class="sublabel" style="color:rgba(255,255,255,0.75);">Record a supplier delivery</span>
             </div>
-            <div class="dash-btn" onclick="openDashSaleModal()" style="background:var(--action-blue);border-color:var(--action-blue);cursor:pointer;">
+            <a href="/record-sale" class="dash-btn" style="background:var(--action-blue);border-color:var(--action-blue);">
                 <span class="icon" style="color:var(--white);">&#128176;</span>
                 <span class="label" style="color:var(--white);">Record Sale</span>
-                <span class="sublabel" style="color:rgba(255,255,255,0.75);">Select buyer and date</span>
-            </div>
-            <a href="/organic-sale" class="dash-btn" style="background:var(--accent);border-color:var(--accent);">
-                <img src="/static/canada_organic.png" alt="" style="width:36px;height:36px;border-radius:50%;background:var(--white);object-fit:cover;">
-                <span class="label" style="color:var(--white);">Organic Sale</span>
-                <span class="sublabel" style="color:rgba(255,255,255,0.75);">Scan organic cases</span>
+                <span class="sublabel" style="color:rgba(255,255,255,0.75);">Cases &middot; organic scanned</span>
             </a>
         </div>
         </div>
@@ -518,77 +513,6 @@ loadProdBadge();
 // Portal tiles + their live-count JS moved to _portal_tiles.html (shared
 // with the FOH dashboard, 2026-08-26).
 
-// ── Dashboard Record Sale modal ──
-async function openDashSaleModal(){
-    document.getElementById('dash-sale-form').style.display = 'block';
-    document.getElementById('dash-sale-success').style.display = 'none';
-    var today = new Date().toLocaleDateString('en-CA');
-    document.getElementById('dash-sale-date').value = today;
-    document.getElementById('dash-sale-msg').style.display = 'none';
-    try {
-        var res = await fetch('/api/buyers');
-        _dashBuyers = await res.json();
-        var sel = document.getElementById('dash-sale-buyer');
-        sel.innerHTML = '<option value="">— Select buyer —</option>';
-        _dashBuyers.forEach(function(b){
-            var o = document.createElement('option');
-            o.value = b.id;
-            o.textContent = b.name;
-            sel.appendChild(o);
-        });
-    } catch(e) {}
-    document.getElementById('dash-sale-modal').classList.add('open');
-}
-var _dashBuyers = [];
-function onDashBuyerChange(){
-    var buyerId = document.getElementById('dash-sale-buyer').value;
-    var buyer = _dashBuyers.find(function(b){ return b.id === buyerId; });
-    var locField = document.getElementById('dash-loc-field');
-    var locSel = document.getElementById('dash-loc-select');
-    if(!locField || !locSel) return;
-    if(buyer && buyer.locations && buyer.locations.length > 0){
-        locSel.innerHTML = '<option value="">— Main / Primary address —</option>';
-        buyer.locations.forEach(function(loc){
-            var o = document.createElement('option');
-            o.value = loc.id;
-            o.textContent = loc.name + (loc.address ? ' — ' + loc.address : '');
-            o.setAttribute('data-name', loc.name || '');
-            o.setAttribute('data-address', loc.address || '');
-            locSel.appendChild(o);
-        });
-        locField.style.display = '';
-    } else {
-        locField.style.display = 'none';
-        locSel.innerHTML = '<option value="">— Main / Primary address —</option>';
-    }
-}
-function closeDashSaleModal(){
-    document.getElementById('dash-sale-modal').classList.remove('open');
-}
-function dashSaleNext(){
-    var date = document.getElementById('dash-sale-date').value;
-    var buyerId = document.getElementById('dash-sale-buyer').value;
-    var msg = document.getElementById('dash-sale-msg');
-    if(!date){ msg.textContent='Please select a date.'; msg.style.display='block'; return; }
-    if(!buyerId){ msg.textContent='Please select a buyer.'; msg.style.display='block'; return; }
-    var buyer = _dashBuyers.find(function(b){ return b.id === buyerId; });
-    var buyerName = buyer ? buyer.name : '';
-    // Read selected location from the dashboard modal
-    var locSel = document.getElementById('dash-loc-select');
-    var locOpt = locSel ? locSel.options[locSel.selectedIndex] : null;
-    var locName = locOpt ? (locOpt.getAttribute('data-name') || '') : '';
-    var locAddr = locOpt ? (locOpt.getAttribute('data-address') || '') : '';
-    msg.style.display='none';
-    closeDashSaleModal();
-    var params = '?action=sell'
-        +'&date='+encodeURIComponent(date)
-        +'&buyer_id='+encodeURIComponent(buyerId)
-        +'&buyer_name='+encodeURIComponent(buyerName)
-        +'&loc_name='+encodeURIComponent(locName)
-        +'&loc_addr='+encodeURIComponent(locAddr);
-    window.location.href = '/organic' + params;
-}
-
 </script>
 <style>
 .dash-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center;}
@@ -608,48 +532,7 @@ function dashSaleNext(){
 .dash-modal-actions button{flex:1;padding:13px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
 .dm-cancel{background:var(--white);border:1px solid var(--grey-border);color:var(--text);}
 .dm-primary-green{background:var(--action-green);border:none;color:var(--white);}
-.dm-primary-blue{background:var(--info);border:none;color:var(--white);}
 </style>
-
-<!-- Record Sale modal -->
-<div class="dash-modal-overlay" id="dash-sale-modal">
-  <div class="dash-modal">
-    <button onclick="closeDashSaleModal()" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:var(--grey);">&times;</button>
-    <div id="dash-sale-form">
-      <h2>&#128176; Record Sale</h2>
-      <p>Select buyer and date. LOT numbers are assigned automatically by FIFO on the next screen.</p>
-      <div class="dash-modal-field">
-        <label>Sale Date</label>
-        <input type="date" id="dash-sale-date">
-      </div>
-      <div class="dash-modal-field">
-        <label>Buyer</label>
-        <select id="dash-sale-buyer" onchange="onDashBuyerChange()">
-          <option value="">— Select buyer —</option>
-        </select>
-      </div>
-      <div id="dash-loc-field" style="display:none;margin-bottom:14px;padding:12px 14px;background:var(--action-blue-bg);border:2px solid var(--info-border);border-radius:9px;">
-        <label style="display:block;font-size:11px;font-weight:700;color:var(--info-dark);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px;">&#128205; Delivery Location</label>
-        <select id="dash-loc-select" style="width:100%;padding:10px 12px;border:1.5px solid var(--info-border);border-radius:7px;font-size:14px;font-weight:500;background:var(--white);">
-          <option value="">— Main / Primary address —</option>
-        </select>
-      </div>
-      <div class="dash-modal-err" id="dash-sale-msg"></div>
-      <div class="dash-modal-actions">
-        <button class="dm-cancel" onclick="closeDashSaleModal()">Cancel</button>
-        <button class="dm-primary-blue" onclick="dashSaleNext()">Next →</button>
-      </div>
-    </div>
-    <div class="dash-modal-success" id="dash-sale-success" style="display:none;">
-      <div class="check">&#10003;</div>
-      <p>Sale recorded</p>
-      <small>Inventory updated. Check the Inventory page for LOT details.</small>
-      <div style="margin-top:14px;">
-        <button class="dm-primary-blue" style="width:100%;padding:12px;" onclick="closeDashSaleModal()">Done</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- Receive Inventory modal -->
 <div class="dash-modal-overlay" id="dash-receive-modal">
@@ -751,9 +634,7 @@ async function downloadBackup(){
 document.getElementById('dash-receive-modal').addEventListener('click', function(e){
   if(e.target === this) closeDashReceiveModal();
 });
-document.getElementById('dash-sale-modal').addEventListener('click', function(e){
-  if(e.target === this) closeDashSaleModal();
-});
+
 </script>
 {% endif %}
 </body>

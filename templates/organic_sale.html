@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Organic Sale · Soma</title>
+<title>Record Sale · Soma</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
 .os-main { max-width: 640px; margin: 0 auto; }
@@ -66,7 +66,7 @@ body { padding-bottom: 96px; }
 <body>
 <div class="header">
     <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-    <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Organic Sale</p></div>
+    <div class="header-text"><h1>Record Sale</h1><p>Soma Bone Broth</p></div>
     <div class="header-right"><a href="/" class="header-btn">⌂ Dashboard</a></div>
 </div>
 <div class="main os-main" id="os-root">
@@ -82,8 +82,15 @@ body { padding-bottom: 96px; }
     </div>
 
     <div class="card">
-        <h2>2. Scan organic cases</h2>
-        <p class="os-muted" style="margin-top:0;">Scan every organic case in the pile, one at a time. Move the phone off each label before the next one. Each beep adds one case.</p>
+        <h2>2. Products</h2>
+        <p class="os-muted" style="margin-top:0;">In cases. Oldest stock goes first.</p>
+        <div id="os-plain"><p class="os-muted">Pick a buyer to see their products.</p></div>
+        <p class="os-muted" style="margin:12px 0 0;font-size:12px;">Selling loose jars? <a href="/organic?action=sell" style="color:var(--dark);">Jar-level sale form</a></p>
+    </div>
+
+    <div class="card" id="os-scan-card">
+        <h2>3. Scan organic cases</h2>
+        <p class="os-muted" style="margin-top:0;">One label at a time. Each beep adds a case.</p>
         <div class="os-cam" id="os-cam"><video id="os-video" playsinline muted autoplay></video><div class="frame"></div></div>
         <div class="os-status" id="os-status"></div>
         <button class="btn btn-primary os-big" id="os-cam-btn" onclick="osToggleCamera()">Start scanning</button>
@@ -95,12 +102,6 @@ body { padding-bottom: 96px; }
         </details>
     </div>
 
-    <div class="card">
-        <h2>3. Other products</h2>
-        <p class="os-muted" style="margin-top:0;">Everything that isn't organic, in cases. These come off the oldest stock first.</p>
-        <div id="os-plain"><p class="os-muted">Pick a buyer to see their products.</p></div>
-    </div>
-
     <div id="os-msg"></div>
 </div>
 <div class="os-bar" id="os-bar"><div class="os-bar-in">
@@ -110,7 +111,9 @@ body { padding-bottom: 96px; }
 <div class="os-sheet" id="os-sheet" onclick="if(event.target===this)osCloseReview()"><div class="os-sheet-in" id="os-sheet-in"></div></div>
 <script src="/static/vendor/jsqr/jsQR.js"></script>
 <script>
-// Organic Sale (sales.add_organic_scan_order). Scanned cases are resolved on
+// Record Sale (sales.add_organic_scan_order) — every wholesale order, phone-first.
+// Was "Organic Sale" until 2026-10-01; the dashboard's jar-level Record Sale
+// modal folded into it (the old form stays reachable for loose jars). Scanned cases are resolved on
 // the phone against /api/organic/sale-stock (no round trip per beep); the
 // order route re-checks every line and saves all-or-nothing.
 //
@@ -290,13 +293,20 @@ function osRender() {
             + '<button class="os-icon-btn" aria-label="One case less" onclick="osChangePlain(' + osPlain.indexOf(r) + ', -1)">&minus;</button>'
             + '<div class="n">' + (osPlainQty[r.sku_key] || 0) + '</div>'
             + '<button class="os-icon-btn" aria-label="One case more" onclick="osChangePlain(' + osPlain.indexOf(r) + ', 1)">+</button></div>'
-        ).join('') : '<p class="os-muted">None of this buyer\'s other products are in stock.</p>';
+        ).join('') : '<p class="os-muted">None of this buyer\'s non-organic products have a full case in stock.</p>';
     }
+
+    // The scan step only shows for a buyer who carries organic stock (or when
+    // something is already scanned) — most orders never need the camera.
+    const orgKeys = new Set(osOrganic.map(r => r.sku_key));
+    const needsScan = !b || orgCases > 0 || (b.skus || []).some(s => orgKeys.has(s.sku_key));
+    document.getElementById('os-scan-card').style.display = needsScan ? '' : 'none';
+    if (!needsScan) osStopCamera();
 
     const plainCases = Object.values(osPlainQty).reduce((a, x) => a + x, 0);
     const total = orgCases + plainCases;
     document.getElementById('os-summary').innerHTML = total
-        ? '<b>' + total + '</b> case' + (total === 1 ? '' : 's') + '<br>' + orgCases + ' organic &middot; ' + plainCases + ' other'
+        ? '<b>' + total + '</b> case' + (total === 1 ? '' : 's') + (orgCases ? '<br>' + orgCases + ' organic &middot; ' + plainCases + ' other' : '')
         : 'Nothing added yet';
     document.getElementById('os-save').disabled = !total;
     osSaveDraft();
@@ -413,7 +423,7 @@ function osReview() {
         + '<br>Delivery ' + osEsc(date || 'not set') + (po ? ' &middot; PO ' + osEsc(po) : '') + '</div>'
         + (o.cases.length ? '<div class="os-rv-head">Organic (scanned)</div><ul class="os-rv">'
             + o.cases.map(c => item(osName(c.r), 'LOT# ' + osEsc(c.r.lot) + (osOnList(c.r.sku_key) ? '' : ' &middot; no price on this buyer\'s list'), c.n)).join('') + '</ul>' : '')
-        + (o.lines.length ? '<div class="os-rv-head">Other products (oldest stock first)</div><ul class="os-rv">'
+        + (o.lines.length ? '<div class="os-rv-head">' + (o.cases.length ? 'Other products' : 'Products') + ' (oldest stock first)</div><ul class="os-rv">'
             + o.lines.map(l => item(osName(l.r), '', l.n)).join('') + '</ul>' : '')
         + '<div class="os-rv-total"><span>Total</span><span>' + total + ' cases &middot; ' + (total * 12) + ' jars</span></div>'
         + '<div id="os-rv-msg"></div>'
@@ -460,14 +470,14 @@ async function osConfirm() {
         const emailLine = em.sent
             ? '<p class="os-muted">&#9993; Packing slip emailed to ' + osEsc((em.to || []).join(', ')) + '</p>'
             : em.reason === 'no_recipients'
-                ? '<p class="os-muted">No packing slip email sent: no addresses are set in <a href="/company-settings#organic-email">Company Settings &rarr; Organic Sale</a>.</p>'
+                ? '<p class="os-muted">No packing slip email sent: no addresses are set in <a href="/company-settings#organic-email">Company Settings &rarr; Packing slip email</a>.</p>'
             : '<div class="os-warn" style="text-align:left;">The sale is saved, but the packing slip email did not send'
                 + (em.error ? ': ' + osEsc(em.error) : '') + '. Once that is fixed, use <b>Email slip</b> on this sale in Organic Lots, or print it below.</div>';
         document.getElementById('os-root').innerHTML = '<div class="card os-done"><div class="big">&#10004;</div>'
             + '<h2>Sale recorded</h2><p class="os-muted">' + osEsc(o.b.name) + ' &middot; ' + total + ' cases</p>' + emailLine
             + '<a class="btn btn-primary os-big" style="display:block;text-decoration:none;margin:14px 0 10px;" href="/sales/'
             + encodeURIComponent(data.slip_sale_id) + '/packing-slip?print=1">Print packing slip</a>'
-            + '<a class="btn btn-outline os-big" style="display:block;text-decoration:none;" href="/organic-sale">New organic sale</a></div>';
+            + '<a class="btn btn-outline os-big" style="display:block;text-decoration:none;" href="/record-sale">New sale</a></div>';
         window.scrollTo(0, 0);
     } catch (e) {
         msg.innerHTML = '<div class="os-warn" style="margin:0 0 12px;">Network error: ' + osEsc(e.message) + '. Nothing was saved; your scans are still here.</div>';
