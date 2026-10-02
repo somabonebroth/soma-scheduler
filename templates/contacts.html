@@ -123,6 +123,10 @@ body.cp { background: var(--bg); }
   .tab-btn { padding:12px 14px; font-size:12px; }
   .tab-content { padding:16px 14px 0; }
 }
+.tab-n { font-size:11px; color:var(--text-light); font-weight:600; margin-left:3px; }
+.del-link { font-size:12px; color:var(--text-light); text-decoration:none; }
+.del-link:hover { color:var(--action-red); text-decoration:underline; }
+.cc[data-edit-sid]:hover { box-shadow:0 2px 10px rgba(0,0,0,.06); }
 </style>
 </head>
 <body class="cp">
@@ -135,16 +139,16 @@ body.cp { background: var(--bg); }
   </div>
 </div>
 <div class="tab-bar">
-  <button class="tab-btn" onclick="showTab('suppliers')">Suppliers</button>
-  <button class="tab-btn active" onclick="showTab('buyers')">Buyers</button>
-  <button class="tab-btn" onclick="showTab('catalogue')">SKU Catalogue</button>
+  <button class="tab-btn" onclick="showTab('suppliers')">Suppliers <span id="sup-count" class="tab-n"></span></button>
+  <button class="tab-btn active" onclick="showTab('buyers')">Buyers <span id="buy-count" class="tab-n"></span></button>
+  <button class="tab-btn" onclick="showTab('catalogue')">SKU Catalogue <span id="cat-count" class="tab-n"></span></button>
 </div>
 <div class="main">
 
 <!-- Suppliers -->
 <div class="tab-content" id="tab-suppliers">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
-    <div><div style="font-size:20px;font-weight:700;color:var(--dark);">Suppliers</div><div id="sup-count" style="font-size:12px;color:var(--text-light);margin-top:2px;"></div></div>
+    <span></span>
     <button class="btn btn-p" onclick="openAddSup()" style="background:var(--action-green);border:none;">+ Add Supplier</button>
   </div>
   <div id="sup-list"><div class="empty">Loading…</div></div>
@@ -153,7 +157,7 @@ body.cp { background: var(--bg); }
 <!-- Buyers -->
 <div class="tab-content active" id="tab-buyers">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
-    <div><div style="font-size:20px;font-weight:700;color:var(--dark);">Buyers</div><div id="buy-count" style="font-size:12px;color:var(--text-light);margin-top:2px;"></div></div>
+    <span></span>
     <button class="btn btn-p" onclick="openAddBuy()" style="background:var(--info);border:none;">+ Add Buyer</button>
   </div>
   <div id="buy-list"><div class="empty">Loading…</div></div>
@@ -162,10 +166,6 @@ body.cp { background: var(--bg); }
 <!-- SKU Catalogue (read-only) -->
 <div class="tab-content" id="tab-catalogue">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
-    <div>
-      <div style="font-size:20px;font-weight:700;color:var(--dark);">SKU Catalogue</div>
-      <div id="cat-count" style="font-size:12px;color:var(--text-light);margin-top:2px;"></div>
-    </div>
     <input id="cat-q" type="text" placeholder="Filter SKUs or buyers…" oninput="rCatList()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:240px;max-width:100%;">
   </div>
   <div id="cat-list"><div class="empty">Loading…</div></div>
@@ -227,7 +227,6 @@ body.cp { background: var(--bg); }
         <div class="ff"><label>Website</label><input id="b-web" type="url" placeholder="https://"></div>
       </div>
       <div class="ff"><label>Primary Address</label><input id="b-addr" type="text" placeholder="Street, City, Province, Postal"></div>
-      <div class="ff"><label>Type / Certifications</label><input id="b-certs" type="text" placeholder="e.g. Retail, Foodservice, Distributor"></div>
       <div class="ff"><label>Notes</label><textarea id="b-notes" rows="2" placeholder="Payment terms, preferences…"></textarea></div>
 
       <div class="mo-div">Delivery Locations</div>
@@ -270,7 +269,7 @@ var _sups=[],_sMode='add',_sId=null,_sCk={},_ing=[];
 async function loadSups(){
   _sups=await(await fetch('/api/suppliers')).json();
   var c=G('sup-list'),cnt=G('sup-count');
-  if(cnt)cnt.textContent=_sups.length+' supplier'+(_sups.length===1?'':'s');
+  if(cnt)cnt.textContent=_sups.length;
   if(!_sups.length){c.innerHTML='<div class="empty">No suppliers yet.</div>';return;}
   c.innerHTML=_sups.map(function(s){
     var m=[],sidE=e(s.id),snameE=e(s.name);
@@ -280,7 +279,7 @@ async function loadSups(){
     if(s.website)m.push('<a href="'+e(s.website)+'" target="_blank">Website</a>');
     var n=(s.ingredients||[]).length;
     var prev=(s.ingredients||[]).slice(0,4).map(function(i){return e(i.name);}).join(', ')+(n>4?' +'+(n-4)+' more':'');
-    var h='<div class="cc">';
+    var h='<div class="cc" style="cursor:pointer;" data-edit-sid="'+sidE+'">';
     h+='<div style="flex:1;min-width:0;">';
     h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">';
     h+='<div class="cc-name" style="font-size:17px;">'+snameE+'</div>';
@@ -293,16 +292,15 @@ async function loadSups(){
     if(s.notes) h+='<div class="cc-sub" style="font-style:italic;margin-top:4px;color:#999;">'+e(s.notes)+'</div>';
     h+=certListHtml(s);
     h+='</div><div class="cc-actions">';
-    h+='<button class="btn btn-p" style="font-size:12px;padding:8px 16px;background:#2e7d32;border:none;" data-edit-sid="'+sidE+'">Edit</button>';
-    h+='<button class="btn-r" data-del-sid="'+sidE+'" data-del-name="'+snameE+'">Delete</button>';
+    h+='<a href="#" class="del-link" data-del-sid="'+sidE+'" data-del-name="'+snameE+'">Delete</a>';
     h+='</div></div>';
     return h;
   }).join('');
   c.querySelectorAll('[data-edit-sid]').forEach(function(btn){
-    btn.addEventListener('click', function(){ openEditSup(this.getAttribute('data-edit-sid')); });
+    btn.addEventListener('click', function(ev){ if(ev.target.closest('a')) return; openEditSup(this.getAttribute('data-edit-sid')); });
   });
   c.querySelectorAll('[data-del-sid]').forEach(function(btn){
-    btn.addEventListener('click', function(){ delSup(this.getAttribute('data-del-sid'), this.getAttribute('data-del-name')); });
+    btn.addEventListener('click', function(ev){ ev.preventDefault(); ev.stopPropagation(); delSup(this.getAttribute('data-del-sid'), this.getAttribute('data-del-name')); });
   });
 }
 async function _fIng(){try{_ing=await(await fetch('/api/organic/ingredients')).json();}catch(ex){_ing=[];}}
@@ -337,7 +335,7 @@ function certWhen(c){
 }
 function certListHtml(s){
   const certs=s.certificates||[];
-  if(!certs.length) return '<div class="cert-list"><div class="cert-line" style="color:var(--text-light);">No certificates on file.</div></div>';
+  if(!certs.length) return '<div class="cc-sub" style="margin-top:4px;">Certificates: none</div>';
   return '<div class="cert-list">'+certs.map(function(c){
     const url=certFileUrl(s.id,c);
     return '<div class="cert-line"><span class="cc-badge '+CERT_BADGE[c.status||'none']+'">'+CERT_LABEL[c.status||'none']+'</span>'
@@ -438,7 +436,7 @@ var _buys=[],_bMode='add',_bId=null,_bCk={},_bLocs=[],_skus=[],_skuG=[];
 async function loadBuys(){
   _buys=await(await fetch('/api/buyers')).json();
   var c=G('buy-list'),cnt=G('buy-count');
-  if(cnt)cnt.textContent=_buys.length+' buyer'+(_buys.length===1?'':'s');
+  if(cnt)cnt.textContent=_buys.length;
   if(!_buys.length){c.innerHTML='<div class="empty">No buyers yet.</div>';return;}
   c.innerHTML=_buys.map(function(b){
     var bid=e(b.id),m=[];
@@ -454,9 +452,7 @@ async function loadBuys(){
       +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">'
       +'<div class="cc-name" style="font-size:17px;">'+e(b.name)+'</div>'
       +(sn?'<span class="cc-badge bg-g">'+sn+' SKU'+(sn===1?'':'s')+'</span>':'')
-      +(pricedCount===sn&&sn>0?'<span class="cc-badge" style="background:#e8f4fd;color:#0277bd;border:1px solid #90caf9;">Fully priced</span>'
-        :pricedCount>0?'<span class="cc-badge" style="background:#fff8e1;color:#e65100;border:1px solid #ffe082;">'+pricedCount+'/'+sn+' priced</span>':'')
-      +(b.certifications?'<span class="cc-badge bg-b">'+e(b.certifications)+'</span>':'')
+      +(sn&&pricedCount<sn?'<span class="cc-badge" style="background:#fff8e1;color:#e65100;border:1px solid #ffe082;">'+(sn-pricedCount)+' unpriced</span>':'')
       +'</div>'
       +(m.length?'<div class="cc-sub">'+m.join(' · ')+'</div>':'')
       +(b.address?'<div class="cc-sub">'+e(b.address)+'</div>':'')
@@ -465,10 +461,13 @@ async function loadBuys(){
       +(b.notes?'<div class="cc-sub" style="font-style:italic;margin-top:4px;color:#999;">'+e(b.notes)+'</div>':'')
       +'</div>'
       +'<div class="cc-actions" onclick="event.stopPropagation();">'
-      +'<a class="btn btn-p" href="/buyers/'+bid+'/edit" style="font-size:12px;padding:8px 16px;text-decoration:none;background:#0288d1;border:none;display:inline-flex;align-items:center;gap:4px;">✎ Edit</a>'
-      +'<button class="btn-r" onclick="delBuy(\''+bid+'\',\''+e(b.name)+'\')" >Delete</button>'
+      +'<a href="#" class="del-link" data-del-bid="'+bid+'" data-del-name="'+e(b.name)+'">Delete</a>'
       +'</div></div>';
   }).join('');
+  // Names travel in data attributes: an apostrophe (Nature's) broke the old inline onclick.
+  c.querySelectorAll('[data-del-bid]').forEach(function(a){
+    a.addEventListener('click', function(ev){ ev.preventDefault(); ev.stopPropagation(); delBuy(this.dataset.delBid, this.dataset.delName); });
+  });
 }
 async function _fSkus(){var r=await fetch('/api/buyers/sku-catalog');_skuG=await r.json();_skus=[];_skuG.forEach(function(g){g.skus.forEach(function(s){_skus.push(s);});});}
 
@@ -505,7 +504,7 @@ function rSkuList(){
   });
   list.innerHTML=html;
 }
-function _clrBuy(){['b-name','b-contact','b-phone','b-email','b-web','b-addr','b-certs','b-notes','b-sku-q'].forEach(function(id){G(id).value='';});G('b-msg').textContent='';_bCk={};_bLocs=[];}
+function _clrBuy(){['b-name','b-contact','b-phone','b-email','b-web','b-addr','b-notes','b-sku-q'].forEach(function(id){G(id).value='';});G('b-msg').textContent='';_bCk={};_bLocs=[];}
 async function openAddBuy(){_bMode='add';_bId=null;G('buy-mo-title').textContent='Add Buyer';G('b-save').textContent='Save Buyer';_clrBuy();rLocList();await _fSkus();rSkuList();G('buy-mo').classList.add('open');}
 function closeBuy(){G('buy-mo').classList.remove('open');}
 async function saveBuy(){
@@ -513,7 +512,7 @@ async function saveBuy(){
   if(!name){msg.className='smsg err';msg.textContent='Name required.';return;}
   syncLocs();
   var skus=_skus.filter(function(s){return _bCk[s.sku_key];});
-  var body={name,skus,locations:_bLocs.filter(function(l){return l.name;}),contact_name:G('b-contact').value.trim(),phone:G('b-phone').value.trim(),email:G('b-email').value.trim(),website:G('b-web').value.trim(),address:G('b-addr').value.trim(),certifications:G('b-certs').value.trim(),notes:G('b-notes').value.trim()};
+  var body={name,skus,locations:_bLocs.filter(function(l){return l.name;}),contact_name:G('b-contact').value.trim(),phone:G('b-phone').value.trim(),email:G('b-email').value.trim(),website:G('b-web').value.trim(),address:G('b-addr').value.trim(),notes:G('b-notes').value.trim()};
   btn.disabled=true;btn.textContent='Saving…';
   var res=await fetch(_bMode==='add'?'/api/buyers':'/api/buyers/'+_bId,{method:_bMode==='add'?'POST':'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   var d=await res.json();btn.disabled=false;btn.textContent=_bMode==='add'?'Save Buyer':'Save Changes';
@@ -563,7 +562,7 @@ async function loadCatalogue(){
         if(bs){
           assigned.push({
             name:b.name||'(unnamed buyer)',
-            price:bs.price,cogs:bs.cogs,margin_pct:bs.margin_pct,
+            price:bs.price,
             active:bs.active!==false,
           });
         }
@@ -573,7 +572,7 @@ async function loadCatalogue(){
     });
     var brands={};_catSkus.forEach(function(s){brands[s.brand]=1;});
     var brandCount=Object.keys(brands).length;
-    if(cnt)cnt.textContent=_catSkus.length+' SKU'+(_catSkus.length===1?'':'s')+' · '+brandCount+' brand'+(brandCount===1?'':'s');
+    if(cnt)cnt.textContent=_catSkus.length;
     rCatList();
   }catch(ex){
     c.innerHTML='<div class="empty">Failed to load catalogue.</div>';
@@ -599,12 +598,10 @@ function rCatList(){
     byBrand[s.brand].push(s);
   });
   var money=function(v){return v==null?'—':'$'+Number(v).toFixed(2);};
-  var pct=function(v){return v==null?'—':Number(v).toFixed(1)+'%';};
   c.innerHTML=brandOrder.map(function(brand){
     var cards=byBrand[brand].map(function(s){
       var head='<div class="cat-card-head">'
-        +'<div class="cat-sku-name">'+e(s.display||s.recipe||'(unnamed)')+'</div>'
-        +'<div class="cat-sku-fmt">'+e(s.format||'')+'</div>'
+        +'<div class="cat-sku-name">'+e(s.recipe?s.recipe+(s.format?' · '+s.format:''):(s.display||'(unnamed)'))+'</div>'
         +'</div>';
       var body;
       if(!s.buyers.length){
@@ -615,9 +612,7 @@ function rCatList(){
           return '<div class="'+cls+'">'
             +'<span class="cat-buyer-name">'+e(b.name)+'</span>'
             +'<span class="cat-num cat-price">'+money(b.price)+'</span>'
-            +'<span class="cat-num">COGS '+money(b.cogs)+'</span>'
-            +'<span class="cat-num">'+pct(b.margin_pct)+' margin</span>'
-            +'<span class="cat-active-tag">'+(b.active?'Active':'Inactive')+'</span>'
+            +(b.active?'':'<span class="cat-active-tag">Paused</span>')
             +'</div>';
         }).join('')+'</div>';
       }
