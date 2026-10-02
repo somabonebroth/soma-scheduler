@@ -1386,19 +1386,23 @@ def api_sales_by_buyer():
         by_buyer[buyer]["by_sku"][sku]["units"]   += qty
         by_buyer[buyer]["by_sku"][sku]["revenue"] += revenue_this
 
-    # Clover's non-jar items (hot cups, creams, …) are money only, kept per
-    # day in clover_days.json — add them to SOMA (Clover) as one line.
-    if not buyers_q or buyers_q.lower() == CLOVER_BUYER.lower():
-        for d in _load_json(CLOVER_DAYS_PATH, []):
+    # Shopify/Clover non-jar items (hot cups, creams, …) are money only, kept
+    # per day in <channel>_days.json — add them to the channel's buyer as one
+    # line.
+    for ch in DAILY_CHANNELS:
+        ch_buyer = _channel_buyer(ch)
+        if buyers_q and buyers_q.lower() != ch_buyer.lower():
+            continue
+        for d in _load_json(_channel_days_path(ch), []):
             dollars = float(d.get("extra_revenue") or 0)
             if not dollars or (cutoff and (d.get("day_id") or "") < cutoff.isoformat()):
                 continue
-            b = by_buyer.setdefault(CLOVER_BUYER, {"buyer": CLOVER_BUYER, "orders": set(),
-                                                   "units": 0, "revenue": 0.0, "by_sku": {}})
-            b["orders"].add("ORD-CLOVER-" + d.get("day_id", ""))
+            b = by_buyer.setdefault(ch_buyer, {"buyer": ch_buyer, "orders": set(),
+                                               "units": 0, "revenue": 0.0, "by_sku": {}})
+            b["orders"].add(f"ORD-{ch.upper()}-" + d.get("day_id", ""))
             b["revenue"] += dollars
-            line = b["by_sku"].setdefault("clover-other", {
-                "sku": "clover-other", "recipe": "Other retail items",
+            line = b["by_sku"].setdefault(ch + "-other", {
+                "sku": ch + "-other", "recipe": "Other retail items",
                 "format": "hot cups, creams, …", "units": 0, "revenue": 0.0})
             line["revenue"] += dollars
 
@@ -4239,6 +4243,17 @@ def _shopify_commit_for_week(week_id):
     if not validate_week_id(week_id):
         return {"error": "Invalid or missing 'week' parameter"}, 400
 
+    # Shopify is imported daily since 2026-10-02; a week with any daily import
+    # is left alone so nothing counts twice (CLOVER/SHOPIFY daily, below).
+    daily = _channel_days_in_week("shopify", week_id)
+    if daily:
+        return {
+            "ok": True,
+            "message": "Shopify is imported daily for this week — nothing to do",
+            "week_id": week_id,
+            "daily_imports": daily,
+        }, 200
+
     client_id = os.environ.get("SHOPIFY_CLIENT_ID", "").strip()
     client_secret = os.environ.get("SHOPIFY_CLIENT_SECRET", "").strip()
     store = os.environ.get("SHOPIFY_STORE", "").strip()
@@ -4592,20 +4607,34 @@ def clover_preview():
         return jsonify({"error": str(e)}), 500
 
 
-# Clover is imported DAILY since 2026-10-02 (Jeremy: "Soma sales accurate and
-# daily"). Each completed day writes:
+# Clover and Shopify are imported DAILY (Clover 2026-10-02, Shopify the same
+# day; Jeremy: "Soma sales accurate and daily"). Each completed day writes:
 #   - sale rows for the SOMA- jar SKUs, FIFO-deducted from FG exactly as the
-#     weekly import does (rows carry day_id + week_id, order ORD-CLOVER-<day>);
-#   - ONE entry in clover_days.json with the money that is NOT on a sale row:
-#     hot cups, creams and every other non-SOMA or SKU-less item, plus any jar
-#     SKU that could not be recorded (no stock, unmapped). That file never
+#     weekly import does (rows carry day_id + week_id, order
+#     ORD-<CHANNEL>-<day>);
+#   - ONE entry in <channel>_days.json with the money that is NOT on a sale
+#     row: hot cups, creams and every other non-SOMA or SKU-less item, plus any
+#     jar SKU that could not be recorded (no stock, unmapped). That file never
 #     touches stock and nothing inventory-side reads it — it exists so the
-#     sales charts can show Clover's whole day.
+#     sales charts can show the channel's whole day.
 # The weekly path stays for weeks before the switch and refuses a week that
 # has any daily import, and the daily path refuses a week the weekly import
 # already wrote, so the two can never count the same sale twice.
 CLOVER_DAYS_PATH = os.path.join(INVENTORY_DIR, "clover_days.json")
+SHOPIFY_DAYS_PATH = os.path.join(INVENTORY_DIR, "shopify_days.json")
 CLOVER_BUYER = "SOMA (Clover)"
+SHOPIFY_BUYER = "SOMA (Shopify)"
+DAILY_CHANNELS = ("shopify", "clover")
+
+
+def _channel_days_path(channel):
+    """The money-only daily log for a channel. Looked up at call time so tests
+    can patch the module constants."""
+    return SHOPIFY_DAYS_PATH if channel == "shopify" else CLOVER_DAYS_PATH
+
+
+def _channel_buyer(channel):
+    return SHOPIFY_BUYER if channel == "shopify" else CLOVER_BUYER
 
 
 def _clover_env():
@@ -4615,28 +4644,35 @@ def _clover_env():
             os.environ.get("CLOVER_API_BASE", "").strip() or None)
 
 
-def _clover_weekly_rows_exist(sales, week_id):
-    """True when the WEEKLY import already wrote Clover rows for this week
-    (weekly rows have a week_id and no day_id)."""
-    return any(s.get("channel") == "clover" and s.get("week_id") == week_id
+def _shopify_env():
+    """(client_id, client_secret, store) from the environment."""
+    return (os.environ.get("SHOPIFY_CLIENT_ID", "").strip(),
+            os.environ.get("SHOPIFY_CLIENT_SECRET", "").strip(),
+            os.environ.get("SHOPIFY_STORE", "").strip())
+
+
+def _channel_weekly_rows_exist(channel, sales, week_id):
+    """True when the WEEKLY import already wrote this channel's rows for this
+    week (weekly rows have a week_id and no day_id)."""
+    return any(s.get("channel") == channel and s.get("week_id") == week_id
                and not s.get("day_id") for s in sales)
 
 
-def _clover_days_in_week(week_id):
-    """day_ids of daily Clover imports that fall in this Mon–Sun week."""
-    return sorted(d.get("day_id") for d in _load_json(CLOVER_DAYS_PATH, [])
+def _channel_days_in_week(channel, week_id):
+    """day_ids of this channel's daily imports in this Mon–Sun week."""
+    return sorted(d.get("day_id") for d in _load_json(_channel_days_path(channel), [])
                   if d.get("week_id") == week_id and d.get("day_id"))
 
 
-def _clover_write_sales(matched_list, sales, fg, *, period_field, period_id,
-                        week_id, order_id, sale_date):
+def _channel_write_sales(channel, matched_list, sales, fg, *, period_field,
+                         period_id, week_id, order_id, sale_date):
     """FIFO-deduct each matched SOMA SKU from FG and append its sale row.
 
-    Shared by the weekly and the daily import so both deduct one way.
-    Idempotent on (channel, period_field, sku_key). Mutates `sales` and `fg`
-    in place; the caller saves. Returns (created, skipped_idempotent, errors,
-    organic_skipped)."""
-    CHANNEL = "clover"
+    Shared by the daily import (both channels) and the Clover weekly import so
+    they deduct one way. Idempotent on (channel, period_field, sku_key).
+    Mutates `sales` and `fg` in place; the caller saves. Returns (created,
+    skipped_idempotent, errors, organic_skipped)."""
+    CHANNEL = channel
     created = []
     skipped_idempotent = []
     errors = []
@@ -4755,7 +4791,7 @@ def _clover_write_sales(matched_list, sales, fg, *, period_field, period_id,
             "fg_id": (sale_lots[0]["fg_ids"][0]
                       if len(sale_lots) == 1 and len(sale_lots[0]["fg_ids"]) == 1
                       else ""),
-            "buyer": CLOVER_BUYER,
+            "buyer": _channel_buyer(channel),
             "sale_date": sale_date,
             "case_lot": "",
             "po_number": "",
@@ -4782,7 +4818,7 @@ def _clover_commit_for_week(week_id):
     if not validate_week_id(week_id):
         return {"error": "Invalid or missing 'week' parameter"}, 400
 
-    daily = _clover_days_in_week(week_id)
+    daily = _channel_days_in_week("clover", week_id)
     if daily:
         return {
             "ok": True,
@@ -4832,8 +4868,8 @@ def _clover_commit_for_week(week_id):
 
     sales = _load_json(ORGANIC_SALES_PATH, [])
     fg = _load_json(ORGANIC_FG_PATH, [])
-    created, skipped_idempotent, errors, organic_skipped = _clover_write_sales(
-        preview["matched"], sales, fg, period_field="week_id", period_id=week_id,
+    created, skipped_idempotent, errors, organic_skipped = _channel_write_sales(
+        "clover", preview["matched"], sales, fg, period_field="week_id", period_id=week_id,
         week_id=week_id, order_id=order_id, sale_date=sale_date)
 
     if created:
@@ -4867,11 +4903,15 @@ def _toronto_today():
         return datetime.now().date()
 
 
-def _clover_other_items(preview):
-    """Group the day's non-jar lines (no SKU, or not a SOMA- SKU) by name."""
+def _channel_other_items(preview):
+    """Group the day's non-jar lines (no SKU, or not a SOMA- SKU) by name.
+    Clover names a line `name`; Shopify uses `title` + `variant_title`."""
     items = {}
     for x in preview.get("skipped_no_sku") or []:
-        label = (x.get("name") or "").strip() or "(untitled)"
+        label = " · ".join(t for t in [
+            (x.get("name") or x.get("title") or "").strip(),
+            (x.get("variant_title") or "").strip(),
+        ] if t) or "(untitled)"
         it = items.setdefault(label, {"name": label, "quantity": 0, "revenue": 0.0})
         it["quantity"] += int(x.get("quantity") or 0)
         it["revenue"] += float(x.get("revenue") or 0)
@@ -4885,16 +4925,35 @@ def _clover_other_items(preview):
     return out
 
 
-def _clover_commit_for_day(day_id):
-    """Import ONE completed Toronto day from Clover. Returns (body, status).
+def _channel_day_preview(channel, day_id):
+    """Read one day from the channel (no writes). Returns (preview, error)."""
+    recipes = _load_json(RECIPES_PATH, {})
+    if channel == "shopify":
+        cid, csec, store = _shopify_env()
+        if not (cid and csec and store):
+            return None, "Shopify config missing in environment"
+        return shopify_importer.preview_day(day_id, recipes, cid, csec, store), None
+    token, merchant_id, api_base = _clover_env()
+    if not (token and merchant_id):
+        return None, "Clover config missing in environment"
+    return clover_importer.preview_day(
+        day_id, recipes, token, merchant_id, api_base=api_base), None
+
+
+def _channel_commit_for_day(channel, day_id):
+    """Import ONE completed Toronto day from Shopify or Clover. Returns
+    (body, status).
 
     Jar SKUs become sale rows and leave FG (the weekly rules, via
-    _clover_write_sales). Everything else Clover sold that day — hot cups,
-    creams, any line with no SOMA- SKU — and any jar line that could not be
-    recorded is kept as money only, in clover_days.json (`extra_revenue`).
-    Unlike the weekly commit, one bad SKU does not refuse the day: it is
-    reported in `errors`, its money is still counted, and re-running the day
-    after fixing it imports just that SKU (idempotent per SKU)."""
+    _channel_write_sales). Everything else the channel sold that day — hot
+    cups, creams, any line with no SOMA- SKU — and any jar line that could not
+    be recorded is kept as money only, in <channel>_days.json
+    (`extra_revenue`). Unlike the weekly commit, one bad SKU does not refuse
+    the day: it is reported in `errors`, its money is still counted, and
+    re-running the day after fixing it imports just that SKU (idempotent per
+    SKU)."""
+    if channel not in DAILY_CHANNELS:
+        return {"error": f"Unknown channel '{channel}'"}, 400
     try:
         day = datetime.strptime(day_id or "", "%Y-%m-%d").date()
     except ValueError:
@@ -4903,25 +4962,24 @@ def _clover_commit_for_day(day_id):
         # A day still trading would be marked done with half its sales.
         return {"error": "Only a finished day can be imported"}, 400
     week_id = (day - timedelta(days=day.weekday())).strftime("%Y-%m-%d")
+    buyer = _channel_buyer(channel)
+    days_path = _channel_days_path(channel)
 
     sales = _load_json(ORGANIC_SALES_PATH, [])
-    if _clover_weekly_rows_exist(sales, week_id):
+    if _channel_weekly_rows_exist(channel, sales, week_id):
         return {
             "ok": True,
             "message": "This week was already imported weekly — nothing to do",
-            "day_id": day_id, "week_id": week_id,
+            "day_id": day_id, "week_id": week_id, "channel": channel,
         }, 200
 
-    token, merchant_id, api_base = _clover_env()
-    if not (token and merchant_id):
-        return {"error": "Clover config missing in environment"}, 500
     try:
-        recipes = _load_json(RECIPES_PATH, {})
-        preview = clover_importer.preview_day(
-            day_id, recipes, token, merchant_id, api_base=api_base)
+        preview, err = _channel_day_preview(channel, day_id)
     except Exception as e:
-        logger.exception("Clover daily import: preview failed for %s", day_id)
+        logger.exception("%s daily import: preview failed for %s", channel, day_id)
         return {"error": str(e)}, 502
+    if err:
+        return {"error": err}, 500
 
     errors = [{"sku": u["sku"], "error": "SKU does not parse: " + u.get("error", "")}
               for u in preview["unparseable"]]
@@ -4934,21 +4992,21 @@ def _clover_commit_for_day(day_id):
                            "error": "No Soma recipe for " + m["soma_key"]})
 
     fg = _load_json(ORGANIC_FG_PATH, [])
-    created, skipped_idempotent, write_errors, organic_skipped = _clover_write_sales(
-        importable, sales, fg, period_field="day_id", period_id=day_id,
-        week_id=week_id, order_id=f"ORD-CLOVER-{day_id}", sale_date=day_id)
+    created, skipped_idempotent, write_errors, organic_skipped = _channel_write_sales(
+        channel, importable, sales, fg, period_field="day_id", period_id=day_id,
+        week_id=week_id, order_id=f"ORD-{channel.upper()}-{day_id}", sale_date=day_id)
     errors.extend(write_errors)
     if created:
         _save_json(ORGANIC_SALES_PATH, sales)
         _save_json(ORGANIC_FG_PATH, fg)
-        _add_contact("buyer", CLOVER_BUYER)
+        _add_contact("buyer", buyer)
 
     # Money not carried by a sale row: the non-jar items, plus jar SKUs that
     # have no row for this day (errors above). Recomputed from scratch on every
     # run, so a re-run after a fix moves that money onto the new sale row.
     on_file = {s.get("sku_key") for s in sales
-               if s.get("channel") == "clover" and s.get("day_id") == day_id}
-    other_items = _clover_other_items(preview)
+               if s.get("channel") == channel and s.get("day_id") == day_id}
+    other_items = _channel_other_items(preview)
     unrecorded = [{"name": m["sku"], "quantity": m["quantity"],
                    "revenue": round(float(m.get("revenue") or 0), 2)}
                   for m in preview["matched"] if m["soma_key"] not in on_file]
@@ -4961,7 +5019,7 @@ def _clover_commit_for_day(day_id):
                         + sum(float(u.get("revenue") or 0) for u in preview["unparseable"]), 2)
 
     entry = {
-        "channel": "clover",
+        "channel": channel,
         "day_id": day_id,
         "week_id": week_id,
         "imported_at": datetime.now().isoformat(),
@@ -4976,17 +5034,17 @@ def _clover_commit_for_day(day_id):
         "unrecorded_items": unrecorded,
         "errors": errors,
     }
-    days = [d for d in _load_json(CLOVER_DAYS_PATH, []) if d.get("day_id") != day_id]
+    days = [d for d in _load_json(days_path, []) if d.get("day_id") != day_id]
     days.append(entry)
     days.sort(key=lambda d: d.get("day_id") or "")
-    _save_json(CLOVER_DAYS_PATH, days)
+    _save_json(days_path, days)
 
     return {
         "ok": True,
         "day_id": day_id,
         "week_id": week_id,
-        "buyer": CLOVER_BUYER,
-        "channel": "clover",
+        "buyer": buyer,
+        "channel": channel,
         "created_count": len(created),
         "skipped_count": len(skipped_idempotent),
         "error_count": len(errors),
@@ -4998,16 +5056,22 @@ def _clover_commit_for_day(day_id):
     }, 200
 
 
-def _clover_extra_revenue_by_day():
-    """{date: dollars} Clover sold that is NOT on a sale row (hot cups, creams,
-    unrecordable jars) — what the sales charts add for the Soma channel."""
+def _clover_commit_for_day(day_id):
+    """Clover's daily import (see _channel_commit_for_day)."""
+    return _channel_commit_for_day("clover", day_id)
+
+
+def _channel_extra_revenue_by_day(channel=None):
+    """{date: dollars} sold that is NOT on a sale row (hot cups, creams,
+    unrecordable jars) — what the sales charts add. One channel, or both."""
     out = {}
-    for d in _load_json(CLOVER_DAYS_PATH, []):
-        try:
-            day = datetime.strptime(d.get("day_id") or "", "%Y-%m-%d").date()
-            out[day] = out.get(day, 0.0) + float(d.get("extra_revenue") or 0)
-        except (ValueError, TypeError):
-            continue
+    for ch in ([channel] if channel else DAILY_CHANNELS):
+        for d in _load_json(_channel_days_path(ch), []):
+            try:
+                day = datetime.strptime(d.get("day_id") or "", "%Y-%m-%d").date()
+                out[day] = out.get(day, 0.0) + float(d.get("extra_revenue") or 0)
+            except (ValueError, TypeError):
+                continue
     return out
 
 
@@ -5052,38 +5116,43 @@ def clover_internal_import_last_week():
     return jsonify(body), status
 
 
-@app.route("/admin/clover-commit-day", methods=["POST"])
+@app.route("/admin/<any(shopify, clover):channel>-commit-day", methods=["POST"])
 @manager_required
-def clover_commit_day():
-    """Import one finished day from Clover by hand (?day=YYYY-MM-DD).
-    Safe to re-run: jar SKUs already on file are skipped, the money-only
-    day entry is rebuilt."""
-    body, status = _clover_commit_for_day((request.args.get("day") or "").strip())
+def channel_commit_day(channel):
+    """Import one finished day from Shopify or Clover by hand
+    (?day=YYYY-MM-DD). Safe to re-run: jar SKUs already on file are skipped,
+    the money-only day entry is rebuilt."""
+    body, status = _channel_commit_for_day(channel, (request.args.get("day") or "").strip())
     return jsonify(body), status
 
 
-@app.route("/admin/clover-days")
+@app.route("/admin/channel-days")
 @manager_required
-def clover_days():
-    """The daily Clover import log, newest first (?n= days, default 14)."""
+def channel_days():
+    """Both channels' daily import logs, newest first (?n= days per channel,
+    default 14)."""
     try:
         n = max(1, min(int(request.args.get("n") or 14), 120))
     except ValueError:
         n = 14
-    days = sorted(_load_json(CLOVER_DAYS_PATH, []),
-                  key=lambda d: d.get("day_id") or "", reverse=True)
-    return jsonify({"days": days[:n]})
+    out = []
+    for ch in DAILY_CHANNELS:
+        days = sorted(_load_json(_channel_days_path(ch), []),
+                      key=lambda d: d.get("day_id") or "", reverse=True)[:n]
+        out += [{**d, "channel": ch} for d in days]
+    out.sort(key=lambda d: (d.get("day_id") or "", d["channel"]), reverse=True)
+    return jsonify({"days": out})
 
 
-CLOVER_CATCHUP_DAYS = 7
+CHANNEL_CATCHUP_DAYS = 7
 
 
-@app.route("/api/internal/clover-import-day", methods=["POST"])
-def clover_internal_import_day():
-    """Called by the DAILY Render Cron Job (X-Internal-Key).
+@app.route("/api/internal/<any(shopify, clover):channel>-import-day", methods=["POST"])
+def channel_internal_import_day(channel):
+    """Called by each channel's DAILY Render Cron Job (X-Internal-Key).
 
     Imports yesterday (Toronto) and catches up any of the last
-    CLOVER_CATCHUP_DAYS days with no import on file, so a missed run heals
+    CHANNEL_CATCHUP_DAYS days with no import on file, so a missed run heals
     itself. `?day=YYYY-MM-DD` imports that one day instead. Non-2xx when any
     day failed, so `curl -f` marks the cron run failed."""
     provided = (request.headers.get("X-Internal-Key") or "").strip()
@@ -5099,18 +5168,18 @@ def clover_internal_import_day():
         targets = [one]
     else:
         today = _toronto_today()
-        done = {d.get("day_id") for d in _load_json(CLOVER_DAYS_PATH, [])}
+        done = {d.get("day_id") for d in _load_json(_channel_days_path(channel), [])}
         yesterday = (today - timedelta(days=1)).strftime("%Y-%m-%d")
         targets = [yesterday] + [
             (today - timedelta(days=i)).strftime("%Y-%m-%d")
-            for i in range(2, CLOVER_CATCHUP_DAYS + 1)
+            for i in range(2, CHANNEL_CATCHUP_DAYS + 1)
             if (today - timedelta(days=i)).strftime("%Y-%m-%d") not in done]
 
     results = []
     failed = False
     for day_id in targets:
-        logger.info("Clover daily import firing for %s", day_id)
-        body, status = _clover_commit_for_day(day_id)
+        logger.info("%s daily import firing for %s", channel, day_id)
+        body, status = _channel_commit_for_day(channel, day_id)
         failed = failed or status >= 400
         results.append({
             "day_id": day_id, "status": status,
@@ -5120,7 +5189,8 @@ def clover_internal_import_day():
             "extra_revenue": (body.get("day") or {}).get("extra_revenue"),
             "errors": body.get("errors"),
         })
-    return jsonify({"ok": not failed, "results": results}), (502 if failed else 200)
+    return jsonify({"ok": not failed, "channel": channel, "results": results}), \
+        (502 if failed else 200)
 
 
 @app.route("/admin/clover-import")

@@ -81,8 +81,9 @@
     <code>read_all_orders</code> scope, so older weeks may come back empty.
   </details>
 
-  <h3 class="cd-h">Clover · daily</h3>
+  <h3 class="cd-h">Daily</h3>
   <div class="anyweek">
+    <select id="cd-ch"><option value="clover">Clover</option><option value="shopify">Shopify</option></select>
     <input id="cd-day" type="date">
     <button class="btn btn-primary btn-sm" onclick="importCloverDay()">Import day</button>
   </div>
@@ -335,27 +336,29 @@ async function reconcile(channel, week, target) {
 
 loadWeeks();
 
-// Clover is imported DAILY since 2026-10-02 (nightly cron + catch-up). Jars
-// leave stock as sale rows; hot cups, creams etc. are kept as money only.
+// Shopify + Clover are imported DAILY since 2026-10-02 (nightly cron per
+// channel + catch-up). Jars leave stock as sale rows; hot cups, creams etc.
+// are kept as money only.
 let cdDays = [];
 async function loadCloverDays() {
   const host = document.getElementById('cd-days');
   try {
-    const r = await fetch('/admin/clover-days?n=14');
+    const r = await fetch('/admin/channel-days?n=14');
     const d = await r.json();
     cdDays = d.days || [];
     if (!cdDays.length) { host.innerHTML = '<div class="msg">No daily imports yet.</div>'; return; }
-    host.innerHTML = '<table><thead><tr><th>Day</th><th class="num">Orders</th><th class="num">Jars</th>'
+    host.innerHTML = '<table><thead><tr><th>Day</th><th>Channel</th><th class="num">Orders</th><th class="num">Jars</th>'
       + '<th class="num">Other items</th><th class="num">Total</th><th></th></tr></thead><tbody>'
       + cdDays.map(function (x, i) {
           const errs = (x.errors || []).length;
           return '<tr class="cd-row" onclick="toggleCloverDay(' + i + ')"><td>' + esc(x.day_id) + '</td>'
+            + '<td><span class="chip chip-' + esc(x.channel) + '">' + esc(x.channel) + '</span></td>'
             + '<td class="num">' + (x.order_count || 0) + '</td>'
             + '<td class="num">' + money(x.jar_revenue) + '</td>'
             + '<td class="num">' + money(x.other_revenue) + '</td>'
             + '<td class="num"><b>' + money(x.total_revenue) + '</b></td>'
             + '<td>' + (errs ? '<span class="cd-err">' + errs + ' not recorded</span>' : '') + '</td></tr>'
-            + '<tr id="cd-x-' + i + '" style="display:none;"><td colspan="6" class="cd-items"></td></tr>';
+            + '<tr id="cd-x-' + i + '" style="display:none;"><td colspan="7" class="cd-items"></td></tr>';
         }).join('') + '</tbody></table>';
   } catch (e) {
     host.innerHTML = '<div class="msg msg-err">' + esc(e.message) + '</div>';
@@ -377,13 +380,14 @@ function toggleCloverDay(i) {
 }
 
 async function importCloverDay() {
+  const ch = document.getElementById('cd-ch').value;
   const day = document.getElementById('cd-day').value;
   if (!day) { alert('Pick a day first.'); return; }
-  if (!confirm('Import Clover sales for ' + day + '? Jar sales deduct finished goods.')) return;
+  if (!confirm('Import ' + ch + ' sales for ' + day + '? Jar sales deduct finished goods.')) return;
   const out = document.getElementById('cd-out');
   out.innerHTML = '<div class="msg">Importing ' + esc(day) + '…</div>';
   try {
-    const r = await fetch('/admin/clover-commit-day?day=' + encodeURIComponent(day), {method: 'POST', credentials: 'same-origin'});
+    const r = await fetch('/admin/' + ch + '-commit-day?day=' + encodeURIComponent(day), {method: 'POST', credentials: 'same-origin'});
     const d = await r.json();
     if (!r.ok) { out.innerHTML = '<div class="msg msg-err">' + esc(d.error || ('HTTP ' + r.status)) + '</div>'; return; }
     out.innerHTML = '<div class="msg"><b>' + (d.message ? esc(d.message)

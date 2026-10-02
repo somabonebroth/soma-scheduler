@@ -477,9 +477,9 @@ def preview_week(week_id, recipes_data, client_id, client_secret, store):
 def preview_day(day_id, recipes_data, client_id, client_secret, store):
     """One day's orders, same shape as preview_week plus `day_id`.
 
-    Read-only reporting for the Daily Review. There is deliberately no daily
-    commit: the weekly import remains the only path that writes sales and
-    deducts FG, so this can never double-count against it.
+    Read-only. Feeds the Daily Review AND, since 2026-10-02, the daily
+    import (app._channel_commit_for_day), which writes the sales — so the two
+    can never disagree about a day.
     """
     access_token = get_access_token(client_id, client_secret, store)
     start_iso, end_iso = day_range_iso(day_id)

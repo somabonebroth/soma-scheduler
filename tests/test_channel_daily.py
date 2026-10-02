@@ -1,4 +1,4 @@
-"""Daily Clover import (app._clover_commit_for_day, 2026-10-02).
+"""Daily Clover + Shopify import (app._channel_commit_for_day, 2026-10-02).
 
 Jar SKUs become sale rows and leave FG; hot cups, creams and other non-jar
 items are money only (clover_days.json) and reach the Sales by channel chart;
@@ -33,12 +33,23 @@ def preview(jars=4, jar_rev=60.0, unparseable=()):
     }
 
 
+def shop_preview():
+    p = preview(jars=2, jar_rev=40.0)
+    p["matched"][0]["order_ids"] = [101]
+    p["skipped_no_sku"] = [{"order_id": 102, "title": "Gift Card", "variant_title": "$25",
+                            "quantity": 1, "revenue": 25.0}]
+    p["skipped_other_brands"] = []
+    return p
+
+
 class Daily(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.fg_path = os.path.join(self.tmp, "fg.json")
         self.sales_path = os.path.join(self.tmp, "sales.json")
         self.days_path = os.path.join(self.tmp, "clover_days.json")
+        self.shop_days_path = os.path.join(self.tmp, "shopify_days.json")
+        self.shop_preview = shop_preview()
         with open(self.fg_path, "w") as f:
             json.dump([{"id": "p1", "brand": "Soma", "recipe": "Chicken Bone Broth",
                         "format": "SS-750ML", "certification": "Conventional", "lot": "150927",
@@ -49,6 +60,10 @@ class Daily(unittest.TestCase):
             mock.patch.object(app, "ORGANIC_FG_PATH", self.fg_path),
             mock.patch.object(app, "ORGANIC_SALES_PATH", self.sales_path),
             mock.patch.object(app, "CLOVER_DAYS_PATH", self.days_path),
+            mock.patch.object(app, "SHOPIFY_DAYS_PATH", self.shop_days_path),
+            mock.patch.object(app, "_shopify_env", return_value=("i", "s", "store")),
+            mock.patch.object(app.shopify_importer, "preview_day",
+                              side_effect=lambda *a, **k: self.shop_preview),
             mock.patch.object(app, "RECIPES_PATH", os.path.join(self.tmp, "r.json")),
             mock.patch.object(helpers, "ORGANIC_CONTACTS_PATH", os.path.join(self.tmp, "c.json")),
             mock.patch.object(app, "_toronto_today", return_value=date(2026, 10, 2)),
@@ -135,6 +150,38 @@ class Daily(unittest.TestCase):
         r = c.get("/api/analytics/sales-by-buyer")
         clover = next(b for b in r.get_json()["buyers"] if b["buyer"] == "SOMA (Clover)")
         self.assertEqual(clover["revenue"], 98.0)
+
+    def test_shopify_day(self):
+        body, status = app._channel_commit_for_day("shopify", DAY)
+        self.assertEqual(status, 200)
+        sale = self.load(self.sales_path)[0]
+        self.assertEqual((sale["channel"], sale["buyer"], sale["order_id"], sale["day_id"]),
+                         ("shopify", "SOMA (Shopify)", "ORD-SHOPIFY-" + DAY, DAY))
+        self.assertEqual(self.load(self.fg_path)[0]["quantity_remaining"], 22)
+        day = self.load(self.shop_days_path)[0]
+        self.assertEqual(day["other_items"][0]["name"], "Gift Card · $25")
+        self.assertEqual(day["total_revenue"], 65.0)
+        self.assertFalse(os.path.exists(self.days_path))
+
+    def test_channels_are_independent(self):
+        app._channel_commit_for_day("clover", DAY)
+        body, _ = app._channel_commit_for_day("shopify", DAY)
+        self.assertEqual(body["created_count"], 1)
+        self.assertEqual(self.load(self.fg_path)[0]["quantity_remaining"], 18)
+        body, _ = app._shopify_commit_for_week("2026-09-28")
+        self.assertEqual(body["daily_imports"], [DAY])
+
+    def test_both_channels_on_dashboard(self):
+        app._channel_commit_for_day("clover", DAY)
+        app._channel_commit_for_day("shopify", DAY)
+        c = app.app.test_client()
+        with c.session_transaction() as s:
+            s["authenticated"] = True
+            s["role"] = "manager"
+        r = c.get("/api/analytics/sales-by-channel?grain=month&end=2026-09&n=1")
+        self.assertEqual(r.get_json()["periods"][0]["revenue"]["soma"], 98.0 + 65.0)
+        days = c.get("/admin/channel-days").get_json()["days"]
+        self.assertEqual(sorted(d["channel"] for d in days), ["clover", "shopify"])
 
 
 if __name__ == "__main__":
