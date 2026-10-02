@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Labelling · {{ sheet.label_day }}</title>
+<link rel="stylesheet" href="/static/style.css">
+{% include '_packing_slip_head.html' %}
+<style>
+/* The floor's labelling sheet, printed on the same 4x6 thermal labels as the
+   packing slips (shared head: @page 4x6, black on white, ?print=1). One sheet
+   carries the day: what to label, the LOT#, and how to set the hot stamp. */
+.ls-lot { border: 2pt solid #000; padding: 4pt 6pt; margin: 5pt 0; break-inside: avoid; page-break-inside: avoid; }
+.ls-lotrow { display: flex; justify-content: space-between; align-items: flex-end; gap: 6pt; }
+.ls-lotnum { font-family: ui-monospace, Menlo, monospace; font-size: 22pt; font-weight: 800; letter-spacing: 1pt; line-height: 1.05; }
+.ls-best { font-size: 8.5pt; margin-top: 1pt; }
+.ls-slots { display: flex; gap: 2pt; margin-top: 2pt; }
+.ls-slot { display: flex; flex-direction: column; align-items: center; }
+.ls-slot .ch { width: 19pt; height: 24pt; display: flex; align-items: center; justify-content: center; border: 1.5pt solid #000; font-family: ui-monospace, Menlo, monospace; font-size: 17pt; font-weight: 800; transform: scaleX(-1); }
+.ls-slot .n { font-size: 7pt; margin-top: 1pt; }
+.ls-check { font-size: 7.5pt; margin-top: 3pt; line-height: 1.25; }
+.ls-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6pt; border-bottom: 2pt solid #000; padding-bottom: 3pt; }
+.ls-head .day { font-size: 11pt; font-weight: 800; }
+.ls-head .meta { font-size: 7.5pt; text-align: right; }
+main .sig { margin-top: 6pt; }
+main .sig-space { height: .3in; }
+table.ps-tbl td { padding: 3pt 2pt; }
+.ls-box { display: inline-block; width: 9pt; height: 9pt; border: 1.25pt solid #000; vertical-align: middle; }
+.ls-org { font-size: 7pt; font-weight: 800; border: 1pt solid #000; padding: 0 2pt; margin-left: 2pt; vertical-align: 1pt; letter-spacing: .04em; }
+.ls-note { font-size: 8pt; display: block; margin-top: 1pt; }
+.ls-empty { border: 1.5pt solid #000; padding: 8pt; margin-top: 8pt; font-size: 11pt; text-align: center; }
+</style>
+</head>
+<body class="inv-page">
+<div class="ps-ctrl">
+  <button onclick="window.print()" class="btn btn-primary">&#128424; Print (4&times;6 label)</button>
+  <a href="javascript:history.length > 1 ? history.back() : (location.href = '/')" class="btn btn-outline">&larr; Back</a>
+</div>
+<main>
+<div class="ls-head">
+  <div><div class="lbl">Labelling</div><div class="day">{{ sheet.label_day }}</div></div>
+  <div class="meta">Jars counted {{ sheet.counted_label }}<br>Printed {{ printed }}</div>
+</div>
+
+{% if not sheet.rows %}
+<div class="ls-empty">Nothing to label &mdash; no jars were counted on {{ sheet.counted_label }}.</div>
+{% else %}
+
+{% for l in sheet.lots %}
+<div class="ls-lot">
+  <div class="ls-lotrow">
+    <div>
+      <div class="lbl">LOT # {% if sheet.multi_lot %}&middot; {{ l.jars }} jars{% endif %}</div>
+      <div class="ls-lotnum">{{ l.lot }}</div>
+      {% if l.best_before %}<div class="ls-best">Best before {{ l.best_before }}</div>{% endif %}
+    </div>
+    <div>
+      <div class="lbl">Hot stamp &mdash; set in this order</div>
+      <div class="ls-slots">
+        {% for ch in l.stamp %}<span class="ls-slot"><span class="ch">{{ ch }}</span><span class="n">{{ loop.index }}</span></span>{% endfor %}
+      </div>
+    </div>
+  </div>
+  <div class="ls-check">Slot 1 = left as you face the holder. Type sits mirrored. In a mirror it must read <b>{{ l.lot }}</b>.</div>
+</div>
+{% endfor %}
+
+<table class="ps-tbl">
+  <thead>
+    <tr><th style="width:12pt;"></th><th>Product</th><th class="r">Cases</th><th class="r">Jars</th></tr>
+  </thead>
+  <tbody>
+  {% for r in sheet.rows %}
+  <tr>
+    <td><span class="ls-box"></span></td>
+    <td><strong>{{ r.name }}</strong>{% if r.organic %}<span class="ls-org">ORGANIC</span>{% endif %}
+      {% if r.format %}<span class="ps-sub">{{ r.format }}</span>{% endif %}
+      {% if sheet.multi_lot and r.lot %}<span class="ls-note">LOT # {{ r.lot }}</span>{% endif %}
+      {% if r.hot_cups %}<span class="ls-note">+ {{ r.hot_cups }} loose jar{{ 's' if r.hot_cups != 1 }} &rarr; hot cups, <b>no organic label</b></span>{% endif %}
+    </td>
+    <td class="r qty">{{ r.cases }}{% if r.loose %}<span class="ls-note">+ {{ r.loose }} jar{{ 's' if r.loose != 1 }}</span>{% endif %}</td>
+    <td class="r">{{ r.jars }}</td>
+  </tr>
+  {% endfor %}
+  <tr class="totals"><td colspan="4" class="r">{{ sheet.total_cases }} cases{% if sheet.total_loose %} + {{ sheet.total_loose }} jars{% endif %} &middot; {{ sheet.total_jars }} jars</td></tr>
+  </tbody>
+</table>
+
+<div class="sig">
+  <div><div class="sig-space"></div><div class="sig-block">Labelled by</div></div>
+  <div><div class="sig-space"></div><div class="sig-block">Checked by</div></div>
+</div>
+{% endif %}
+</main>
+</body>
+</html>

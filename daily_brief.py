@@ -223,6 +223,9 @@ def _production_section(on):
             # arithmetic that produced this row's LOT#, so passing the batch
             # (start) date keeps the printed label and the FG record identical.
             "production_date": _ddmmyyyy(batched_on) or _ddmmyyyy(on.isoformat()),
+            # Organic batches hold full cases only; the kitchen's leftover jars
+            # go to hot cups and must NOT get an organic label (labelling sheet).
+            "loose_jars": int(f.get("loose_jars") or 0),
         })
     rows.sort(key=lambda r: (-r["quantity"], r["item"]))
 
@@ -703,6 +706,63 @@ def labelling_today():
         "production": {k: prod.get(k) for k in
                        ("rows", "lots", "totals", "total_jars", "source")},
     })
+
+
+def _sheet_name(brand, recipe):
+    """The product name for the floor — Soma's own brand left off, any other
+    brand leads. The format prints on its own line beneath."""
+    b, r = (brand or "").strip(), (recipe or "").strip()
+    return r if not b or b.upper() == "SOMA" else "%s · %s" % (b, r)
+
+
+def _labelling_sheet(prod, on):
+    """The 4x6 labelling sheet for the jars COUNTED on `on` — the ones the
+    floor labels the next morning. Pure: shapes _production_section's output,
+    reads nothing, so the sheet and section 1 of the Daily Summary can never
+    disagree about a product, a jar count or a LOT#."""
+    lots = []
+    for b in prod.get("lots") or []:
+        lot = b["lot"]
+        best = "%s/%s/20%s" % (lot[:2], lot[2:4], lot[4:]) if len(lot) == 6 and lot.isdigit() else ""
+        lots.append({"lot": lot, "stamp": b["stamp"], "best_before": best, "jars": b["jars"]})
+    rows = []
+    for r in prod.get("rows") or []:
+        jars = int(r.get("quantity") or 0)
+        rows.append({
+            "name": _sheet_name(r.get("brand"), r.get("recipe")) or r.get("item", ""),
+            "format": (r.get("format") or "").strip(),
+            "organic": (r.get("certification") or "").strip().lower() == "organic",
+            "lot": r.get("lot", ""),
+            "jars": jars,
+            "cases": jars // 12,
+            "loose": jars % 12,
+            "hot_cups": int(r.get("loose_jars") or 0),
+        })
+    total = sum(r["jars"] for r in rows)
+    return {
+        "counted_label": on.strftime("%a %d %b"),
+        "label_day": (on + timedelta(days=1)).strftime("%A %d %B"),
+        "lots": lots,
+        "rows": rows,
+        "multi_lot": len(lots) > 1,
+        "total_jars": total,
+        "total_cases": sum(r["cases"] for r in rows),
+        "total_loose": sum(r["loose"] for r in rows),
+        "hot_cups": sum(r["hot_cups"] for r in rows),
+    }
+
+
+@daily_brief_bp.route("/labelling-sheet")
+@login_required
+def labelling_sheet_page():
+    """Printable 4x6 labelling sheet (2026-10-01): the products to label, the
+    LOT# and the hot-stamp guide, handed to the floor with the case labels.
+    ?date= is the day the jars were COUNTED (default yesterday), the same
+    date the Daily Summary and /api/labelling-today use."""
+    on = _parse_date(request.args.get("date")) or (date.today() - timedelta(days=1))
+    sheet = _labelling_sheet(_production_section(on), on)
+    return render_template("labelling_sheet.html", sheet=sheet,
+                           printed=datetime.now().strftime("%d %b %Y %H:%M"))
 
 
 @daily_brief_bp.route("/api/daily-brief/channels", methods=["GET"])
