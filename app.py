@@ -3506,7 +3506,9 @@ def _compute_available_stock():
     fg = _load_json(ORGANIC_FG_PATH, [])
     sales = _load_json(ORGANIC_SALES_PATH, [])
     company = _load_company_info()
-    buffer_units = int(company.get("ripe_inventory_buffer") or 0)
+    # The Ripe inventory buffer was retired 2026-10-01 (Jeremy): Ripe sees all
+    # available stock. The field stays in the feed as 0 so Ripe needs no change.
+    buffer_units = 0
 
     gross_map = {}
     for entry in fg:
@@ -3570,7 +3572,9 @@ def internal_buyer_catalogue():
     stock_map = _compute_available_stock()
     meta = _load_json(SKU_META_PATH, {})
     company = _load_company_info()
-    buffer_units = int(company.get("ripe_inventory_buffer") or 0)
+    # The Ripe inventory buffer was retired 2026-10-01 (Jeremy): Ripe sees all
+    # available stock. The field stays in the feed as 0 so Ripe needs no change.
+    buffer_units = 0
     recipes = load_recipes()
 
     catalogue = []

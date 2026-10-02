@@ -1196,6 +1196,8 @@ Ripe's order number visible on both. That pairing is the only defence against a
 mislabelled parcel — because the destination address exists only on Ripe's label, Soma's
 data model never holds it, and a label attached to the wrong order cannot be detected.
 
+**Ripe pages declutter (2026-10-01):** Ripe Orders rows lead with Ripe's `order_number` (internal id is the tooltip) and carry ONE status (order status + date, with any money owed beneath); filters are All / Needs action (pending or approved); an opened order is one compact line + items "N cases · $X"; "Net 14 outstanding" (Ripe's own rule: net14/cc_net14 orders pending or approved) sits at the top. **Ripe Analytics (`/ripe-analytics` + template) was DELETED** — its data is on the dashboard's Sales by channel and Sales by Buyer; Ripe's `/api/internal/analytics` is untouched. **The Ripe inventory buffer is RETIRED (Jeremy):** `_compute_available_stock` and the catalogue use `buffer_units = 0` whatever `ripe_inventory_buffer` holds, the setting left Company Settings, and the feed still sends `buffer_units: 0` so Ripe needs no change. The dashboard's Ripe row is Wholesale Orders · Retail Pack Queue · Ripe credits.
+
 **Retail e-transfer batches (2026-09-18).** Ripe may settle a retail batch by e-transfer
 (−2%) instead of card (+2.9%). `/ripe-retail` shows an "Awaiting e-transfer" section fed by
 Ripe's `GET /api/internal/retail-etransfer-batches` — batch summaries only; the parcels are

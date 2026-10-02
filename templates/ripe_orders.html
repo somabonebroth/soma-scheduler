@@ -83,6 +83,10 @@
 .toast.show{opacity:1;}
 
 .export-wrap{margin-left:auto;}
+.pay-note{font-size:10px;color:var(--text-light);}
+.pay-note.bad{color:var(--action-red);font-weight:600;}
+.od-line{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:13px;margin-bottom:12px;}
+.od-line .mono{font-family:ui-monospace,Menlo,monospace;letter-spacing:.04em;}
 .export-wrap summary{cursor:pointer;list-style:none;padding:4px 0;}
 .export-wrap summary::-webkit-details-marker{display:none;}
 .export-wrap summary::after{content:' \25BE';}
@@ -110,6 +114,7 @@
 
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
     {% if pending_count > 0 %}<span class="tag tag-pending">{{ pending_count }} pending</span>{% endif %}
+    {% if net14_outstanding %}<span class="tag tag-net14">${{ "{:,.0f}".format(net14_outstanding) }} Net 14 outstanding</span>{% endif %}
     {# Monthly bookkeeping job — kept one tap away so it does not sit on top of the queue. #}
     <details class="export-wrap">
       <summary class="export-label">Bookkeeping export</summary>
@@ -124,16 +129,18 @@
 
   <div class="filter-bar">
     <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
-    <button class="filter-btn" onclick="setFilter('pending',this)">Pending</button>
-    <button class="filter-btn" onclick="setFilter('approved',this)">Approved</button>
-    <button class="filter-btn" onclick="setFilter('fulfilled',this)">Fulfilled</button>
-    <button class="filter-btn" onclick="setFilter('declined',this)">Declined</button>
+    <button class="filter-btn" onclick="setFilter('action',this)">Needs action</button>
   </div>
 
   {% macro order_row(o) %}
-    <tr class="order-row" data-id="{{ o.id }}" data-status="{{ o.status }}" onclick="toggleDetail('{{ o.id }}')">
+    {# One status per row (2026-10-01): order status, with the date it was set
+       for and any money still owed, instead of separate payment + status tags. #}
+    {% set ps = o.payment_status or '' %}
+    {% set owed = o.status != 'declined' and ps != 'paid' %}
+    {% set needs = o.status == 'pending' or o.status == 'approved' %}
+    <tr class="order-row" data-id="{{ o.id }}" data-status="{{ o.status }}" data-action="{{ '1' if needs else '0' }}" onclick="toggleDetail('{{ o.id }}')">
       <td>
-        <strong>{{ o.id }}</strong>
+        <strong title="{{ o.id }}">{{ o.order_number or o.id }}</strong>
         {% if o.order_mode == 'retail' %}<br><span class="tag" style="background:#fdf0e6;color:#8a4a1a;font-size:10px;padding:1px 7px;margin-top:3px;">Retail</span>{% endif %}
         {# Van request (2026-10-01): Ripe flags it on the order form; no charge. #}
         {% if o.van_requested %}<br><span class="tag" style="background:var(--orange);color:#fff;font-size:11px;font-weight:700;letter-spacing:.04em;padding:2px 8px;margin-top:4px;">VAN REQUESTED</span>{% endif %}
@@ -143,50 +150,32 @@
       <td>{% if o.order_mode == 'retail' %}{{ o.total_units }} jars{% else %}{{ o.total_cases }}{% endif %}</td>
       <td>${{ "%.2f"|format(o.total) }}</td>
       <td>
-        <div class="payment-stack">
-          {% if o.payment_key == 'etransfer' %}<span style="font-size:11px;color:var(--text-light);">E-Transfer</span>
-          {% elif o.payment_key == 'stripe_checkout' %}<span style="font-size:11px;color:var(--text-light);">Card</span>
-          {% else %}<span class="tag tag-net14">Net 14</span>{% endif %}
-          {% set ps = o.payment_status or 'n/a' %}
-          {% if ps == 'paid' %}<span class="tag tag-paid">paid{% if o.paid_at %} · {{ o.paid_at[:10] }}{% endif %}</span>
-          {% elif ps == 'invoice_sent' %}<span class="tag tag-invoice-sent">invoice sent</span>
-          {% elif ps in ['awaiting_etransfer', 'awaiting_invoice'] %}<span class="tag tag-awaiting">awaiting</span>
-          {% elif ps == 'payment_failed' %}<span class="tag tag-failed">payment failed</span>
-          {% elif ps == 'voided' %}<span class="tag tag-voided">voided</span>{% endif %}
-        </div>
-      </td>
-      <td>
-        {% if o.status == 'pending' %}<span class="tag tag-pending">pending</span>
-        {% elif o.status == 'approved' %}
-          <span class="tag tag-approved">approved</span>
-          {% if o.fulfillment_date %}<br><span style="font-size:10px;color:var(--text-light);">{{ o.fulfillment_date }}</span>{% endif %}
-        {% elif o.status == 'fulfilled' %}<span class="tag tag-fulfilled">fulfilled</span>
-        {% elif o.status == 'declined' %}<span class="tag tag-declined">declined</span>
+        {% if o.status == 'pending' %}<span class="tag tag-pending">Pending</span>
+        {% elif o.status == 'approved' %}<span class="tag tag-approved">Approved{% if o.fulfillment_date %} · {{ o.fulfillment_date }}{% endif %}</span>
+        {% elif o.status == 'fulfilled' %}<span class="tag tag-fulfilled">Fulfilled</span>
+        {% elif o.status == 'declined' %}<span class="tag tag-declined">Declined</span>
         {% else %}<span class="tag">{{ o.status }}</span>{% endif %}
+        {% if owed %}<br><span class="pay-note{{ ' bad' if ps == 'payment_failed' else '' }}">
+          {%- if ps == 'payment_failed' %}payment failed{% elif ps == 'voided' %}voided{% elif ps == 'invoice_sent' %}Net 14 invoice sent{% elif o.payment_key == 'etransfer' %}awaiting e-transfer{% elif o.payment_key in ['net14','cc_net14'] %}Net 14 · unpaid{% else %}unpaid{% endif -%}
+        </span>{% endif %}
       </td>
     </tr>
     <tr id="detail-{{ o.id }}" class="order-detail">
-      <td colspan="7" style="padding:0 10px 10px;">
+      <td colspan="6" style="padding:0 10px 10px;">
         <div class="order-detail-inner">
           {% if o.van_requested %}
           <div style="background:var(--orange);color:#fff;font-weight:700;font-size:14px;letter-spacing:.03em;padding:10px 14px;border-radius:8px;margin-bottom:12px;">VAN REQUESTED — Ripe has asked to use the van for this order</div>
           {% endif %}
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px;font-size:13px;">
-            <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Delivery</div>{{ o.delivery_label }}<br><span style="font-size:11px;color:var(--text-light);">{{ o.delivery_address }}</span></div>
-            <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Requested</div>{{ o.requested_date or '—' }}{% if o.requested_time %} · {{ o.requested_time }}{% endif %}</div>
-            <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Payment</div>{{ o.payment_label }}</div>
-            {% if o.order_number %}<div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Ripe Order #</div><span style="font-family:ui-monospace,Menlo,monospace;font-weight:600;">{{ o.order_number }}</span></div>{% endif %}
-            {% if o.fulfillment_date %}<div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Set Date</div><strong>{{ o.fulfillment_date }}</strong></div>{% endif %}
-            {% if o.payment_key == 'etransfer' and o.etransfer_reference %}
-            <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">E-Transfer Memo</div><span style="font-family:ui-monospace,Menlo,monospace;font-weight:700;letter-spacing:.08em;">{{ o.etransfer_reference }}</span></div>
-            <div><div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Bank Confirmation</div><span style="font-family:ui-monospace,Menlo,monospace;">{{ o.etransfer_confirmation or '—' }}</span></div>
-            {% endif %}
+          <div class="od-line">
+            <span>{{ o.delivery_label }}{% if o.delivery_address %} — {{ o.delivery_address }}{% endif %}</span>
+            {% if o.requested_date %}<span>Requested {{ o.requested_date }}{% if o.requested_time %} · {{ o.requested_time }}{% endif %}</span>{% endif %}
+            <span>{{ o.payment_label }}</span>
+            {% if o.payment_key == 'etransfer' and o.etransfer_reference %}<span>Memo <b class="mono">{{ o.etransfer_reference }}</b>{% if o.etransfer_confirmation %} · conf <span class="mono">{{ o.etransfer_confirmation }}</span>{% endif %}</span>{% endif %}
           </div>
-
           <div style="font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Items</div>
           <ul class="items-list">
           {% for item in o['items'] %}
-            <li><span>{{ item.name }} <span style="color:var(--text-light);">({{ item.format }})</span></span><span>{{ item.cases }} cases · {{ item.units }} units · ${{ "%.2f"|format(item.line_total) }}</span></li>
+            <li><span>{{ item.name }} <span style="color:var(--text-light);">· {{ item.format }}</span></span><span>{{ item.cases }} cases · ${{ "%.2f"|format(item.line_total) }}</span></li>
           {% endfor %}
           </ul>
           <div style="display:flex;justify-content:flex-end;gap:16px;font-size:12px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
@@ -211,11 +200,6 @@
             <a href="/ripe-orders/{{ o.id }}/packing-slip" target="_blank" class="btn-fulfill" style="text-decoration:none;background:#455a64;border-color:#455a64;">🖨 Packing Slip</a>
             {% endif %}
           </div>
-          {% if o.status == 'approved' and o.payment_key == 'cc_net14' %}
-          <div style="font-size:11px;color:var(--indigo);margin-top:8px;">⏳ Net 14 invoice sent. Inventory deducts on {{ o.fulfillment_date or 'delivery date' }}. Sale pending Stripe payment.</div>
-          {% elif o.status == 'approved' and o.payment_key == 'etransfer' %}
-          <div style="font-size:11px;color:var(--action-green);margin-top:8px;">✓ E-transfer confirmed. Inventory deducts on {{ o.fulfillment_date or 'delivery date' }}.</div>
-          {% endif %}
         </div>
       </td>
     </tr>
@@ -267,10 +251,10 @@
   <div class="card awaiting-card" style="padding:0;overflow:hidden;margin-bottom:14px;">
   <table class="orders-table">
     <thead>
-      <tr><th>Order</th><th>Date</th><th>Delivery</th><th>Cases</th><th>Total</th><th>Payment</th><th>Status</th></tr>
+      <tr><th>Ripe order</th><th>Date</th><th>Delivery</th><th>Cases</th><th>Total</th><th>Status</th></tr>
     </thead>
     <tbody>
-      <tr class="section-header"><td colspan="7">Awaiting payment <span class="count">{{ awaiting_orders|length }}</span></td></tr>
+      <tr class="section-header"><td colspan="6">Awaiting payment <span class="count">{{ awaiting_orders|length }}</span></td></tr>
       {% for o in awaiting_orders %}{{ order_row(o) }}{% endfor %}
     </tbody>
   </table>
@@ -288,7 +272,7 @@
     <div class="month-body">
       <table class="orders-table">
         <thead>
-          <tr><th>Order</th><th>Date</th><th>Delivery</th><th>Cases</th><th>Total</th><th>Payment</th><th>Status</th></tr>
+          <tr><th>Ripe order</th><th>Date</th><th>Delivery</th><th>Cases</th><th>Total</th><th>Status</th></tr>
         </thead>
         <tbody>
           {% for o in m.orders %}{{ order_row(o) }}{% endfor %}
@@ -361,7 +345,7 @@ function setFilter(f, btn) {
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   document.querySelectorAll('.order-row').forEach(row => {
-    var show = f === 'all' || row.dataset.status === f;
+    var show = f === 'all' || (f === 'action' ? row.dataset.action === '1' : row.dataset.status === f);
     row.style.display = show ? '' : 'none';
     var det = document.getElementById('detail-' + row.dataset.id);
     if (det) det.style.display = show ? '' : 'none';

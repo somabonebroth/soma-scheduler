@@ -214,7 +214,7 @@ def create_ripe_sale_records(order, delivery_date, payment_key):
     # Pre-flight stock check for SS items (shelf-stable / make-to-stock).
     # FZ/BB are made-to-order and may legitimately fall short — those flow
     # through unchanged below. For SS, refuse approval if the order would
-    # exceed currently-available stock (gross minus buffer), protecting
+    # exceed currently-available stock (gross minus pending), protecting
     # against the read/write race where two buyers see the same stock and
     # both order it.
     stock_map = _compute_available_stock()
@@ -544,9 +544,16 @@ def ripe_orders_page():
     else:
         service_fees, service_fee_outstanding = [], 0
 
+    # Net 14 still owed — Ripe's own analytics rule (pending/approved Net 14
+    # orders), shown here since the Ripe Analytics page was removed 2026-10-01.
+    net14_outstanding = round(sum(float(o.get("total") or 0) for o in orders
+                                  if o.get("payment_key") in ("net14", "cc_net14")
+                                  and o.get("status") in ("pending", "approved")), 2)
+
     return render_template("ripe_orders.html",
         awaiting_orders=awaiting_orders, settled_months=settled_months,
         pending_count=pending_count, configured=configured, error=error,
+        net14_outstanding=net14_outstanding,
         service_fees=service_fees, service_fee_outstanding=service_fee_outstanding)
 
 
@@ -1037,16 +1044,6 @@ def ripe_products_page():
     """
     from flask import redirect
     return redirect("/contacts?tab=buyers")
-
-
-@ripe_orders_bp.route("/ripe-analytics")
-@_soma_manager_required
-def ripe_analytics_page():
-    """Sales analytics — calls Ripe internal API."""
-    status, data = _ripe_request("GET", "/api/internal/analytics")
-    configured = _configured()
-    error = None if status == 200 else (data.get("error") if isinstance(data, dict) else "Could not reach Ripe portal")
-    return render_template("ripe_analytics.html", analytics=data if status == 200 else {}, configured=configured, error=error)
 
 
 @ripe_orders_bp.route("/ripe-orders/<order_id>/packing-slip")

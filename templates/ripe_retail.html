@@ -11,7 +11,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
 <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
 <link rel="apple-touch-icon" sizes="180x180" href="/static/logo-180.png">
-<title>Soma – Retail Parcels</title>
+<title>Soma – Retail Pack Queue</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
 .info-msg{background:var(--action-blue-bg);border:1px solid #90caf9;border-radius:var(--r-md);padding:14px;font-size:13px;color:var(--info-dark);margin-bottom:16px;}
@@ -93,7 +93,7 @@
 <body>
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-  <div class="header-text"><h1>Retail Parcels</h1><p>Soma Bone Broth</p></div>
+  <div class="header-text"><h1>Retail Pack Queue</h1><p>Soma Bone Broth</p></div>
   <div class="header-right" style="align-items:center;">
     <div class="nav-arrows">
       <button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button>
@@ -151,8 +151,7 @@
   {% if not batches %}
   <div class="card empty">
     <span class="big">&#128230;</span>
-    Nothing to pack right now.<br>
-    Paid retail parcels from Ripe land here automatically.
+    Nothing to pack.
   </div>
   {% endif %}
 
@@ -194,8 +193,7 @@
         {% for o in b.orders %}
         <tr id="row-{{ o.id }}">
           <td data-label="Order #">
-            <div class="order-no">{{ o.order_number }}</div>
-            <div class="mono">{{ o.id }}</div>
+            <div class="order-no" title="{{ o.id }}">{{ o.order_number }}</div>
           </td>
           <td data-label="Customer">{{ o.customer_name }}</td>
           <td class="items-inline" data-label="Contents">

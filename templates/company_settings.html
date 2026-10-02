@@ -80,13 +80,6 @@
   <!-- Ripe Portal -->
   <div class="scard" id="ripe">
     <h3>Ripe Portal</h3>
-    <div class="ff" style="max-width:320px;margin-bottom:18px;">
-      <label>Inventory Buffer — units withheld from Ripe per SKU</label>
-      <div style="display:flex;align-items:center;gap:12px;margin-top:6px;">
-        <input id="ci-buf" type="number" min="0" step="1" placeholder="12" oninput="dCI()" style="width:80px;font-size:20px;font-weight:700;text-align:center;padding:8px;">
-        <span style="font-size:13px;color:var(--text-light);line-height:1.4;">units per SKU<br><span style="font-size:11px;">Keeps a safety buffer so Ripe can't order your last cases</span></span>
-      </div>
-    </div>
     <div class="ff" style="max-width:520px;margin-bottom:18px;">
       <label>One-time credits — Ripe can apply these to e-transfer orders</label>
       <div id="credits-list" style="margin-top:8px;display:flex;flex-direction:column;gap:8px;"></div>
@@ -153,7 +146,6 @@ async function loadCI() {
   G('ci-reg').value     = d.registration || '';
   G('ci-notes').value   = d.notes   || '';
   G('ci-slip-emails').value = d.organic_slip_emails || '';
-  G('ci-buf').value     = d.ripe_inventory_buffer !== undefined ? d.ripe_inventory_buffer : 12;
   renderCredits(Array.isArray(d.ripe_credits) ? d.ripe_credits : []);
   renderPromos(Array.isArray(d.ripe_monthly_promos) ? d.ripe_monthly_promos : []);
   renderPromoMonth(Array.isArray(d.ripe_credits) ? d.ripe_credits : []);
@@ -202,7 +194,6 @@ async function saveCI() {
     address: G('ci-address').value, city: G('ci-city').value,
     registration: G('ci-reg').value, notes: G('ci-notes').value,
     organic_slip_emails: G('ci-slip-emails').value,
-    ripe_inventory_buffer:       parseInt(G('ci-buf').value)            || 0,
     ripe_credits:                scrapeCredits(),
     ripe_monthly_promos:         scrapePromos(),
     ss_small_order_threshold:    parseInt(G('ci-ss-small-thresh').value) || 20,
