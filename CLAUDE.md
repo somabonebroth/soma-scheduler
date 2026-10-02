@@ -25,7 +25,15 @@ helpers.py          — Foundation layer (extracted 2026-06-03): dependency-free
 suppliers.py        — Flask Blueprint: /api/suppliers CRUD (extracted 2026-06-03)
 buyers.py           — Flask Blueprint: /api/buyers CRUD only (extracted 2026-06-03).
                       Shared buyer helpers stay in app.py; reached via `import app`.
-recipes.py          — Flask Blueprint (637 lines, extracted 2026-06-03): 17 recipe
+recipes.py          — **RECIPE LOCK (2026-10-02, Jeremy: recipes are the one source every
+                      cascade reads, he edits them exclusively).** Every recipe WRITE route is
+                      `@recipe_editor_required` = manager AND `session["recipe_unlocked"]`, set by
+                      `POST /api/recipes/unlock` with `RECIPE_PASSWORD` (env, read at call time;
+                      unset = locked for EVERYONE). `/recipes` renders read-only (`can_edit`) until
+                      unlocked; header has Unlock / Lock editing (managers only). Lasts until
+                      logout or Lock. A new recipe write route MUST use `recipe_editor_required` —
+                      `tests.test_recipe_lock` walks the route map and fails otherwise.
+                      Flask Blueprint (637 lines, extracted 2026-06-03): 17 recipe
                       routes + recipe-private _schedules_using_recipe, incl. the
                       update_recipe rename cascade. Shared recipe/buyer helpers stay
                       in app.py (reached via `import app`); foundation names imported
@@ -901,6 +909,7 @@ bugs were found and **fixed**:
 - `SECRET_KEY`
 - `APP_PASSWORD`
 - `MANAGER_PASSWORD`
+- `RECIPE_PASSWORD` — unlocks recipe editing on /recipes (2026-10-02); unset = recipes locked for everyone
 - `FOH_PASSWORD` — front-of-house login (third role, 2026-08-26); unset = FOH login disabled
 - `INTERNAL_API_KEY` — used by Ripe→Soma calls AND by the Shopify/Clover cron jobs
 - `RIPE_PORTAL_URL`

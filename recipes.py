@@ -90,11 +90,66 @@ def manager_required(f):
     return decorated
 
 
+def _recipe_password():
+    """Read at call time so a Render env change needs no code path reload."""
+    return os.environ.get("RECIPE_PASSWORD", "")
+
+
+def _recipes_unlocked():
+    """Recipe editing is a manager session that has ALSO entered
+    RECIPE_PASSWORD (2026-10-02, Jeremy: recipes are the one true source of
+    cascading data, so only he edits them). No password set = locked for all."""
+    return ((session.get("role") or "manager") == "manager"
+            and bool(_recipe_password())
+            and session.get("recipe_unlocked") is True)
+
+
+def recipe_editor_required(f):
+    """Every recipe WRITE route: manager AND unlocked with RECIPE_PASSWORD.
+    Enforced here, not just by hiding buttons — update_recipe's rename cascade
+    rewrites FG/sales/runs/schedules."""
+    @wraps(f)
+    @manager_required
+    def decorated(*args, **kwargs):
+        if not _recipes_unlocked():
+            return jsonify({"error": "Recipes are locked. Unlock editing on the Recipes page."}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+
 @recipes_bp.route("/recipes")
 @login_required
 def recipes_page():
-    """Render the recipes page."""
-    return render_template("recipes.html")
+    """Render the recipes page. Read-only unless this session is unlocked."""
+    return render_template(
+        "recipes.html",
+        can_edit=_recipes_unlocked(),
+        can_unlock=(session.get("role") or "manager") == "manager",
+    )
+
+
+@recipes_bp.route("/api/recipes/unlock", methods=["POST"])
+@manager_required
+def unlock_recipes():
+    """Check RECIPE_PASSWORD and unlock recipe editing for this session
+    (until logout or Lock)."""
+    import hmac
+    pw = _recipe_password()
+    if not pw:
+        return jsonify({"error": "RECIPE_PASSWORD is not set on the server"}), 403
+    submitted = ((request.get_json() or {}).get("password") or "").strip()
+    if not (submitted and hmac.compare_digest(submitted.encode(), pw.encode())):
+        return jsonify({"error": "Wrong recipe password"}), 401
+    session["recipe_unlocked"] = True
+    return jsonify({"ok": True})
+
+
+@recipes_bp.route("/api/recipes/lock", methods=["POST"])
+@login_required
+def lock_recipes():
+    """Lock recipe editing again for this session."""
+    session.pop("recipe_unlocked", None)
+    return jsonify({"ok": True})
 
 
 @recipes_bp.route("/api/recipes", methods=["GET"])
@@ -110,7 +165,7 @@ def get_recipes():
 
 
 @recipes_bp.route("/api/recipes", methods=["POST"])
-@manager_required
+@recipe_editor_required
 def add_recipe():
     """POST /api/recipes - create a recipe from the JSON body."""
     data = request.json or {}
@@ -184,7 +239,7 @@ def recipe_pdf_all():
 
 
 @recipes_bp.route("/api/recipes/<path:name>", methods=["PUT"])
-@manager_required
+@recipe_editor_required
 def update_recipe(name):
     """Update an existing recipe. If the body's 'name' differs from the URL
     name, this is treated as a rename.
@@ -370,7 +425,7 @@ def _cert_mismatch(recipe_name):
 
 
 @recipes_bp.route("/api/recipes/<path:name>/apply-certification", methods=["POST"])
-@manager_required
+@recipe_editor_required
 def apply_recipe_certification(name):
     """Set every finished-goods batch AND sale row of this recipe's SKU to the
     recipe's current certification (2026-10-01). For correcting a product that
@@ -398,7 +453,7 @@ def apply_recipe_certification(name):
 
 
 @recipes_bp.route("/api/recipes/<path:name>", methods=["DELETE"])
-@manager_required
+@recipe_editor_required
 def delete_recipe(name):
     """DELETE /api/recipes/<name> - remove a recipe."""
     recipes = app.load_recipes()
@@ -466,7 +521,7 @@ def _schedules_using_recipe(recipe_name):
 
 
 @recipes_bp.route("/api/recipes/<path:name>/duplicate", methods=["POST"])
-@manager_required
+@recipe_editor_required
 def duplicate_recipe(name):
     """Duplicate a recipe with a new name. Body: {new_name}.
     Copies all data including ingredients/yield/brand/format. If the source
@@ -514,7 +569,7 @@ def duplicate_recipe(name):
 
 
 @recipes_bp.route("/api/recipes/<path:name>/archive", methods=["POST"])
-@manager_required
+@recipe_editor_required
 def archive_recipe(name):
     """Mark a recipe as archived. It stays in storage so old schedules and
     tracker entries still resolve, but it's hidden from the new-schedule
@@ -530,7 +585,7 @@ def archive_recipe(name):
 
 
 @recipes_bp.route("/api/recipes/<path:name>/unarchive", methods=["POST"])
-@manager_required
+@recipe_editor_required
 def unarchive_recipe(name):
     """Restore an archived recipe to active."""
     recipes = app.load_recipes()
@@ -542,7 +597,7 @@ def unarchive_recipe(name):
 
 
 @recipes_bp.route("/api/recipes/migrate-all", methods=["POST"])
-@manager_required
+@recipe_editor_required
 def migrate_all_recipes():
     """Force-persist structured-ingredient migration to disk for all recipes.
     Performs smart pack conversion using organic/tracking_modes.json, then
@@ -603,7 +658,7 @@ def migrate_all_recipes():
 
 
 @recipes_bp.route("/api/recipes/<path:name>/photo", methods=["POST"])
-@manager_required
+@recipe_editor_required
 def upload_recipe_photo(name):
     """POST a photo for a recipe; stored under PHOTOS_DIR."""
     if "photo" not in request.files:
@@ -679,7 +734,7 @@ def get_recipes_grouped():
 
 
 @recipes_bp.route("/api/recipes/order", methods=["POST"])
-@manager_required
+@recipe_editor_required
 def update_recipe_order():
     """POST /api/recipes/order - persist the recipe display order."""
     data = request.json or {}
@@ -688,7 +743,7 @@ def update_recipe_order():
 
 
 @recipes_bp.route("/api/recipes/upload", methods=["POST"])
-@manager_required
+@recipe_editor_required
 def upload_recipe():
     """POST /api/recipes/upload - create a recipe from an uploaded PDF or JSON text."""
     if request.files and "file" in request.files:
@@ -733,7 +788,7 @@ def upload_recipe():
 
 
 @recipes_bp.route("/api/recipes/upload-json", methods=["POST"])
-@manager_required
+@recipe_editor_required
 def upload_recipe_json():
     """POST /api/recipes/upload-json - create a recipe from a JSON body (manual add)."""
     data = request.json or {}

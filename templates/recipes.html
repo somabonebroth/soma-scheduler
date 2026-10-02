@@ -82,11 +82,12 @@
     <div class="header-text"><h1>Recipe Cards</h1><p>Soma Bone Broth</p></div>
     <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button><button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button></div>
+    {% if can_unlock %}{% if can_edit %}<button type="button" class="header-btn" onclick="lockRecipes()">&#128275; Lock editing</button>{% else %}<button type="button" class="header-btn" onclick="unlockRecipes()">&#128274; Unlock editing</button>{% endif %}{% endif %}
     <a href="/" class="header-btn">⌂ Dashboard</a>
   </div>
 </div>
 <div class="main">
-    {% if session.get('role', 'manager') == 'manager' %}
+    {% if can_edit %}
     <div class="migrate-banner" id="migrate-banner"><span id="migrate-msg"></span><button onclick="runMigration()">Migrate &amp; Save</button></div>
     {% endif %}
     <div class="card">
@@ -94,7 +95,7 @@
             <h2 style="margin:0;">All Recipes (<span id="recipe-count">0</span>)</h2>
             <div style="display:flex;gap:8px;flex-wrap:wrap;position:relative;">
                 <button class="btn btn-outline" onclick="downloadAllRecipes(this)">⤓ Download all</button>
-                {% if session.get('role', 'manager') == 'manager' %}
+                {% if can_edit %}
                 <button class="btn btn-primary" onclick="document.getElementById('add-menu').classList.toggle('open')">+ Add recipe</button>
                 <div class="add-menu" id="add-menu">
                     <button onclick="document.getElementById('add-menu').classList.remove('open');openAddManual()">Enter manually</button>
@@ -167,9 +168,22 @@ function mobileConfirm(message, opts){
 }
 </script>
 <script>
-// Production tablet gets a read-only view (2026-08-18 two-role split); the
-// recipe WRITE endpoints are manager-only server-side as well.
-var READ_ONLY = {{ 'false' if session.get('role', 'manager') == 'manager' else 'true' }};
+// Read-only unless a manager has unlocked editing with RECIPE_PASSWORD
+// (2026-10-02); the recipe WRITE endpoints enforce the same server-side.
+// Recipe lock (2026-10-02): editing needs RECIPE_PASSWORD on top of the manager login.
+async function unlockRecipes(){
+    const pw = prompt('Recipe password:');
+    if(!pw) return;
+    const res = await fetch('/api/recipes/unlock', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password: pw})});
+    if(res.ok){ location.reload(); return; }
+    const d = await res.json().catch(() => ({}));
+    alert(d.error || 'Could not unlock');
+}
+async function lockRecipes(){
+    await fetch('/api/recipes/lock', {method:'POST'});
+    location.reload();
+}
+var READ_ONLY = {{ 'false' if can_edit else 'true' }};
 var recipes={};var editingName='';var isAdding=false;var currentFilter='all';var brandOrder=[];var recipeOrder={};var viewingName='';
 function closeModal(id){document.getElementById(id).classList.remove('active');}
 document.addEventListener('DOMContentLoaded',async function(){recipes=await(await fetch('/api/recipes')).json();await loadOrder();await loadRecipeCheck();renderList();if(!READ_ONLY)checkMigration();});

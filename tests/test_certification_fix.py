@@ -38,13 +38,15 @@ class CertFix(unittest.TestCase):
             json.dump([row("s1", *beef, "Organic"), row("s2", "Soma", "Organic Chicken", "SS-750ML", "Organic")], f)
         self.patches = [mock.patch.object(app, "ORGANIC_FG_PATH", self.fg_path),
                         mock.patch.object(app, "ORGANIC_SALES_PATH", self.sales_path),
-                        mock.patch.object(app, "load_recipes", return_value=RECIPES)]
+                        mock.patch.object(app, "load_recipes", return_value=RECIPES),
+                        mock.patch.dict(os.environ, {"RECIPE_PASSWORD": "rpw"})]
         for p in self.patches:
             p.start()
         self.c = app.app.test_client()
         with self.c.session_transaction() as s:
             s["authenticated"] = True
             s["role"] = "manager"
+            s["recipe_unlocked"] = True
 
     def tearDown(self):
         for p in self.patches:
