@@ -204,8 +204,11 @@ production.py       — Flask Blueprint (771 lines, extracted 2026-06-03): the F
                       built as three lines, merged same day at Jeremy's request), Ripe (`ripe_order_id`), Nature's Emporium + Healthy Planet
                       (buyer name after `_buyer_resolver` roll-up, apostrophe-insensitive
                       prefix match), All other wholesale (everything else, incl. SBBC portal
-                      orders from other buyers). $ (default) / Cases (jars/12) toggle + Week/Month/Year;
-                      legend entries are buttons that hide/show a line; same `deducted_at` →
+                      orders from other buyers). **Reshaped 2026-10-01 (Jeremy):** ONE stacked bar per
+                      month, last 12, DOLLARS only — no week/year, no cases, no legend switches, no
+                      table; a panel beside the chart shows the selected month's total + every channel
+                      ($ and %), the current (building, drawn lighter) month by default, hover/tap a bar
+                      to switch. The API still serves week/year/units for any other caller; same `deducted_at` →
                       `sale_date` → `created_at` day key; revenue = `line_total` else qty×price.
                       Colours are a fixed categorical palette literal in the JS (colour follows
                       the channel; "other" is grey).
