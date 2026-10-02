@@ -83,9 +83,8 @@ body { padding-bottom: 96px; }
 
     <div class="card">
         <h2>2. Products</h2>
-        <p class="os-muted" style="margin-top:0;">In cases. Oldest stock goes first.</p>
-        <div id="os-plain"><p class="os-muted">Pick a buyer to see their products.</p></div>
-        <p class="os-muted" style="margin:12px 0 0;font-size:12px;">Selling loose jars? <a href="/organic?action=sell" style="color:var(--dark);">Jar-level sale form</a></p>
+        <div id="os-plain"><p class="os-muted">Pick a buyer above.</p></div>
+        <p class="os-muted" style="margin:12px 0 0;font-size:12px;"><a href="/organic?action=sell" style="color:var(--dark);">Sell loose jars instead</a></p>
     </div>
 
     <div class="card" id="os-scan-card">
@@ -285,7 +284,7 @@ function osRender() {
     const b = osBuyer();
     const box = document.getElementById('os-plain');
     if (!b) {
-        box.innerHTML = '<p class="os-muted">Pick a buyer to see their products.</p>';
+        box.innerHTML = '<p class="os-muted">Pick a buyer above.</p>';
     } else {
         const inStock = osPlain.filter(r => (b.skus || []).some(s => s.sku_key === r.sku_key) && r.held >= 12);
         box.innerHTML = inStock.length ? inStock.map(r =>
@@ -293,7 +292,7 @@ function osRender() {
             + '<button class="os-icon-btn" aria-label="One case less" onclick="osChangePlain(' + osPlain.indexOf(r) + ', -1)">&minus;</button>'
             + '<div class="n">' + (osPlainQty[r.sku_key] || 0) + '</div>'
             + '<button class="os-icon-btn" aria-label="One case more" onclick="osChangePlain(' + osPlain.indexOf(r) + ', 1)">+</button></div>'
-        ).join('') : '<p class="os-muted">None of this buyer\'s non-organic products have a full case in stock.</p>';
+        ).join('') : '<p class="os-muted">Nothing in stock.</p>';
     }
 
     // The scan step only shows for a buyer who carries organic stock (or when
