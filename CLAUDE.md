@@ -1044,8 +1044,8 @@ English, Greek, English, French (English on every other turn); the asleep line i
 in all four, so the rotation holds rather than fading between identical text. Beside it, a
 live Toronto temperature from Open-Meteo (no API key, client-side, refreshed every 15 min)
 that stays HIDDEN on any failure — an offline tablet must never see a stale number.
-**This is the codebase's only external font dependency:** Caveat (Latin + Greek) + Kalam
-(Devanagari) from Google Fonts, falling back to the device cursive. If another page ever
+**This is the codebase's only external font dependency:** Caveat (Latin) + Kalam
+(Devanagari) + Mynerve (Greek turn only — Caveat has no Greek) from Google Fonts, falling back to the device cursive. If another page ever
 needs handwriting, reuse that pair rather than adding a third family.
 
 ---

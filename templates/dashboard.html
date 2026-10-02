@@ -18,7 +18,7 @@
 <title>Soma - Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Kalam:wght@700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Kalam:wght@700&family=Mynerve&display=swap">
 <link rel="stylesheet" href="/static/style.css">
 <style>
 .dashboard-grid { display: grid; gap: 16px; margin-top: 8px; }
@@ -127,15 +127,17 @@
    everything, rotating through the team's languages (English twice as often)
    with a live Toronto temperature beside it. -- */
 .greet-bar { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px 16px; margin: 2px 0 18px; }
-/* Handwriting stack: Caveat carries Latin, Kalam carries Devanagari, and
-   Greek falls through to whatever cursive the device has. A tablet with no
-   network gets the same fallback -- the greeting never disappears. */
+/* Handwriting stack: Caveat carries Latin, Kalam carries Devanagari.
+   Caveat has no Greek, so the Greek turn switches to Mynerve (one weight,
+   wider than Caveat -- hence the smaller size). A tablet with no network
+   falls back to the device cursive -- the greeting never disappears. */
 .greet-text { font-family: 'Caveat', 'Kalam', 'Segoe Script', 'Bradley Hand', cursive; font-size: 40px; font-weight: 700; color: var(--dark); letter-spacing: .3px; line-height: 1.15; transition: opacity .45s ease; }
 .greet-weather { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; color: var(--text-light); background: var(--card-bg); border: 1px solid var(--border); border-radius: 999px; padding: 5px 13px; white-space: nowrap; }
 .greet-weather .w-icon { font-size: 16px; line-height: 1; }
 .greet-weather .w-temp { color: var(--dark); font-weight: 700; }
 .greet-weather[hidden] { display: none; }
-@media (max-width: 600px) { .greet-text { font-size: 32px; } }
+.greet-text:lang(el) { font-family: 'Mynerve', 'Segoe Script', 'Bradley Hand', cursive; font-weight: 400; font-size: 36px; }
+@media (max-width: 600px) { .greet-text { font-size: 32px; } .greet-text:lang(el) { font-size: 28px; } }
 </style>
 </head>
 <body>
@@ -205,6 +207,7 @@
         return GREETINGS[slot()][CYCLE[n % CYCLE.length]];
     }
     function render() {
+        el.lang = CYCLE[step % CYCLE.length];
         el.textContent = phrase(step);
     }
     function rotate() {
