@@ -673,16 +673,17 @@ body.inv-page .modal-actions {
     .dash-modal-overlay .modal-actions { flex-direction: column-reverse; gap: 10px; }
     .dash-modal-overlay .modal-actions button { width: 100%; min-height: 48px; box-sizing: border-box; }
 
-    /* Add Inventory ingredient grid — collapse LOT# below name */
+    /* Add Inventory ingredient grid — name on its own line, then LOT#, Qty and
+       the unit (kept visible: it was hidden on phones, so lbs/ml could not be picked) */
     #add-inv-ingredient-grid > div {
-        grid-template-columns: 1fr 90px !important;
+        grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto !important;
         grid-template-rows: auto auto;
     }
     #add-inv-ingredient-grid > div > div:first-child {
         grid-column: 1 / -1;
         padding-bottom: 4px;
-        border-bottom: 1px solid #f0f0eb;
     }
+    .inv-grid-header { display: none !important; }
 
     /* Adjustment ingredient grid — collapse similarly */
     #adj-ingredient-grid > div {
@@ -710,17 +711,11 @@ body.inv-page .modal-actions {
     #add-inv-photo-buttons { flex-direction: column; }
     #add-inv-photo-buttons button { width: 100%; text-align: center; }
 
-    /* Add inventory ingredient grid header — hide unit col on mobile since unit shows inline */
-    .inv-grid-header { grid-template-columns: 1fr 130px 90px !important; }
-    .inv-grid-unit-col { display: none; }
-    #add-inv-ingredient-grid > div { grid-template-columns: 1fr 130px 90px 0px !important; }
-    #add-inv-ingredient-grid > div > div:last-child { display: none; }
 
     /* ── New FG / Buyers / Record Sale mobile rules ── */
 
-    /* Record Sale SKU grid — drop stock col, keep product + units */
-    #sale-sku-grid .rs-row { grid-template-columns: 1fr 112px; }
-    #sale-sku-grid .rs-row > div:nth-child(2) { display: none; }
+    /* Record Sale SKU grid — stock stays visible (narrow), product + units */
+    #sale-sku-grid .rs-row { grid-template-columns: minmax(0, 1fr) 48px 112px; gap: 6px; }
     .rs-po input { max-width: none; }
 
     /* FG Adjust grid — drop stock col, keep SKU + adjust */
@@ -777,8 +772,7 @@ body.inv-page .modal-actions {
     .rs-total { width: 100%; text-align: center; margin: 0; }
 
     /* Hide matching header cols when grid cols are hidden */
-    #sale-sku-grid-header { grid-template-columns: 1fr 112px; }
-    #sale-sku-grid-header > div:nth-child(2) { display: none; }
+    #sale-sku-grid-header { grid-template-columns: minmax(0, 1fr) 48px 112px; gap: 6px; }
     #fg-adj-grid-header { grid-template-columns: 1fr 80px !important; }
     #fg-adj-grid-header > div:nth-child(2) { display: none; }
 }
@@ -792,7 +786,7 @@ body.inv-page .modal-actions {
 /* iOS Safari zooms the page when a focused field's text is under 16px. */
 @media (max-width: 768px) {
     .modal input, .modal select, .modal textarea { font-size: 16px !important; }
-    .modal-actions button, .modal-actions .btn { max-width: 100%; }
+    .modal-actions button, .modal-actions .btn { max-width: 100%; margin-left: 0 !important; }
 }
 .repair-note { font-size: 12px; color: var(--text-light); line-height: 1.5; margin: 4px 4px 0; }
 .repair-note a { color: var(--dark); }
@@ -2169,7 +2163,7 @@ function goToAddInvStep2(){
         row.innerHTML =
             '<div style="font-size:13px;font-weight:500;">'+ing.name+'</div>' +
             '<div><input type="text" data-lot="'+idx+'" placeholder="LOT#" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;"></div>' +
-            '<div><input type="number" data-qty="'+idx+'" placeholder="0" step="any" min="0" inputmode="decimal" oninput="onInvQtyInput('+idx+')" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;"><div data-conv="'+idx+'" style="font-size:10px;color:#2e7d32;margin-top:2px;height:12px;line-height:12px;"></div></div>' +
+            '<div><input type="number" data-qty="'+idx+'" placeholder="Qty" step="any" min="0" inputmode="decimal" oninput="onInvQtyInput('+idx+')" style="width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;"><div data-conv="'+idx+'" style="font-size:10px;color:#2e7d32;margin-top:2px;height:12px;line-height:12px;"></div></div>' +
             unitCell;
         row.setAttribute('data-ing-idx', idx);
         grid.appendChild(row);

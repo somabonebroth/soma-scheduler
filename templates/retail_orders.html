@@ -99,10 +99,7 @@
   <div class="err-msg"><strong>Could not reach the SBBC portal:</strong> {{ error }}</div>
   {% endif %}
 
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-    <h2 style="margin:0;font-size:18px;">SBBC Wholesale Portal Orders</h2>
-    {% if pending_count > 0 %}<span class="tag tag-pending">{{ pending_count }} pending</span>{% endif %}
-  </div>
+  {% if pending_count > 0 %}<div style="margin-bottom:12px;"><span class="tag tag-pending">{{ pending_count }} pending</span></div>{% endif %}
 
   <div class="filter-bar">
     <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
