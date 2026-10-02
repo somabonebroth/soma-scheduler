@@ -42,8 +42,10 @@ sales.py            — Flask Blueprint (731 lines, extracted 2026-06-03): the 7
                       come first; the scan card shows only when the buyer carries organic stock or
                       something is scanned. The dashboard's two sale tiles + its buyer/date modal
                       (which re-asked the same questions inside organic.html) are gone — one
-                      "Record Sale" tile. The jar-level Record Sale modal on Manage Inventory stays
-                      (linked from the page as "Jar-level sale form") for loose jars. Every sale
+                      "Record Sale" tile. Soma sells wholesale CASES only (Jeremy, 2026-10-02): the
+                      loose-jar link is gone and Manage Inventory's "Record sale" button now opens
+                      /record-sale; the old jar-level modal survives only behind `/organic?action=sell`
+                      (no link reaches it). Every sale
                       recorded there emails its slip (settings card renamed "Packing slip email",
                       same `organic_slip_emails` key + `#organic-email` anchor).
                       **Organic Sale (2026-09-30):** `/organic-sale` (templates/organic_sale.html,
