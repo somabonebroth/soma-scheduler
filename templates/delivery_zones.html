@@ -96,7 +96,7 @@
 <body>
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-  <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Delivery Zone Lookup &mdash; wholesale quoting</p></div>
+  <div class="header-text"><h1>Delivery Zones</h1><p>Wholesale quoting</p></div>
   <div class="header-right"><button class="header-btn" onclick="window.location='/'">&#8962; Dashboard</button></div>
 </div>
 
@@ -117,7 +117,7 @@
         <input id="cases" type="number" min="0" step="1" placeholder="—" inputmode="numeric">
       </div>
       <button class="btn btn-primary" id="go" onclick="doLookup()">Look up</button>
-      <div class="hint">Zone, minimum order and delivery fee for a wholesale customer. Cases are {{ summary.case_size }} units. Nothing here is saved.</div>
+      <div class="hint">Cases are {{ summary.case_size }} units.</div>
     </div>
     <div class="status error" id="err" style="display:none;"></div>
     {% if summary.store.address %}<div class="store-line">Delivering from {{ summary.store.label or 'the store' }}, {{ summary.store.address }}.</div>{% endif %}

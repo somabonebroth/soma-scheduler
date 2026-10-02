@@ -194,6 +194,15 @@ body {
 }
 .nav-arrow-btn:hover { background:rgba(255,255,255,0.25); }
 .nav-arrow-btn:disabled { opacity:0.3; cursor:default; }
+/* One header everywhere (2026-10-01): page title, Back, Dashboard. Forward is
+   dropped — it duplicated the browser's own and crowded the phone header; Back
+   stays because the home-screen app has no browser Back button. */
+#nav-fwd { display: none; }
+.header-btn { white-space: nowrap; }
+@media (max-width: 600px) {
+    .header-text:not(.keep-sub) p { display: none; }
+    .header-text h1 { line-height: 1.2; }
+}
 
 /* ── Quantity stepper: number input flanked by −/+ buttons ──────────────── */
 /* Wrap markup: <div class="qty-stepper"><button>−</button><input type="number"><button>+</button></div>

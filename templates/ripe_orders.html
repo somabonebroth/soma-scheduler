@@ -82,7 +82,11 @@
 .toast{position:fixed;bottom:20px;right:20px;background:var(--text);color:var(--white);padding:10px 16px;border-radius:8px;font-size:13px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;}
 .toast.show{opacity:1;}
 
-.export-bar{margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.export-wrap{margin-left:auto;}
+.export-wrap summary{cursor:pointer;list-style:none;padding:4px 0;}
+.export-wrap summary::-webkit-details-marker{display:none;}
+.export-wrap summary::after{content:' \25BE';}
+.export-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;}
 .export-label{font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;}
 .export-bar input[type=date]{padding:5px 7px;border:1px solid var(--grey-border);border-radius:6px;font-size:12px;}
 </style>
@@ -90,7 +94,7 @@
 <body>
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-  <div class="header-text"><h1>SOMA BONE BROTH</h1><p>Ripe Orders</p></div>
+  <div class="header-text"><h1>Ripe Orders</h1><p>Soma Bone Broth</p></div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button><button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button></div>
     <a href="/" class="header-btn">⌂ Dashboard</a>
@@ -105,15 +109,17 @@
   {% endif %}
 
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-    <h2 style="margin:0;font-size:18px;">Ripe Orders</h2>
     {% if pending_count > 0 %}<span class="tag tag-pending">{{ pending_count }} pending</span>{% endif %}
-    <div class="export-bar">
-      <span class="export-label">Bookkeeping export</span>
-      <input type="date" id="export-from">
-      <span style="color:var(--text-light);font-size:12px;">to</span>
-      <input type="date" id="export-to">
-      <button class="btn-outline" onclick="downloadBookkeepingCsv()">&#11015; CSV</button>
-    </div>
+    {# Monthly bookkeeping job — kept one tap away so it does not sit on top of the queue. #}
+    <details class="export-wrap">
+      <summary class="export-label">Bookkeeping export</summary>
+      <div class="export-bar">
+        <input type="date" id="export-from">
+        <span style="color:var(--text-light);font-size:12px;">to</span>
+        <input type="date" id="export-to">
+        <button class="btn-outline" onclick="downloadBookkeepingCsv()">&#11015; CSV</button>
+      </div>
+    </details>
   </div>
 
   <div class="filter-bar">

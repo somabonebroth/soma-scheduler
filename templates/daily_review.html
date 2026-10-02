@@ -428,7 +428,8 @@ function signHtml(b){
             + (b.signoff.notes ? ' &middot; ' + esc(b.signoff.notes) : '')
             + '<button onclick="unsign()">Undo</button></div>';
     } else if (!b.needs_review) {
-        inner = '<div class="dr-empty">Quiet day — nothing to review.</div>';
+        // Quiet day: the banner at the top already says so — no second box.
+        return '<div id="catchup"></div>';
     } else {
         inner = '<div style="font-size:13px;color:var(--text-light);">'
             + 'Once you&rsquo;ve read this and actioned anything above, mark it reviewed.</div>'

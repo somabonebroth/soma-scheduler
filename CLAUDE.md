@@ -36,6 +36,16 @@ sales.py            — Flask Blueprint (731 lines, extracted 2026-06-03): the 7
                       ORGANIC_FG_PATH/ORGANIC_SALES_PATH constants stay in app.py
                       (app.-qualified); foundation IO from helpers. Channel imports,
                       sales analytics, and trace deliberately NOT included.
+                      **Record Sale = the one sale page (2026-10-01).** Organic Sale was renamed
+                      Record Sale and serves EVERY wholesale order: `/record-sale` (alias
+                      `/organic-sale` kept for old links/home-screen bookmarks). Products in cases
+                      come first; the scan card shows only when the buyer carries organic stock or
+                      something is scanned. The dashboard's two sale tiles + its buyer/date modal
+                      (which re-asked the same questions inside organic.html) are gone — one
+                      "Record Sale" tile. The jar-level Record Sale modal on Manage Inventory stays
+                      (linked from the page as "Jar-level sale form") for loose jars. Every sale
+                      recorded there emails its slip (settings card renamed "Packing slip email",
+                      same `organic_slip_emails` key + `#organic-email` anchor).
                       **Organic Sale (2026-09-30):** `/organic-sale` (templates/organic_sale.html,
                       phone-first; "Organic Sale" tile in the manager's Quick Actions) +
                       `GET /api/organic/sale-stock` (organic rows per SKU+LOT with the QR SKU
@@ -652,6 +662,10 @@ unmatched name can be PICKED onto a current name (`POST {"picks": {old: new}}`; 
 unmatched, new a recipe/custom name) — e.g. "Organic Parsley" → "Organic Fresh Parsley".
 Renaming fixes new batches only; past batches' shortage markers clear with Rebuild Raw Balances.
 Tests: `python3 -m unittest tests.test_ingredient_rename`.
+
+**Receive Inventory page (2026-10-01):** `/receive` (`templates/receive.html`, route in raw_materials.py) is the dashboard's Receive Inventory — phone-first, one card per ingredient (LOT#, qty, unit select with conversion), invoice photo required, Save in a bottom bar. It makes the SAME two calls as organic.html's Add Inventory modal (`/api/organic/raw-materials/bulk`, then `receipt-photo/<first id>`) — keep them in step; the modal stays for desktop. The dashboard's supplier/date pop-up is deleted.
+
+**One header everywhere (2026-10-01):** `.header-text h1` is the PAGE name (pages that showed "SOMA BONE BROTH" as h1 were swapped; the dashboard keeps the brand, `keep-sub`). `static/style.css` hides `#nav-fwd` everywhere and the subtitle `<p>` under 600px — so never put information only in the header subtitle. Back stays: the home-screen app has no browser Back. Schedule pages name products `Name · Format` (brand only if not SOMA). Calendar dates in JS use `toLocaleDateString('en-CA')`, never `toISOString()` (UTC: after 8 pm Toronto it is tomorrow).
 
 **Receipt photos:** one per delivery, stored as `<entry_id>.<ext>` in `rm_receipt_photos/`, anchored to the first entry of a bulk save. `GET /api/organic/raw-materials/receipt-photos` lists which entry ids have one; the Receiving list shows a "📎 Invoice" button per delivery. **Every line knows its delivery (2026-09-29):** a delivery save stamps `delivery_id` (= the line-_000 id the photo is stored on) on each line; older bulk lines derive the same value from their id (`helpers._delivery_id`, None for baselines/adjustments/single adds). `GET /api/organic/raw-materials` includes it, the Receiving list groups by it (date + supplier only as a fallback), and `GET .../receipt-photo/<any line id>` falls back to the delivery's photo — so any raw lot a batch used leads to its invoice. Groundwork for the Organic Lots folders. Tests: `python3 -m unittest tests.test_delivery_id`.
 

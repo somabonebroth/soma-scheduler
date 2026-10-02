@@ -151,7 +151,7 @@
 <body>
 <div class="header">
     <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-    <div class="header-text"><h1>SOMA BONE BROTH</h1><p>{{ 'Management Dashboard' if role == 'manager' else ('Front of House' if role == 'foh' else 'Production') }}</p></div>
+    <div class="header-text keep-sub"><h1>SOMA BONE BROTH</h1><p>{{ 'Management Dashboard' if role == 'manager' else ('Front of House' if role == 'foh' else 'Production') }}</p></div>
     <div class="header-right"><button class="header-btn" onclick="doLogout()">Log Out</button></div>
 </div>
 <div class="main">

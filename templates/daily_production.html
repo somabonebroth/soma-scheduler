@@ -130,7 +130,7 @@ async function init(){
     productionData=await prodRes.json();
     ccpSections=await ccpRes.json();
     var clData=await clRes.json();
-    document.getElementById('header-sub').textContent=productionData.day_name+' - '+productionData.date;
+    document.getElementById('header-sub').textContent=productionData.date;
     document.getElementById('info-bar').innerHTML='<strong>DATE:</strong> '+productionData.date+'&nbsp;&nbsp;&nbsp;<strong>LOT# on jars filled today:</strong> '+productionData.prev_lot+'&nbsp;&nbsp;&nbsp;<strong>LOT# for batches started today:</strong> '+productionData.today_lot;
     // Show daily notes if any
     if(productionData.daily_notes && productionData.daily_notes.trim()){
@@ -191,7 +191,7 @@ function fmtIng(item){
 }
 function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-// Canonical display name: 'Brand-Name-Format' (all dashes). See weekly_view for parity.
+// Display name: 'Name · Format' (2026-10-01; was 'SOMA-Name-Format'), brand only if not Soma. See weekly_view for parity.
 function buildDisplayName(brand, recipeName, format) {
     var name = (recipeName || '').trim();
     var fmt = (format || '').trim();
@@ -200,11 +200,13 @@ function buildDisplayName(brand, recipeName, format) {
     var prev = null;
     while (prev !== name) { prev = name; name = name.replace(suffixRe, '').replace(/[\s\-]+$/, ''); }
     if (!name) name = (recipeName || '').trim();
+    // Soma's own brand is left off (it is nearly every product); any other
+    // brand leads, so a Benefits by Nature batch still reads as one.
     var parts = [];
-    if (b) parts.push(b);
+    if (b && b.toUpperCase() !== 'SOMA') parts.push(b);
     if (name) parts.push(name);
     if (fmt) parts.push(fmt);
-    return parts.join('-');
+    return parts.join(' \u00b7 ');
 }
 
 function buildRecipeCard(data,vessel,side){
@@ -212,7 +214,7 @@ function buildRecipeCard(data,vessel,side){
     var display=buildDisplayName(r.brand||'', name, r.format||'');
     var halvedNote=data.halved?'<span class="halved-badge">½ QUANTITIES</span>':'';
     var html='<div class="recipe-title">'+escHtml(display)+halvedNote+'</div>';
-    html+='<div class="recipe-format">Target: '+(r.yield||'--')+' units</div>';
+    if(r.yield) html+='<div class="recipe-format">Target: '+r.yield+' units</div>';
     if(r.special_instructions&&r.special_instructions.length){html+='<div class="special-box">';for(var i=0;i<r.special_instructions.length;i++)html+=escHtml(r.special_instructions[i])+'<br>';html+='</div>';}
     var secs=[['Add to kettle overnight',r.kettle_overnight],['Add after skim',r.after_skim],['Finishing',r.finishing],['Add to jar/container',r.add_to_jar]];
     for(var s=0;s<secs.length;s++){

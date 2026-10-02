@@ -21,7 +21,7 @@
 .day-block { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
 .day-header { background: var(--accent); color: var(--white); padding: 10px 16px; font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
 .day-header .lot { font-size: 12px; opacity: 0.8; }
-.vessel-row { display: grid; grid-template-columns: 80px 1fr 90px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--border); gap: 12px; }
+.vessel-row { display: grid; grid-template-columns: 70px 1fr auto; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--border); gap: 12px; }
 .vessel-row:last-child { border-bottom: none; }
 .vessel-row:nth-child(even) { background: var(--row-alt); }
 .vessel-label { font-weight: 700; font-size: 14px; }
@@ -48,6 +48,7 @@
 .notes-card p { font-size: 14px; color: var(--dark); white-space: pre-wrap; }
 .vessel-label.half-vessel { color: #e67e22; }
 .yield-val.halved { color: #e67e22; }
+.day-block.today { outline: 3px solid var(--action-green); outline-offset: -1px; scroll-margin-top: 84px; }
 .day-note-display { padding: 8px 16px; background: #fffdf5; border-top: 1px dashed var(--border); font-size: 12px; color: var(--text); line-height: 1.5; }
 </style>
 </head>
@@ -74,7 +75,7 @@
 </div>
 <script>
 var DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-// Canonical display name: 'Brand-Name-Format' (all dashes).
+// Display name: 'Name · Format' (2026-10-01; was 'SOMA-Name-Format'), brand only if not Soma.
 // Strips any format suffix already present in the name so we don't double-append.
 function buildDisplayName(brand, recipeName, format) {
     var name = (recipeName || '').trim();
@@ -85,11 +86,13 @@ function buildDisplayName(brand, recipeName, format) {
     var prev = null;
     while (prev !== name) { prev = name; name = name.replace(suffixRe, '').replace(/[\s\-]+$/, ''); }
     if (!name) name = (recipeName || '').trim();
+    // Soma's own brand is left off (it is nearly every product); any other
+    // brand leads, so a Benefits by Nature batch still reads as one.
     var parts = [];
-    if (b) parts.push(b);
+    if (b && b.toUpperCase() !== 'SOMA') parts.push(b);
     if (name) parts.push(name);
     if (fmt) parts.push(fmt);
-    return parts.join('-');
+    return parts.join(' \u00b7 ');
 }
 var VESSELS = {{ VESSELS|tojson }};
 const HALF_VESSELS = {{ HALF_VESSELS|tojson }};
@@ -151,6 +154,8 @@ async function loadWeek(weekId) {
         var res = await fetch('/api/schedule/' + weekId);
         var data = await res.json();
 
+        // Edit makes no sense on an empty week — the empty state carries Create.
+        if (editBtn) editBtn.style.display = data.schedule ? '' : 'none';
         if (!data.schedule) {
             notesArea.innerHTML = '';
             container.innerHTML = '<div class="no-schedule"><h2>No schedule for this week</h2><p>Use the arrows to browse other weeks' + (editBtn ? ', or create a new schedule.</p><a href="/create-schedule?week=' + weekId + '" class="btn btn-primary" style="margin-top:16px;display:inline-block;padding:12px 24px;text-decoration:none;">Create Schedule for This Week</a>' : '.</p>') + '</div>';
@@ -206,7 +211,8 @@ async function loadWeek(weekId) {
 
             var hasStart = false;
             var hasFinish = false;
-            html += '<div class="day-block"><div class="day-header"><span>' + DAYS[idx] + ' — ' + ds + '</span><span class="lot" title="LOT# for batches started this day (start date + 365)">LOT# ' + lot + '</span></div>';
+            var isToday = d.toLocaleDateString('en-CA') === new Date().toLocaleDateString('en-CA');
+            html += '<div class="day-block' + (isToday ? ' today" id="today-block' : '') + '"><div class="day-header"><span>' + DAYS[idx] + ' — ' + ds + '</span><span class="lot" title="LOT# for batches started this day (start date + 365)">LOT# ' + lot + '</span></div>';
 
             for (var v = 0; v < VESSELS.length; v++) {
                 var vessel = VESSELS[v];
@@ -272,6 +278,9 @@ async function loadWeek(weekId) {
         }
 
         container.innerHTML = html;
+        // This week opens on today, not Monday.
+        var todayEl = document.getElementById('today-block');
+        if (todayEl && todayEl !== container.querySelector('.day-block')) todayEl.scrollIntoView({block: 'start'});
 
     } catch (e) {
         container.innerHTML = '<div class="no-schedule"><p>Error loading schedule: ' + e.message + '</p></div>';
