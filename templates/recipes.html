@@ -26,6 +26,12 @@
 .recipe-info .recipe-meta { font-size: 11px; color: var(--text-light); }
 .recipe-info .organic-badge { font-size: 10px; background: var(--action-green-bg); color: var(--action-green); padding: 1px 6px; border-radius: 8px; font-weight: 600; margin-left: 6px; }
 .recipe-btns { display: flex; gap: 6px; flex-shrink: 0; }
+.add-menu { display:none; position:absolute; right:0; top:100%; margin-top:6px; background:var(--card-bg); border:1px solid var(--border); border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,.12); z-index:20; min-width:170px; overflow:hidden; }
+.add-menu.open { display:block; }
+.add-menu button { display:block; width:100%; text-align:left; background:none; border:none; padding:11px 14px; font:inherit; font-size:14px; cursor:pointer; }
+.add-menu button:hover { background:var(--row-alt); }
+.recipe-list-item.clickable { cursor:pointer; }
+.recipe-list-item.clickable:hover { background:var(--row-alt); }
 .upload-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; }
 .upload-zone:hover,.upload-zone.dragover { border-color: var(--accent); background: rgba(74,103,65,0.05); }
 .upload-zone p { color: var(--text-light); font-size: 14px; }
@@ -73,7 +79,7 @@
 <body>
 <div class="header">
     <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-    <div class="header-text"><h1>Recipe Cards</h1><p>Manage production recipes</p></div>
+    <div class="header-text"><h1>Recipe Cards</h1><p>Soma Bone Broth</p></div>
     <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button><button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button></div>
     <a href="/" class="header-btn">⌂ Dashboard</a>
@@ -82,33 +88,33 @@
 <div class="main">
     {% if session.get('role', 'manager') == 'manager' %}
     <div class="migrate-banner" id="migrate-banner"><span id="migrate-msg"></span><button onclick="runMigration()">Migrate &amp; Save</button></div>
-    <div class="card">
-        <h2>Add Recipe</h2>
-        <div class="add-btns" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-            <button class="btn btn-primary" onclick="openAddManual()">Add Recipe Manually</button>
-            <span style="color:var(--text-light);font-size:13px;">or upload PDF below</span>
-
-        </div>
-        <div class="upload-zone" id="upload-zone"><p>Upload recipe card PDF</p><input type="file" id="recipe-upload" accept=".pdf"></div>
-        <div id="upload-status" class="status" style="margin-top:12px;"></div>
-    </div>
     {% endif %}
     <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
             <h2 style="margin:0;">All Recipes (<span id="recipe-count">0</span>)</h2>
-            <button class="btn btn-outline" onclick="downloadAllRecipes(this)">⤓ Download All</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;position:relative;">
+                <button class="btn btn-outline" onclick="downloadAllRecipes(this)">⤓ Download all</button>
+                {% if session.get('role', 'manager') == 'manager' %}
+                <button class="btn btn-primary" onclick="document.getElementById('add-menu').classList.toggle('open')">+ Add recipe</button>
+                <div class="add-menu" id="add-menu">
+                    <button onclick="document.getElementById('add-menu').classList.remove('open');openAddManual()">Enter manually</button>
+                    <button onclick="document.getElementById('add-menu').classList.remove('open');document.getElementById('recipe-upload').click()">Upload PDF</button>
+                </div>
+                <input type="file" id="recipe-upload" accept=".pdf" style="display:none;">
+                {% endif %}
+            </div>
         </div>
+        <div id="upload-status" class="status" style="margin-bottom:10px;"></div>
         <div class="filter-bar">
             <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
             <button class="filter-btn" onclick="setFilter('Organic',this)">Organic</button>
             <button class="filter-btn" onclick="setFilter('Pasture Raised',this)">Pasture Raised</button>
             <button class="filter-btn" onclick="setFilter('Conventional',this)">Conventional</button>
         </div>
-        <p style="font-size:11px;color:var(--text-light);margin-bottom:10px;">Drag to reorder brands and recipes.</p>
         <div id="recipe-list"></div>
     </div>
 </div>
-<div class="modal-overlay" id="view-modal"><div class="modal"><button class="modal-close" onclick="closeModal('view-modal')">&times;</button><h2 id="view-name"></h2><div class="modal-meta" id="view-meta"></div><div id="view-photo"></div><div id="view-body"></div><div class="photo-upload-area" id="photo-area" style="display:none;"><p style="font-size:12px;color:var(--text-light);">Tap to upload product photo</p><input type="file" id="photo-input" accept="image/*"></div></div></div>
+<div class="modal-overlay" id="view-modal"><div class="modal"><button class="modal-close" onclick="closeModal('view-modal')">&times;</button><h2 id="view-name"></h2><div class="modal-meta" id="view-meta"></div><div id="view-photo"></div><div id="view-body"></div><div class="modal-actions" id="view-actions" style="flex-wrap:wrap;"></div><div class="photo-upload-area" id="photo-area" style="display:none;"><p style="font-size:12px;color:var(--text-light);">Tap to upload product photo</p><input type="file" id="photo-input" accept="image/*"></div></div></div>
 <div class="modal-overlay" id="edit-modal"><div class="modal"><button class="modal-close" onclick="closeModal('edit-modal')">&times;</button><h2 id="edit-title">Edit Recipe</h2><div id="edit-form"></div><div class="modal-actions"><button class="btn btn-outline" onclick="closeModal('edit-modal')">Cancel</button><button class="btn btn-primary" id="edit-save-btn" onclick="saveEdit()">Save Changes</button></div></div></div>
 <div class="modal-overlay" id="dup-modal">
     <div class="modal" style="max-width:440px;">
@@ -206,16 +212,15 @@ function renderList(){
             var archBadge=archived?'<span style="font-size:10px;background:#999;color:#fff;padding:2px 6px;border-radius:8px;margin-left:6px;">Archived</span>':'';
             var chk=(!archived&&recipeCheck[name])||null;
             var chkBadge=chk?'<span class="cert-badge" title="Not organic-named: '+esc(chk.join(', '))+'" style="font-size:10px;background:var(--amber-bg);color:var(--amber-text-dark);border:1px solid var(--amber-border);padding:2px 6px;border-radius:8px;font-weight:600;margin-left:6px;">&#9888; check ingredients</span>':'';
-            html+='<div class="recipe-list-item"'+((archived||READ_ONLY)?(archived?' style="opacity:0.7;"':''):' draggable="true"')+' data-recipe-name="'+nameSafe+'" data-recipe-brand="'+brandSafe+'">';
-            html+='<div class="recipe-info"><div class="recipe-name">'+((archived||READ_ONLY)?'':'<span class="drag-handle">&#9776;</span>')+name+cert+chkBadge+archBadge+'</div><div class="recipe-meta">'+(r.format||'')+' | Target: '+(r.yield||'--')+' units</div></div>';
-            var btns='<button class="btn-sm" data-action="view" data-name="'+nameSafe+'">View</button>';
-            btns+='<button class="btn-sm" data-action="download" data-name="'+nameSafe+'" title="Download PDF">⤓</button>';
-            if(READ_ONLY){
-                // view + download only
-            } else if(!archived){
-                btns+='<button class="btn-sm" data-action="edit" data-name="'+nameSafe+'">Edit</button>';
-                btns+='<button class="btn-sm" data-action="duplicate" data-name="'+nameSafe+'">Duplicate</button>';
-                btns+='<button class="btn-sm" data-action="archive" data-name="'+nameSafe+'">Archive</button>';
+            html+='<div class="recipe-list-item'+(archived?'':' clickable')+'"'+((archived||READ_ONLY)?(archived?' style="opacity:0.7;"':''):' draggable="true"')+' data-recipe-name="'+nameSafe+'" data-recipe-brand="'+brandSafe+'"'+(archived?'':' data-action="view" data-name="'+nameSafe+'"')+'>';
+            html+='<div class="recipe-info"><div class="recipe-name">'+((archived||READ_ONLY)?'':'<span class="drag-handle">&#9776;</span>')+name+cert+chkBadge+archBadge+'</div><div class="recipe-meta">'+(r.format||'')+(r.yield?' · Target '+r.yield+' units':'')+'</div></div>';
+            // A row opens its card (2026-10-01); Edit / Duplicate / PDF / Archive
+            // live in the card. Archived rows keep their own two buttons.
+            var btns='';
+            if(!archived){
+                // the whole row is the button
+            } else if(READ_ONLY){
+                btns+='<button class="btn-sm" data-action="view" data-name="'+nameSafe+'">View</button>';
             } else {
                 btns+='<button class="btn-sm" data-action="unarchive" data-name="'+nameSafe+'">Unarchive</button>';
                 btns+='<button class="btn-danger" data-action="delete" data-name="'+nameSafe+'">Delete</button>';
@@ -346,8 +351,8 @@ async function saveOrder(){await fetch('/api/recipes/order',{method:'POST',heade
 
 function viewRecipe(name){
     var r=recipes[name];if(!r)return;viewingName=name;
-    document.getElementById('view-name').textContent=(r.brand?r.brand+'-':'')+name;
-    var meta=(r.format||'')+' | Target: '+(r.yield||'--')+' units';if(r.certification)meta+=' | '+r.certification;
+    document.getElementById('view-name').textContent=name;
+    var meta=(r.format||'')+(r.yield?' · Target '+r.yield+' units':'');if(r.certification)meta+=' · '+r.certification;
     document.getElementById('view-meta').textContent=meta;
     var photoHtml='';if(r.photo){photoHtml='<img src="/api/photos/'+r.photo+'" class="recipe-photo">';}
     document.getElementById('view-photo').innerHTML=photoHtml;
@@ -366,6 +371,22 @@ function viewRecipe(name){
         }
     });
     document.getElementById('view-body').innerHTML=html;
+    var a='<button class="btn btn-outline" data-va="download">⤓ PDF</button>';
+    if(!READ_ONLY){
+        a='<button class="btn btn-outline" data-va="archive">Archive</button><button class="btn btn-outline" data-va="duplicate">Duplicate</button>'+a
+          +'<button class="btn btn-primary" data-va="edit">Edit</button>';
+    }
+    var acts=document.getElementById('view-actions');
+    acts.innerHTML=a;
+    acts.onclick=function(e){
+        var b=e.target.closest('[data-va]'); if(!b) return;
+        var act=b.getAttribute('data-va');
+        if(act!=='download') closeModal('view-modal');
+        if(act==='edit') editRecipe(name);
+        else if(act==='duplicate') duplicateRecipe(name);
+        else if(act==='archive') archiveRecipe(name);
+        else downloadRecipe(name);
+    };
     document.getElementById('photo-area').style.display=READ_ONLY?'none':'block';
     document.getElementById('view-modal').classList.add('active');
 }
@@ -686,13 +707,9 @@ async function downloadAllRecipes(btn){
     finally{if(btn){btn.disabled=false;btn.textContent=orig;}}
 }
 
-var uz=document.getElementById('upload-zone');var ui=document.getElementById('recipe-upload');
-if(uz&&ui){   // absent for the read-only (production) role
-uz.addEventListener('click',function(){ui.click();});
-uz.addEventListener('dragover',function(e){e.preventDefault();uz.classList.add('dragover');});
-uz.addEventListener('dragleave',function(){uz.classList.remove('dragover');});
-uz.addEventListener('drop',function(e){e.preventDefault();uz.classList.remove('dragover');if(e.dataTransfer.files.length)doUpload(e.dataTransfer.files[0]);});
-ui.addEventListener('change',function(){if(ui.files.length)doUpload(ui.files[0]);});
+var ui=document.getElementById('recipe-upload');
+if(ui){   // absent for the read-only (production) role
+ui.addEventListener('change',function(){if(ui.files.length)doUpload(ui.files[0]);ui.value='';});
 }
 async function doUpload(file){
     var st=document.getElementById('upload-status');st.className='status loading';st.textContent='Parsing...';st.style.display='block';
