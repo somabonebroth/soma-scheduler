@@ -43,7 +43,6 @@
 </div>
 
 <div class="cs-wrap">
-  <h1 style="font-size:24px;font-weight:800;margin:0 0 20px;">Company Settings</h1>
 
   <!-- Company Info -->
   <div class="scard">
@@ -70,7 +69,7 @@
     <div class="ff"><label for="ci-slip-emails">Email packing slips to</label>
       <input id="ci-slip-emails" type="text" inputmode="email" autocomplete="off" placeholder="you@example.com, books@example.com" oninput="dCI('slip')">
     </div>
-    <p style="font-size:12px;color:var(--text-light);margin:6px 0 10px;line-height:1.5;">Every sale recorded on Record Sale emails its packing slip (PDF) to these addresses the moment it is recorded. Separate several with commas. Leave empty to send nothing.</p>
+    <p style="font-size:12px;color:var(--text-light);margin:6px 0 10px;">Every Record Sale slip. Comma-separated; empty sends nothing.</p>
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <button type="button" class="btn btn-outline" style="font-size:13px;" onclick="testSlipEmail()">Send test email</button>
       <span id="slip-status" style="font-size:13px;"></span>
@@ -79,25 +78,25 @@
 
   <!-- Ripe Portal -->
   <div class="scard" id="ripe">
-    <h3>Ripe Portal</h3>
+    <h3>Ripe</h3>
     <div class="ff" style="max-width:520px;margin-bottom:18px;">
-      <label>One-time credits — Ripe can apply these to e-transfer orders</label>
+      <label>One-time credits</label>
       <div id="credits-list" style="margin-top:8px;display:flex;flex-direction:column;gap:8px;"></div>
       <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap;">
         <button type="button" id="add-credit-btn" class="btn btn-secondary">+ Add one-time credit</button>
         <span class="credit-status" id="credit-status" aria-live="polite"></span>
       </div>
-      <div class="hint">Name it and enter the amount — it saves as you type. Ripe can apply any portion to an e-transfer order; the balance depletes when you approve, and a credit that reaches $0 is removed.</div>
+      <div class="hint">Ripe applies them to e-transfer orders; a credit is removed at $0.</div>
     </div>
     <div class="ff" style="max-width:520px;margin-bottom:18px;">
-      <label>Monthly promos — added to a running credit on the 1st of every month</label>
+      <label>Monthly promos</label>
       <div id="promos-list" style="margin-top:8px;display:flex;flex-direction:column;gap:8px;"></div>
       <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap;">
         <button type="button" id="add-promo-btn" class="btn btn-secondary">+ Add monthly promo</button>
         <span class="credit-status" id="promo-status" aria-live="polite"></span>
       </div>
       <div id="promo-month" class="hint" style="font-weight:600;color:var(--text);"></div>
-      <div class="hint">Each promo adds its amount to one running credit on the 1st; nothing expires, unused credit adds up. Adding a promo grants this month's amount right away and editing the amount moves the balance by the difference. Removing a promo stops the top-ups; the balance already granted stays as a one-time credit above.</div>
+      <div class="hint">Added on the 1st of each month; unused credit carries over.</div>
     </div>
     <div id="credit-history" hidden style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:18px;">
       <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px;">

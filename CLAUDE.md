@@ -475,6 +475,8 @@ edits. Data lives in `cleaning_jobs.json` as `closing_items` + `closing_records`
 
 **Two pages, split by role (2026-08-19).** `/cleaning` is the FLOOR's page — doing the work only: tonight's closing gate, the rotating pool, sign-offs, notes, declines. It no longer branches on role and is passed none. `/cleaning-records` (`cleaning_records.html`, manager-only) is the management side and holds four things: closing history (date-ranged, finally reading the long-orphaned `GET /api/cleaning/closing/records`), rotating-job history, the closing-list editor, and the rotating-job editor — both editors MOVED off the floor page. Job `POST`/`PATCH`/`DELETE` and `DELETE /api/cleaning/completions/<cid>` became `manager_required` at the same time; the floor could previously rewrite the job pool and delete its own cleaning sign-offs. Editing a list never rewrites history — closing records snapshot their labels.
 
+**Cleaning Records declutter (2026-10-01):** no explanatory paragraphs; ONE date range at the top drives both closing histories (BOH "Kitchen closing history" + FOH); the three editable lists sit under a "Lists" heading (`#lists`). Dashboard row: History · Lists · Floor page. Card ids (`#closing`, `#foh-closing`, `#jobs`, `#closing-list`, …) are unchanged.
+
 **API shape gotchas in this blueprint:** `PUT /api/cleaning/closing/items` takes a BARE LIST, not `{items: [...]}`. A closing record's signer is `staff` (not `signed_by`) and it carries TWO distinct notes — `notes` from the sign-off itself and `manager_note` from the End of Day handover. A completion is `job_title` + `staff` + `date`. `get_cleaning_jobs` sorts with `j.get("last_done")`, not `j[...]`: that endpoint feeds both the floor page and End of Day, so a record missing the key must not 500 it.
 
 **Jars are completed the day AFTER they are scheduled — one model, audited 2026-08-18.**
@@ -930,6 +932,8 @@ Two automated weekly imports run on Render Cron Jobs (separate services from the
 | `soma-shopify-weekly` | `0 14 * * 1` (Mon 14:00 UTC) | `/api/internal/shopify-import-week` | buyer `SOMA (Shopify)`, channel `shopify`, `ORD-SHOPIFY-{week}` |
 | `soma-clover-weekly`  | `15 14 * * 1` (Mon 14:15 UTC) | `/api/internal/clover-import-week`  | buyer `SOMA (Clover)`, channel `clover`, `ORD-CLOVER-{week}` |
 | `soma-bookkeeper-monthly` | `0 14 1 * *` (1st 14:00 UTC) | `/api/internal/ripe-sales-report` | nothing — read-only; emails last month's Ripe sales CSV to `BOOKKEEPER_EMAIL`. Use `curl -f` so a failed send marks the cron run failed |
+
+**Since 2026-10-01 the manual import runs from `/admin/channel-prices` (titled "Shopify & Clover"):** pick channel + week, then Reconcile or **Import week** (POSTs `/admin/{channel}-commit`, then reconciles so you see what landed). `/admin/{channel}-import` now REDIRECTS there; the inline `SHOPIFY_IMPORT_HTML` page is deleted. The price-repair explainer folded into a "How price repair works" details. Dashboard Data & Imports row: Data Backup · Shopify & Clover. Company Settings lost its repeated heading and long hints; the Settings row says CCP Checklist (the page's own name).
 
 Each channel has a matching set of routes for manual operation (in `app.py`):
 

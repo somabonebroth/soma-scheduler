@@ -4207,103 +4207,12 @@ def shopify_debug():
 @app.route("/admin/shopify-import")
 @manager_required
 def shopify_import_ui():
-    """Tiny control page for triggering preview + commit from the browser.
-    Avoids needing curl to POST. Renders inline HTML, no template file.
-    """
-    # Default to the Monday of the current week, Toronto time.
-    try:
-        from zoneinfo import ZoneInfo
-        now_local = datetime.now(ZoneInfo("America/Toronto"))
-    except Exception:
-        now_local = datetime.now()
-    monday = now_local - timedelta(days=now_local.weekday())
-    default_week = monday.strftime("%Y-%m-%d")
-
-    from flask import render_template_string
-    return render_template_string(SHOPIFY_IMPORT_HTML, default_week=default_week)
+    """Old Shopify import page — the import now runs from the Channel Sales
+    page (channel + week + "Import week"), which posts to the same commit
+    route. Kept as a redirect for bookmarks (2026-10-01)."""
+    return redirect("/admin/channel-prices")
 
 
-SHOPIFY_IMPORT_HTML = """<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Shopify Import</title>
-<style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-         max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #222; }
-  h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
-  p.lede { color: #666; margin-top: 0; }
-  .controls { display: flex; gap: 0.5rem; align-items: center; margin: 1rem 0; }
-  input[type=date] { padding: 0.4rem; font-size: 1rem; }
-  button { padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer;
-           border: 1px solid #888; background: #f5f5f5; border-radius: 4px; }
-  button.primary { background: #2563eb; color: white; border-color: #1d4ed8; }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  pre { background: #f7f7f7; padding: 1rem; border-radius: 4px; overflow: auto;
-        max-height: 60vh; font-size: 0.85rem; }
-  .status { padding: 0.5rem 0.75rem; margin: 0.5rem 0; border-radius: 4px; }
-  .status.ok { background: #d1fae5; color: #065f46; }
-  .status.err { background: #fee2e2; color: #991b1b; }
-</style>
-</head>
-<body>
-<h1>Shopify Weekly Import</h1>
-<p class="lede">
-  Preview shows what would be imported (read-only). Commit writes one sale row
-  per SKU to Soma, attributes them to buyer "SOMA (Shopify)", and FIFO-deducts
-  FG. Re-running Commit on the same week is safe — already-imported SKUs are
-  skipped.
-</p>
-
-<div class="controls">
-  <label for="week">Week (Monday):</label>
-  <input type="date" id="week" value="{{ default_week }}">
-  <button id="preview-btn">Preview</button>
-  <button id="commit-btn" class="primary">Commit</button>
-</div>
-
-<div id="status"></div>
-<pre id="result">(no result yet)</pre>
-
-<script>
-function run(endpoint, method) {
-  const week = document.getElementById('week').value;
-  if (!week) { setStatus('err', 'Pick a Monday first.'); return; }
-  const url = endpoint + '?week=' + encodeURIComponent(week);
-  setStatus('', 'Running ' + method + ' ' + url + ' …');
-  document.getElementById('preview-btn').disabled = true;
-  document.getElementById('commit-btn').disabled = true;
-  fetch(url, { method: method, credentials: 'same-origin' })
-    .then(r => r.json().then(data => ({ status: r.status, data: data })))
-    .then(({status, data}) => {
-      const ok = status >= 200 && status < 300;
-      setStatus(ok ? 'ok' : 'err',
-                (ok ? 'OK' : 'Error') + ' (HTTP ' + status + ')');
-      document.getElementById('result').textContent =
-        JSON.stringify(data, null, 2);
-    })
-    .catch(e => { setStatus('err', 'Network error: ' + e); })
-    .finally(() => {
-      document.getElementById('preview-btn').disabled = false;
-      document.getElementById('commit-btn').disabled = false;
-    });
-}
-function setStatus(cls, msg) {
-  const el = document.getElementById('status');
-  el.className = 'status ' + cls;
-  el.textContent = msg;
-}
-document.getElementById('preview-btn').onclick =
-  () => run('/admin/shopify-preview', 'GET');
-document.getElementById('commit-btn').onclick = () => {
-  if (!confirm('Commit Shopify orders for this week to Soma sales? ' +
-               'This will deduct FG inventory.')) return;
-  run('/admin/shopify-commit', 'POST');
-};
-</script>
-</body>
-</html>
-"""
 
 
 def _shopify_commit_for_week(week_id):
@@ -4924,27 +4833,10 @@ def clover_internal_import_last_week():
 @app.route("/admin/clover-import")
 @manager_required
 def clover_import_ui():
-    """Tiny control page for triggering Clover preview + commit from the
-    browser — same shape as /admin/shopify-import.
-    """
-    try:
-        from zoneinfo import ZoneInfo
-        now_local = datetime.now(ZoneInfo("America/Toronto"))
-    except Exception:
-        now_local = datetime.now()
-    monday = now_local - timedelta(days=now_local.weekday())
-    default_week = monday.strftime("%Y-%m-%d")
-
-    from flask import render_template_string
-    # Reuse the Shopify control-page template but rewrite the endpoints
-    # and headings via simple string substitution. Keeps both UIs in sync.
-    clover_html = (SHOPIFY_IMPORT_HTML
-                   .replace("Shopify Weekly Import", "Clover Weekly Import")
-                   .replace('SOMA (Shopify)', 'SOMA (Clover)')
-                   .replace("'/admin/shopify-preview'", "'/admin/clover-preview'")
-                   .replace("'/admin/shopify-commit'", "'/admin/clover-commit'")
-                   .replace("Commit Shopify orders", "Commit Clover orders"))
-    return render_template_string(clover_html, default_week=default_week)
+    """Old Clover import page — the import now runs from the Channel Sales
+    page (channel + week + "Import week"), which posts to the same commit
+    route. Kept as a redirect for bookmarks (2026-10-01)."""
+    return redirect("/admin/channel-prices")
 
 
 # ── Channel price repair ─────────────────────────────────────────

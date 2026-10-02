@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Channel Sales · Soma</title>
+<title>Shopify &amp; Clover · Soma</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
   .cp-wrap { max-width: 1040px; margin: 0 auto; padding: 24px 16px 60px; }
@@ -51,17 +51,19 @@
   .bucket { margin-top: 14px; border-top: 1px solid var(--grey-border); padding-top: 12px; }
   .bucket h4 { font-size: 12px; margin: 0 0 4px; color: var(--dark); }
   .bucket p { font-size: 12px; color: var(--text-light); margin: 0 0 8px; line-height: 1.5; }
+.cp-note summary { cursor: pointer; margin-bottom: 6px; }
 </style>
 </head>
 <body class="inv-page">
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-  <div class="header-text"><h1>Channel Sales</h1><p>Reconcile Shopify &amp; Clover against what Soma recorded</p></div>
+  <div class="header-text"><h1>Shopify &amp; Clover</h1><p>Soma Bone Broth</p></div>
   <div class="header-right"><a href="/" class="header-btn">⌂ Dashboard</a></div>
 </div>
 
 <div class="cp-wrap">
-  <div class="cp-note">
+  <details class="cp-note">
+    <summary><strong>How price repair works</strong></summary>
     <strong>Price-only repair.</strong> This re-reads a week from the channel and writes
     <code>line_total</code> / <code>unit_price</code> onto sale rows already on file. It never
     creates or removes a sale, and never touches quantity, lots, or finished-goods stock —
@@ -73,15 +75,14 @@
     <br><br>
     Note Shopify only serves orders from roughly the last 60 days unless the app holds the
     <code>read_all_orders</code> scope, so older weeks may come back empty.
-  </div>
+  </details>
 
   <div class="anyweek">
-    <label for="aw-ch">Check any week:</label>
+    <label for="aw-ch">Week:</label>
     <select id="aw-ch"><option value="shopify">Shopify</option><option value="clover">Clover</option></select>
     <input id="aw-wk" type="date" title="Any day in the target week — snapped to its Monday">
     <button class="btn btn-secondary btn-sm" onclick="checkAnyWeek()">Reconcile</button>
-    <span style="font-size:11px;color:var(--text-light);">Use this for a week Soma has no sales for at all —
-      a failed import leaves no rows, so it won't appear below.</span>
+    <button class="btn btn-primary btn-sm" onclick="importWeek()">Import week</button>
   </div>
   <div id="anyout" style="margin-bottom:18px;"></div>
 
@@ -182,6 +183,37 @@ function mondayOf(d) {
   const off = (t.getDay() + 6) % 7;          // Mon=0
   t.setDate(t.getDate() - off);
   return t.toLocaleDateString('en-CA');
+}
+
+// Import a week by hand (2026-10-01; was its own bare page per channel). Same
+// commit route the weekly cron uses; re-running is safe (already-imported SKUs
+// are skipped). The result is followed by a reconcile so you see what landed.
+async function importWeek() {
+  const ch = document.getElementById('aw-ch').value;
+  const raw = document.getElementById('aw-wk').value;
+  if (!raw) { alert('Pick a date first.'); return; }
+  const wk = mondayOf(raw);
+  if (!confirm('Import ' + ch + ' sales for the week of ' + wk + '? This deducts finished goods.')) return;
+  const out = document.getElementById('anyout');
+  out.style.display = 'block';
+  out.innerHTML = '<div class="msg">Importing ' + esc(ch) + ' for week of ' + esc(wk) + '…</div>';
+  try {
+    const r = await fetch('/admin/' + ch + '-commit?week=' + encodeURIComponent(wk), {method: 'POST', credentials: 'same-origin'});
+    const d = await r.json();
+    if (!r.ok) {
+      out.innerHTML = '<div class="msg" style="color:var(--action-red);">' + esc(d.error || ('HTTP ' + r.status)) + '</div>'
+        + (d.unparseable || d.unmapped ? '<pre style="font-size:11px;white-space:pre-wrap;">' + esc(JSON.stringify(d.unparseable || d.unmapped, null, 1)) + '</pre>' : '');
+      return;
+    }
+    const errs = (d.errors || []).map(function (e) { return '<li>' + esc(e.sku) + ': ' + esc(e.error) + '</li>'; }).join('');
+    const head = '<div class="msg"><b>' + (d.message ? esc(d.message) : (d.created_count || 0) + ' imported · ' + (d.skipped_count || 0) + ' already on file · ' + (d.error_count || 0) + ' not imported') + '</b>'
+      + (errs ? '<ul style="margin:6px 0 0 18px;">' + errs + '</ul>' : '') + '</div>';
+    await reconcile(ch, wk, 'anyout');
+    out.insertAdjacentHTML('afterbegin', head);
+    loadWeeks && loadWeeks();
+  } catch (e) {
+    out.innerHTML = '<div class="msg" style="color:var(--action-red);">Network error: ' + esc(e.message) + '</div>';
+  }
 }
 
 function checkAnyWeek() {

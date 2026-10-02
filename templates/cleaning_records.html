@@ -19,6 +19,8 @@
   .range-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
   .range-bar input[type=date] { padding: 6px 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
   .range-label { font-size: 12px; color: var(--text-light); }
+  .cr-section { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--dark); margin: 26px 0 10px; scroll-margin-top: 80px; }
+  .cr-section span { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-light); }
   .rec { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
   .rec summary { padding: 11px 14px; cursor: pointer; list-style: none; display: flex;
                  align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
@@ -65,7 +67,7 @@
 <body class="inv-page">
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-  <div class="header-text"><h1>Cleaning Records</h1><p>BOH &amp; FOH closing history, rotating-job history, and the lists</p></div>
+  <div class="header-text"><h1>Cleaning Records</h1><p>Soma Bone Broth</p></div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <a href="/cleaning" class="header-btn">Cleaning &amp; Upkeep</a>
     <a href="/" class="header-btn">⌂ Dashboard</a>
@@ -73,42 +75,30 @@
 </div>
 
 <div class="cr-wrap">
+  <!-- One date range for both closing histories (2026-10-01; each card had its own). -->
+  <div class="range-bar">
+    <span class="range-label">Closing records from</span><input type="date" id="cl-from" onchange="loadBoth()">
+    <span class="range-label">to</span><input type="date" id="cl-to" onchange="loadBoth()">
+    <button class="btn btn-outline" style="font-size:12px;padding:6px 12px;" onclick="clearRange()">Last 30</button>
+  </div>
   <div class="card" id="closing">
-    <h2>Closing checklist history <span class="count-badge" id="cl-count">—</span></h2>
-    <p>Every night's closing sign-off — who signed, and anything that was missed. Records snapshot
-    the labels as they read on the night, so editing the list below never rewrites history.</p>
-    <div class="range-bar">
-      <span class="range-label">From</span><input type="date" id="cl-from">
-      <span class="range-label">to</span><input type="date" id="cl-to">
-      <button class="btn btn-outline" style="font-size:12px;padding:6px 12px;" onclick="loadClosingRecords()">Apply</button>
-      <button class="btn btn-outline" style="font-size:12px;padding:6px 12px;" onclick="clearRange()">Last 30</button>
-    </div>
+    <h2>Kitchen closing history <span class="count-badge" id="cl-count">—</span></h2>
     <div id="cl-list"><div class="empty-state">Loading…</div></div>
   </div>
 
   <div class="card" id="foh-closing">
-    <h2>FOH closing checklist history <span class="count-badge" id="fcl-count">—</span></h2>
-    <p>Front of house's nightly sign-off — who signed, and anything that was missed. Records
-    snapshot the labels as they read on the night, so editing the list below never rewrites history.</p>
-    <div class="range-bar">
-      <span class="range-label">From</span><input type="date" id="fcl-from">
-      <span class="range-label">to</span><input type="date" id="fcl-to">
-      <button class="btn btn-outline" style="font-size:12px;padding:6px 12px;" onclick="loadFohClosingRecords()">Apply</button>
-      <button class="btn btn-outline" style="font-size:12px;padding:6px 12px;" onclick="clearFohRange()">Last 30</button>
-    </div>
+    <h2>FOH closing history <span class="count-badge" id="fcl-count">—</span></h2>
     <div id="fcl-list"><div class="empty-state">Loading…</div></div>
   </div>
 
   <div class="card" id="jobs">
     <h2>Rotating job history <span class="count-badge" id="comp-count">—</span></h2>
-    <p>Completed rotating jobs, newest first.</p>
     <div id="comp-list"><div class="empty-state">Loading…</div></div>
   </div>
 
+  <div class="cr-section" id="lists">Lists <span>&mdash; End of Day walks each closing list in this order</span></div>
   <div class="card" id="closing-list">
-    <h2>Closing list</h2>
-    <p>The fixed nightly list. <strong>Order matters</strong> — End of Day walks the floor through
-    these one at a time, in exactly this order, so it should read as a walk around the kitchen.</p>
+    <h2>Kitchen closing list</h2>
     <div id="ci-editor" class="listbox"></div>
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn btn-outline" style="font-size:13px;" onclick="addClosingItem()">+ Add item</button>
@@ -119,9 +109,6 @@
 
   <div class="card" id="foh-closing-list">
     <h2>FOH closing list</h2>
-    <p>Front of house's fixed nightly list. <strong>Order matters</strong> — the FOH End of Day
-    walks through these one at a time, in exactly this order, so it should read as a walk through
-    the front of the shop.</p>
     <div id="fci-editor" class="listbox"></div>
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn btn-outline" style="font-size:13px;" onclick="addFohClosingItem()">+ Add item</button>
@@ -132,8 +119,6 @@
 
   <div class="card" id="job-list">
     <h2>Rotating job list</h2>
-    <p>The pool End of Day offers one job from. Skipping carries no penalty — a decline is recorded
-    as a note, never an issue.</p>
     <button class="btn btn-outline" style="font-size:13px;margin-bottom:10px;" onclick="openJobModal()">+ Add job</button>
     <div id="manage-list" class="listbox"></div>
     <div class="err" id="job-list-err"></div>
@@ -184,8 +169,9 @@ function slotLabel(days) {
 function clearRange() {
   document.getElementById('cl-from').value = '';
   document.getElementById('cl-to').value = '';
-  loadClosingRecords();
+  loadBoth();
 }
+function loadBoth() { loadClosingRecords(); loadFohClosingRecords(); }
 
 async function loadClosingRecords() {
   const f = document.getElementById('cl-from').value;
@@ -222,15 +208,10 @@ async function loadClosingRecords() {
 }
 
 // ── FOH closing history (clone of the BOH loader with foh endpoints) ─
-function clearFohRange() {
-  document.getElementById('fcl-from').value = '';
-  document.getElementById('fcl-to').value = '';
-  loadFohClosingRecords();
-}
 
 async function loadFohClosingRecords() {
-  const f = document.getElementById('fcl-from').value;
-  const t = document.getElementById('fcl-to').value;
+  const f = document.getElementById('cl-from').value;
+  const t = document.getElementById('cl-to').value;
   const q = [];
   if (f) q.push('from=' + encodeURIComponent(f));
   if (t) q.push('to=' + encodeURIComponent(t));
