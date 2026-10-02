@@ -38,7 +38,7 @@ body.an-page { background:var(--bg); }
 <body class="an-page inv-page">
 <div class="header">
   <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-  <div class="header-text"><h1>Sales by Buyer</h1><p>Revenue by buyer</p></div>
+  <div class="header-text"><h1>Sales by Buyer</h1><p>Soma Bone Broth</p></div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <div class="nav-arrows">
       <button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button>
@@ -49,7 +49,6 @@ body.an-page { background:var(--bg); }
 </div>
 
 <div class="an-wrap">
-    <div style="font-size:12px;color:var(--text-light);margin-bottom:14px;">Click any buyer for detailed analytics. Revenue requires prices set in buyer catalogue.</div>
     <div class="period-row">
       <div class="period-label">Period:</div>
       <div class="period-toggle">
@@ -119,7 +118,7 @@ function renderSales(buyers) {
       + '<div class="rev-bar-wrap"><div class="rev-bar-fill" style="width:'+pct+'%"></div></div>'
       + '</div>'
       + '<div class="bc-stats">'
-      + '<div class="bc-stat"><div class="bc-stat-n">'+fmt$(b.revenue)+'</div><div class="bc-stat-l">Revenue</div></div>'
+      + '<div class="bc-stat"><div class="bc-stat-n">'+(b.revenue || !b.cases ? fmt$(b.revenue) : '—')+'</div><div class="bc-stat-l">'+(b.revenue || !b.cases ? 'Revenue' : 'No prices set')+'</div></div>'
       + '<div class="bc-stat"><div class="bc-stat-n">'+fmtN(b.cases)+'</div><div class="bc-stat-l">Cases</div></div>'
       + '<div class="bc-stat"><div class="bc-stat-n">'+fmtN(b.orders)+'</div><div class="bc-stat-l">Orders</div></div>'
       + '</div>'

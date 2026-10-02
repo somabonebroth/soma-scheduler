@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" sizes="192x192" href="/static/logo-192.png">
 <link rel="apple-touch-icon" sizes="512x512" href="/static/logo-512.png">
 <!-- /PWA tags -->
-<title>Soma - Production Tracker</title>
+<title>Soma - Production</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
 .view-toggle { display: flex; gap: 0; margin-bottom: 16px; }
@@ -27,11 +27,6 @@
 .picker-bar input[type="date"], .picker-bar select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
 .chart-container { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin-bottom: 16px; }
 .chart-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; color: var(--dark); }
-.legend { display: flex; gap: 16px; margin-bottom: 16px; font-size: 12px; flex-wrap: wrap; }
-.legend-group { display: flex; flex-direction: column; gap: 4px; padding: 6px 10px; background: #fafaf5; border-radius: 6px; border: 1px solid var(--border); }
-.legend-group-title { font-size: 11px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 0.5px; }
-.legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-.legend-dot { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
 .bar-chart { display: flex; align-items: flex-end; gap: 12px; height: 280px; padding: 0 8px; border-bottom: 2px solid var(--border); }
 .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .bar-wrapper { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; width: 100%; }
@@ -40,21 +35,19 @@
 .bar-empty { background: var(--border); border-radius: 3px; min-height: 4px; }
 .bar-value { font-size: 11px; font-weight: 600; color: var(--dark); }
 .bar-label { font-size: 11px; color: var(--text-light); margin-top: 8px; text-align: center; }
-.total-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
-.total-row:last-child { border-bottom: none; }
-.total-sub { padding-left: 20px; }
-.total-sub .total-label { color: var(--text-light); font-size: 12px; }
-.total-label { font-size: 13px; color: var(--text); }
-.total-value { font-size: 15px; font-weight: 700; }
-.total-all { color: var(--dark); font-size: 18px; }
-.total-section-head { font-size: 12px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 0 4px; border-bottom: none; }
+.key-line { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 14px; font-size: 13px; color: var(--text); }
+.key-item { display: inline-flex; align-items: center; gap: 6px; }
+.key-item i { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
+.key-item b { color: var(--dark); font-variant-numeric: tabular-nums; }
+.key-item a { font-size: 11px; }
+.key-total { margin-left: auto; }
 .no-data { text-align: center; padding: 60px 20px; color: var(--text-light); font-size: 14px; }
 </style>
 </head>
 <body>
 <div class="header">
     <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-    <div class="header-text"><h1>Production Tracker</h1><p>Output overview</p></div>
+    <div class="header-text"><h1>Production</h1><p>Soma Bone Broth</p></div>
     <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <div class="nav-arrows"><button class="nav-arrow-btn" id="nav-back" title="Back">&#8592;</button><button class="nav-arrow-btn" id="nav-fwd" title="Forward">&#8594;</button></div>
     <a href="/" class="header-btn">⌂ Dashboard</a>
@@ -68,7 +61,7 @@
     </div>
     <div class="picker-bar" id="picker-bar"></div>
     <div id="chart-area"></div>
-    {% set ov_compact = false %}{% include "_produced_vs_sold.html" %}
+    {% include "_produced_vs_sold.html" %}
 </div>
 <script>
 var currentView='week';
@@ -118,10 +111,19 @@ function buildPicker(){
     }
 }
 
+// The one time control drives both charts: the bars show inside the chosen
+// period, "Produced vs sold" shows the run of periods ending at it.
 async function loadData(){
     if(currentView==='week') await loadWeek();
     else if(currentView==='month') await loadMonth();
     else await loadYear();
+    var end;
+    if(currentView==='week') end=document.getElementById('week-date').value;
+    else if(currentView==='month'){
+        var m=parseInt(document.getElementById('month-sel').value)+1;
+        end=document.getElementById('month-year-sel').value+'-'+(m<10?'0'+m:m);
+    } else end=document.getElementById('year-sel').value;
+    loadOverlay(currentView, end);
 }
 
 async function loadWeek(){
@@ -197,23 +199,6 @@ function renderBarChart(data, labelFn, title){
     var html='<div class="chart-container">';
     html+='<div class="chart-title">'+title+'</div>';
 
-    // Legend — group SS sizes together, then Frozen, Other (if any), Kettle's End, BB
-    html+='<div class="legend">';
-    html+='<div class="legend-group"><div class="legend-group-title">Standard Production (SS)</div>';
-    ['SS-876ML','SS-750ML','SS-473ML'].forEach(function(b){
-        html+='<div class="legend-item"><div class="legend-dot" style="background:'+BUCKET_COLORS[b]+';"></div>'+BUCKET_LABELS[b]+'</div>';
-    });
-    html+='</div>';
-    // Frozen always visible
-    html+='<div class="legend-item"><div class="legend-dot" style="background:'+BUCKET_COLORS['FZ']+';"></div>'+BUCKET_LABELS['FZ']+'</div>';
-    // Other only if nonzero
-    if(grandTotals['Other']>0){
-        html+='<div class="legend-item"><div class="legend-dot" style="background:'+BUCKET_COLORS['Other']+';"></div>'+BUCKET_LABELS['Other']+'</div>';
-    }
-    html+='<div class="legend-item"><div class="legend-dot" style="background:'+BUCKET_COLORS['Kettles End']+';"></div>'+BUCKET_LABELS['Kettles End']+'</div>';
-    html+='<div class="legend-item"><div class="legend-dot" style="background:'+BUCKET_COLORS['BB']+';"></div>'+BUCKET_LABELS['BB']+'</div>';
-    html+='</div>';
-
     // Bar chart
     html+='<div class="bar-chart">';
     for(var i=0;i<data.length;i++){
@@ -240,24 +225,17 @@ function renderBarChart(data, labelFn, title){
     }
     html+='</div>';
 
-    // Totals section
-    var ssSubtotal=grandTotals['SS-876ML']+grandTotals['SS-750ML']+grandTotals['SS-473ML'];
+    // One key line, each format with its total — it is the legend and the
+    // totals in one (they used to be a grouped legend AND a totals list).
     var grandTotal=0;
     BUCKET_ORDER.forEach(function(b){grandTotal+=grandTotals[b];});
-
-    html+='<div style="margin-top:16px;">';
-    html+='<div class="total-row total-section-head"><span>Standard Production (SS)</span><span>'+ssSubtotal+' units</span></div>';
-    ['SS-876ML','SS-750ML','SS-473ML'].forEach(function(b){
-        html+='<div class="total-row total-sub"><span class="total-label">'+BUCKET_LABELS[b]+'</span><span class="total-value" style="color:'+BUCKET_COLORS[b]+';">'+grandTotals[b]+' units</span></div>';
+    html+='<div class="key-line">';
+    BUCKET_ORDER.forEach(function(b){
+        if(b==='Other' && !grandTotals[b]) return;
+        var why=(b==='Other' && currentView==='week') ? ' <a href="#" onclick="showOtherDetails(); return false;">why?</a>' : '';
+        html+='<span class="key-item"><i style="background:'+BUCKET_COLORS[b]+'"></i>'+BUCKET_LABELS[b]+' <b>'+grandTotals[b]+'</b>'+why+'</span>';
     });
-    html+='<div class="total-row"><span class="total-label">'+BUCKET_LABELS['FZ']+'</span><span class="total-value" style="color:'+BUCKET_COLORS['FZ']+';">'+grandTotals['FZ']+' units</span></div>';
-    if(grandTotals['Other']>0){
-        var whyLink = (currentView==='week') ? ' <a href="#" onclick="showOtherDetails(); return false;" style="font-size:11px;margin-left:8px;">(why?)</a>' : '';
-        html+='<div class="total-row"><span class="total-label">'+BUCKET_LABELS['Other']+whyLink+'</span><span class="total-value" style="color:'+BUCKET_COLORS['Other']+';">'+grandTotals['Other']+' units</span></div>';
-    }
-    html+='<div class="total-row"><span class="total-label">'+BUCKET_LABELS['Kettles End']+'</span><span class="total-value" style="color:'+BUCKET_COLORS['Kettles End']+';">'+grandTotals['Kettles End']+' units</span></div>';
-    html+='<div class="total-row"><span class="total-label">'+BUCKET_LABELS['BB']+'</span><span class="total-value" style="color:'+BUCKET_COLORS['BB']+';">'+grandTotals['BB']+' units</span></div>';
-    html+='<div class="total-row"><span class="total-label"><strong>Total</strong></span><span class="total-value total-all">'+grandTotal+' units</span></div>';
+    html+='<span class="key-item key-total">Total <b>'+grandTotal+'</b></span>';
     html+='</div></div>';
     container.innerHTML=html;
 }

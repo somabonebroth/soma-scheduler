@@ -1,29 +1,14 @@
 {# Produced vs sold — two lines in JARS on one time axis, fed by
-   GET /api/production-tracker/overlay (manager-only). Shared by the Production
-   Tracker (full controls: bucket + "show last" + "ending") and the manager
-   dashboard (`ov_compact`: bucket toggle only, defaults ending now, plus a link
-   to the tracker). Extracted 2026-09-15 so the two can never drift — edit here,
-   never fork. Set `ov_compact` before including. Self-contained: own CSS
-   (ov-* namespace), own markup (#overlay-card), own JS (ov* / loadOverlay). #}
+   GET /api/production-tracker/overlay (manager-only). Lives on the Production
+   page (production_tracker.html), which calls loadOverlay(grain, end) from its
+   ONE time control: the card shows the run of periods ending at the chosen one
+   (12 weeks / 12 months / 5 years). Decluttered 2026-10-01: its own controls,
+   the stat strip, the five per-format mini charts and the unused dashboard
+   compact mode were removed. Self-contained: ov-* CSS, #overlay-card, ov* JS. #}
 <style>
 .ov-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 20px 24px; margin-bottom: 16px; }
 .ov-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
 .ov-title { font-size: 16px; font-weight: 600; color: var(--dark); }
-.ov-title a { font-size: 12px; font-weight: 500; color: var(--text-light); text-decoration: none; margin-left: 10px; }
-.ov-title a:hover { color: var(--accent); }
-.ov-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.ov-toggle { display: flex; }
-.ov-toggle button { padding: 7px 16px; border: 1px solid var(--border); font-size: 13px; font-weight: 600; cursor: pointer; background: var(--card-bg); color: var(--text); margin-left: -1px; }
-.ov-toggle button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
-.ov-toggle button:last-child { border-radius: 0 6px 6px 0; }
-.ov-toggle button.active { background: var(--accent); color: var(--white); border-color: var(--accent); position: relative; z-index: 1; }
-.ov-picker { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ov-picker label { font-size: 13px; font-weight: 600; }
-.ov-picker input[type="date"], .ov-picker select { padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--card-bg); }
-.ov-stats { display: flex; align-items: baseline; gap: 22px; flex-wrap: wrap; margin: 2px 0 10px; }
-.ov-stat b { font-size: 22px; font-weight: 700; color: var(--dark); letter-spacing: -.01em; }
-.ov-stat span { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-light); margin-left: 6px; }
-.ov-span { font-size: 12px; color: var(--text-light); margin-left: auto; }
 .ov-foot { font-size: 11px; color: var(--text-light); margin-top: 8px; }
 .ov-legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--text); margin-bottom: 8px; }
 .ov-legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -39,10 +24,6 @@
 .ov-tip .t-row { display: flex; align-items: center; gap: 6px; }
 .ov-tip .t-row b { font-weight: 700; min-width: 3.5em; text-align: right; }
 .ov-tip .t-key { display: inline-block; width: 12px; border-top: 2px solid; }
-.ov-multiples { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
-.ov-panel { border: 1px solid var(--border); border-radius: 6px; padding: 10px 10px 4px; background: var(--row-alt); }
-.ov-panel-title { font-size: 12px; font-weight: 600; color: var(--dark); margin-bottom: 2px; display: flex; justify-content: space-between; }
-.ov-panel-title small { font-weight: 400; color: var(--text-light); }
 .ov-table { margin-top: 14px; font-size: 12px; }
 .ov-table summary { cursor: pointer; color: var(--text-light); }
 .ov-table table { width: 100%; border-collapse: collapse; margin-top: 8px; }
@@ -50,110 +31,34 @@
 .ov-table th:first-child, .ov-table td:first-child { text-align: left; }
 .ov-table th { font-size: 11px; color: var(--text-light); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .ov-status { font-size: 13px; color: var(--text-light); padding: 24px 0; text-align: center; }
-@media (max-width: 900px) { .ov-multiples { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 600px) { .ov-multiples { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
-<div class="ov-card" id="overlay-card" data-compact="{{ '1' if ov_compact else '0' }}">
+<div class="ov-card" id="overlay-card">
     <div class="ov-head">
-        <div class="ov-title">Produced vs sold{% if ov_compact %}<a href="/production-tracker">Production Tracker &rarr;</a>{% endif %}</div>
-        <div class="ov-controls">
-            <div class="ov-toggle" id="ov-bucket">
-                <button class="active" data-grain="week" onclick="ovSetGrain('week')">Week</button>
-                <button data-grain="month" onclick="ovSetGrain('month')">Month</button>
-                <button data-grain="year" onclick="ovSetGrain('year')">Year</button>
-            </div>
-            {% if not ov_compact %}<div class="ov-picker" id="ov-picker"></div>{% endif %}
-        </div>
+        <div class="ov-title">Produced vs sold <span id="ov-span" style="font-size:12px;font-weight:400;color:var(--text-light);margin-left:6px;"></span></div>
+        <div class="ov-legend" id="ov-legend" style="margin:0;"></div>
     </div>
-    <div class="ov-stats" id="ov-stats"></div>
-    <div class="ov-legend" id="ov-legend"></div>
     <div id="ov-main"><div class="ov-status">Loading…</div></div>
-    <div class="ov-multiples" id="ov-multiples"></div>
     <details class="ov-table" id="ov-table-wrap"><summary>Show the numbers</summary><div id="ov-table"></div>
         <div class="ov-foot">Jars: 876 / 750 / 473 ml, frozen, Back Bar. Kettle's End is not a product and is not counted.</div>
     </details>
 </div>
 <script>
 // ── Produced vs sold overlay ─────────────────────────────────────────────
-// Two lines in jars on one time axis, fed by /api/production-tracker/overlay.
-// Has its OWN bucket toggle + range + end picker, independent of the bars above:
-// week = one point per Mon–Sun week, month = one per calendar month,
-// year = one per calendar year (annual totals).
+// Two lines in jars, the run of periods ending at the Production page's chosen
+// period: week = Mon–Sun weeks, month = calendar months, year = calendar years.
 const OV_LABELS = {'SS-876ML':'876 ml','SS-750ML':'750 ml','SS-473ML':'473 ml','FZ':'Frozen','BB':'Back Bar'};
-const OV_RANGES = { week: [12, 26, 52], month: [6, 12, 24], year: [3, 5, 10] };
-const OV_COMPACT_N = { week: 12, month: 12, year: 5 };   // dashboard defaults — a glance, not a study
-const OV_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-const OV_COMPACT = document.getElementById('overlay-card').dataset.compact === '1';
+const OV_N = { week: 12, month: 12, year: 5 };
 let _ovData = null;
-let _ovGrain = 'week';
 
-function ovMondayIso(){
-    const t = new Date(); const d = t.getDay(); const m = new Date(t);
-    m.setDate(t.getDate() + (d === 0 ? -6 : 1 - d));
-    return m.toLocaleDateString('en-CA');
-}
-
-function ovSetGrain(g){
-    _ovGrain = g;
-    document.querySelectorAll('#ov-bucket button').forEach(b => b.classList.toggle('active', b.dataset.grain === g));
-    ovBuildPicker();
-    loadOverlay();
-}
-
-function ovBuildPicker(){
-    const bar = document.getElementById('ov-picker');
-    if (!bar) return;                                   // compact card: toggle only
-    const now = new Date();
-    const unit = _ovGrain;
-    const ranges = OV_RANGES[unit].map((r, i) => '<option value="' + r + '"' + (i === 1 ? ' selected' : '') + '>' + r + ' ' + unit + 's</option>').join('');
-    let html = '<label>Show last</label><select id="ov-n" onchange="loadOverlay()">' + ranges + '</select>';
-    html += '<label>ending</label>';
-    if (unit === 'week') {
-        html += '<input type="date" id="ov-end-date" value="' + ovMondayIso() + '" onchange="loadOverlay()">';
-    } else if (unit === 'month') {
-        html += '<select id="ov-end-month" onchange="loadOverlay()">';
-        for (let i = 0; i < 12; i++) html += '<option value="' + i + '"' + (i === now.getMonth() ? ' selected' : '') + '>' + OV_MONTHS[i] + '</option>';
-        html += '</select><select id="ov-end-year" onchange="loadOverlay()">';
-        for (let y = now.getFullYear() - 3; y <= now.getFullYear() + 1; y++) html += '<option value="' + y + '"' + (y === now.getFullYear() ? ' selected' : '') + '>' + y + '</option>';
-        html += '</select>';
-    } else {
-        html += '<select id="ov-end-year" onchange="loadOverlay()">';
-        for (let y = now.getFullYear() - 3; y <= now.getFullYear() + 1; y++) html += '<option value="' + y + '"' + (y === now.getFullYear() ? ' selected' : '') + '>' + y + '</option>';
-        html += '</select>';
-    }
-    bar.innerHTML = html;
-}
-
-function ovParams(){
-    const nEl = document.getElementById('ov-n');
-    const n = nEl ? (parseInt(nEl.value, 10) || OV_RANGES[_ovGrain][1]) : OV_COMPACT_N[_ovGrain];
-    if (OV_COMPACT) {                                   // dashboard: defaults, ending now
-        const now = new Date();
-        if (_ovGrain === 'week')  return {grain:'week',  end:ovMondayIso(), n:n, unit:'week'};
-        if (_ovGrain === 'month') return {grain:'month', end:now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'), n:n, unit:'month'};
-        return {grain:'year', end:String(now.getFullYear()), n:n, unit:'year'};
-    }
-    if (_ovGrain === 'week') {
-        return {grain:'week', end:document.getElementById('ov-end-date').value, n:n, unit:'week'};
-    }
-    if (_ovGrain === 'month') {
-        const m = parseInt(document.getElementById('ov-end-month').value, 10) + 1;
-        const y = document.getElementById('ov-end-year').value;
-        return {grain:'month', end:y + '-' + (m < 10 ? '0' + m : m), n:n, unit:'month'};
-    }
-    return {grain:'year', end:document.getElementById('ov-end-year').value, n:n, unit:'year'};
-}
-
-async function loadOverlay(){
+async function loadOverlay(grain, end){
     const main=document.getElementById('ov-main');
-    const p=ovParams();
-    if(!p.end){ main.innerHTML='<div class="ov-status">Pick a period above.</div>'; return; }
+    if(!end){ main.innerHTML='<div class="ov-status">Pick a period above.</div>'; return; }
     main.style.opacity = _ovData ? '.5' : '1';
     try{
-        const res=await fetch('/api/production-tracker/overlay?grain='+p.grain+'&end='+encodeURIComponent(p.end)+'&n='+p.n);
+        const res=await fetch('/api/production-tracker/overlay?grain='+grain+'&end='+encodeURIComponent(end)+'&n='+OV_N[grain]);
         if(!res.ok) throw new Error('HTTP '+res.status);
         _ovData=await res.json();
-        _ovData.unit=p.unit;
+        _ovData.unit=grain;
         renderOverlay();
     }catch(e){
         main.style.opacity='1';
@@ -300,45 +205,20 @@ function renderOverlay(){
     const totalP=rows.reduce((a,r)=>a+r.produced,0), totalS=rows.reduce((a,r)=>a+r.sold,0);
     if(!rows.length || (!totalP && !totalS)){
         main.innerHTML='<div class="ov-status">Nothing in this window.</div>';
-        document.getElementById('ov-multiples').innerHTML='';
         document.getElementById('ov-table').innerHTML='';
         document.getElementById('ov-legend').innerHTML='';
-        document.getElementById('ov-stats').innerHTML='';
+        document.getElementById('ov-span').textContent='';
         return;
     }
     const net=totalP-totalS;
-    const span = rows[0].label + ' – ' + rows[rows.length-1].label + ' · ' + rows.length + ' ' + unitWord + (rows.length===1?'':'s') + (periods[periods.length-1].partial ? ' · last one so far' : '');
-    const stats = document.getElementById('ov-stats'); stats.textContent = '';
-    [[ovFmt(totalP),'produced'],[ovFmt(totalS),'sold'],[(net>0?'+':'')+ovFmt(net),'net']].forEach(([v,l])=>{
-        const st=document.createElement('div'); st.className='ov-stat';
-        const b=document.createElement('b'); b.textContent=v; const sm=document.createElement('span'); sm.textContent=l;
-        st.appendChild(b); st.appendChild(sm); stats.appendChild(st);
-    });
-    const sp=document.createElement('div'); sp.className='ov-span'; sp.textContent=span; stats.appendChild(sp);
+    document.getElementById('ov-span').textContent = rows[0].label + ' – ' + rows[rows.length-1].label + (periods[periods.length-1].partial ? ' (so far)' : '');
+    // The lines are labelled at their ends; the key only explains the shading.
     document.getElementById('ov-legend').innerHTML =
-        '<span><i class="ov-key" style="border-color:'+C.produced+'"></i>Produced</span>'
-        + '<span><i class="ov-key" style="border-color:'+C.sold+'"></i>Sold</span>'
-        + '<span><i class="ov-swatch" style="background:'+C.produced+';opacity:.25"></i>Building</span>'
+        '<span><i class="ov-swatch" style="background:'+C.produced+';opacity:.25"></i>Building</span>'
         + '<span><i class="ov-swatch" style="background:'+C.sold+';opacity:.25"></i>Drawing down</span>';
 
     const yMax=Math.max(...rows.map(r=>Math.max(r.produced,r.sold)),1);
     ovChart(main, rows, {id:'ovm', yMax:yMax, aria:'Produced vs sold, all jars'});
-
-    // small multiples, one per format, sharing a y scale
-    const mult=document.getElementById('ov-multiples'); mult.innerHTML='';
-    let subMax=1;
-    d.buckets.forEach(b=>periods.forEach(p=>{ subMax=Math.max(subMax,p.produced[b]||0,p.sold[b]||0); }));
-    d.buckets.forEach((b,bi)=>{
-        const panel=document.createElement('div'); panel.className='ov-panel';
-        const bp=periods.reduce((a,p)=>a+(p.produced[b]||0),0), bs=periods.reduce((a,p)=>a+(p.sold[b]||0),0);
-        const t=document.createElement('div'); t.className='ov-panel-title';
-        const tn=document.createElement('span'); tn.textContent=OV_LABELS[b]||b;
-        const ts=document.createElement('small'); ts.textContent=ovFmt(bp)+' / '+ovFmt(bs);
-        t.appendChild(tn); t.appendChild(ts); panel.appendChild(t);
-        const host=document.createElement('div'); panel.appendChild(host); mult.appendChild(panel);
-        const brows=periods.map(p=>({label:p.label, title:(OV_LABELS[b]||b)+' · '+titleOf(p), produced:p.produced[b]||0, sold:p.sold[b]||0}));
-        ovChart(host, brows, {id:'ovs'+bi, yMax:subMax, compact:true, aria:(OV_LABELS[b]||b)+' produced vs sold'});
-    });
 
     // table view — every value reachable without hovering
     const tbl=document.getElementById('ov-table');
@@ -360,5 +240,5 @@ function renderOverlay(){
 let _ovResizeT=null;
 window.addEventListener('resize',function(){ clearTimeout(_ovResizeT); _ovResizeT=setTimeout(renderOverlay,150); });
 
-document.addEventListener('DOMContentLoaded', function(){ ovBuildPicker(); loadOverlay(); });
+
 </script>

@@ -193,6 +193,15 @@ production.py       — Flask Blueprint (771 lines, extracted 2026-06-03): the F
                       strip (produced / sold / net + span), not a sentence; the "jars only,
                       Kettle's End excluded" note is a footnote inside "Show the numbers".
                       Edit the partial, never fork it (same rule as `_labelling_panel.html`).
+                      **Analytics declutter (2026-10-01):** the Production page (renamed from
+                      Production Tracker; dashboard links now "Sales by Buyer" / "Production") has
+                      ONE Week/Month/Year control that drives both charts — `loadOverlay(grain,end)`
+                      shows 12 weeks / 12 months / 5 years ending at the chosen period. The card's own
+                      controls, stat strip, five per-format mini charts and the `ov_compact` mode are
+                      GONE (the notes above about them are history). The bar chart's grouped legend +
+                      totals list became one key line with each format's total. Buyer page: no repeated
+                      name / extra back button, three headline figures, Insights & Forecast removed,
+                      format under the product name, no Units columns (cases × 12).
                       **Sales by channel replaced it on the dashboard (2026-09-18, Jeremy's
                       call):** the manager dashboard now includes `templates/_sales_by_channel.html`
                       (`sc*` namespace) instead; the produced-vs-sold card stays on the tracker
