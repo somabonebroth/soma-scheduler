@@ -590,7 +590,7 @@ day being clean. Only days the kitchen RAN are reviewable (`daily_brief._kitchen
 completed production or a cleaning sign-off), so quiet days need no review.
 `GET /api/daily-signoffs/pending` lists unreviewed days oldest-first and drives both the
 brief's catch-up line and the dashboard's Completed Production badge.
-**The weekly sign-off is RETIRED, not deleted** — `sign_off_week`/`unsign_week` are gone so
+**Completed Production decluttered (2026-10-01):** last 8 weeks (Show older); each week = one line ("n days to review · Review →" to `/daily-review?date=<oldest unreviewed>` — the Daily Summary now honours `?date=`), its production totals (lazy-loaded from `/api/traceability/<week>/summary` when the week opens), then the days (View · PDF · a quiet Delete, still hidden + refused on reviewed days). The review panel, the Week Summary pop-up, and the dashboard's two extra pending badges + "Review outstanding days" link are gone — the Daily Summary button is the ONE pending-review signal. **The weekly sign-off is RETIRED, not deleted** — `sign_off_week`/`unsign_week` are gone so
 nothing writes a new one, but `_load_weekly_signoffs` still reads and pre-cutover weeks
 render their historical confirmation. **Watch out:** the weekly sign-off silently gated the
 Delete button on day records; the daily sign-off inherited that lock at finer grain

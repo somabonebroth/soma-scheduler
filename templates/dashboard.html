@@ -70,7 +70,6 @@
 .mgmt-details > summary:hover { color: var(--accent); }
 /* The pending-review count mirrors onto the summary so a collapsed section
    never hides the signal (it is only shown when > 0). */
-.mgmt-details > summary .mgmt-badge { text-transform: none; letter-spacing: 0; }
 .mgmt-list { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
 /* Daily Summary — full-width entry point, highlighted until the day is reviewed */
 .review-btn { display: flex; align-items: center; gap: 14px; width: 100%; box-sizing: border-box; text-decoration: none; background: var(--card-bg); border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 18px; transition: background .12s, border-color .12s; }
@@ -98,7 +97,6 @@
 .mgmt-links a, .mgmt-links button { font-size: 12px; font-weight: 500; color: var(--text); text-decoration: none; background: var(--bg); border: 1px solid var(--border); border-radius: 14px; padding: 5px 12px; cursor: pointer; font-family: inherit; line-height: 1.5; }
 .mgmt-links a:hover, .mgmt-links button:hover { border-color: var(--accent); color: var(--accent); }
 .mgmt-links .soon { opacity: 0.45; cursor: default; pointer-events: none; }
-.mgmt-badge { background: var(--amber-text); color: var(--white); border-radius: 10px; padding: 1px 8px; font-size: 11px; font-weight: 800; line-height: 18px; display: none; }
 /* ── Production (tablet) view: bigger tap targets, no chrome ── */
 /* The floor finds a tile by its colour before it reads the label, so colour
    carries the meaning: green = today's work, amber = the end-of-shift flow,
@@ -301,15 +299,15 @@
             <a href="/delivery-zones" class="dash-btn full tile-blue"><span class="icon zone-trio" aria-hidden="true"><span class="zone-1">1</span><span class="zone-2">2</span><span class="zone-3">3</span></span><span class="label">Delivery Zone Lookup &amp; Map</span><span class="sublabel">Postal code &rarr; zone, minimum order, delivery fee &mdash; with the Ontario zone map</span></a>
         </div>
         <details class="mgmt-details">
-        <summary class="section-label"><span class="chev">&#9654;</span>Administration <span class="mgmt-badge" id="admin-badge" title="Days the kitchen ran that you have not reviewed yet"></span></summary>
+        <summary class="section-label"><span class="chev">&#9654;</span>Administration</summary>
         <div class="mgmt-list">
             <div class="mgmt-row">
                 <a class="mgmt-title" href="/analytics">Analytics</a>
                 <div class="mgmt-links"><a href="/analytics">Sales by Buyer</a><a href="/production-tracker">Production</a></div>
             </div>
             <div class="mgmt-row" id="prod-record-btn">
-                <a class="mgmt-title" href="/traceability">Completed Production <span class="mgmt-badge" id="prod-badge" title="Days the kitchen ran that you have not reviewed yet"></span></a>
-                <div class="mgmt-links"><a href="/daily-review">Review outstanding days</a></div>
+                <a class="mgmt-title" href="/traceability">Completed Production</a>
+                <div class="mgmt-links"><a href="/traceability">Production records</a></div>
             </div>
             <div class="mgmt-row">
                 <a class="mgmt-title" href="/organic">Inventory</a>
@@ -484,31 +482,7 @@ async function loadReviewButton(){
 }
 loadReviewButton();
 
-// Completed Production — pending review badge
-async function loadProdBadge() {
-  try {
-    // Daily review replaced the weekly sign-off — the badge counts days the
-    // kitchen ran that the HOO hasn't reviewed yet.
-    var r = await fetch('/api/daily-signoffs/pending');
-    var d = await r.json();
-    var needsSignoff = d.pending || [];
-    // The Administration section starts collapsed, so the count is shown on
-    // its summary too — otherwise the signal would be hidden by default.
-    const badges = ['prod-badge', 'admin-badge'].map(id => document.getElementById(id)).filter(Boolean);
-    if (needsSignoff.length > 0) {
-      var btn   = document.getElementById('prod-record-btn');
-      badges.forEach(b => { b.textContent = needsSignoff.length; b.style.display = 'inline-block'; });
-      if (btn)   btn.classList.add('needs-signoff');
-    } else {
-      // Signing the last outstanding day should clear the badge, not leave a
-      // stale count sitting directly under the brief that cleared it.
-      const btn   = document.getElementById('prod-record-btn');
-      badges.forEach(b => { b.style.display = 'none'; });
-      if (btn)   btn.classList.remove('needs-signoff');
-    }
-  } catch(e) {}
-}
-loadProdBadge();
+// Days awaiting review are counted on the Daily Summary button only (2026-10-01).
 
 // Portal tiles + their live-count JS moved to _portal_tiles.html (shared
 // with the FOH dashboard, 2026-08-26).
