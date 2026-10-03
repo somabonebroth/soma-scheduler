@@ -130,6 +130,8 @@ function osEsc(s) {
 }
 function osKey(r) { return r.sku_key + '@@' + r.lot; }
 // Product name without the brand prefix: "Organic Chicken Bone Broth · SS-750ML".
+// Brand + name, for telling near-identical products of two brands apart.
+function osFullName(r) { const b = (r.sku_key || '').split('|')[0]; return (b ? b + ' ' : '') + osName(r); }
 function osName(r) { return r.recipe ? r.recipe + (r.format ? ' · ' + r.format : '') : (r.name || ''); }
 function osBuyer() { return osBuyers.find(b => b.id === document.getElementById('os-buyer').value); }
 function osOnList(skuKey) {
@@ -161,6 +163,19 @@ function osStatus(text, kind) {
 
 // Add one case of a (SKU, LOT#) — refused past the cases on record.
 function osAddCase(r) {
+    const b = osBuyer();
+    if (!b) {
+        osBeep(false);
+        osStatus('Pick a buyer first', 'bad');
+        return;
+    }
+    // Only the buyer's own products (2026-10-02): a Benefits by Nature case
+    // once went into a Nature's Emporium order with a small grey note.
+    if (!osOnList(r.sku_key)) {
+        osBeep(false);
+        osStatus('Wrong product: ' + osFullName(r) + ' is not on ' + b.name + '\'s list', 'bad');
+        return;
+    }
     const k = osKey(r), have = osTally[k] || 0;
     if (have + 1 > r.cases) {
         osBeep(false);
@@ -266,7 +281,7 @@ function osRender() {
     document.getElementById('os-tally').innerHTML = rows.map(r => {
         const k = osKey(r);
         return '<li><div class="what">' + osEsc(osName(r)) + '<small>LOT# ' + osEsc(r.lot)
-            + (osOnList(r.sku_key) ? '' : ' &middot; not on this buyer\'s price list') + '</small></div>'
+            + (osOnList(r.sku_key) ? '' : ' &middot; <b style="color:var(--action-red)">' + osEsc(osFullName(r)) + ' is not on this buyer\'s list, remove it</b>') + '</small></div>'
             + '<button class="os-icon-btn" aria-label="Remove one case" onclick="osChangeCase(' + osOrganic.indexOf(r) + ', -1)">&minus;</button>'
             + '<div class="n">' + osTally[k] + '</div></li>';
     }).join('');
@@ -274,10 +289,11 @@ function osRender() {
     document.getElementById('os-org-total').innerHTML = orgCases ? '<b>' + orgCases + '</b> organic case' + (orgCases === 1 ? '' : 's') + ' scanned' : '';
 
     // By-hand list
-    document.getElementById('os-hand-list').innerHTML = osOrganic.length ? osOrganic.map(r =>
+    const handRows = osBuyer() ? osOrganic.filter(r => osOnList(r.sku_key)) : [];
+    document.getElementById('os-hand-list').innerHTML = !osBuyer() ? '<li class="os-muted">Pick a buyer first.</li>' : handRows.length ? handRows.map(r =>
         '<li><div class="what">' + osEsc(osName(r)) + '<small>LOT# ' + osEsc(r.lot) + ' &middot; ' + r.cases + ' cases on record</small></div>'
         + '<button class="os-icon-btn" aria-label="Add one case" onclick="osAddCase(osOrganic[' + osOrganic.indexOf(r) + '])">+</button></li>'
-    ).join('') : '<li class="os-muted">No organic stock on record.</li>';
+    ).join('') : '<li class="os-muted">None of this buyer\'s organic products in stock.</li>';
 
     // Plain products: the buyer's catalogue, in stock, not organic.
     const b = osBuyer();
@@ -412,6 +428,13 @@ function osReview() {
         return;
     }
     if (!o.cases.length && !o.lines.length) return;
+    const wrong = o.cases.filter(c => !osOnList(c.r.sku_key));
+    if (wrong.length) {
+        msg.innerHTML = '<div class="os-warn">Not on ' + osEsc(o.b.name) + '\'s list: '
+            + wrong.map(c => osEsc(osFullName(c.r))).join(', ') + '. Remove ' + (wrong.length === 1 ? 'it' : 'them') + ' before recording.</div>';
+        msg.scrollIntoView({behavior: 'smooth', block: 'center'});
+        return;
+    }
     osStopCamera();
     const total = o.cases.reduce((a, c) => a + c.n, 0) + o.lines.reduce((a, l) => a + l.n, 0);
     const date = document.getElementById('os-date').value, po = document.getElementById('os-po').value.trim();
@@ -420,7 +443,7 @@ function osReview() {
         + '<div class="os-rv-meta"><b>' + osEsc(o.b.name) + '</b>' + (o.loc ? ' &middot; ' + osEsc(o.loc.name) : '')
         + '<br>Delivery ' + osEsc(date || 'not set') + (po ? ' &middot; PO ' + osEsc(po) : '') + '</div>'
         + (o.cases.length ? '<div class="os-rv-head">Organic (scanned)</div><ul class="os-rv">'
-            + o.cases.map(c => item(osName(c.r), 'LOT# ' + osEsc(c.r.lot) + (osOnList(c.r.sku_key) ? '' : ' &middot; no price on this buyer\'s list'), c.n)).join('') + '</ul>' : '')
+            + o.cases.map(c => item(osName(c.r), 'LOT# ' + osEsc(c.r.lot), c.n)).join('') + '</ul>' : '')
         + (o.lines.length ? '<div class="os-rv-head">' + (o.cases.length ? 'Other products' : 'Products') + ' (oldest stock first)</div><ul class="os-rv">'
             + o.lines.map(l => item(osName(l.r), '', l.n)).join('') + '</ul>' : '')
         + '<div class="os-rv-total"><span>Total</span><span>' + total + ' cases &middot; ' + (total * 12) + ' jars</span></div>'

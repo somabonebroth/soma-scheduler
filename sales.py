@@ -570,6 +570,16 @@ def get_organic_sale_stock():
     })
 
 
+def _brand_name(sku_key):
+    """'Benefits by Nature Plain Chicken Broth · SS-876ML' for a sku_key —
+    brand included, since two brands can carry near-identical recipe names."""
+    parts = (sku_key or "").split("|")
+    if len(parts) != 3:
+        return sku_key
+    brand, recipe, fmt = parts
+    return f"{brand} {recipe} · {fmt}".strip()
+
+
 @sales_bp.route("/api/organic/sales/organic-order", methods=["POST"])
 @manager_required
 def add_organic_scan_order():
@@ -618,6 +628,13 @@ def add_organic_scan_order():
             plain[key] = plain.get(key, 0) + n * 12
     if not organic and not plain:
         return jsonify({"error": "Nothing to record: scan a case or add a product"}), 400
+
+    # Only the buyer's own products (2026-10-02): a Benefits by Nature case
+    # scanned into a Nature's Emporium order was saved with no price.
+    off_list = [k for k in list(organic) + list(plain) if k not in prices]
+    if off_list:
+        return jsonify({"error": "Nothing was saved", "details": [
+            f"{_brand_name(k)} is not on {data['buyer']}'s product list" for k in off_list]}), 400
 
     errors, deducted = [], []
     for key, by_lot in organic.items():

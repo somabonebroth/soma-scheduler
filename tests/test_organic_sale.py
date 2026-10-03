@@ -95,6 +95,23 @@ class Route(unittest.TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertIn("must be scanned", r.get_json()["details"][0])
 
+    def test_only_the_buyers_own_products(self):
+        # 2026-10-02: a Benefits by Nature case went into a Nature's Emporium order.
+        other = "Benefits by Nature|Organic Chicken Bone Broth|SS-750ML"
+        with open(self.fg_path) as f:
+            rows = json.load(f)
+        rows.append(dict(fg("x1", "Organic Chicken Bone Broth", "210727", 48, "Organic", "2026-07-21"),
+                         brand="Benefits by Nature"))
+        with open(self.fg_path, "w") as f:
+            json.dump(rows, f)
+        r = self.post(cases=[{"sku_key": ORG, "lot": "280927", "cases": 1},
+                             {"sku_key": other, "lot": "210727", "cases": 1}])
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Benefits by Nature Organic Chicken Bone Broth · SS-750ML is not on Nature's Emporium's",
+                      r.get_json()["details"][0])
+        self.assertEqual(self.sales(), [])
+        self.assertEqual(self.remaining()["x1"], 48)
+
     def test_plain_cannot_be_scanned(self):
         r = self.post(cases=[{"sku_key": PLAIN, "lot": "280927", "cases": 1}])
         self.assertEqual(r.status_code, 400)
