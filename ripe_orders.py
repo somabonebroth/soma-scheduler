@@ -888,6 +888,34 @@ def ripe_retail_packing_slip(order_id):
                            order=order, company=_load_company_info())
 
 
+@ripe_orders_bp.route("/ripe-retail/<order_id>/packing-slip.pdf")
+@_soma_manager_required
+def ripe_retail_packing_slip_pdf(order_id):
+    """The retail (in-the-box) slip as a 4x6 PDF for the iPhone app
+    (2026-10-05). No pricing, same as ripe_retail_packing_slip.html."""
+    orders, _ = _fetch_ripe_orders()
+    order = next((o for o in orders if o["id"] == order_id), None)
+    if not order:
+        return "Order not found", 404
+    from pdf_engine import generate_slip_pdf
+    items = order.get("items") or []
+    pdf = generate_slip_pdf({
+        "logo": None,
+        "company": ["Ripe Nutrition Co.", "44 Charles St W., Toronto, ON, M4Y 1R7", "info@ripe-nutrition.com"],
+        "printed": "",
+        "order": [("Order #", order.get("order_number")), ("Reference", order.get("id"))],
+        "info": [[("Prepared for", order.get("customer_name")),
+                  ("Order placed", (order.get("created_at") or "")[:10])]],
+        "notes": order.get("notes"),
+        "columns": ["Product", "Jars"],
+        "sections": [{"rows": [{"name": li.get("name"), "subs": [li.get("format"), li.get("sku")],
+                                "cells": [li.get("units", 0)]} for li in items]}],
+        "totals": ["Total jars", sum(int(li.get("units") or 0) for li in items)],
+        "footer": ["Thank you for your order.", "Questions? info@ripe-nutrition.com"],
+    })
+    return _pdf_response(pdf, f"packing-slip-{order.get('order_number') or order_id}.pdf")
+
+
 @ripe_orders_bp.route("/ripe-retail/<order_id>/label")
 @_soma_manager_required
 def ripe_retail_label(order_id):
@@ -1060,6 +1088,53 @@ def ripe_packing_slip(order_id):
         order=data,
         today=_dt.now().strftime("%B %d, %Y"),
     )
+
+
+_RIPE_SLIP_CO = ["9454411 CANADA INC. (Ripe Nutrition Co.)", "44 Charles St W., Toronto, ON, M4Y 1R7",
+                 "info@ripe-nutrition.com"]
+
+
+def _pdf_response(pdf, filename):
+    """A PDF shown inline (the slip page's share button downloads it)."""
+    return Response(pdf, mimetype="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{filename}"'})
+
+
+@ripe_orders_bp.route("/ripe-orders/<order_id>/packing-slip.pdf")
+@_soma_manager_required
+def ripe_packing_slip_pdf(order_id):
+    """The wholesale slip as a 4x6 PDF, for printing from the iPhone app
+    (2026-10-05). Same order detail and layout as ripe_packing_slip.html."""
+    status, order = _ripe_request("GET", f"/api/internal/order-detail/{order_id}")
+    if status != 200 or not isinstance(order, dict):
+        return "Order not found", 404
+    from pdf_engine import generate_slip_pdf, slip_format_groups
+    items = order.get("items") or []
+    sections = []
+    for name, group in slip_format_groups(items, lambda li: li.get("format")):
+        sections.append({"heading": name,
+                         "heading_cells": [f"{sum(int(li.get('cases') or 0) for li in group)} cs",
+                                           f"{sum(int(li.get('units') or 0) for li in group)} un"],
+                         "rows": [{"name": li.get("name"), "subs": [li.get("format"), li.get("sku")],
+                                   "cells": [li.get("cases", 0), li.get("units", 0)]} for li in group]})
+    supplies = order.get("supplies") or []
+    pdf = generate_slip_pdf({
+        "logo": os.path.join(os.path.dirname(__file__), "static", "ripe-logo.png"),
+        "company": ["Distributed by:"] + _RIPE_SLIP_CO,
+        "printed": "Printed " + datetime.now().strftime("%B %d, %Y"),
+        "order": [("Order Number", order.get("id")), ("Ripe Order #", order.get("order_number"))],
+        "info": [("Business", order.get("business_name"))],
+        "notes": order.get("notes"),
+        "columns": ["Product", "Cases", "Units"],
+        "sections": sections,
+        "totals": ["Totals", sum(int(li.get("cases") or 0) for li in items),
+                   sum(int(li.get("units") or 0) for li in items)],
+        "after": [{"heading": "PACKING SUPPLIES",
+                   "rows": [{"name": sp.get("label"), "cells": [sp.get("qty_label")]} for sp in supplies]}]
+                 if supplies else [],
+        "footer": _RIPE_SLIP_CO,
+    })
+    return _pdf_response(pdf, f"packing-slip-ripe-{order.get('order_number') or order_id}.pdf")
 
 
 def _build_bookkeeping_csv(date_from=None, date_to=None):

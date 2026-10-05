@@ -12,51 +12,10 @@
    so it prints from a phone: a PDF opened from the home-screen app on iOS
    has no print control. Same data as the PDF (sales._packing_slip_data). #}
 <div class="ps-ctrl">
-  <button id="ps-print" onclick="psPrint()" class="btn btn-primary">&#128424; Print (4&times;6 label)</button>
+  <button id="ps-print" data-pdf="/api/organic/sales/{{ s.sale_id }}/packing-slip" data-filename="{{ s.filename }}" class="btn btn-primary">&#128424; Print (4&times;6 label)</button>
   <a href="/api/organic/sales/{{ s.sale_id }}/packing-slip" class="btn btn-outline">PDF</a>
   <a href="javascript:history.length > 1 ? history.back() : (location.href = '/')" class="btn btn-outline">&larr; Back</a>
 </div>
-<p id="ps-note" class="ps-ctrl" style="display:none;font-size:13px;color:var(--text-light);"></p>
-<script>
-// The iPhone home-screen app ignores window.print() entirely (a WebKit
-// limit, 2026-10-05: the button did nothing). There, the button hands the
-// slip PDF to the share sheet, which has Print and the label printer's app.
-// The PDF is fetched on load because Safari only allows share() straight
-// from the tap: waiting for a download after the tap is refused.
-const psStandalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
-let psFile = null;
-if (psStandalone) {
-  const btn = document.getElementById('ps-print');
-  btn.disabled = true;
-  btn.textContent = 'Preparing…';
-  fetch('/api/organic/sales/{{ s.sale_id }}/packing-slip', {credentials: 'same-origin'})
-    .then(r => r.ok ? r.blob() : null)
-    .then(b => {
-      const f = b && new File([b], {{ s.filename|tojson }}, {type: 'application/pdf'});
-      if (f && navigator.canShare && navigator.canShare({files: [f]})) {
-        psFile = f;
-        btn.innerHTML = '&#128424; Print / share (4&times;6 label)';
-        btn.disabled = false;
-      } else {
-        psUnavailable();
-      }
-    })
-    .catch(psUnavailable);
-}
-function psUnavailable() {
-  document.getElementById('ps-print').style.display = 'none';
-  const note = document.getElementById('ps-note');
-  note.textContent = 'This phone can\'t print from the home-screen app. Open Soma in Safari to print this slip.';
-  note.style.display = '';
-}
-function psPrint() {
-  if (psFile) {
-    navigator.share({files: [psFile]}).catch(() => {});   // cancel = AbortError, nothing to do
-    return;
-  }
-  window.print();
-}
-</script>
 <main>
 <div class="ps-head">
   <div>

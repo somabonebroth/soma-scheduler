@@ -306,6 +306,15 @@ retail_orders.py    — Flask Blueprint (added 2026-07-02): SBBC Wholesale Porta
                       in `sales.get_packing_slip` (manual/organic sales, carries LOT#s):
                       same page size + rules; FORMAT sits under the product; note the
                       frame's 6pt inner padding when sizing tables (`WIDTH`).
+                      **iPhone printing (2026-10-05):** the home-screen app ignores
+                      `window.print()`, so every slip's Print button (`#ps-print`,
+                      handled in `_packing_slip_head.html`) carries `data-pdf`; in the
+                      standalone app it fetches that PDF on load and opens the share
+                      sheet (Print / the label printer's app). The three portal slips
+                      got `…/packing-slip.pdf` routes built by `pdf_engine.generate_slip_pdf`
+                      from the SAME order dict the HTML reads — change both together.
+                      The labelling sheet has no PDF (button prints the page only).
+                      Tests: `tests.test_slip_pdfs`.
 end_of_day.py       — Flask Blueprint (added 2026-08-19): the floor's one end-of-shift
                       flow at /end-of-day. Owns NO data — it joins production
                       (file_checklist) and cleaning (closing record, rotation) and is

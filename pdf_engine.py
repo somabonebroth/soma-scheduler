@@ -1001,3 +1001,206 @@ def generate_audit_pack_pdf(output, pack, example=None, logo_path=None):
 
     footer()
     c.save()
+
+
+# ── Portal packing slips as 4x6 PDFs (2026-10-05) ─────────────────────────
+# The iPhone home-screen app cannot print a web page (window.print() is a
+# no-op there), so every slip page also serves a PDF the phone hands to the
+# share sheet. One builder for the three portal slips (Ripe wholesale, Ripe
+# retail, SBBC); each route turns the SAME order dict its HTML template reads
+# into a spec, so the page and the PDF show the same thing. Thermal printer:
+# black only, weight and rules carry hierarchy (see _packing_slip_head.html).
+
+def slip_format_groups(items, fmt_of):
+    """[(heading, [items])] in the slip's fixed order — shelf stable, frozen,
+    back bar, other — by format prefix, empty groups dropped. Mirrors the
+    grouping in ripe_packing_slip.html / retail_packing_slip.html."""
+    order = [("SS", "SHELF STABLE"), ("FZ", "FROZEN"), ("BB", "BACK BAR"), ("OT", "OTHER")]
+    buckets = {k: [] for k, _ in order}
+    for it in items:
+        fmt = (fmt_of(it) or "").upper()
+        key = next((k for k in ("SS", "FZ", "BB") if fmt.startswith(k)), "OT")
+        buckets[key].append(it)
+    return [(name, buckets[k]) for k, name in order if buckets[k]]
+
+
+def generate_slip_pdf(spec):
+    """A 4in x 6in packing slip PDF (bytes) from a plain spec:
+
+    logo         path to an image, or None
+    company      [lines] — the first is bold
+    printed      "Printed …" line, or ""
+    order        [(label, value)] — the big order number block
+    info         [(label, value) or [(label, value), (label, value)]] — a list
+                 draws two side by side; value may contain "\\n" for line breaks
+    notes        text or ""
+    columns      ["Product", "Cases", …] — every column after the first is numeric
+    sections     [{"heading": text or None, "heading_cells": [..] or None,
+                   "rows": [{"name", "subs": [..], "cells": [..]}]}]
+    totals       [label, cell, …] or None — drawn after the sections
+    after        sections drawn after the totals (Ripe's packing supplies)
+    signatures   [labels] — blank lines to sign, or []
+    footer       [lines]
+    """
+    from reportlab.lib import colors
+    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                    Paragraph, Spacer, HRFlowable, Image)
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_RIGHT, TA_LEFT, TA_CENTER
+    from xml.sax.saxutils import escape
+    import io as _io
+    import os as _os
+
+    BLACK = colors.black
+    MARGIN = 0.08 * inch
+    WIDTH = 4 * inch - 2 * (MARGIN + 6)   # the frame pads 6pt inside the margin
+    buf = _io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=(4 * inch, 6 * inch), rightMargin=MARGIN,
+                            leftMargin=MARGIN, topMargin=MARGIN, bottomMargin=MARGIN)
+    base = getSampleStyleSheet()["Normal"]
+    _n = [0]
+
+    def ps(**kw):
+        _n[0] += 1
+        kw.setdefault("textColor", BLACK)
+        return ParagraphStyle(f"slip{_n[0]}", parent=base, **kw)
+
+    def esc(v):
+        return escape(str(v if v is not None else ""))
+
+    def lines(v):
+        return "<br/>".join(esc(x) for x in str(v or "").split("\n") if x.strip())
+
+    story = []
+    co = spec.get("company") or []
+    co_html = "<br/>".join([f"<b>{esc(co[0])}</b>"] + [esc(x) for x in co[1:]]) if co else ""
+    co_para = Paragraph(co_html, ps(fontSize=7.5, alignment=TA_RIGHT, leading=9.5))
+    logo = spec.get("logo")
+    if logo and _os.path.exists(logo):
+        left = Image(logo, width=0.85 * inch, height=0.6 * inch, kind="proportional")
+        left.hAlign = "LEFT"
+        head = Table([[left, co_para]], colWidths=[1.1 * inch, WIDTH - 1.1 * inch])
+    else:
+        head = Table([[co_para]], colWidths=[WIDTH])
+        co_para.style.alignment = TA_LEFT
+    head.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                              ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                              ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]))
+    story.append(head)
+    story.append(HRFlowable(width="100%", thickness=2, color=BLACK, spaceBefore=2, spaceAfter=3))
+    title = Paragraph("PACKING SLIP", ps(fontSize=14, fontName="Helvetica-Bold", leading=16))
+    printed = Paragraph(esc(spec.get("printed") or ""), ps(fontSize=7.5, alignment=TA_RIGHT))
+    tt = Table([[title, printed]], colWidths=[WIDTH * 0.55, WIDTH * 0.45])
+    tt.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
+                            ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                            ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+    story.append(tt)
+
+    lbl = ps(fontSize=7, fontName="Helvetica-Bold", leading=9)
+    order = [(k, v) for k, v in (spec.get("order") or []) if v]
+    if order:
+        rows = [[Paragraph(esc(k).upper(), lbl),
+                 Paragraph(esc(v), ps(fontSize=13 if i == 0 else 10, leading=15 if i == 0 else 12,
+                                      fontName="Helvetica-Bold" if i == 0 else "Helvetica"))]
+                for i, (k, v) in enumerate(order)]
+        t = Table(rows, colWidths=[1.0 * inch, WIDTH - 1.0 * inch])
+        t.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 1.5, BLACK), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                               ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+                               ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4)]))
+        story.append(t)
+        story.append(Spacer(1, 4))
+    # An info entry is (label, value), or a list of two pairs drawn side by side.
+    info = []
+    for e in spec.get("info") or []:
+        pairs = [p for p in (e if isinstance(e, list) else [e]) if p[1]]
+        if pairs:
+            info.append(pairs)
+    if info:
+        val = ps(fontSize=10, leading=12.5)
+        rows, style = [], [("BOX", (0, 0), (-1, -1), 1, BLACK),
+                           ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+                           ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4)]
+        for pairs in info:
+            i = len(rows)
+            rows.append([Paragraph(esc(k).upper(), lbl) for k, _ in pairs] + [""] * (2 - len(pairs)))
+            rows.append([Paragraph(lines(v), val) for _, v in pairs] + [""] * (2 - len(pairs)))
+            if i:
+                style.append(("LINEABOVE", (0, i), (-1, i), 0.5, BLACK))
+            if len(pairs) == 1:
+                style += [("SPAN", (0, i), (1, i)), ("SPAN", (0, i + 1), (1, i + 1))]
+            else:
+                style.append(("LINEBEFORE", (1, i), (1, i + 1), 0.5, BLACK))
+        t = Table(rows, colWidths=[WIDTH / 2, WIDTH / 2])
+        t.setStyle(TableStyle(style))
+        story.append(t)
+        story.append(Spacer(1, 4))
+    if spec.get("notes"):
+        story.append(Paragraph("<b>Notes:</b> " + lines(spec["notes"]), ps(fontSize=9, leading=11, spaceAfter=4)))
+
+    cols = spec.get("columns") or ["Product"]
+    n_num = len(cols) - 1
+    num_w = 0.62 * inch
+    widths = [WIDTH - n_num * num_w] + [num_w] * n_num
+    hdr_l = ps(fontSize=7.5, fontName="Helvetica-Bold")
+    hdr_r = ps(fontSize=7.5, fontName="Helvetica-Bold", alignment=TA_RIGHT)
+    grp_l = ps(fontSize=8, fontName="Helvetica-Bold")
+    grp_r = ps(fontSize=8, fontName="Helvetica-Bold", alignment=TA_RIGHT)
+    cell = ps(fontSize=10.5, leading=12.5)
+    qty = ps(fontSize=13, leading=15, fontName="Helvetica-Bold", alignment=TA_RIGHT)
+    tot_l = ps(fontSize=11, leading=13, fontName="Helvetica-Bold")
+    tot_r = ps(fontSize=11, leading=13, fontName="Helvetica-Bold", alignment=TA_RIGHT)
+
+    rows = [[Paragraph(esc(cols[0]).upper(), hdr_l)] + [Paragraph(esc(c).upper(), hdr_r) for c in cols[1:]]]
+    style = [("LINEBELOW", (0, 0), (-1, 0), 1.5, BLACK), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+             ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+             ("LEFTPADDING", (0, 0), (-1, -1), 2), ("RIGHTPADDING", (0, 0), (-1, -1), 2)]
+
+    def add_sections(sections):
+        for sec in sections or []:
+            if sec.get("heading"):
+                hc = sec.get("heading_cells") or []
+                row = [Paragraph(esc(sec["heading"]), grp_l)] + [Paragraph(esc(c), grp_r) for c in hc]
+                row += [""] * (len(cols) - len(row))
+                i = len(rows)
+                rows.append(row)
+                style.append(("LINEABOVE", (0, i), (-1, i), 1.5, BLACK))
+                style.append(("LINEBELOW", (0, i), (-1, i), 0.75, BLACK))
+                if not hc and len(cols) > 1:
+                    style.append(("SPAN", (0, i), (-1, i)))
+            for r in sec.get("rows") or []:
+                subs = "".join(f'<br/><font size="8">{esc(s)}</font>' for s in r.get("subs") or [] if s)
+                row = [Paragraph(f'<b>{esc(r.get("name"))}</b>{subs}', cell)]
+                row += [Paragraph(esc(c), qty) for c in r.get("cells") or []]
+                row += [""] * (len(cols) - len(row))
+                i = len(rows)
+                rows.append(row)
+                style.append(("LINEBELOW", (0, i), (-1, i), 0.5, BLACK))
+                if len(r.get("cells") or []) == 1 and len(cols) > 2:
+                    style.append(("SPAN", (1, i), (-1, i)))
+
+    add_sections(spec.get("sections"))
+    if spec.get("totals"):
+        t = spec["totals"]
+        i = len(rows)
+        rows.append([Paragraph(esc(t[0]), tot_l)] + [Paragraph(esc(c), tot_r) for c in t[1:]]
+                    + [""] * (len(cols) - len(t)))
+        style.append(("LINEABOVE", (0, i), (-1, i), 2, BLACK))
+    add_sections(spec.get("after"))
+    items = Table(rows, colWidths=widths, repeatRows=1)
+    items.setStyle(TableStyle(style))
+    story.append(items)
+
+    sigs = spec.get("signatures") or []
+    if sigs:   # side by side, a blank line above each label to sign on
+        w = WIDTH / len(sigs)
+        t = Table([[""] * len(sigs), [Paragraph(esc(x), ps(fontSize=7.5)) for x in sigs]],
+                  colWidths=[w] * len(sigs), rowHeights=[0.3 * inch, None])
+        t.setStyle(TableStyle([("LINEBELOW", (i, 0), (i, 0), 1, BLACK) for i in range(len(sigs))]
+                              + [("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3)]))
+        story.append(t)
+    if spec.get("footer"):
+        story.append(Spacer(1, 0.1 * inch))
+        story.append(Paragraph("<br/>".join(esc(x) for x in spec["footer"] if x),
+                               ps(fontSize=7.5, leading=9.5, alignment=TA_CENTER)))
+    doc.build(story)
+    return buf.getvalue()

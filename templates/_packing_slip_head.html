@@ -65,4 +65,43 @@ table.ps-tbl .totals td { border-bottom:none; border-top:2pt solid #000; font-we
 if (new URLSearchParams(location.search).get('print') === '1') {
   window.addEventListener('load', function () { window.print(); });
 }
+
+// Print from the iPhone home-screen app (2026-10-05). There window.print()
+// does nothing at all, so a Print button carrying data-pdf (the same slip as
+// a 4x6 PDF) hands that PDF to the share sheet instead, which has Print and
+// the label printer's app. The PDF is fetched on load because Safari only
+// allows share() straight from the tap: waiting for a download after the
+// tap is refused. Everywhere else the button prints the page as before.
+const psStandalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+let psFile = null;
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('ps-print');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    if (psFile) navigator.share({files: [psFile]}).catch(() => {});   // cancel = AbortError
+    else window.print();
+  });
+  if (!psStandalone || !btn.dataset.pdf) return;
+  const label = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = 'Preparing…';
+  const unavailable = () => {
+    btn.style.display = 'none';
+    const note = document.createElement('p');
+    note.className = 'ps-ctrl';
+    note.style.cssText = 'font-size:13px;color:var(--text-light);';
+    note.textContent = 'This phone can\'t print from the home-screen app. Open Soma in Safari to print this slip.';
+    btn.parentNode.after(note);
+  };
+  fetch(btn.dataset.pdf, {credentials: 'same-origin'})
+    .then(r => r.ok ? r.blob() : null)
+    .then(b => {
+      const f = b && new File([b], btn.dataset.filename || 'packing-slip.pdf', {type: 'application/pdf'});
+      if (!f || !navigator.canShare || !navigator.canShare({files: [f]})) return unavailable();
+      psFile = f;
+      btn.innerHTML = label.replace('Print', 'Print / share');
+      btn.disabled = false;
+    })
+    .catch(unavailable);
+});
 </script>

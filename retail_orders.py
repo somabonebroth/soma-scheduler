@@ -328,6 +328,54 @@ def retail_packing_slip(order_id):
     )
 
 
+@retail_orders_bp.route("/retail-orders/<order_id>/packing-slip.pdf")
+@_soma_manager_required
+def retail_packing_slip_pdf(order_id):
+    """The SBBC slip as a 4x6 PDF, for printing from the iPhone app
+    (2026-10-05). Same order detail and layout as retail_packing_slip.html."""
+    status, order = _retail_request("GET", f"/api/internal/order-detail/{order_id}")
+    if status != 200 or not isinstance(order, dict) or not order.get("id"):
+        return "Order not found", 404
+    from flask import Response
+    from pdf_engine import generate_slip_pdf, slip_format_groups
+    company = _load_company_info()
+    d = order.get("delivery") or {}
+    items = order.get("items") or []
+    sections = [{"heading": name, "heading_cells": [f"{sum(int(li.get('qty') or 0) for li in group)} units"],
+                 "rows": [{"name": li.get("name"), "subs": [li.get("format"), li.get("sku_key") or li.get("sku")],
+                           "cells": [li.get("qty", 0)]} for li in group]}
+                for name, group in slip_format_groups(items, lambda li: li.get("format"))]
+    if "alma care" in (order.get("buyer") or "").strip().lower():
+        sections.append({"rows": [{"name": "Special Ingredient Package",
+                                   "subs": ["Include in the box — supplied by Alma Care"], "cells": [1]}]})
+    addr = (d.get("address") or "") + (", " + d["postal"] if d.get("postal") else "")
+    contact = " · ".join(x for x in (d.get("phone"), d.get("email")) if x)
+    if order.get("delivery_zone"):
+        contact += "\nZone: " + str(order["delivery_zone"])
+    co_addr = (company.get("address") or "") + (", " + company["city"] if company.get("address") and company.get("city") else "")
+    pdf = generate_slip_pdf({
+        "logo": os.path.join(os.path.dirname(__file__), "static", "logo.jpg"),
+        "company": [company.get("name") or "Soma Bone Broth", co_addr, company.get("phone"), company.get("email")],
+        "printed": "Printed " + datetime.now().strftime("%B %d, %Y"),
+        "order": [("Order Number", order.get("id"))],
+        "info": [[("Order placed", (order.get("created_at") or "")[:10]),
+                  ("Delivered" if order.get("status") == "fulfilled" else "Ship date",
+                   order.get("fulfillment_date") or "—")],
+                 ("Ship to", "\n".join(x for x in (order.get("buyer") or d.get("contact_name"),
+                                                    d.get("contact_name"), addr) if x)),
+                 ("Contact", contact or "—")],
+        "notes": d.get("notes"),
+        "columns": ["Product", "Units"],
+        "sections": sections,
+        "totals": ["Total broth units", sum(int(li.get("qty") or 0) for li in items)],
+        "signatures": ["Packed by — name & date", "Received by — signature & date"],
+        "footer": [" · ".join(x for x in (company.get("name") or "Soma Bone Broth", co_addr) if x),
+                   " · ".join(x for x in (company.get("phone"), company.get("email"), company.get("website")) if x)],
+    })
+    return Response(pdf, mimetype="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="packing-slip-{order_id}.pdf"'})
+
+
 @retail_orders_bp.route("/api/retail-orders/<order_id>", methods=["PATCH"])
 @_soma_manager_required
 def retail_order_action(order_id):

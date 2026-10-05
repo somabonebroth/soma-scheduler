@@ -9,7 +9,7 @@
 </head>
 <body class="inv-page">
 <div class="ps-ctrl">
-  <button onclick="window.print()" class="btn btn-primary">🖨 Print (4×6 label)</button>
+  <button id="ps-print" data-pdf="/ripe-orders/{{ order.id }}/packing-slip.pdf" data-filename="packing-slip-ripe-{{ order.order_number or order.id }}.pdf" class="btn btn-primary">🖨 Print (4×6 label)</button>
   <a href="/ripe-orders" class="btn btn-outline">← Back to Orders</a>
 </div>
 <main>
