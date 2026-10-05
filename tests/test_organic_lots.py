@@ -49,6 +49,19 @@ class Folders(unittest.TestCase):
                          ["210927"])
         self.assertEqual(self.build([other]), [])
 
+    def test_every_product_row_carries_its_brand(self):
+        # Two brands carry near-identical recipe names (2026-10-05): the
+        # folder must say whose product it is, not just "Plain Chicken".
+        f = self.build([fg("a", "210927", 240, 168, "run1"), fg("b", "210927", 24, 24)],
+                       sales=[sale("s1", "ORD1", 48, "a", "210927")],
+                       adjustments=[{"kind": "subtract", "created_at": "2026-09-24T08:00:00",
+                                     "reason": "Breakage", "notes": "",
+                                     "drained": [{"fg_id": "a", "lot": "210927", "quantity": 12}]}])[0]
+        rows = (f["skus"] + f["added"] + f["out"][0]["lines"]
+                + [o for o in f["out"] if o["kind"] == "reduction"])
+        self.assertTrue(rows)
+        self.assertEqual({r["brand"] for r in rows}, {"Soma"})
+
     def test_made_sold_reduced_held_add_up(self):
         f = self.build([fg("a", "210927", 240, 180, "run1")],
                        sales=[sale("s1", "ORD1", 48, "a", "210927")],

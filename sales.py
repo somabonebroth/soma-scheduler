@@ -556,10 +556,10 @@ def get_organic_sale_stock():
         if _is_organic_sku(fg, key):
             row = organic.setdefault((key, f.get("lot") or ""), {
                 "sku_key": key, "name": name, "lot": f.get("lot") or "",
-                "recipe": f.get("recipe", ""), "format": f.get("format", ""),
+                "brand": f.get("brand", ""), "recipe": f.get("recipe", ""), "format": f.get("format", ""),
                 "sku_code": _organic_sku_code(key), "held": 0})
         else:
-            row = plain.setdefault(key, {"sku_key": key, "name": name, "held": 0,
+            row = plain.setdefault(key, {"sku_key": key, "name": name, "held": 0, "brand": f.get("brand", ""),
                                          "recipe": f.get("recipe", ""), "format": f.get("format", "")})
         row["held"] += held
     for row in organic.values():

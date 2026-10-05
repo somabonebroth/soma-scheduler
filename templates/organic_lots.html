@@ -166,16 +166,17 @@ function olBestBefore(lot) {
     return m ? olDate('20' + m[3] + '-' + m[2] + '-' + m[1]) : '';
 }
 
-// Product name without the brand prefix: "Organic Chicken Bone Broth · SS-750ML".
+// Product name with its brand: "Nature's Emporium Plain Chicken · SS-876ML".
+// Two brands carry near-identical recipe names, so the brand always shows.
 function olProduct(x) {
-    return x.recipe ? x.recipe + (x.format ? ' · ' + x.format : '') : (x.name || '');
+    return x.recipe ? (x.brand ? x.brand + ' ' : '') + x.recipe + (x.format ? ' · ' + x.format : '') : (x.name || '');
 }
 
 // The same name as HTML, the format kept on one line so a phone never
 // breaks "SS-750ML" in two.
 function olProductHtml(x) {
     if (!x.recipe) return olEsc(x.name || '');
-    return olEsc(x.recipe) + (x.format ? ' &middot; <span class="ol-nw">' + olEsc(x.format) + '</span>' : '');
+    return olEsc((x.brand ? x.brand + ' ' : '') + x.recipe) + (x.format ? ' &middot; <span class="ol-nw">' + olEsc(x.format) + '</span>' : '');
 }
 
 // Cases first (a case is 12 jars), jars underneath. Loose jars carry their
@@ -288,10 +289,10 @@ function olSummaryHtml(f) {
 
 function olInHtml(f) {
     let h = '<div class="card"><h2>In</h2>';
-    const rows = f.batches.map(b => '<li><span><span class="who">' + olEsc(b.recipe) + '</span>'
+    const rows = f.batches.map(b => '<li><span><span class="who">' + olEsc((b.brand ? b.brand + ' ' : '') + b.recipe) + '</span>'
             + '<span class="meta">' + [b.vessel, b.start_date ? 'started ' + olDate(b.start_date) : ''].filter(Boolean).map(olEsc).join(' &middot; ') + '</span></span></li>')
         .concat(f.added.map(a => '<li><span><span class="who">' + olEsc(a.label) + '</span>'
-            + '<span class="meta">' + olProductHtml({recipe: a.recipe, format: a.format, name: a.sku}) + (a.date ? ' &middot; ' + olEsc(olDate(a.date)) : '') + '</span></span>'
+            + '<span class="meta">' + olProductHtml({brand: a.brand, recipe: a.recipe, format: a.format, name: a.sku}) + (a.date ? ' &middot; ' + olEsc(olDate(a.date)) : '') + '</span></span>'
             + '<span class="amt">' + olCases(a.quantity) + ' ' + olCaseWord(a.quantity) + '</span></li>'));
     if (rows.length) h += '<ul class="ol-rows">' + rows.join('') + '</ul>';
     if (f.invoices.length) h += '<div class="ol-heading">Ingredients</div>';
@@ -338,7 +339,7 @@ function olOutHtml(f) {
         } else {
             h += '<li><span><span class="who">' + olEsc(o.reason || 'Reduced') + '</span>'
                 + '<span class="meta">' + olEsc(olDate(o.date))
-                + (f.skus.length > 1 ? ' &middot; ' + olProductHtml({recipe: o.recipe, format: o.format, name: o.sku}) : '')
+                + (f.skus.length > 1 ? ' &middot; ' + olProductHtml({brand: o.brand, recipe: o.recipe, format: o.format, name: o.sku}) : '')
                 + (o.notes ? ' &middot; ' + olEsc(o.notes) : '') + '</span></span>'
                 + '<span class="amt minus">&minus;' + olCases(o.jars) + ' ' + olCaseWord(o.jars) + '</span></li>';
         }

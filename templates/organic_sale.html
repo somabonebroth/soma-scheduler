@@ -129,10 +129,13 @@ function osEsc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function osKey(r) { return r.sku_key + '@@' + r.lot; }
-// Product name without the brand prefix: "Organic Chicken Bone Broth · SS-750ML".
-// Brand + name, for telling near-identical products of two brands apart.
-function osFullName(r) { const b = (r.sku_key || '').split('|')[0]; return (b ? b + ' ' : '') + osName(r); }
-function osName(r) { return r.recipe ? r.recipe + (r.format ? ' · ' + r.format : '') : (r.name || ''); }
+// "Nature's Emporium Plain Chicken · SS-876ML": the brand always shows,
+// since two brands carry near-identical recipe names.
+function osName(r) {
+    const b = r.brand || (r.sku_key || '').split('|')[0];
+    return r.recipe ? (b ? b + ' ' : '') + r.recipe + (r.format ? ' · ' + r.format : '') : (r.name || '');
+}
+function osFullName(r) { return osName(r); }
 function osBuyer() { return osBuyers.find(b => b.id === document.getElementById('os-buyer').value); }
 function osOnList(skuKey) {
     const b = osBuyer();
