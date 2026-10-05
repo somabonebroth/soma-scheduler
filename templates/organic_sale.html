@@ -16,8 +16,21 @@
 .os-cam.hit .frame { border-color: var(--green-light); }
 .os-cam.miss .frame { border-color: var(--action-red); }
 .os-status { font-size: 15px; font-weight: 600; min-height: 22px; margin: 10px 0; color: var(--dark); }
-.os-status.ok { color: var(--action-green); }
-.os-status.bad { color: var(--action-red); }
+.os-status.ok { color: var(--action-green); background: var(--action-green-bg); border-radius: var(--r-md); padding: 8px 12px; }
+.os-status.bad { color: var(--action-red); background: var(--action-red-bg); border-radius: var(--r-md); padding: 8px 12px; }
+/* Scan result over the camera: a big check (or cross) you can see from
+   arm's length at the pile, not just a line of text below it. */
+.os-flash { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+.os-flash.show { opacity: 1; transition: none; }
+.os-flash.ok { background: color-mix(in srgb, var(--action-green) 55%, transparent); }
+.os-flash.bad { background: color-mix(in srgb, var(--action-red) 55%, transparent); }
+.os-flash .mark { width: 104px; height: 104px; border-radius: 50%; background: var(--white); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+.os-flash.show .mark { animation: os-pop 0.3s ease-out; }
+.os-flash .mark svg { width: 64px; height: 64px; }
+.os-flash.ok .mark svg { stroke: var(--action-green); }
+.os-flash.bad .mark svg { stroke: var(--action-red); }
+.os-flash .txt { color: var(--white); font-size: 20px; font-weight: 700; text-shadow: 0 1px 4px rgba(0,0,0,0.5); text-align: center; padding: 0 12px; }
+@keyframes os-pop { 0% { transform: scale(0.4); } 70% { transform: scale(1.12); } 100% { transform: scale(1); } }
 .os-big { width: 100%; font-size: 17px; padding: 14px; }
 .os-tally { list-style: none; margin: 8px 0 0; padding: 0; }
 .os-tally li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
@@ -89,7 +102,7 @@ body { padding-bottom: 96px; }
     <div class="card" id="os-scan-card">
         <h2>3. Scan organic cases</h2>
         <p class="os-muted" style="margin-top:0;">One label at a time. Each beep adds a case.</p>
-        <div class="os-cam" id="os-cam"><video id="os-video" playsinline muted autoplay></video><div class="frame"></div></div>
+        <div class="os-cam" id="os-cam"><video id="os-video" playsinline muted autoplay></video><div class="frame"></div><div class="os-flash" id="os-flash"><div class="mark"></div><div class="txt"></div></div></div>
         <div class="os-status" id="os-status"></div>
         <button class="btn btn-primary os-big" id="os-cam-btn" onclick="osToggleCamera()">Start scanning</button>
         <ul class="os-tally" id="os-tally"></ul>
@@ -155,13 +168,31 @@ function osBeep(ok) {
     } catch (e) {}
 }
 
-function osStatus(text, kind) {
+const OS_MARKS = {
+    ok: '<svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+    bad: '<svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+};
+let osFlashTimer = null;
+
+// `big` = the short line under the check/cross on the camera view.
+function osStatus(text, kind, big) {
     const el = document.getElementById('os-status');
     el.textContent = text;
     el.className = 'os-status' + (kind ? ' ' + kind : '');
     const cam = document.getElementById('os-cam');
     cam.classList.remove('hit', 'miss');
-    if (kind) { cam.classList.add(kind === 'ok' ? 'hit' : 'miss'); setTimeout(() => cam.classList.remove('hit', 'miss'), 500); }
+    if (!kind) return;
+    cam.classList.add(kind === 'ok' ? 'hit' : 'miss');
+    setTimeout(() => cam.classList.remove('hit', 'miss'), 500);
+    const fl = document.getElementById('os-flash');
+    fl.querySelector('.mark').innerHTML = OS_MARKS[kind];
+    fl.querySelector('.txt').textContent = big || (kind === 'ok' ? 'Added' : 'Not added');
+    fl.className = 'os-flash';
+    void fl.offsetWidth;   // restart the pop when two scans land close together
+    fl.className = 'os-flash show ' + kind;
+    clearTimeout(osFlashTimer);
+    osFlashTimer = setTimeout(() => fl.classList.remove('show'), kind === 'ok' ? 700 : 1400);
+    try { if (navigator.vibrate) navigator.vibrate(kind === 'ok' ? 60 : [80, 60, 80]); } catch (e) {}
 }
 
 // Add one case of a (SKU, LOT#) — refused past the cases on record.
@@ -187,7 +218,8 @@ function osAddCase(r) {
     }
     osTally[k] = have + 1;
     osBeep(true);
-    osStatus('+1 ' + osName(r) + ' · LOT# ' + r.lot + ' (' + osTally[k] + ')', 'ok');
+    osStatus('+1 ' + osName(r) + ' · LOT# ' + r.lot + ' (' + osTally[k] + ')', 'ok',
+        '+1 case · ' + osTally[k] + ' of LOT# ' + r.lot);
     osRender();
 }
 
