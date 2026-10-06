@@ -3319,10 +3319,15 @@ def _apply_fg_audit(audit):
             continue
         brand, recipe_name, fmt = parts
 
+        # Match on the SAME key the count list was built with
+        # (_build_fg_audit_items), never on the raw stored strings: a recipe
+        # whose format is stored as e.g. 'ss-750ml' showed the right on-hand
+        # figure but matched nothing here, so the count was ignored (shortage)
+        # or added on top of the old stock (surplus).
         same_sku = [f for f in fg
-                    if (f.get("brand") or "").strip() == brand
-                    and (f.get("recipe") or "").strip() == recipe_name
-                    and (f.get("format") or "").strip() == fmt]
+                    if _sku_key((f.get("brand") or "").strip(),
+                                (f.get("recipe") or "").strip(),
+                                f.get("format") or "") == sku_key]
         if lot_key is not None:
             lot_entries = [f for f in same_sku if (f.get("lot") or "") == lot_key]
             matching = [f for f in lot_entries if int(f.get("quantity_remaining") or 0) > 0]
@@ -3348,6 +3353,12 @@ def _apply_fg_audit(audit):
                 f["last_adjusted_at"]   = now_iso
                 to_remove -= take
         else:
+            # Write a surplus row in the stored spelling of the SKU, so every
+            # reader that groups on raw strings still sees one product.
+            if same_sku:
+                brand = (same_sku[0].get("brand") or "").strip()
+                recipe_name = (same_sku[0].get("recipe") or "").strip()
+                fmt = (same_sku[0].get("format") or "").strip()
             recipe_meta = recipes.get(recipe_name, {}) or {}
             new_id = ("fg_baseline_" + datetime.now().strftime("%Y%m%d%H%M%S")
                       + "_" + str(len(new_rows)))
