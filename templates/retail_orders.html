@@ -80,6 +80,37 @@
 
 .toast{position:fixed;bottom:20px;right:20px;background:var(--text);color:var(--white);padding:10px 16px;border-radius:8px;font-size:13px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;}
 .toast.show{opacity:1;}
+.od-totals{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px 16px;font-size:12px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);}
+
+/* Phone (2026-10-06): the eight-column table clipped Total, Payment and
+   Status off the right edge. Each order becomes a stacked card: number +
+   total, buyer + units, placed · ship to, then payment + status. */
+@media (max-width:760px){
+  .orders-table thead{display:none;}
+  .orders-table, .orders-table tbody{display:block;}
+  .orders-table .section-header, .orders-table .section-header td{display:block;}
+  .order-row{display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:"num num total" "buyer buyer units" "placed ship ship" "pay pay status";gap:3px 10px;align-items:baseline;padding:12px 14px;border-bottom:1px solid var(--border);}
+  .order-row td{padding:0;border:none;display:block;min-width:0;}
+  .order-row td:nth-child(1){grid-area:num;}
+  .order-row td:nth-child(2){grid-area:buyer;font-size:14px !important;font-weight:600;}
+  .order-row td:nth-child(3){grid-area:placed;font-size:12px;color:var(--text-light);}
+  .order-row td:nth-child(4){grid-area:ship;font-size:12px;color:var(--text-light);}
+  .order-row td:nth-child(4) br{display:none;}
+  .order-row td:nth-child(4) span::before{content:' · ';}
+  .order-row td:nth-child(5){grid-area:units;font-size:12px;color:var(--text-light);text-align:right;}
+  .order-row td:nth-child(6){grid-area:total;font-weight:700;text-align:right;}
+  .order-row td:nth-child(7){grid-area:pay;margin-top:4px;}
+  .order-row td:nth-child(7) .payment-stack{flex-direction:row;align-items:center;gap:6px;}
+  .order-row td:nth-child(8){grid-area:status;margin-top:4px;text-align:right;}
+  .order-row td:nth-child(8) br{display:none;}
+  .order-row td:nth-child(8) span + span{margin-left:6px;}
+  .order-detail.open{display:block;border-bottom:1px solid var(--border);}
+  .order-detail td{display:block;padding:0 8px 10px !important;}
+  .order-detail-inner{padding:12px;}
+  .items-list li{gap:10px;}
+  .items-list li > span:last-child{white-space:nowrap;text-align:right;}
+  .action-row > *{flex:1 1 auto;text-align:center;}
+}
 </style>
 </head>
 <body>
@@ -165,7 +196,7 @@
             <li><span>{{ item.name }} <span style="color:var(--text-light);">({{ item.format }})</span></span><span>{{ item.qty }} × ${{ "%.2f"|format(item.unit_price) }} · ${{ "%.2f"|format(item.line_total) }}</span></li>
           {% endfor %}
           </ul>
-          <div style="display:flex;justify-content:flex-end;gap:16px;font-size:12px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+          <div class="od-totals">
             <span>Subtotal: <strong>${{ "%.2f"|format(o.subtotal) }}</strong></span>
             <span>Delivery: <strong>${{ "%.2f"|format(o.delivery_fee or 0) }}</strong></span>
             <span>Total: <strong>${{ "%.2f"|format(o.total) }}</strong></span>

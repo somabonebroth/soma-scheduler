@@ -93,6 +93,43 @@
 .export-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;}
 .export-label{font-size:10px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:.05em;}
 .export-bar input[type=date]{padding:5px 7px;border:1px solid var(--grey-border);border-radius:6px;font-size:12px;}
+.od-totals{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px 16px;font-size:12px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);}
+
+/* Phone (2026-10-06): the six-column table clipped Total and Status off the
+   right edge. Each order becomes a stacked card: number + total, then date ·
+   delivery · cases, then status. Same cells, laid out by grid area. */
+@media (max-width:700px){
+  .orders-table thead{display:none;}
+  .orders-table, .orders-table tbody{display:block;}
+  .orders-table .section-header, .orders-table .section-header td{display:block;}
+  .fee-row{display:grid;grid-template-columns:1fr auto;grid-template-areas:"period amount" "desc desc" "status action";gap:3px 10px;align-items:center;padding:12px 14px;}
+  .fee-row td{padding:0;border:none;display:block;}
+  .fee-row td:nth-child(1){grid-area:period;}
+  .fee-row td:nth-child(2){grid-area:desc;font-size:12px;}
+  .fee-row td:nth-child(3){grid-area:amount;font-weight:700;text-align:right;}
+  .fee-row td:nth-child(4){grid-area:status;}
+  .fee-row td:nth-child(5){display:none;}
+  .fee-row td:nth-child(6){grid-area:action;}
+  .order-row{display:grid;grid-template-columns:auto auto 1fr auto;grid-template-areas:"num num num total" "date deliv cases cases" "status status status status";gap:3px 8px;align-items:baseline;padding:12px 14px;border-bottom:1px solid var(--border);}
+  .order-row td{padding:0;border:none;display:block;min-width:0;}
+  .order-row td:nth-child(1){grid-area:num;}
+  .order-row td:nth-child(2){grid-area:date;font-size:12px;color:var(--text-light);}
+  .order-row td:nth-child(3){grid-area:deliv;font-size:12px !important;color:var(--text-light);}
+  .order-row td:nth-child(4){grid-area:cases;font-size:12px;color:var(--text-light);}
+  .order-row td:nth-child(4)::after{content:' cases';}
+  .order-row[data-retail="1"] td:nth-child(4)::after{content:'';}
+  .order-row td:nth-child(5){grid-area:total;font-weight:700;text-align:right;}
+  .order-row td:nth-child(6){grid-area:status;margin-top:4px;}
+  .order-row td:nth-child(6) br{display:none;}
+  .order-row td:nth-child(6) .pay-note{margin-left:6px;}
+  .order-detail.open{display:block;border-bottom:1px solid var(--border);}
+  .order-detail td{display:block;padding:0 8px 10px !important;}
+  .order-detail-inner{padding:12px;}
+  .items-list li{gap:10px;}
+  .items-list li > span:last-child{white-space:nowrap;text-align:right;}
+  .action-row > *{flex:1 1 auto;text-align:center;}
+  .export-wrap{margin-left:0;width:100%;}
+}
 </style>
 </head>
 <body>
@@ -140,7 +177,7 @@
     {% set ps = o.payment_status or '' %}
     {% set owed = o.status != 'declined' and ps != 'paid' %}
     {% set needs = o.status == 'pending' or o.status == 'approved' %}
-    <tr class="order-row" data-id="{{ o.id }}" data-status="{{ o.status }}" data-action="{{ '1' if needs else '0' }}" onclick="toggleDetail('{{ o.id }}')">
+    <tr class="order-row" data-id="{{ o.id }}" data-status="{{ o.status }}" data-action="{{ '1' if needs else '0' }}" data-retail="{{ '1' if o.order_mode == 'retail' else '0' }}" onclick="toggleDetail('{{ o.id }}')">
       <td>
         <strong title="{{ o.id }}">{{ o.order_number or o.id }}</strong>
         {% if o.order_mode == 'retail' %}<br><span class="tag" style="background:#fdf0e6;color:#8a4a1a;font-size:10px;padding:1px 7px;margin-top:3px;">Retail</span>{% endif %}
@@ -180,7 +217,7 @@
             <li><span>{{ item.name }} <span style="color:var(--text-light);">· {{ item.format }}</span></span><span>{{ item.cases }} cases · ${{ "%.2f"|format(item.line_total) }}</span></li>
           {% endfor %}
           </ul>
-          <div style="display:flex;justify-content:flex-end;gap:16px;font-size:12px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+          <div class="od-totals">
             <span>Subtotal: <strong>${{ "%.2f"|format(o.subtotal) }}</strong></span>
             {% if o.surcharge %}<span>Surcharge: <strong>${{ "%.2f"|format(o.surcharge) }}</strong></span>{% endif %}
             {% if o.small_order_fee %}<span style="color:#a66b1e;">Small order fee: <strong>${{ "%.2f"|format(o.small_order_fee) }}</strong></span>{% endif %}
@@ -223,7 +260,7 @@
         </td>
       </tr>
       {% for f in service_fees %}
-      <tr>
+      <tr class="fee-row">
         <td style="font-weight:600;">{{ f.period_label }}</td>
         <td style="color:var(--text-light);">{{ f.description }}</td>
         <td style="font-variant-numeric:tabular-nums;">${{ "%.2f"|format(f.amount) }}</td>

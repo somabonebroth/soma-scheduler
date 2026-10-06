@@ -202,6 +202,10 @@ body {
 @media (max-width: 600px) {
     .header-text:not(.keep-sub) p { display: none; }
     .header-text h1 { line-height: 1.2; }
+    /* A page with several header buttons wraps them under the title instead
+       of pushing them off the right edge (2026-10-06). */
+    .header { flex-wrap: wrap; padding: 10px 12px; }
+    .header-right { flex-wrap: wrap; justify-content: flex-end; }
 }
 
 /* ── Quantity stepper: number input flanked by −/+ buttons ──────────────── */
