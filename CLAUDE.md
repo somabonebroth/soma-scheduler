@@ -524,6 +524,19 @@ job or an explicit decline; (5) a done card. `GET /api/end-of-day` returns the w
 in one read and reports what is already done, so a re-opened flow RESUMES rather than
 asking twice.
 
+**Cleaning & Maintenance left End of Day (2026-10-06, Jeremy).** The rotating jobs are done by
+DIFFERENT staff on their own schedule, so End of Day is now production → note → closing → done
+(no step 4; `/api/end-of-day` no longer returns `jobs`/`job_done`/`declined`). `/cleaning` is the
+Cleaning & Maintenance page — the rotating jobs only (the closing card moved out; the file had
+also been truncated mid-script and loaded nothing since the 2026-08-19 editor move) — behind its
+own full-width button under End of Day on the production dashboard. The Daily Summary gives it
+its own section 4 (`daily_brief._maintenance_section`: job, who signed + time, the job's note;
+the overdue count); job notes are no longer copied into the top notes, and section 3 is
+"Completed checklists". A maintenance job does NOT make `_kitchen_ran` true (so no
+missing-closing flag on a maintenance-only day) but does set `needs_review`. Nothing calls
+`/api/cleaning/rotation/decline` any more; old declines stay in the file, unread. Tests:
+`tests.test_cleaning_maintenance`.
+
 **Step 1 IS the checklist sign-off — the tablet no longer files the day.** The Sign &
 Complete button and the `signoff-kitchen` field are gone from `daily_production.html`; the
 tablet only captures numbers and ticks as they happen (still autosaving). Filing moved to

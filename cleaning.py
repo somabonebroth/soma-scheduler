@@ -1,4 +1,4 @@
-"""cleaning.py — Cleaning & Upkeep: the daily closing gate + the rotating job pool.
+"""cleaning.py — the daily closing gate + the rotating Cleaning & Maintenance jobs.
 
 Self-contained blueprint (suppliers.py pattern): owns its data file and
 helpers, defines a local login_required, pulls IO from helpers.py.
@@ -193,10 +193,12 @@ def _job_view(job):
 @cleaning_bp.route("/cleaning")
 @login_required
 def cleaning_page():
-    """Cleaning & Upkeep: tonight's closing gate + the rotating job pool.
+    """Cleaning & Maintenance: the rotating job pool, on its own.
 
-    Doing-the-work only. Both list editors moved to /cleaning-records
-    (manager-only) on 2026-08-19, so this template no longer branches on role.
+    Its own dashboard button since 2026-10-06 (Jeremy): different staff work
+    through it on their own schedule, so it left the kitchen's End of Day.
+    The closing checklist is signed only in End of Day. Doing-the-work only —
+    the editors are on /cleaning-records (manager-only).
     """
     return render_template("cleaning.html")
 
@@ -389,8 +391,9 @@ def day_summary(on):
         }
 
     jobs_done = [{"title": c.get("job_title", ""), "staff": c.get("staff", ""),
-                  "notes": c.get("notes", "")}
-                 for c in data["completions"] if c.get("date") == iso]
+                  "notes": c.get("notes", ""), "ts": c.get("ts", "")}
+                 for c in sorted(data["completions"], key=lambda c: c.get("ts", ""))
+                 if c.get("date") == iso]
 
     declined = next((d for d in data["declines"] if d.get("date") == iso), None)
 

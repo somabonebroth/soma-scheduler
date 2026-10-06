@@ -71,20 +71,6 @@ body { background: var(--bg); }
 .eod-btn:disabled { background: var(--grey-light); cursor: default; }
 .linkish { background: none; border: none; color: var(--text-light); font-size: 13px; text-decoration: underline; cursor: pointer; font-family: inherit; padding: 10px; display: block; margin: 8px auto 0; }
 
-.slot-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: var(--dark); margin: 20px 0 8px; display: flex; align-items: center; gap: 9px; }
-.slot-head:first-child { margin-top: 4px; }
-.slot-head .rule { flex: 1; height: 1px; background: var(--border); }
-.slot-pill { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 9px; border: 1px solid; }
-.slot-weekly { color: var(--info-dark); border-color: var(--info-border); background: var(--action-blue-bg); }
-.slot-monthly { color: var(--action-green); border-color: var(--green-light); background: var(--action-green-bg); }
-.slot-quarterly { color: var(--amber-text-dark); border-color: var(--amber-border); background: var(--amber-bg); }
-.slot-semiannual { color: var(--indigo); border-color: var(--indigo); background: var(--bg); }
-.job-pick { width: 100%; text-align: left; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--r-md); padding: 14px; margin-bottom: 8px; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 12px; }
-.job-pick:hover { border-color: var(--accent); }
-.job-pick .jt { font-size: 15px; font-weight: 600; color: var(--dark); }
-.job-pick .jm { font-size: 11.5px; color: var(--text-light); margin-top: 3px; }
-.job-pick .chev { margin-left: auto; color: var(--text-light); font-size: 18px; }
-.overdue-dot { color: var(--orange); font-weight: 700; }
 
 .done-mark { text-align: center; padding: 30px 10px; }
 .done-mark .ring { width: 82px; height: 82px; border-radius: 50%; background: var(--action-green-bg); border: 3px solid var(--action-green); color: var(--action-green); font-size: 42px; line-height: 76px; margin: 0 auto 18px; animation: pop .35s ease-out; }
@@ -117,18 +103,12 @@ body { background: var(--bg); }
 const TODAY = new Date();
 const ISO = TODAY.getFullYear() + '-' + String(TODAY.getMonth() + 1).padStart(2, '0')
           + '-' + String(TODAY.getDate()).padStart(2, '0');
-const SLOTS = [
-    { key: 'weekly', label: 'Weekly', cls: 'slot-weekly' },
-    { key: 'monthly', label: 'Monthly', cls: 'slot-monthly' },
-    { key: 'quarterly', label: 'Quarterly', cls: 'slot-quarterly' },
-    { key: 'semiannual', label: 'Semi-annual', cls: 'slot-semiannual' }
-];
 
 let payload = null;
 let steps = [];
 let at = 0;
 const state = { staff: '', checks: {}, closing: {}, note: '', busy: false,
-                recap: [], pickedJob: null, warnings: [] };
+                recap: [], warnings: [] };
 
 function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -156,17 +136,12 @@ async function boot() {
         });
     }
     steps.push({ kind: 'closing-sign' });
-    steps.push({ kind: 'rotation' });
     steps.push({ kind: 'done' });
 
     // Resume where the shift left off rather than asking twice.
     at = 0;
     if (payload.production.completed && steps[0].kind === 'production') at = 1;
-    if (payload.closing_signed) {
-        const r = steps.findIndex(s => s.kind === 'rotation');
-        if (at < r && payload.note_saved) at = r;
-    }
-    if (payload.declined || (payload.job_done || []).length) {
+    if (payload.closing_signed && payload.note_saved) {
         at = steps.findIndex(s => s.kind === 'done');
     }
     render();
@@ -181,7 +156,6 @@ function render() {
     else if (step.kind === 'note') html = viewNote();
     else if (step.kind === 'item') html = viewItem(step);
     else if (step.kind === 'closing-sign') html = viewClosingSign();
-    else if (step.kind === 'rotation') html = viewRotation();
     else html = viewDone();
     host.innerHTML = '<div class="step enter">' + html + '</div>';
     window.scrollTo(0, 0);
@@ -192,7 +166,7 @@ function render() {
 function drawTrail() {
     // One segment per stage of the flow, not per checklist item — ten closing
     // items shouldn't make the bar look like ten separate jobs.
-    const stages = ['production', 'note', 'closing', 'rotation', 'done'];
+    const stages = ['production', 'note', 'closing', 'done'];
     const cur = steps[at].kind;
     const curStage = (cur === 'item' || cur === 'closing-sign') ? 'closing' : cur;
     const idx = stages.indexOf(curStage);
@@ -204,7 +178,7 @@ function drawTrail() {
 function kicker(stage, name) {
     // Numbering has to follow the steps actually in play — production is
     // skipped entirely on a day the kitchen didn't run.
-    const stages = (payload.production.ran ? ['production'] : []).concat(['note', 'closing', 'rotation']);
+    const stages = (payload.production.ran ? ['production'] : []).concat(['note', 'closing']);
     const n = stages.indexOf(stage) + 1;
     return '<div class="step-kicker">Step ' + n + ' of ' + stages.length + ' &middot; ' + name + '</div>';
 }
@@ -385,93 +359,7 @@ async function signClosing() {
     }
 }
 
-/* ── 4. One rotating job ────────────────────────────────────────────────── */
-function viewRotation() {
-    if (state.pickedJob) return viewJobSign();
-    const jobs = payload.jobs || [];
-    if (!jobs.length) {
-        return kicker('rotation', 'Rotating job')
-             + '<h2>Nothing in the rotation tonight</h2>'
-             + '<p class="lead">Every rotating job is resting. Nothing to pick.</p>'
-             + '<div class="actions"><button class="eod-btn primary grow" onclick="advance()">Continue &rarr;</button></div>';
-    }
-    let body = '';
-    SLOTS.forEach(slot => {
-        const mine = jobs.filter(j => j.slot === slot.key);
-        if (!mine.length) return;
-        body += '<div class="slot-head"><span class="slot-pill ' + slot.cls + '">' + slot.label + '</span><span class="rule"></span></div>';
-        body += mine.map(j =>
-            '<button class="job-pick" onclick="pickJob(\'' + j.id + '\')">'
-            + '<div><div class="jt">' + esc(j.title) + '</div><div class="jm">'
-            + (j.last_done ? 'Last done ' + j.days_since + ' days ago' : 'Never done')
-            + (j.due_ratio >= 1 && j.last_done ? ' <span class="overdue-dot">&bull; overdue</span>' : '')
-            + (j.notes ? ' &middot; ' + esc(j.notes) : '')
-            + '</div></div><span class="chev">&rsaquo;</span></button>').join('');
-    });
-    return kicker('rotation', 'Rotating job')
-         + '<h2>Pick a rotating job</h2>'
-         + '<p class="lead">If there&rsquo;s time left, take one from the list &mdash; roughly an hour each. No time tonight is fine.</p>'
-         + body
-         + '<div class="actions"><button class="eod-btn ghost grow" id="decline-btn" onclick="declineJob()">No time tonight</button></div>';
-}
-
-function pickJob(id) {
-    state.pickedJob = (payload.jobs || []).find(j => j.id === id) || null;
-    render();
-}
-
-function viewJobSign() {
-    const j = state.pickedJob;
-    return kicker('rotation', 'Rotating job')
-         + '<h2>' + esc(j.title) + '</h2>'
-         + (j.notes ? '<p class="lead">' + esc(j.notes) + '</p>' : '<p class="lead">Done? Put your name on it and it rotates to the back of the line.</p>')
-         + '<div class="sign-field"><label>Sign &mdash; your name</label>'
-         + '<input type="text" id="job-staff" data-autofocus autocomplete="off" placeholder="e.g. Sam" value="' + esc(state.staff) + '"></div>'
-         + '<div class="sign-field"><label>Note (optional)</label>'
-         + '<input type="text" id="job-note" autocomplete="off" placeholder="Anything worth mentioning"></div>'
-         + '<div class="err" id="job-err"></div>'
-         + '<div class="actions"><button class="eod-btn go grow" id="job-btn" onclick="signJob()">&#10003; Done</button></div>'
-         + '<button class="linkish" onclick="state.pickedJob=null;render();">&larr; Pick a different job</button>';
-}
-
-async function signJob() {
-    const j = state.pickedJob;
-    const input = document.getElementById('job-staff');
-    const err = document.getElementById('job-err');
-    const btn = document.getElementById('job-btn');
-    const name = (input.value || '').trim();
-    if (!name) { err.textContent = 'Enter your name to sign.'; input.focus(); return; }
-    state.staff = name;
-    btn.disabled = true; btn.textContent = 'Saving…';
-    try {
-        const res = await fetch('/api/cleaning/jobs/' + j.id + '/complete', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ staff: name, date: ISO, notes: document.getElementById('job-note').value })
-        });
-        const out = await res.json();
-        if (!res.ok || out.error) throw new Error(out.error || 'Could not save');
-        state.recap.push('Rotating job done: ' + j.title);
-        advance();
-    } catch (e) {
-        err.textContent = e.message;
-        btn.disabled = false; btn.innerHTML = '&#10003; Done';
-    }
-}
-
-async function declineJob() {
-    const btn = document.getElementById('decline-btn');
-    btn.disabled = true;
-    try {
-        await fetch('/api/cleaning/rotation/decline', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ staff: state.staff, date: ISO })
-        });
-    } catch (e) { /* a declined job is a note, never a blocker */ }
-    state.recap.push('Rotating job declined');
-    advance();
-}
-
-/* ── 5. Done ────────────────────────────────────────────────────────────── */
+/* ── 4. Done ────────────────────────────────────────────────────────────── */
 function viewDone() {
     const lines = state.recap.length
         ? state.recap.map(r => '<div><span class="k">&#10003;</span>' + esc(r) + '</div>').join('')

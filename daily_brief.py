@@ -180,16 +180,17 @@ def _missing_delivery_issues(exceptions, on):
 
 
 def _kitchen_ran(prod, clean):
-    """Did the kitchen run that day? Completed production, or any cleaning
-    sign-off (closing or a rotation job).
+    """Did the kitchen run that day? Completed production, or a closing
+    sign-off. (Cleaning & Maintenance jobs do NOT count since 2026-10-06 —
+    other staff do them, possibly on a day the kitchen is shut, and they must
+    not raise a missing-closing flag. They make a day reviewable on their own
+    in _build_brief.)
 
     This is what makes a day REVIEWABLE. A quiet day needs no HOO review and
     raises no missing-closing flag — the system can't tell a quiet day from a
     forgotten one, and flagging every weekend would bury the real flags.
     """
     if prod.get("completed"):
-        return True
-    if clean.get("jobs_done"):
         return True
     return bool((clean.get("closing") or {}).get("signed"))
 
@@ -590,7 +591,7 @@ def _channel_day(channel, on):
 
 
 def _checklists_section(on, prod):
-    """SECTION 3 — the day's checklists: CCP, closing gate, and the rotation."""
+    """SECTION 3 — the day's checklists: CCP and the closing gates."""
     try:
         clean = cleaning.day_summary(on)
     except Exception:
@@ -620,13 +621,6 @@ def _checklists_section(on, prod):
         notes.append({"source": "Closing", "text": closing["notes"]})
     if foh_closing.get("notes"):
         notes.append({"source": "FOH closing", "text": foh_closing["notes"]})
-    for j in clean.get("jobs_done", []):
-        if j.get("notes"):
-            notes.append({"source": j.get("title", "Cleaning job"), "text": j["notes"]})
-    if clean.get("declined") and not clean.get("jobs_done"):
-        # A plain note, never an issue — skipping the rotation carries no
-        # penalty (cleaning.py), management just gets to see how often it happens.
-        notes.append({"source": "Rotation", "text": "Rotating job declined"})
 
     kitchen_ran = _kitchen_ran(prod, clean)
     if not closing.get("signed"):
@@ -662,9 +656,6 @@ def _checklists_section(on, prod):
         },
         "closing": closing,
         "foh_closing": {**foh_closing, "exists": foh.get("exists", False)},
-        "rotation": {"jobs_done": clean.get("jobs_done", []),
-                     "overdue": clean.get("jobs_overdue", 0),
-                     "declined": clean.get("declined", False)},
         "notes": notes,
         "issues": issues,
         "_kitchen_ran": kitchen_ran,
@@ -672,11 +663,27 @@ def _checklists_section(on, prod):
     }
 
 
+def _maintenance_section(on):
+    """SECTION 4 — Cleaning & Maintenance: the rotating jobs signed that day,
+    who signed each, and the note left on it. Its own section since
+    2026-10-06 (Jeremy) — different staff do these jobs, apart from the
+    kitchen's End of Day. Each job's note is shown on the job here, not
+    gathered into the notes at the top. No issues: skipping is fine."""
+    try:
+        clean = cleaning.day_summary(on)
+    except Exception:
+        logger.warning("daily brief: maintenance summary failed", exc_info=True)
+        clean = {}
+    return {"jobs_done": clean.get("jobs_done", []),
+            "overdue": clean.get("jobs_overdue", 0)}
+
+
 def _build_brief(on):
     """Assemble the three sections plus the flat action list they imply."""
     prod = _production_section(on)
     txn = _transactions_section(on)
     checks = _checklists_section(on, prod)
+    maint = _maintenance_section(on)
 
     # Flat list drives the dashboard button, the badge and the sign-off
     # snapshot. Ordered by consequence: food safety, then traceability, then
@@ -713,6 +720,7 @@ def _build_brief(on):
         "production": prod,
         "transactions": txn,
         "checklists": checks,
+        "maintenance": maint,
         "notes": notes,
         "handover_note": handover,
         "foh_handover_note": foh_handover,
@@ -720,10 +728,13 @@ def _build_brief(on):
         "actions": actions,
         "all_clear": not actions,
         "signoff": signoffs.get(on.isoformat()),
-        # Reviewable when the kitchen ran OR front of house left a record —
+        # Reviewable when the kitchen ran, front of house left a record, or a
+        # maintenance job was signed —
         # an FOH Saturday note must still reach the Monday review (2026-08-26,
         # Jeremy's call).
-        "needs_review": checks["_kitchen_ran"] or checks["_foh_ran"],
+        # Cleaning & Maintenance work counts too, so its notes reach a review.
+        "needs_review": (checks["_kitchen_ran"] or checks["_foh_ran"]
+                         or bool(maint["jobs_done"])),
     }
 
 

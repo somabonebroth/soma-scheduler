@@ -15,11 +15,10 @@
 <link rel="apple-touch-icon" sizes="192x192" href="/static/logo-192.png">
 <link rel="apple-touch-icon" sizes="512x512" href="/static/logo-512.png">
 <!-- /PWA tags -->
-<title>Soma - Cleaning &amp; Upkeep</title>
+<title>Soma - Cleaning &amp; Maintenance</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
 /* Page layout only — colours/components come from the shared sheet */
-.intro { font-size: 13px; color: var(--text-light); margin: 4px 0 18px; line-height: 1.5; }
 .section-label { font-size: 11px; font-weight: 700; color: var(--dark); text-transform: uppercase; letter-spacing: 1px; margin: 22px 0 8px; border-left: 3px solid var(--accent); padding-left: 8px; }
 .job-list { display: flex; flex-direction: column; gap: 8px; }
 .job-row { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; }
@@ -36,42 +35,16 @@
 .slot-head:first-child { margin-top: 2px; }
 .slot-rule { flex: 1; height: 1px; background: var(--border); }
 .slot-count { font-size: 11px; color: var(--text-light); }
-.ci-ord { font-size: 11px; font-weight: 700; color: var(--text-light); width: 18px; text-align: right; flex: none; }
-.ci-move { background: var(--bg); border: 1px solid var(--border); color: var(--text-light); border-radius: var(--r-sm); padding: 4px 8px; cursor: pointer; font-size: 11px; }
-.ci-move:disabled { opacity: .35; cursor: default; }
 .due-badge { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 8px; background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark, var(--amber-text)); white-space: nowrap; }
 .job-notes { font-size: 12px; color: var(--text-light); margin-top: 3px; font-style: italic; }
 .done-btn { flex-shrink: 0; background: var(--action-green); color: var(--white); border: none; border-radius: 8px; padding: 10px 16px; font-size: 13px; font-weight: 700; cursor: pointer; }
 .done-btn:hover { opacity: 0.9; }
 .empty-state { text-align: center; padding: 40px 16px; color: var(--text-light); font-size: 14px; background: var(--card-bg); border: 1px dashed var(--border); border-radius: 10px; }
-/* Closing gate — visually distinct from the skip-freely rotation */
-.closing-card { background: var(--card-bg); border: 1px solid var(--border); border-left: 3px solid var(--action-green); border-radius: 10px; padding: 14px 16px; }
-.closing-status { font-size: 11.5px; color: var(--text-light); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.closing-pill { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 8px; background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark, var(--amber-text)); }
-.closing-pill.done { background: var(--action-green-bg); border-color: var(--action-green); color: var(--action-green); }
-.closing-item { display: flex; align-items: flex-start; gap: 10px; padding: 9px 2px; border-bottom: 1px solid var(--border); font-size: 13.5px; cursor: pointer; }
-.closing-item:last-of-type { border-bottom: none; }
-.closing-item input { width: 20px; height: 20px; flex-shrink: 0; margin-top: 1px; accent-color: var(--action-green); }
-.closing-item.ticked span { color: var(--text-light); text-decoration: line-through; }
-.closing-sign { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
-.closing-sign input { flex: 1; min-width: 120px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; background: var(--white); }
-.closing-err { font-size: 12.5px; color: var(--action-red); margin-top: 8px; display: none; }
-.ci-edit-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
-.ci-edit-row input { flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; }
-.ci-edit-row button { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 12px; cursor: pointer; color: var(--text-light); }
-.ci-edit-row button:hover { border-color: var(--action-red); color: var(--action-red); }
 /* Recent sign-offs */
 .comp-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; background: var(--card-bg); }
 .comp-list { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
 .comp-row:last-child { border-bottom: none; }
 .comp-when { color: var(--text-light); font-size: 11.5px; white-space: nowrap; }
-.comp-undo { margin-left: auto; background: none; border: 1px solid var(--border); color: var(--text-light); border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
-.comp-undo:hover { border-color: var(--action-red); color: var(--action-red); }
-/* Manage section */
-.manage-job-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
-.manage-job-row:last-child { border-bottom: none; }
-.manage-actions button { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px; font-size: 11px; cursor: pointer; color: var(--text); margin-left: 4px; }
-.manage-actions .del:hover { border-color: var(--action-red); color: var(--action-red); }
 /* Modal */
 .cl-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; align-items: center; justify-content: center; }
 .cl-modal-overlay.open { display: flex; }
@@ -91,19 +64,14 @@
 <body>
 <div class="header">
     <img src="/static/logo.jpg" alt="Soma" onclick="window.location='/'">
-    <div class="header-text"><h1>Cleaning &amp; Upkeep</h1><p>Soma Bone Broth</p></div>
+    <div class="header-text"><h1>Cleaning &amp; Maintenance</h1><p>Soma Bone Broth</p></div>
     <div class="header-right"><button class="header-btn" onclick="window.location='/'">&#8962; Dashboard</button></div>
 </div>
 <div class="main">
-    <div class="section-label">Tonight&rsquo;s closing &mdash; all required</div>
-    <div class="closing-card" id="closing-card">Loading&hellip;</div>
-
-    <div class="section-label" style="margin-top:26px;">Rotating jobs &mdash; pick one if you have time</div>
-    <p class="intro">Extra time at the end of a shift? Grab a job from the top of the list, do it, and sign off with your name — it leaves the list and comes back a week, a month, 3 or 6 months later. Busy day? Skip it, no worries — it just stays in line.</p>
-
+    <div class="section-label">Up next</div>
     <div class="job-list" id="upnext-list"></div>
 
-    <div class="section-label" id="rest-label" style="display:none;">Recently done — back in line later</div>
+    <div class="section-label" id="rest-label" style="display:none;">Done &mdash; back in line later</div>
     <div class="job-list" id="rest-list"></div>
 
     <div class="section-label">Recent sign-offs</div>
@@ -133,12 +101,10 @@
   </div>
 </div>
 
-<!-- Add/Edit job modal -->
 <script>
 // New JS — let/const per the forward-only policy.
 let jobs = [];
 let signoffJobId = null;
-let editJobId = null;
 
 function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -203,73 +169,6 @@ function jobRowHtml(j){
         + '</div>';
 }
 
-// ── Closing gate ─────────────────────────────────────────────────────────
-let closingItems = [];
-let closingRec = null;
-const ticked = {};
-
-async function loadClosing(){
-    const res = await fetch('/api/cleaning/closing');
-    closingRec = await res.json();
-    closingItems = closingRec.items || [];
-    closingItems.forEach(i => { ticked[i.id] = !!i.done; });
-    renderClosing();
-}
-
-function renderClosing(){
-    const card = document.getElementById('closing-card');
-    if (!closingItems.length) {
-        card.innerHTML = '<div class="empty-state" style="border:none;padding:16px;">No closing items set up yet.</div>';
-        return;
-    }
-    const doneCount = closingItems.filter(i => ticked[i.id]).length;
-    const all = doneCount === closingItems.length;
-    let status = '<span class="closing-pill' + (all ? ' done' : '') + '">'
-        + (all ? 'All done' : doneCount + ' of ' + closingItems.length) + '</span>';
-    if (closingRec.staff) {
-        status += '<span>Signed by ' + esc(closingRec.staff)
-            + (closingRec.ts ? ' at ' + esc(closingRec.ts.slice(11, 16)) : '') + '</span>';
-    } else {
-        status += '<span>Not signed off yet</span>';
-    }
-    const rows = closingItems.map(i =>
-        '<label class="closing-item' + (ticked[i.id] ? ' ticked' : '') + '">'
-        + '<input type="checkbox" ' + (ticked[i.id] ? 'checked' : '')
-        + ' onchange="toggleClosing(\'' + i.id + '\', this.checked)">'
-        + '<span>' + esc(i.label) + '</span></label>').join('');
-    card.innerHTML = '<div class="closing-status">' + status + '</div>' + rows
-        + '<div class="closing-sign">'
-        + '<input type="text" id="closing-staff" placeholder="Your name" autocomplete="off" value="'
-        + esc(closingRec.staff || '') + '">'
-        + '<input type="text" id="closing-notes" placeholder="Anything worth mentioning (optional)" autocomplete="off" value="'
-        + esc(closingRec.notes || '') + '">'
-        + '<button class="done-btn" onclick="signClosing()">&#10003; '
-        + (closingRec.staff ? 'Update' : 'Sign off closing') + '</button></div>'
-        + '<div class="closing-err" id="closing-err"></div>';
-}
-
-function toggleClosing(id, on){
-    ticked[id] = on;
-    renderClosing();
-}
-
-async function signClosing(){
-    const staff = document.getElementById('closing-staff').value.trim();
-    const err = document.getElementById('closing-err');
-    if (!staff) { err.textContent = 'Put your name on it first.'; err.style.display = 'block'; return; }
-    const res = await fetch('/api/cleaning/closing', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({staff: staff, notes: document.getElementById('closing-notes').value.trim(), done: ticked}),
-    });
-    if (!res.ok) {
-        const d = await res.json().catch(() => ({error: 'Save failed'}));
-        err.textContent = d.error || 'Save failed'; err.style.display = 'block';
-        return;
-    }
-    await loadClosing();
-}
-
-// Manager-only: edit what's on the list. Ids are preserved so history lines up.
 async function loadJobs(){
     const res = await fetch('/api/cleaning/jobs');
     jobs = await res.json();
@@ -305,7 +204,6 @@ async function loadCompletions(){
         + (c.notes ? '<div style="font-size:11.5px;color:var(--text-light);font-style:italic;">' + esc(c.notes) + '</div>' : '')
         + '</div>'
         + '<span class="comp-when" style="margin-left:auto;">' + esc(c.date) + '</span>'
-        + '<button class="comp-undo" title="Undo this sign-off" onclick="undoCompletion(\'' + c.id + '\')">undo</button>'
         + '</div>'
     ).join('') + '</div>';
 }
@@ -348,10 +246,7 @@ async function submitSignoff(){
     }
 }
 
-async function undoCompletion(cid){
-    if (!confirm('Undo this sign-off? The job moves back up the line.')) return;
-    await fetch('/api/cleaning/completions/' + cid, {method: 'DELETE'});
-    await Promise.all([loadJobs(), loadCompletions()]);
-}
-
-// ── Manage jobs ──
+document.addEventListener('DOMContentLoaded', () => { loadJobs(); loadCompletions(); });
+</script>
+</body>
+</html>

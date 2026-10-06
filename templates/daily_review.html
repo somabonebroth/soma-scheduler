@@ -356,27 +356,34 @@ function checklistsHtml(c){
         }
     }
 
-    body += '<div class="dr-sublabel">Cleaning &amp; upkeep rotation</div>';
-    const jobs = (c.rotation && c.rotation.jobs_done) || [];
-    if (!jobs.length) {
-        body += '<div class="dr-empty">' + (c.rotation && c.rotation.declined
-            ? 'Rotating job declined — no time on the day.'
-            : 'No rotating job done this day.') + '</div>';
-    } else {
-        body += '<div class="dr-scroll"><table class="dr-table"><tr><th>Job</th><th>By</th></tr>'
-            + jobs.map(j => '<tr><td>' + esc(j.title) + '</td><td>' + esc(j.staff) + '</td></tr>').join('')
-            + '</table></div>';
-    }
-    if (c.rotation && c.rotation.overdue) {
-        body += '<div class="dr-totals"><span><b>' + c.rotation.overdue + '</b> rotating job'
-            + (c.rotation.overdue === 1 ? '' : 's') + ' currently overdue</span></div>';
-    }
-
     body += issuesHtml(c.issues);
     // FOH joins the count only on days it left a record.
     const done = (c.ccp.completed ? 1 : 0) + (cl.signed ? 1 : 0) + (fcl.exists && fcl.signed ? 1 : 0);
     const of = 2 + (fcl.exists ? 1 : 0);
-    return section(3, 'Completed checklists and cleaning', done + ' of ' + of + ' signed', body, 'amber');
+    return section(3, 'Completed checklists', done + ' of ' + of + ' signed', body, 'amber');
+}
+
+// Section 4 — Cleaning & Maintenance. Its own section (2026-10-06): other
+// staff do these jobs, apart from the kitchen's End of Day. Each job's note
+// sits on its row here rather than in the notes at the top.
+function maintenanceHtml(m){
+    m = m || {};
+    const jobs = m.jobs_done || [];
+    let body;
+    if (!jobs.length) {
+        body = '<div class="dr-empty">No jobs signed off this day.</div>';
+    } else {
+        body = '<div class="dr-scroll"><table class="dr-table"><tr><th>Job</th><th>Signed by</th><th>Note</th></tr>'
+            + jobs.map(j => '<tr><td>' + esc(j.title) + '</td><td>' + esc(j.staff)
+                + (j.ts ? ' <span style="color:var(--text-light);">' + esc(String(j.ts).slice(11, 16)) + '</span>' : '')
+                + '</td><td>' + (j.notes ? esc(j.notes) : '<span style="color:var(--text-light);">&mdash;</span>') + '</td></tr>').join('')
+            + '</table></div>';
+    }
+    if (m.overdue) {
+        body += '<div class="dr-totals"><span><b>' + m.overdue + '</b> job'
+            + (m.overdue === 1 ? '' : 's') + ' overdue now</span></div>';
+    }
+    return section(4, 'Cleaning and Maintenance', jobs.length + ' done', body, '');
 }
 
 // Print ahead: the next two labelling days, for when the office prints the
@@ -420,7 +427,7 @@ function aheadHtml(days){
     return html;
 }
 
-// Sections 2 and 3 start collapsed: the labelling panel is the morning's
+// Sections 2-4 start collapsed: the labelling panel is the morning's
 // action, the rest is there to open when something looks off.
 const OPEN_BY_DEFAULT = { 1: true };
 
@@ -481,6 +488,7 @@ async function load(){
         + productionHtml(b.production)
         + transactionsHtml(b.transactions)
         + checklistsHtml(b.checklists)
+        + maintenanceHtml(b.maintenance)
         + signHtml(b);
     loadCatchup();
     loadChannels();

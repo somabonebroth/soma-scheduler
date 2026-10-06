@@ -10,13 +10,16 @@ everything a shift owes before anyone leaves:
   2. A note for management, seen on tomorrow's Daily Review.
   3. The closing checklist, one item at a time, in the manager's order,
      signed and time-stamped.
-  4. One rotating job, or an explicit decline.
-  5. Done.
+  4. Done.
+
+The rotating cleaning jobs left this flow on 2026-10-06 (Jeremy): they are
+their own Cleaning & Maintenance page (/cleaning), done by different staff
+on their own schedule, and their own section on the Daily Summary.
 
 Pattern: routes-move / helpers-stay (buyers.py) — a bare `import app` at
 module top, `import production` / `import cleaning` for the two domains this
 joins. It owns NO data of its own: step 1 writes the production checklist via
-`production.file_checklist`, steps 2-4 write the cleaning file via cleaning's
+`production.file_checklist`, steps 2-3 write the cleaning file via cleaning's
 own endpoints. Nothing here is a new record type.
 """
 import logging
@@ -139,8 +142,8 @@ def end_of_day_page():
 @boh_required
 def get_end_of_day():
     """Everything the flow needs in one read: today's production and CCP state,
-    the note already left, the closing list in the manager's order with what is
-    already ticked, and the rotating pool grouped by slot.
+    the note already left, and the closing list in the manager's order with
+    what is already ticked.
 
     Also reports which steps are already done so a re-opened flow resumes
     instead of asking twice.
@@ -162,13 +165,6 @@ def get_end_of_day():
         rec or {"date": iso, "staff": "", "notes": "", "items": []},
         data["closing_items"])
 
-    jobs = [cleaning._job_view(j) for j in data["jobs"]]
-    jobs = [j for j in jobs if j["ready"]]
-    jobs.sort(key=lambda j: (-j["due_ratio"], 0 if j["last_done"] is None else 1))
-
-    done_today = [c for c in data["completions"] if c.get("date") == iso]
-    declined = any(d.get("date") == iso for d in data["declines"])
-
     return jsonify({
         "date": iso,
         "label": on.strftime("%A %d %B"),
@@ -177,10 +173,6 @@ def get_end_of_day():
         "note_saved": bool((rec or {}).get("manager_note_ts")),
         "closing": closing,
         "closing_signed": bool((rec or {}).get("staff")),
-        "jobs": jobs,
-        "job_done": [{"title": c.get("job_title", ""), "staff": c.get("staff", "")}
-                     for c in done_today],
-        "declined": declined,
         "staff": ((rec or {}).get("staff") or prod.get("signed_by") or ""),
     })
 
@@ -256,7 +248,7 @@ def get_foh_end_of_day():
 
     Also reports which steps are done so a re-opened flow resumes rather than
     asking twice — the same resume contract as /api/end-of-day, minus the
-    production and rotation halves FOH doesn't have.
+    production half FOH doesn't have.
     """
     on = _parse_date(request.args.get("date")) or date.today()
     data = cleaning._load_cleaning()
