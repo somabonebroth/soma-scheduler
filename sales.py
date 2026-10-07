@@ -683,7 +683,7 @@ def add_organic_scan_order():
 
 
 def _email_organic_slip(rows):
-    """Email an Organic Sale's packing slip (PDF) to Company Settings'
+    """Email a Record Sale order's packing slip (PDF) to Company Settings'
     organic_slip_emails (2026-10-01). Returns what happened for the done
     screen; never raises — a failed email must not look like a failed sale."""
     recipients, _ = _parse_emails(_load_company_info().get("organic_slip_emails", ""))
@@ -697,10 +697,11 @@ def _email_organic_slip(rows):
         first = rows[0]
         lines = "\n".join(
             f"  {r['recipe']} {r['format']}: {r['quantity'] // 12} case(s)"
+            + ("  ORGANIC" if r.get("certification") == "Organic" else "")
             + (f"  LOT# {', '.join(l['lot'] for l in r.get('lots') or [])}" if r.get("lots") else "")
             for r in rows)
         po = f" · PO {first['po_number']}" if first.get("po_number") else ""
-        body = (f"Organic sale recorded for {first['buyer']}{po}.\n"
+        body = (f"Sale recorded for {first['buyer']}{po}.\n"
                 f"Delivery date: {first['sale_date']}\n\n{lines}\n\n"
                 "The packing slip is attached.\n\n— Soma Bone Broth (sent automatically by Soma)\n")
         _send_email(recipients, f"Packing slip · {first['buyer']}{po} · {first['sale_date']}",

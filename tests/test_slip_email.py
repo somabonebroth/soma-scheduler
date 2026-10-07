@@ -65,6 +65,10 @@ class SlipEmail(unittest.TestCase):
         self.assertIn("Nature's Emporium", subject)
         self.assertIn("PO NE-9", subject)
         self.assertIn("LOT# 280927", body)
+        # One page records every sale, so the email never calls the whole order organic —
+        # only the lines that are carry the tag.
+        self.assertTrue(body.startswith("Sale recorded for"))
+        self.assertIn("case(s)  ORGANIC  LOT# 280927", body)
         filename, data, subtype = attachments[0]
         self.assertTrue(data.startswith(b"%PDF"))
         self.assertEqual(subtype, "pdf")
