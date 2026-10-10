@@ -88,6 +88,7 @@ summary.dr-head::-webkit-details-marker { display: none; }
 .dr-chan-name { font-size: 12.5px; font-weight: 700; color: var(--dark); }
 .dr-chan-fig { font-size: 12.5px; color: var(--text-light); margin-left: auto; }
 .dr-chan-fig b { color: var(--dark); }
+.dr-chan-sub td { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-light); padding-top: 8px; }
 .dr-chan-msg { font-size: 12px; color: var(--text-light); font-style: italic; }
 
 .dr-sublabel { display: flex; align-items: center; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text); margin: 20px 0 8px; }
@@ -494,19 +495,20 @@ async function load(){
     loadChannels();
 }
 
-// Shopify and Clover are read LIVE for the date, because the cron import only
-// runs weekly — sales.json holds nothing for yesterday on six mornings out of
-// seven. Read-only: nothing here writes a sale or moves inventory. Loaded
-// after the page renders so two outbound API calls can never delay the review.
+// Shopify and Clover are read LIVE for the date, so the day shows even before
+// the overnight import has run. Read-only: nothing here writes a sale or moves
+// inventory. Loaded after the page renders so two outbound API calls can never
+// delay the review. The dollar figure is the whole day — jars plus other items
+// (hot cups, creams, anything without a SOMA- SKU) — matching the sales charts.
 const CHANNEL_NAMES = {shopify: 'Shopify', clover: 'Clover'};
 
 function channelHtml(c){
     const name = CHANNEL_NAMES[c.channel] || c.channel;
+    const others = c.other_items || [];
     let head = '<div class="dr-chan-head"><span class="dr-chan-name">' + esc(name) + '</span>';
     if (c.status === 'ok') {
-        head += '<span class="dr-chan-fig"><b>' + c.units + '</b> units &middot; <b>'
-            + money(c.revenue) + '</b> &middot; ' + c.orders + ' order'
-            + (c.orders === 1 ? '' : 's') + '</span>';
+        head += '<span class="dr-chan-fig"><b>' + money(c.revenue) + '</b> &middot; '
+            + c.orders + ' order' + (c.orders === 1 ? '' : 's') + '</span>';
     }
     head += '</div>';
 
@@ -515,25 +517,31 @@ function channelHtml(c){
         body = '<div class="dr-chan-msg">' + esc(c.status === 'error'
             ? name + ' could not be read: ' + c.message
             : c.message) + '</div>';
-    } else if (!c.rows.length) {
+    } else if (!c.rows.length && !others.length) {
         body = '<div class="dr-chan-msg">No sales on this day.</div>';
     } else {
+        const sub = (label, units, value) => '<tr class="dr-chan-sub"><td>' + label
+            + '</td><td class="num">' + units + '</td><td class="num">' + money(value) + '</td></tr>';
         body = '<div class="dr-scroll"><table class="dr-table"><tr>'
-            + '<th>Product</th><th class="num">Units</th><th class="num">Value</th></tr>'
-            + c.rows.map(r => '<tr><td>' + esc(r.item)
-                + (r.exists_in_soma ? '' : ' <span class="dr-lot">(no matching recipe)</span>')
-                + '</td><td class="num"><b>' + r.quantity + '</b></td>'
-                + '<td class="num">' + money(r.revenue) + '</td></tr>').join('')
-            + '</table></div>';
+            + '<th>Product</th><th class="num">Units</th><th class="num">Value</th></tr>';
+        if (c.rows.length) {
+            body += sub('Jars', c.units, c.jar_revenue)
+                + c.rows.map(r => '<tr><td>' + esc(r.item)
+                    + (r.exists_in_soma ? '' : ' <span class="dr-lot">(no matching recipe)</span>')
+                    + '</td><td class="num"><b>' + r.quantity + '</b></td>'
+                    + '<td class="num">' + money(r.revenue) + '</td></tr>').join('');
+        }
+        if (others.length) {
+            body += sub('Other items', others.reduce((n, i) => n + i.quantity, 0), c.other_revenue)
+                + others.map(i => '<tr><td>' + esc(i.name) + '</td><td class="num"><b>' + i.quantity
+                    + '</b></td><td class="num">' + money(i.revenue) + '</td></tr>').join('');
+        }
+        body += '</table></div>';
     }
-    // Anything the weekly import would choke on is worth seeing on the day it
-    // happened, not the following Monday when the commit refuses.
     const flags = [];
     if ((c.unparseable || []).length) flags.push(c.unparseable.length + ' SKU(s) the importer cannot parse: ' + c.unparseable.join(', '));
     if ((c.unmapped || []).length) flags.push(c.unmapped.length + ' SKU(s) with no matching Soma recipe: ' + c.unmapped.join(', '));
-    if (c.other_brands) flags.push(c.other_brands + ' non-SOMA item(s) sold (not imported).');
-    if ((c.imported || {}).rows) flags.push('Soma already holds ' + c.imported.rows + ' imported ' + name
-        + ' sale row(s) dated this day (' + c.imported.units + ' units) — the weekly import stamps a whole week on its Sunday.');
+    if ((c.imported || {}).rows) flags.push('Recorded in Soma: ' + c.imported.units + ' jar' + (c.imported.units === 1 ? '' : 's') + '.');
     if (flags.length) body += '<div class="dr-chan-msg" style="margin-top:7px;">' + flags.map(esc).join('<br>') + '</div>';
 
     return '<div class="dr-chan">' + head + body + '</div>';
@@ -553,9 +561,9 @@ async function loadChannels(){
     }
     if (d.date !== brief.date) return;   // the reader moved on while we waited
     el.innerHTML = d.channels.map(channelHtml).join('')
-        + '<div class="dr-totals"><span>Read live from each channel &mdash; <b>' + d.units
-        + '</b> units &middot; <b>' + money(d.revenue) + '</b> gross, excluding tax and shipping. '
-        + 'These are reported only; the weekly import is still what writes them into Soma and deducts stock.</span></div>';
+        + '<div class="dr-totals"><span><b>' + money(d.revenue) + '</b> gross &middot; jars '
+        + money(d.jar_revenue) + ' (' + d.units + ') &middot; other items ' + money(d.other_revenue)
+        + '. Excludes tax and shipping.</span></div>';
 }
 
 function step(delta){

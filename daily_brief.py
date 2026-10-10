@@ -505,12 +505,9 @@ def _transactions_section(on):
 
 
 def _imported_channel_rows(on, channel):
-    """Channel sales ALREADY written into Soma's books that carry this date.
-
-    The weekly import stamps every row of a week with that week's Sunday, so
-    this is normally empty and, on a Sunday, holds the whole week's lump. The
-    panel says so rather than letting a manager read the live day figure and
-    the imported week figure as two views of the same thing.
+    """Channel sales ALREADY written into Soma's books that carry this date —
+    the daily import's jar rows (or, for an old week, the weekly import's
+    lump on its Sunday). Shown so the reader can see the day was recorded.
     """
     iso = on.isoformat()
     units = 0
@@ -531,14 +528,17 @@ def _imported_channel_rows(on, channel):
 def _channel_day(channel, on):
     """One channel's orders for one date, read live from its API.
 
-    Read-only by design. The weekly cron import remains the only path that
+    Read-only by design. The daily cron import remains the only path that
     writes sales rows and deducts finished goods, so nothing here can
-    double-count against it — this is a report, not an import. A channel that
+    double-count against it — this is a report, not an import. `revenue` is
+    the whole day (jars + other items: hot cups, creams, anything without a
+    SOMA- SKU), the same money the sales charts add up; `units` is jars only. A channel that
     is unconfigured, down, or slow degrades to a status line; it must never
     take the morning review down with it.
     """
     out = {"channel": channel, "status": "ok", "message": "",
            "orders": 0, "units": 0, "revenue": 0.0, "rows": [],
+           "jar_revenue": 0.0, "other_revenue": 0.0, "other_items": [],
            "unmapped": [], "unparseable": [], "other_brands": 0,
            "imported": _imported_channel_rows(on, channel)}
     day_id = on.isoformat()
@@ -578,11 +578,17 @@ def _channel_day(channel, on):
             "exists_in_soma": m["exists_in_soma"],
         })
     rows.sort(key=lambda r: -r["quantity"])
+    other_items = app._channel_other_items(preview)
+    jar_revenue = round(sum(r["revenue"] for r in rows), 2)
+    other_revenue = round(sum(i["revenue"] for i in other_items), 2)
     out.update(
         orders=preview["order_count"],
         units=sum(r["quantity"] for r in rows),
-        revenue=round(sum(r["revenue"] for r in rows), 2),
+        jar_revenue=jar_revenue,
+        other_revenue=other_revenue,
+        revenue=round(jar_revenue + other_revenue, 2),
         rows=rows,
+        other_items=other_items,
         unmapped=[r["sku"] for r in rows if not r["exists_in_soma"]],
         unparseable=[u["sku"] for u in preview["unparseable"]],
         other_brands=sum(o["quantity"] for o in preview["skipped_other_brands"]),
@@ -845,6 +851,8 @@ def get_daily_channels():
         "date": on.isoformat(),
         "channels": channels,
         "units": sum(c["units"] for c in channels),
+        "jar_revenue": round(sum(c["jar_revenue"] for c in channels), 2),
+        "other_revenue": round(sum(c["other_revenue"] for c in channels), 2),
         "revenue": round(sum(c["revenue"] for c in channels), 2),
     })
 

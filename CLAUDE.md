@@ -615,7 +615,7 @@ of `/api/daily-brief` on purpose: `pending_reviews` builds up to 60 briefs and m
 make network calls. An unconfigured/failing channel degrades to a status line. Both
 importers now share `_classify_skus` between `preview_week` and `preview_day` (the weekly
 commit and the daily report can never disagree about a SKU) and sum gross line revenue
-(Shopify nets line discounts; Clover's discount objects are deliberately not netted).
+(Shopify nets line discounts; Clover's discount objects are deliberately not netted). **Since 2026-10-10 the Retail channels block counts the WHOLE day:** each channel's dollar figure = jars + other items (hot cups, creams, gift cards — `app._channel_other_items`, the same grouping the daily import stores), listed under Jars / Other items, so it matches Sales by channel and Sales by Buyer. Units stay jars only. Tests: `tests.test_daily_summary_channels`.
 
 **Review is DAILY, not weekly (changed 2026-08-18).** The HOO signs each day off on the
 morning brief: `POST/DELETE /api/daily-signoff/<date>` → `daily_signoffs.json` keyed by
