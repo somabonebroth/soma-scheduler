@@ -233,7 +233,7 @@ function olRenderCards() {
         h += '<div class="card"><div class="ol-empty">No lot matches “' + olEsc(olQuery) + '”.</div></div>';
     }
     if (held.length) {
-        h += '<div class="ol-heading">On the shelf · ' + held.length + '</div><div class="ol-grid">' + held.map(olFolderCard).join('') + '</div>';
+        h += '<div class="ol-heading">In stock · ' + held.length + '</div><div class="ol-grid">' + held.map(olFolderCard).join('') + '</div>';
     }
     if (closed.length) {
         h += '<details class="ol-closed"' + (q ? ' open' : '') + '><summary>Closed · ' + closed.length + ' <span class="chev">&#9662;</span></summary>'
