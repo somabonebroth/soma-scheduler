@@ -185,7 +185,7 @@ loadSupplierCerts();
     const folders = (await (await fetch('/api/organic-lots')).json()).folders || [];
     const held = folders.filter(function (f) { return f.status === 'held'; });
     const jars = held.reduce(function (a, f) { return a + f.held; }, 0);
-    el.innerHTML = '<span><b>' + Math.floor(jars / 12).toLocaleString() + '</b> cases on the shelf</span>'
+    el.innerHTML = '<span><b>' + Math.floor(jars / 12).toLocaleString() + '</b> cases in stock</span>'
       + '<span><b>' + held.length + '</b> lot' + (held.length === 1 ? '' : 's') + ' with stock</span>'
       + '<span><b>' + (folders.length - held.length) + '</b> closed (none left)</span>';
   } catch (e) { /* the link still works without the numbers */ }
