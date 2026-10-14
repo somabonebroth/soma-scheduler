@@ -2571,7 +2571,7 @@ def _complete_organic_run(finish_week_id, finish_day_idx, produced_data, create_
 
         # Organic stock holds FULL CASES only (Jeremy, 2026-09-29/10-01): the
         # kitchen enters every jar; the remainder below 12 never enters organic
-        # stock — those jars are sold as hot cups under a non-certified label.
+        # stock — those singles are taken out of inventory and not sold.
         # Recorded on the batch (jars_counted / loose_jars) so its Organic Lots
         # folder still balances against the kitchen's count. Raw deduction and
         # the run's amount_produced keep the full count (the batch made them).

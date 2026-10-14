@@ -2,7 +2,7 @@
 
 Shapes section 1 of the Daily Summary (_production_section) for the floor:
 jars counted on D are labelled on D+1; LOT#, stamp and counts must match
-section 1 exactly; organic leftovers go to hot cups with no organic label.
+section 1 exactly; organic singles are taken out of stock, not sold.
 """
 import unittest
 from datetime import date

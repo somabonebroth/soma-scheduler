@@ -139,8 +139,8 @@ def build_folders(fg, runs, sales, adjustments, materials, photo_ids):
             })
             if f.get("run_id"):
                 s["made"] += int(f.get("quantity_produced") or 0)
-                # Jars counted by the kitchen beyond full cases: never organic
-                # stock, sold as hot cups under a non-certified label.
+                # Singles — jars counted beyond the last full case: never
+                # organic stock, taken out of inventory and not sold.
                 s["hot_cups"] += int(f.get("loose_jars") or 0)
             else:
                 s["added"] += int(f.get("quantity_produced") or 0)

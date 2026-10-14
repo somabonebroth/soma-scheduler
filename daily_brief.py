@@ -279,7 +279,7 @@ def _production_section(on):
             # (start) date keeps the printed label and the FG record identical.
             "production_date": _ddmmyyyy(batched_on) or _ddmmyyyy(on.isoformat()),
             # Organic batches hold full cases only; the kitchen's leftover jars
-            # go to hot cups and must NOT get an organic label (labelling sheet).
+            # (singles) are taken out of stock and not sold (labelling sheet).
             "loose_jars": int(f.get("loose_jars") or 0),
         })
     rows.sort(key=lambda r: (-r["quantity"], r["item"]))

@@ -1,7 +1,7 @@
 """Organic batches hold full cases only (app._complete_organic_run, 2026-10-01).
 
 The kitchen enters every jar. Organic stock takes full cases of 12; the rest
-is recorded on the batch as loose jars (sold as hot cups, not certified) so
+is recorded on the batch as loose jars (singles: out of stock, not sold) so
 the Organic Lots folder balances against the kitchen's count. Non-organic
 batches keep every jar.
 """

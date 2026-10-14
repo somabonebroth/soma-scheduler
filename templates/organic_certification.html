@@ -14,6 +14,7 @@
 .oc-hero:hover { border-color: var(--accent); box-shadow: 0 2px 12px rgba(74,103,65,0.15); }
 .oc-hero .icon { font-size: 36px; line-height: 1; flex: none; }
 .oc-hero .body { flex: 1; min-width: 0; }
+.oc-hero .title, .oc-hero .desc { display: block; }
 .oc-hero .title { font-size: 20px; font-weight: 700; color: var(--dark); }
 .oc-hero .desc { font-size: 13px; color: var(--text-light); line-height: 1.5; margin-top: 3px; }
 .oc-hero .stats { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 13px; color: var(--text-light); }
@@ -36,7 +37,9 @@
   .oc-hero { padding: 18px; gap: 14px; }
   .oc-hero .go { display: none; }
 }
+.oc-rule { margin: -6px 0 20px; padding: 12px 16px; border-radius: var(--r-md); background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark); font-size: 14px; line-height: 1.5; }
 .oc-links { font-size: 13px; color: var(--text-light); line-height: 2; margin: 4px 2px 0; }
+.oc-links .k { display: inline-block; min-width: 84px; font-weight: 600; color: var(--text-light); }
 .oc-links a { color: var(--dark); font-weight: 600; text-decoration: none; }
 .oc-links a:hover { text-decoration: underline; }
 </style>
@@ -57,10 +60,16 @@
         <span class="icon">&#128193;</span>
         <span class="body">
             <span class="title">Organic Lots</span>
+            <span class="desc">Each organic LOT#: what went in, where it was sold, what is left.</span>
             <span class="stats" id="oc-lot-stats"></span>
         </span>
         <span class="go">&rarr;</span>
     </a>
+
+    <!-- The singles rule, stated once where an inspector or a new manager reads
+         it (Jeremy, 2026-10-14): organic stock is whole cases only. -->
+    <div class="oc-rule"><b>Organic is sold in full cases only.</b> Jars left over after the last full case
+        (singles) are taken out of inventory and <b>not sold</b>.</div>
 
     <!-- Supplier certificates — read-only view of each supplier's
          `certificates` list (edited on Buyers & Suppliers, incl. the ones a
@@ -68,6 +77,7 @@
          (suppliers._cert_status) so both pages agree. -->
     <div class="card" id="supplier-certs">
         <h2>Supplier Certificates <span class="count-badge" id="sc-count">—</span></h2>
+        <p class="card-desc">Organic certificates your suppliers hold, soonest to expire first.</p>
         <div id="sc-container"><div class="empty-state">Loading…</div></div>
     </div>
 
@@ -75,20 +85,23 @@
          Batches are chosen by START date, the date their LOT# is made from. -->
     <div class="card" id="audit-pack">
         <h2>Audit Pack</h2>
+        <p class="card-desc">One PDF for an inspector: the recipes used, the CCP checklist, and every batch traced from ingredients to sale.</p>
         <form class="ap-form" id="ap-form">
             <label>From <input type="date" id="ap-from" required></label>
             <label>To <input type="date" id="ap-to" required></label>
-            <label class="ap-check"><input type="checkbox" id="ap-organic"> Organic only</label>
+            <label class="ap-check"><input type="checkbox" id="ap-organic"> Organic batches only</label>
             <button type="submit" class="btn btn-primary">Download PDF</button>
         </form>
     </div>
 
     <div class="oc-links">
-        <a href="/audit/fg">Count finished goods</a> &middot;
-        <a href="/audit/rm">Count raw materials</a> &middot;
-        <a href="/audits">Stock count history</a> &middot;
-        <a href="/certifications">Certificates &amp; Documents</a> &middot;
-        <a href="/sales-receiving#trace">Search &amp; Trace</a>
+        <div><span class="k">Count stock</span>
+            <a href="/audit/fg">Finished goods</a> &middot;
+            <a href="/audit/rm">Raw materials</a> &middot;
+            <a href="/audits">Past counts</a></div>
+        <div><span class="k">Look up</span>
+            <a href="/sales-receiving#trace">Search &amp; Trace</a> &middot;
+            <a href="/certifications">Certificates &amp; Documents</a></div>
     </div>
 </div>
 <script>
@@ -172,9 +185,9 @@ loadSupplierCerts();
     const folders = (await (await fetch('/api/organic-lots')).json()).folders || [];
     const held = folders.filter(function (f) { return f.status === 'held'; });
     const jars = held.reduce(function (a, f) { return a + f.held; }, 0);
-    el.innerHTML = '<span><b>' + held.length + '</b> lot' + (held.length === 1 ? '' : 's') + ' held</span>'
-      + '<span><b>' + jars.toLocaleString() + '</b> jars (' + Math.floor(jars / 12).toLocaleString() + ' cases) on the shelf</span>'
-      + '<span><b>' + (folders.length - held.length) + '</b> closed</span>';
+    el.innerHTML = '<span><b>' + Math.floor(jars / 12).toLocaleString() + '</b> cases on the shelf</span>'
+      + '<span><b>' + held.length + '</b> lot' + (held.length === 1 ? '' : 's') + ' with stock</span>'
+      + '<span><b>' + (folders.length - held.length) + '</b> closed (none left)</span>';
   } catch (e) { /* the link still works without the numbers */ }
 })();
 

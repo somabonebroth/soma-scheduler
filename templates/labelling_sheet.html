@@ -76,7 +76,7 @@ table.ps-tbl td { padding: 3pt 2pt; }
     <td><strong>{{ r.name }}</strong>{% if r.organic %}<span class="ls-org">ORGANIC</span>{% endif %}
       {% if r.format %}<span class="ps-sub">{{ r.format }}</span>{% endif %}
       {% if sheet.multi_lot and r.lot %}<span class="ls-note">LOT # {{ r.lot }}</span>{% endif %}
-      {% if r.hot_cups %}<span class="ls-note">+ {{ r.hot_cups }} loose jar{{ 's' if r.hot_cups != 1 }} &rarr; hot cups, <b>no organic label</b></span>{% endif %}
+      {% if r.hot_cups %}<span class="ls-note">+ {{ r.hot_cups }} single{{ 's' if r.hot_cups != 1 }}: <b>take out of stock, do not sell</b></span>{% endif %}
     </td>
     <td class="r qty">{{ r.cases }}{% if r.loose %}<span class="ls-note">+ {{ r.loose }} jar{{ 's' if r.loose != 1 }}</span>{% endif %}</td>
     <td class="r">{{ r.jars }}</td>

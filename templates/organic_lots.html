@@ -66,6 +66,7 @@ details.ol-closed > .ol-grid { margin-top: 14px; }
 .ol-stat.held .v { color: var(--action-green); }
 .ol-check { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 16px; font-size: 13px; color: var(--text-light); }
 .ol-check .ok { color: var(--action-green); font-weight: 600; }
+.ol-singles { margin-top: 16px; padding: 10px 12px; border-radius: var(--r-md); background: var(--row-alt); font-size: 13px; line-height: 1.5; color: var(--text); }
 .ol-alert { margin-top: 16px; padding: 10px 12px; border-radius: var(--r-md); background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark); font-size: 13px; line-height: 1.5; }
 .ol-table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .ol-ing { table-layout: fixed; }
@@ -94,6 +95,7 @@ details.ol-closed > .ol-grid { margin-top: 14px; }
 .ol-group-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
 .ol-group-head b { color: var(--dark); font-size: 15px; }
 .ol-group-head .ol-small { margin-left: 6px; }
+h2 .ol-small { font-weight: 400; margin-left: 6px; }
 .ol-rows { list-style: none; margin: 0; padding: 0; }
 .ol-rows li { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border); font-size: 15px; }
 .ol-rows li:first-child { padding-top: 4px; }
@@ -264,31 +266,37 @@ function olSummaryHtml(f) {
     const made = sum('made') + sum('added'), sold = sum('sold'), reduced = sum('reduced'), hot = sum('hot_cups');
     const bb = olBestBefore(f.lot);
     let h = '<div class="card"><div class="ol-head"><h1 class="ol-title"><span class="ol-mono">LOT# ' + olEsc(f.lot) + '</span></h1>'
-        + '<span class="pill ' + f.status + '">' + (f.status === 'held' ? 'Held' : 'Closed') + '</span></div>'
+        + '<span class="pill ' + f.status + '">' + (f.status === 'held' ? 'On the shelf' : 'Closed') + '</span></div>'
         + '<p class="ol-sub">'
         + (f.skus.length === 1 ? olProductHtml(f.skus[0]) + (bb ? ' &middot; ' : '') : '')
         + (bb ? 'Best before ' + olEsc(bb) : '') + '</p>'
-        + '<div class="ol-stats">' + olStat('Made', made) + olStat('Sold', sold) + olStat('Reduced', reduced) + olStat('Held', f.held, 'held') + '</div>';
+        + '<div class="ol-stats">' + olStat('Made', made) + olStat('Sold', sold) + olStat('Written off', reduced) + olStat('On the shelf', f.held, 'held') + '</div>';
     if (f.skus.length > 1) {
         // Product name on its own line, its four numbers underneath in cases.
         h += '<div class="ol-per">' + f.skus.map(s => '<div class="ol-per-item"><div class="ol-per-name">' + olProductHtml(s) + '</div>'
             + '<div class="ol-per-nums">' + olCell('Made', s.made + s.added) + olCell('Sold', s.sold)
-            + olCell('Reduced', s.reduced) + olCell('Held', s.held, 'held') + '</div></div>').join('') + '</div>';
+            + olCell('Written off', s.reduced) + olCell('On the shelf', s.held, 'held') + '</div></div>').join('') + '</div>';
+    }
+    // Singles: jars the kitchen counted beyond the last full case. Organic is
+    // sold in full cases only, so they never enter stock and are not sold.
+    if (hot) {
+        const counted = sum('made') + hot;
+        h += '<div class="ol-singles">Kitchen counted <b>' + counted.toLocaleString() + ' jars</b>. '
+            + '<b>' + hot + ' single' + (hot === 1 ? '' : 's') + '</b> (jars short of a full case) '
+            + (hot === 1 ? 'was' : 'were') + ' taken out of inventory and <b>not sold</b>.</div>';
     }
     const off = f.skus.filter(s => s.unrecorded);
     if (off.length) {
-        h += '<div class="ol-alert">&#9888; Stock changed with nothing on record: '
+        h += '<div class="ol-alert">&#9888; Doesn\'t add up. No record explains: '
             + off.map(s => olProductHtml(s) + ', ' + (s.unrecorded > 0 ? s.unrecorded + ' jars missing' : (-s.unrecorded) + ' jars extra')).join('; ') + '.</div>';
-    }
-    if (!off.length || hot) {
-        h += '<div class="ol-check">' + (off.length ? '' : '<span class="ok">&#10003; Adds up</span>')
-            + (hot ? '<span>' + hot + ' loose jar' + (hot === 1 ? '' : 's') + ' went to hot cups, not organic stock</span>' : '') + '</div>';
+    } else {
+        h += '<div class="ol-check"><span class="ok">&#10003; Adds up</span><span>Made = sold + written off + on the shelf</span></div>';
     }
     return h + '</div>';
 }
 
 function olInHtml(f) {
-    let h = '<div class="card"><h2>In</h2>';
+    let h = '<div class="card"><h2>In <span class="ol-small">batches and the ingredients they used</span></h2>';
     const rows = f.batches.map(b => '<li><span><span class="who">' + olEsc((b.brand ? b.brand + ' ' : '') + b.recipe) + '</span>'
             + '<span class="meta">' + [b.vessel, b.start_date ? 'started ' + olDate(b.start_date) : ''].filter(Boolean).map(olEsc).join(' &middot; ') + '</span></span></li>')
         .concat(f.added.map(a => '<li><span><span class="who">' + olEsc(a.label) + '</span>'
@@ -318,7 +326,7 @@ function olInHtml(f) {
 }
 
 function olOutHtml(f) {
-    let h = '<div class="card"><h2>Out</h2>';
+    let h = '<div class="card"><h2>Out <span class="ol-small">sales and write-offs</span></h2>';
     if (!f.out.length) return h + '<p class="ol-muted">Nothing has left this lot yet.</p></div>';
     h += '<ul class="ol-rows">';
     f.out.forEach(o => {
@@ -337,7 +345,7 @@ function olOutHtml(f) {
                 + '<span class="links ol-noprint"><a target="_blank" href="/sales/' + encodeURIComponent(o.slip_sale_id) + '/packing-slip">Slip</a> &middot; '
                 + '<button onclick="olEmailSlip(this, \'' + encodeURIComponent(o.slip_sale_id) + '\')">Email</button></span></span></li>';
         } else {
-            h += '<li><span><span class="who">' + olEsc(o.reason || 'Reduced') + '</span>'
+            h += '<li><span><span class="who">' + olEsc(o.reason || 'Written off') + '</span>'
                 + '<span class="meta">' + olEsc(olDate(o.date))
                 + (f.skus.length > 1 ? ' &middot; ' + olProductHtml({brand: o.brand, recipe: o.recipe, format: o.format, name: o.sku}) : '')
                 + (o.notes ? ' &middot; ' + olEsc(o.notes) : '') + '</span></span>'
