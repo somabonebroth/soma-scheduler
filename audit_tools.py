@@ -483,3 +483,83 @@ def audit_pack_pdf():
     buf.seek(0)
     name = "Soma_Audit_Pack_" + frm + "_to_" + to + ("_Organic" if organic_only else "") + ".pdf"
     return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=name)
+
+
+# ── Pest control map (2026-10-15) ────────────────────────────────────────────
+# ONE current map (the trap/bait-station layout an organic inspector asks to
+# see), shown on the Organic Certification page. Uploading replaces it; the
+# file lives on the data disk as pest_control_map.<ext> with a small meta file.
+PEST_MAP_TYPES = {  # extension -> (mimetype, leading bytes)
+    "pdf": ("application/pdf", (b"%PDF",)),
+    "png": ("image/png", (b"\x89PNG",)),
+    "jpg": ("image/jpeg", (b"\xff\xd8\xff",)),
+    "webp": ("image/webp", (b"RIFF",)),
+}
+PEST_MAP_MAX_BYTES = 15 * 1024 * 1024
+
+
+def _pest_map_dir():
+    return os.path.join(app.DATA_DIR, "pest_control")
+
+
+def _pest_map_meta():
+    return _load_json(os.path.join(_pest_map_dir(), "meta.json"), None)
+
+
+@audit_tools_bp.route("/api/pest-map", methods=["GET"])
+@manager_required
+def get_pest_map():
+    """The current map's details, or {exists: false}."""
+    meta = _pest_map_meta()
+    if not meta or not os.path.exists(os.path.join(_pest_map_dir(), meta.get("stored", ""))):
+        return jsonify({"exists": False})
+    return jsonify(dict(meta, exists=True))
+
+
+@audit_tools_bp.route("/api/pest-map/file", methods=["GET"])
+@manager_required
+def get_pest_map_file():
+    """The map itself, inline so the page can display it."""
+    meta = _pest_map_meta()
+    path = os.path.join(_pest_map_dir(), (meta or {}).get("stored", ""))
+    if not meta or not os.path.isfile(path):
+        return jsonify({"error": "No map uploaded"}), 404
+    resp = send_file(path, mimetype=PEST_MAP_TYPES[meta["ext"]][0])
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@audit_tools_bp.route("/api/pest-map", methods=["POST"])
+@manager_required
+def upload_pest_map():
+    """Replace the map. Multipart `file`: PDF, PNG, JPEG or WebP, ≤15 MB,
+    checked by its leading bytes, not just its name."""
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return jsonify({"error": "No file"}), 400
+    ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+    ext = "jpg" if ext == "jpeg" else ext
+    if ext not in PEST_MAP_TYPES:
+        return jsonify({"error": "Upload a PDF, PNG or JPEG."}), 400
+    blob = f.read(PEST_MAP_MAX_BYTES + 1)
+    if len(blob) > PEST_MAP_MAX_BYTES:
+        return jsonify({"error": "File is over 15 MB."}), 400
+    if not blob.startswith(PEST_MAP_TYPES[ext][1]):
+        return jsonify({"error": "That file isn't a real " + ext.upper() + "."}), 400
+    d = _pest_map_dir()
+    os.makedirs(d, exist_ok=True)
+    old = _pest_map_meta()
+    stored = "pest_control_map." + ext
+    tmp = os.path.join(d, stored + ".tmp")
+    with open(tmp, "wb") as fh:
+        fh.write(blob)
+    os.replace(tmp, os.path.join(d, stored))
+    if old and old.get("stored") and old["stored"] != stored:
+        try:
+            os.remove(os.path.join(d, old["stored"]))
+        except FileNotFoundError:
+            pass
+    meta = {"stored": stored, "ext": ext, "filename": f.filename,
+            "uploaded_at": datetime.now().isoformat(timespec="seconds"), "size": len(blob)}
+    _save_json(os.path.join(d, "meta.json"), meta)
+    return jsonify(dict(meta, exists=True))

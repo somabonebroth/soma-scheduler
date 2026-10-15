@@ -166,6 +166,13 @@ h2 .ol-small { font-weight: 400; margin-left: 6px; }
 .ap-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-light); }
 .ap-form input[type=date] { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 14px; background: var(--white); }
 .ap-form .ap-check { flex-direction: row; align-items: center; gap: 6px; font-size: 13px; color: var(--text); padding-bottom: 9px; }
+.pm-img { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--white); }
+.pm-pdf { display: block; width: 100%; height: 75vh; min-height: 420px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--white); }
+.pm-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin-top: 14px; }
+.pm-upload { cursor: pointer; font-size: 14px; }
+.pm-open { font-size: 14px; font-weight: 600; color: var(--dark); }
+.pm-status { font-size: 13px; color: var(--text-light); }
+.pm-status.err { color: var(--action-red); }
 .oc-rule { margin: -6px 0 20px; padding: 12px 16px; border-radius: var(--r-md); background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark); font-size: 14px; line-height: 1.5; }
 .oc-links { font-size: 13px; color: var(--text-light); line-height: 2; margin: 4px 2px 0; }
 .oc-links .k { display: inline-block; min-width: 84px; font-weight: 600; color: var(--text-light); }
@@ -209,8 +216,8 @@ h2 .ol-small { font-weight: 400; margin-left: 6px; }
 
     <!-- Audit pack — one PDF for the inspector (audit_tools.audit_pack_pdf).
          Batches are chosen by START date, the date their LOT# is made from. -->
-    <div class="card" id="audit-pack">
-        <h2>Audit Pack</h2>
+    <details class="card" id="audit-pack">
+        <summary><span class="chev">&#9654;</span><h2>Audit Pack</h2></summary>
         <p class="card-desc">One PDF for an inspector: the recipes used, the CCP checklist, and every batch traced from ingredients to sale.</p>
         <form class="ap-form" id="ap-form">
             <label>From <input type="date" id="ap-from" required></label>
@@ -218,7 +225,22 @@ h2 .ol-small { font-weight: 400; margin-left: 6px; }
             <label class="ap-check"><input type="checkbox" id="ap-organic"> Organic batches only</label>
             <button type="submit" class="btn btn-primary">Download PDF</button>
         </form>
-    </div>
+    </details>
+
+    <!-- Pest control map (audit_tools.py, 2026-10-15): ONE current file, shown
+         here for an inspector; uploading replaces it. Loaded on first open. -->
+    <details class="card" id="pest-map">
+        <summary><span class="chev">&#9654;</span><h2>Pest Control Map <span class="count-badge" id="pm-badge">—</span></h2></summary>
+        <div id="pm-view"><div class="empty-state">Loading…</div></div>
+        <div class="pm-actions">
+            <label class="btn btn-outline pm-upload">
+                <span id="pm-upload-label">Upload map</span>
+                <input type="file" id="pm-file" accept="application/pdf,image/png,image/jpeg,image/webp" hidden>
+            </label>
+            <a id="pm-open" class="pm-open" href="/api/pest-map/file" target="_blank" hidden>Open full size &rarr;</a>
+            <span id="pm-status" class="pm-status"></span>
+        </div>
+    </details>
 
     <div class="oc-links">
         <div><span class="k">Count stock</span>
@@ -323,6 +345,63 @@ loadSupplierCerts();
     window.location = '/api/organic/audit-pack.pdf?' + q.toString();
   });
 })();
+
+// ── Pest control map: details in the header now, the file on first open ──
+let pmMeta = null, pmShown = false;
+function pmDate(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? '' : d.toLocaleDateString('en-CA', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+function pmRender() {
+  const view = document.getElementById('pm-view');
+  const badge = document.getElementById('pm-badge');
+  const open = document.getElementById('pm-open');
+  document.getElementById('pm-upload-label').textContent = pmMeta && pmMeta.exists ? 'Replace map' : 'Upload map';
+  if (!pmMeta || !pmMeta.exists) {
+    badge.textContent = 'none';
+    open.hidden = true;
+    view.innerHTML = '<div class="empty-state">No map uploaded yet. Upload a PDF or a photo of the current map.</div>';
+    return;
+  }
+  badge.textContent = 'updated ' + pmDate(pmMeta.uploaded_at);
+  open.hidden = false;
+  if (!document.getElementById('pest-map').open) return;
+  const src = '/api/pest-map/file?v=' + encodeURIComponent(pmMeta.uploaded_at);
+  open.href = src;
+  view.innerHTML = pmMeta.ext === 'pdf'
+    ? '<object class="pm-pdf" type="application/pdf" data="' + src + '"><a href="' + src + '" target="_blank">Open the map (PDF)</a></object>'
+    : '<a href="' + src + '" target="_blank"><img class="pm-img" src="' + src + '" alt="Pest control map"></a>';
+  pmShown = true;
+}
+(async function () {
+  try { pmMeta = await (await fetch('/api/pest-map')).json(); } catch (e) { pmMeta = null; }
+  pmRender();
+})();
+document.getElementById('pest-map').addEventListener('toggle', function () {
+  if (this.open && !pmShown) pmRender();
+});
+document.getElementById('pm-file').addEventListener('change', async function () {
+  const f = this.files[0];
+  if (!f) return;
+  const st = document.getElementById('pm-status');
+  st.className = 'pm-status';
+  st.textContent = 'Uploading…';
+  const fd = new FormData();
+  fd.append('file', f);
+  try {
+    const r = await fetch('/api/pest-map', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+    pmMeta = d;
+    pmShown = false;
+    st.textContent = 'Saved.';
+    pmRender();
+  } catch (e) {
+    st.className = 'pm-status err';
+    st.textContent = 'Not saved: ' + e.message;
+  }
+  this.value = '';
+});
 
 // ── Shared escaping (mirrored from organic.html) ──
 function escSku(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
