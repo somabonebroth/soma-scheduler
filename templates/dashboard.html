@@ -122,6 +122,8 @@
 .zone-trio .zone-1 { background: var(--action-green-bg); color: var(--action-green); border-color: var(--green-light); }
 .zone-trio .zone-2 { background: var(--action-blue-bg); color: var(--info-dark); border-color: var(--info-light); }
 .zone-trio .zone-3 { background: var(--amber-bg); color: var(--amber-text-dark); border-color: var(--amber-border); }
+/* Organic Certification tile: the Canada Organic logo is its icon (2026-10-15). */
+.organic-logo { display: block; width: 72px; height: 72px; object-fit: contain; border-radius: 50%; background: var(--white); }
 .prod-grid .zone-trio span { width: 36px; height: 36px; font-size: 18px; }
 /* -- Greeting: the first thing the floor and the office both see. Sits above
    everything, rotating through the team's languages (English twice as often)
@@ -291,13 +293,16 @@
         <div class="dash-row">
             <a href="/delivery-zones" class="dash-btn full tile-blue"><span class="icon zone-trio" aria-hidden="true"><span class="zone-1">1</span><span class="zone-2">2</span><span class="zone-3">3</span></span><span class="label">Delivery Zone Lookup &amp; Map</span><span class="sublabel">Postal code &rarr; zone, minimum order, delivery fee &mdash; with the Ontario zone map</span></a>
         </div>
+        <div class="section-label">Organic Certification</div>
+        <div class="dash-row">
+            <a href="/organic-certification" class="dash-btn full tile-green"><span class="icon"><img src="/static/canada_organic_color.jpg" alt="" class="organic-logo"></span><span class="label">Organic Certification</span><span class="sublabel">Organic Lots, supplier certificates &amp; the audit pack</span></a>
+        </div>
         <details class="mgmt-details">
         <summary class="section-label"><span class="chev">&#9654;</span>Administration</summary>
         <div class="mgmt-list">
             <a class="mgmt-row" href="/recipes">Recipes</a>
             <a class="mgmt-row" href="/organic">Inventory</a>
             <a class="mgmt-row" href="/sales-receiving">Sales &amp; Receiving</a>
-            <a class="mgmt-row" href="/organic-certification">Organic Certification</a>
             <a class="mgmt-row" id="prod-record-btn" href="/traceability">Completed Production</a>
             <a class="mgmt-row" href="/analytics">Analytics</a>
             <a class="mgmt-row" href="/contacts">Buyers &amp; Suppliers</a>
