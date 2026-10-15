@@ -233,7 +233,10 @@ h2 .ol-small { font-weight: 400; margin-left: 6px; }
 
     <!-- Audit pack — one PDF for the inspector (audit_tools.audit_pack_pdf).
          Batches are chosen by START date, the date their LOT# is made from. -->
-    <details class="card" id="audit-pack">
+    <!-- HIDDEN 2026-10-15 (Jeremy: walks inspectors through Soma instead; may
+         bring it back). Remove `hidden` to restore — markup, JS and the PDF
+         route (/api/organic/audit-pack.pdf) are all intact. -->
+    <details class="card" id="audit-pack" hidden>
         <summary><span class="chev">&#9654;</span><h2>Audit Pack</h2></summary>
         <p class="card-desc">One PDF for an inspector: the recipes used, the CCP checklist, and every batch traced from ingredients to sale.</p>
         <form class="ap-form" id="ap-form">
