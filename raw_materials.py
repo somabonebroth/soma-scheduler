@@ -374,7 +374,18 @@ def get_raw_material_lots(item, unit):
                 if (m.get("item") or "").strip().lower() == item_lc
                 and (m.get("unit") or "").strip() == unit]
     matching.sort(key=lambda m: (m.get("date_received") or "", m.get("created_at") or ""))
-    return jsonify(matching)
+    # has_invoice: the line or its delivery has a stored photo, so the lot
+    # list can link it (2026-10-15).
+    try:
+        stems = {fn.rsplit(".", 1)[0] for fn in os.listdir(app.RM_RECEIPT_PHOTOS_DIR)}
+    except FileNotFoundError:
+        stems = set()
+    out = []
+    for m in matching:
+        did = _delivery_id(m)
+        out.append(dict(m, delivery_id=did,
+                        has_invoice=m.get("id") in stems or (did in stems if did else False)))
+    return jsonify(out)
 
 
 @raw_materials_bp.route("/api/organic/ingredients", methods=["POST"])
