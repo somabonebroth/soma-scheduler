@@ -65,6 +65,23 @@ class Balance(unittest.TestCase):
         self.assertEqual((g["certified"], g["non_certified"]), (10, 0))
 
 
+class OnlyCertifiedRecipeIngredients(unittest.TestCase):
+    def test_filter_keeps_recipe_ingredients_and_certified_usage(self):
+        from audit_tools import certified_recipe_ingredients
+        recipes = {"Org Chicken": {"certification": "Organic", "kettle_overnight": [
+                       {"name": "Organic Carrots", "amount": 1, "unit": "kg"}]},
+                   "Beef": {"certification": "", "kettle_overnight": [
+                       {"name": "Beef Bones", "amount": 1, "unit": "kg"}]}}
+        only = certified_recipe_ingredients(recipes)
+        self.assertEqual(only, {"organic carrots"})
+        mats = [lot("a", "Organic Carrots", 10, 10, "2026-09-02"),
+                lot("b", "Beef Bones", 10, 10, "2026-09-02"),
+                lot("c", "Lemongrass", 5, 4, "2026-09-02")]
+        runs = [run("Org Chicken", "2026-09-07", 0, [use("c", "Lemongrass", 1)])]
+        out = raw_mass_balance(mats, runs, [], recipes, "2026-09-01", "2026-09-30", only=only)
+        self.assertEqual([g["item"] for g in out["ingredients"]], ["Lemongrass", "Organic Carrots"])
+
+
 class Route(unittest.TestCase):
     def test_bad_dates_and_role(self):
         c = app.app.test_client()

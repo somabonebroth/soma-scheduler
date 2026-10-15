@@ -596,8 +596,26 @@ def _num(v):
         return 0.0
 
 
-def raw_mass_balance(materials, runs, fg, recipes, date_from, date_to):
-    """Pure: the raw mass balance for lots received in [date_from, date_to]."""
+def certified_recipe_ingredients(recipes):
+    """Lower-cased names of the ingredients active Organic-certified recipes
+    use — the same lines the Raw Materials list reads (2026-10-15)."""
+    names = set()
+    for rdata in recipes.values():
+        if rdata.get("archived") or (rdata.get("certification") or "").strip().lower() != "organic":
+            continue
+        for section in app.INGREDIENT_SECTIONS:
+            for item in rdata.get(section, []):
+                if app.is_structured_ingredient(item) and not item.get("needs_review"):
+                    name = (item.get("name") or "").strip().lower()
+                    if name:
+                        names.add(name)
+    return names
+
+
+def raw_mass_balance(materials, runs, fg, recipes, date_from, date_to, only=None):
+    """Pure: the raw mass balance for lots received in [date_from, date_to].
+    `only` (a set of lower-cased names) keeps just those ingredients — plus any
+    a certified batch actually drew on, so a flag can never be filtered away."""
     fg_by_id = {f.get("id"): f for f in fg}
     by_lot = {}          # raw_material_id -> {"cert": qty, "other": qty}
     flags = []           # certified batches in the period with a problem
@@ -659,7 +677,8 @@ def raw_mass_balance(materials, runs, fg, recipes, date_from, date_to):
         g["organic"] = "organic" in g["item"].lower()
         g["not_organic_in_certified"] = (not g["organic"] and g["certified"] > 0
                                          and not any(w in g["item"].lower() for w in ORGANIC_EXEMPT_WORDS))
-        rows.append(g)
+        if only is None or g["item"].lower() in only or g["certified"] > 0:
+            rows.append(g)
     rows.sort(key=lambda g: (g["item"].lower(), g["unit"]))
     flags.sort(key=lambda f: (f["date"], f["recipe"], f["item"]))
     return {"from": date_from, "to": date_to, "ingredients": rows, "flags": flags}
@@ -678,6 +697,9 @@ def raw_mass_balance_route():
         return jsonify({"error": "from and to must be YYYY-MM-DD"}), 400
     if frm > to:
         return jsonify({"error": "from is after to"}), 400
+    recipes = app.load_recipes()
+    # Only ingredients of organic-certified recipes (Jeremy, 2026-10-15).
     return jsonify(raw_mass_balance(
         _load_json(app.ORGANIC_RAW_PATH, []), _load_json(ORGANIC_RUNS_PATH, []),
-        _load_json(app.ORGANIC_FG_PATH, []), app.load_recipes(), frm, to))
+        _load_json(app.ORGANIC_FG_PATH, []), recipes, frm, to,
+        only=certified_recipe_ingredients(recipes)))

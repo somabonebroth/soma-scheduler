@@ -404,7 +404,7 @@ async function runMassBalance() {
   }
   st.textContent = '';
   const ings = d.ingredients;
-  let h = '<div class="mb-head"><b>Raw materials received ' + escHtml(frm) + ' to ' + escHtml(to)
+  let h = '<div class="mb-head"><b>Ingredients of organic-certified recipes received ' + escHtml(frm) + ' to ' + escHtml(to)
     + '</b>, followed to today. Received = certified + non-certified + counts &amp; corrections + on hand.</div>';
   if (d.flags.length) {
     const why = { no_stock: 'used with no stock on record', not_organic: 'non-organic ingredient' };
@@ -417,7 +417,7 @@ async function runMassBalance() {
     h += '<div class="mb-head"><span class="mb-ok">&#10003; Every certified batch in this period drew organic stock on record.</span></div>';
   }
   if (!ings.length) {
-    out.innerHTML = h + '<div class="empty-state">Nothing was received in this period.</div>';
+    out.innerHTML = h + '<div class="empty-state">No ingredient of an organic-certified recipe was received in this period.</div>';
     return;
   }
   h += '<div class="inv-table-wrap"><table class="inv-table mb-table"><thead><tr><th>Ingredient</th>'
