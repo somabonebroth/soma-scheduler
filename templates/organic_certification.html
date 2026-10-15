@@ -173,6 +173,24 @@ h2 .ol-small { font-weight: 400; margin-left: 6px; }
 .pm-open { font-size: 14px; font-weight: 600; color: var(--dark); }
 .pm-status { font-size: 13px; color: var(--text-light); }
 .pm-status.err { color: var(--action-red); }
+.mb-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
+.mb-head { margin: 18px 0 10px; font-size: 14px; color: var(--text-light); line-height: 1.5; }
+.mb-head b { color: var(--dark); }
+.mb-ok { color: var(--action-green); font-weight: 600; }
+.mb-flags { margin: 12px 0; padding: 12px 16px; border-radius: var(--r-md); background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark); font-size: 14px; line-height: 1.6; }
+.mb-flags ul { margin: 6px 0 0; padding-left: 18px; }
+.mb-table td.num, .mb-table th.num { text-align: right; white-space: nowrap; }
+.mb-table tr.mb-ing { cursor: pointer; }
+.mb-table tr.mb-ing td:first-child b { color: var(--dark); }
+.mb-table tr.mb-ing .chev { display: inline-block; width: 14px; color: var(--text-light); font-size: 10px; transition: transform .15s; }
+.mb-table tr.mb-ing.open .chev { transform: rotate(90deg); }
+.mb-table tr.mb-lot td { background: var(--row-alt); font-size: 12px; color: var(--text); }
+.mb-table tr.mb-lot td:first-child { padding-left: 30px; }
+.mb-table tr.mb-warn td:first-child b { color: var(--amber-text-dark); }
+.mb-table .unit { color: var(--text-light); font-size: 12px; margin-left: 4px; }
+.mb-table .cert { color: var(--action-green); font-weight: 600; }
+.mb-table .zero { color: var(--grey-light); }
+.mb-table tfoot td { font-weight: 700; border-top: 2px solid var(--border); }
 .oc-rule { margin: -6px 0 20px; padding: 12px 16px; border-radius: var(--r-md); background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark); font-size: 14px; line-height: 1.5; }
 .oc-links { font-size: 13px; color: var(--text-light); line-height: 2; margin: 4px 2px 0; }
 .oc-links .k { display: inline-block; min-width: 84px; font-weight: 600; color: var(--text-light); }
@@ -225,6 +243,13 @@ h2 .ol-small { font-weight: 400; margin-left: 6px; }
             <label class="ap-check"><input type="checkbox" id="ap-organic"> Organic batches only</label>
             <button type="submit" class="btn btn-primary">Download PDF</button>
         </form>
+        <!-- Raw materials mass balance (audit_tools.raw_mass_balance, 2026-10-15):
+             same From/To as the PDF. Lots received in the period, followed to today. -->
+        <div class="mb-bar">
+            <button type="button" class="btn btn-outline" id="mb-run">Perform raw materials mass balance</button>
+            <span class="pm-status" id="mb-status"></span>
+        </div>
+        <div id="mb-out"></div>
     </details>
 
     <!-- Pest control map (audit_tools.py, 2026-10-15): ONE current file, shown
@@ -345,6 +370,83 @@ loadSupplierCerts();
     window.location = '/api/organic/audit-pack.pdf?' + q.toString();
   });
 })();
+
+// ── Raw materials mass balance (same From/To as the audit pack) ──
+function mbNum(v) {
+  if (!v) return '<span class="zero">0</span>';
+  return (Math.round(v * 1000) / 1000).toLocaleString();
+}
+// Stock counts & corrections, as a change to stock: removed reads −2, added +5.
+function mbCount(v) {
+  if (Math.abs(v) < 0.0005) return '<span class="zero">0</span>';
+  return (v > 0 ? '&minus;' : '+') + (Math.round(Math.abs(v) * 1000) / 1000).toLocaleString();
+}
+function mbLotLabel(l) {
+  const bits = [l.date_received, l.supplier, l.supplier_lot].filter(Boolean).map(escHtml);
+  if (l.opening_count) bits.push('opening count');
+  if (l.added_by_count) bits.push('added by a stock count');
+  return bits.join(' &middot; ');
+}
+async function runMassBalance() {
+  const frm = document.getElementById('ap-from').value, to = document.getElementById('ap-to').value;
+  const st = document.getElementById('mb-status'), out = document.getElementById('mb-out');
+  st.className = 'pm-status';
+  st.textContent = 'Working…';
+  let d;
+  try {
+    const r = await fetch('/api/organic/raw-mass-balance?' + new URLSearchParams({ from: frm, to: to }));
+    d = await r.json();
+    if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+  } catch (e) {
+    st.className = 'pm-status err';
+    st.textContent = 'Could not run: ' + e.message;
+    return;
+  }
+  st.textContent = '';
+  const ings = d.ingredients;
+  let h = '<div class="mb-head"><b>Raw materials received ' + escHtml(frm) + ' to ' + escHtml(to)
+    + '</b>, followed to today. Received = certified + non-certified + counts &amp; corrections + on hand.</div>';
+  if (d.flags.length) {
+    const why = { no_stock: 'used with no stock on record', not_organic: 'non-organic ingredient' };
+    h += '<div class="mb-flags"><b>&#9888; Certified batches to check (' + d.flags.length + ')</b><ul>'
+      + d.flags.map(function (f) {
+          return '<li>' + escHtml(f.date) + ' &middot; ' + escHtml(f.recipe) + ' (' + escHtml(f.vessel) + '): '
+            + escHtml(f.item) + ' ' + mbNum(f.quantity) + ' ' + escHtml(f.unit) + ' &mdash; ' + why[f.kind] + '</li>';
+        }).join('') + '</ul></div>';
+  } else if (ings.length) {
+    h += '<div class="mb-head"><span class="mb-ok">&#10003; Every certified batch in this period drew organic stock on record.</span></div>';
+  }
+  if (!ings.length) {
+    out.innerHTML = h + '<div class="empty-state">Nothing was received in this period.</div>';
+    return;
+  }
+  h += '<div class="inv-table-wrap"><table class="inv-table mb-table"><thead><tr><th>Ingredient</th>'
+    + '<th class="num">Received</th><th class="num">Certified</th><th class="num">Non-certified</th>'
+    + '<th class="num" title="Stock counts and corrections: removed (−) or added (+)">Counts &amp; corrections</th>'
+    + '<th class="num">On hand</th></tr></thead><tbody>';
+  ings.forEach(function (g, i) {
+    h += '<tr class="mb-ing' + (g.not_organic_in_certified ? ' mb-warn' : '') + '" data-mb="' + i + '">'
+      + '<td><span class="chev">&#9654;</span><b>' + escHtml(g.item) + '</b><span class="unit">' + escHtml(g.unit) + '</span>'
+      + (g.not_organic_in_certified ? ' <span title="Not organic, used in a certified batch">&#9888;</span>' : '') + '</td>'
+      + '<td class="num">' + mbNum(g.received) + '</td><td class="num cert">' + mbNum(g.certified) + '</td>'
+      + '<td class="num">' + mbNum(g.non_certified) + '</td><td class="num">' + mbCount(g.counts) + '</td>'
+      + '<td class="num">' + mbNum(g.on_hand) + '</td></tr>';
+    g.lots.forEach(function (l) {
+      h += '<tr class="mb-lot" data-mb-of="' + i + '" hidden><td>' + mbLotLabel(l) + '</td>'
+        + '<td class="num">' + mbNum(l.received) + '</td><td class="num">' + mbNum(l.certified) + '</td>'
+        + '<td class="num">' + mbNum(l.non_certified) + '</td><td class="num">' + mbCount(l.counts) + '</td>'
+        + '<td class="num">' + mbNum(l.on_hand) + '</td></tr>';
+    });
+  });
+  out.innerHTML = h + '</tbody></table></div>';
+  out.querySelectorAll('tr.mb-ing').forEach(function (tr) {
+    tr.addEventListener('click', function () {
+      const open = tr.classList.toggle('open');
+      out.querySelectorAll('tr[data-mb-of="' + tr.dataset.mb + '"]').forEach(function (x) { x.hidden = !open; });
+    });
+  });
+}
+document.getElementById('mb-run').addEventListener('click', runMassBalance);
 
 // ── Pest control map: details in the header now, the file on first open ──
 let pmMeta = null, pmShown = false;

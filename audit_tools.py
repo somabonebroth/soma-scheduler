@@ -563,3 +563,121 @@ def upload_pest_map():
             "uploaded_at": datetime.now().isoformat(timespec="seconds"), "size": len(blob)}
     _save_json(os.path.join(d, "meta.json"), meta)
     return jsonify(dict(meta, exists=True))
+
+
+# ── Raw materials mass balance (2026-10-15) ──────────────────────────────────
+# Jeremy asked for the RAW side of "organic in = organic out" (the finished-goods
+# side is each Organic Lots folder). Every raw lot RECEIVED in the period is
+# followed to today:
+#     received = used in certified + used in non-certified
+#                + stock counts & corrections + on hand
+# Usage is read from each completed batch's FROZEN ingredients_used (joined on
+# raw_material_id — lot strings are not unique), never recomputed from recipes.
+# Stock counts & corrections is the remainder: counts drain lots FIFO without
+# saying which lot, so it is derived, not summed from the log. Lots a count ADDED
+# (adjustment rows) are not "received"; their stock shows as a negative
+# correction. A batch's certification is the audit pack's rule: its FG row, else
+# the recipe. Read-only.
+
+def _batch_certified(run, fg_by_id, recipes):
+    """True when the batch's jars were certified Organic (same rule as the
+    audit pack: the FG row the run wrote, else the recipe on file)."""
+    fin_w, fin_d = run.get("finish_week_id"), run.get("finish_day_idx")
+    fg = fg_by_id.get(f"fg_{fin_w}_{fin_d}_{run.get('vessel', '')}") if fin_w is not None else None
+    cert = ((fg or {}).get("certification")
+            or (recipes.get(run.get("recipe", "")) or {}).get("certification") or "")
+    return cert.strip().lower() == "organic"
+
+
+def _num(v):
+    try:
+        return float(v or 0)
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def raw_mass_balance(materials, runs, fg, recipes, date_from, date_to):
+    """Pure: the raw mass balance for lots received in [date_from, date_to]."""
+    fg_by_id = {f.get("id"): f for f in fg}
+    by_lot = {}          # raw_material_id -> {"cert": qty, "other": qty}
+    flags = []           # certified batches in the period with a problem
+    for run in runs:
+        if run.get("status") != "completed":
+            continue
+        cert = _batch_certified(run, fg_by_id, recipes)
+        start = app._run_start_date_str(run.get("week_id"), run.get("day_idx")) or ""
+        in_period = date_from <= start <= date_to
+        for line in run.get("ingredients_used") or []:
+            qty = _num(line.get("quantity_used"))
+            rid = line.get("raw_material_id")
+            if rid:
+                slot = by_lot.setdefault(rid, {"cert": 0.0, "other": 0.0})
+                slot["cert" if cert else "other"] += qty
+            if not (cert and in_period):
+                continue
+            low = (line.get("item") or "").lower()
+            if line.get("supplier_lot") == "INSUFFICIENT_STOCK":
+                flags.append({"kind": "no_stock", "date": start, "recipe": run.get("recipe", ""),
+                              "vessel": run.get("vessel", ""), "item": line.get("item", ""),
+                              "quantity": round(qty, 3), "unit": line.get("unit", "")})
+            elif "organic" not in low and not any(w in low for w in ORGANIC_EXEMPT_WORDS):
+                flags.append({"kind": "not_organic", "date": start, "recipe": run.get("recipe", ""),
+                              "vessel": run.get("vessel", ""), "item": line.get("item", ""),
+                              "quantity": round(qty, 3), "unit": line.get("unit", "")})
+
+    groups = {}
+    for m in materials:
+        received_on = (m.get("date_received") or "").strip()
+        if not (date_from <= received_on <= date_to):
+            continue
+        item = (m.get("item") or "").strip()
+        unit = (m.get("unit") or "").strip()
+        use = by_lot.get(m.get("id"), {"cert": 0.0, "other": 0.0})
+        received = 0.0 if m.get("adjustment") else _num(m.get("quantity"))
+        on_hand = _num(m.get("remaining"))
+        lot = {
+            "id": m.get("id"), "supplier": m.get("supplier", ""),
+            "supplier_lot": m.get("supplier_lot", ""), "date_received": received_on,
+            "added_by_count": bool(m.get("adjustment")),
+            "opening_count": bool(m.get("migration_baseline")),
+            "received": received, "certified": use["cert"], "non_certified": use["other"],
+            "on_hand": on_hand,
+        }
+        lot["counts"] = received - use["cert"] - use["other"] - on_hand
+        g = groups.setdefault((item.lower(), unit), {"item": item, "unit": unit, "lots": []})
+        g["lots"].append(lot)
+
+    keys = ("received", "certified", "non_certified", "counts", "on_hand")
+    rows = []
+    for g in groups.values():
+        g["lots"].sort(key=lambda l: (l["date_received"], l["id"] or ""))
+        for k in keys:
+            g[k] = round(sum(l[k] for l in g["lots"]), 3)
+        for l in g["lots"]:
+            for k in keys:
+                l[k] = round(l[k], 3)
+        g["organic"] = "organic" in g["item"].lower()
+        g["not_organic_in_certified"] = (not g["organic"] and g["certified"] > 0
+                                         and not any(w in g["item"].lower() for w in ORGANIC_EXEMPT_WORDS))
+        rows.append(g)
+    rows.sort(key=lambda g: (g["item"].lower(), g["unit"]))
+    flags.sort(key=lambda f: (f["date"], f["recipe"], f["item"]))
+    return {"from": date_from, "to": date_to, "ingredients": rows, "flags": flags}
+
+
+@audit_tools_bp.route("/api/organic/raw-mass-balance", methods=["GET"])
+@manager_required
+def raw_mass_balance_route():
+    """GET ?from=YYYY-MM-DD&to=YYYY-MM-DD — the raw materials mass balance."""
+    frm = (request.args.get("from") or "").strip()
+    to = (request.args.get("to") or "").strip()
+    try:
+        datetime.strptime(frm, "%Y-%m-%d")
+        datetime.strptime(to, "%Y-%m-%d")
+    except ValueError:
+        return jsonify({"error": "from and to must be YYYY-MM-DD"}), 400
+    if frm > to:
+        return jsonify({"error": "from is after to"}), 400
+    return jsonify(raw_mass_balance(
+        _load_json(app.ORGANIC_RAW_PATH, []), _load_json(ORGANIC_RUNS_PATH, []),
+        _load_json(app.ORGANIC_FG_PATH, []), app.load_recipes(), frm, to))
