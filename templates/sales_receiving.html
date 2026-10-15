@@ -529,7 +529,7 @@ function trProd(x){ return escHtml((x.recipe||'')+(x.format?' · '+x.format:''))
 function trLot(f){
     var lot=escHtml(f.lot||'');
     return /organic/i.test(f.certification||'') && f.lot
-        ? '<a href="/organic-lots#'+encodeURIComponent(f.lot)+'">LOT# '+lot+' &rarr;</a>'
+        ? '<a href="/organic-certification#'+encodeURIComponent(f.lot)+'">LOT# '+lot+' &rarr;</a>'
         : 'LOT# '+lot;
 }
 async function doTrace(){

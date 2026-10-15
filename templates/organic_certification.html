@@ -6,20 +6,153 @@
 <title>Organic Certification · Soma</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
-/* Organic Certification (reshaped 2026-10-01): Organic Lots is the answer to
-   "organic in = organic out", so it leads; then the supplier certificates to
-   watch, the audit pack for an inspection, and one line of everyday tools. */
+/* Organic Certification (2026-10-15): the Organic Lots folders lead the
+   page, full width, and open in place; then the supplier certificates
+   (collapsed), the audit pack, and one line of everyday tools. */
 .oc-main { max-width: 1100px; margin: 0 auto; }
-.oc-hero { display: flex; align-items: center; gap: 18px; padding: 22px 24px; margin-bottom: 20px; background: var(--card-bg); border: 1px solid var(--border); border-left: 5px solid var(--accent); border-radius: var(--r-lg); text-decoration: none; color: var(--text); transition: border-color .15s, box-shadow .15s; }
-.oc-hero:hover { border-color: var(--accent); box-shadow: 0 2px 12px rgba(74,103,65,0.15); }
-.oc-hero .icon { font-size: 36px; line-height: 1; flex: none; }
-.oc-hero .body { flex: 1; min-width: 0; }
-.oc-hero .title, .oc-hero .desc { display: block; }
-.oc-hero .title { font-size: 20px; font-weight: 700; color: var(--dark); }
-.oc-hero .desc { font-size: 13px; color: var(--text-light); line-height: 1.5; margin-top: 3px; }
-.oc-hero .stats { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 13px; color: var(--text-light); }
-.oc-hero .stats b { color: var(--dark); font-size: 16px; }
-.oc-hero .go { font-size: 22px; color: var(--accent); flex: none; }
+#organic-lots { margin-bottom: 28px; }
+.oc-h { font-size: 20px; font-weight: 700; color: var(--dark); margin: 4px 0 14px; }
+/* Collapsible card — Supplier Certificates starts closed (2026-10-15). */
+details.card > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 10px; }
+details.card > summary::-webkit-details-marker { display: none; }
+details.card > summary h2 { margin: 0; flex: 1; }
+details.card > summary .chev { color: var(--text-light); font-size: 12px; transition: transform .15s; }
+details.card[open] > summary .chev { transform: rotate(90deg); }
+details.card[open] > summary { margin-bottom: 14px; }
+/* Organic Lots — moved here from /organic-lots (2026-10-15). */
+.ol-mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: 1px; }
+.ol-muted { font-size: 13px; color: var(--text-light); line-height: 1.5; margin: 0; }
+.ol-small { font-size: 12px; color: var(--text-light); }
+.ol-nw { white-space: nowrap; }
+
+/* ── List (2026-10-15): one full-width row per LOT# — LOT# + Best Before on
+   the left, products in the middle, cases in stock on the right. ── */
+.ol-search { width: 100%; max-width: 420px; padding: 12px 14px; font-size: 16px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--white); }
+.ol-heading { font-size: 12px; font-weight: 700; color: var(--text-light); text-transform: uppercase; letter-spacing: 1px; margin: 24px 0 12px; }
+.ol-grid { display: flex; flex-direction: column; gap: 12px; }
+.ol-folder { display: grid; grid-template-columns: minmax(170px, 210px) 1fr minmax(150px, 190px); align-items: center; gap: 12px 28px; width: 100%; text-align: left; background: var(--card-bg); border: 1px solid var(--border); border-left: 5px solid var(--action-green); border-radius: var(--r-lg); padding: 18px 24px; cursor: pointer; font: inherit; color: var(--text); transition: border-color .15s, box-shadow .15s; }
+.ol-folder:hover { border-color: var(--action-green); box-shadow: 0 2px 10px rgba(46,125,50,.12); }
+.ol-folder .c-lot { display: flex; flex-direction: column; gap: 4px; }
+.ol-folder .lot { display: inline-flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 700; color: var(--dark); }
+.ol-folder .lot svg { width: 22px; height: 22px; flex: none; color: var(--action-green); }
+.ol-folder .bb { font-size: 13px; color: var(--text-light); padding-left: 32px; }
+.ol-folder .skus { list-style: none; margin: 0; padding: 0; font-size: 16px; font-weight: 600; color: var(--dark); line-height: 1.4; }
+.ol-folder .skus li + li { margin-top: 8px; }
+.ol-folder .skus .fmt { display: block; font-size: 13px; font-weight: 400; color: var(--text-light); letter-spacing: .2px; }
+.ol-folder .c-stock { display: flex; flex-direction: column; gap: 8px; text-align: right; }
+.ol-folder .big { font-size: 26px; font-weight: 700; color: var(--action-green); white-space: nowrap; line-height: 1; }
+.ol-folder .big .of { font-size: 14px; font-weight: 500; color: var(--text-light); margin-left: 5px; }
+.ol-bar { height: 7px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+.ol-bar span { display: block; height: 100%; background: var(--action-green); border-radius: 4px; }
+.ol-folder.closed { background: transparent; border-left-color: var(--grey-light); }
+.ol-folder.closed:hover { border-color: var(--grey); box-shadow: none; }
+.ol-folder.closed .lot, .ol-folder.closed .skus { color: var(--text-light); }
+.ol-folder.closed .lot svg { color: var(--grey-light); }
+.ol-folder .closed-tag { font-size: 14px; font-weight: 600; color: var(--text-light); }
+details.ol-closed { margin-top: 26px; }
+details.ol-closed > summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--text-light); background: var(--card-bg); }
+details.ol-closed > summary:hover { border-color: var(--accent); color: var(--dark); }
+details.ol-closed > summary::-webkit-details-marker { display: none; }
+details.ol-closed > summary .chev { transition: transform .15s; font-size: 11px; }
+details.ol-closed[open] > summary .chev { transform: rotate(180deg); }
+details.ol-closed > .ol-grid { margin-top: 14px; }
+.ol-empty { text-align: center; padding: 32px 20px; color: var(--text-light); font-size: 14px; }
+
+/* ── Folder ── */
+.pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 10px; vertical-align: middle; }
+.pill.held { background: var(--action-green-bg); color: var(--action-green); }
+.pill.closed { background: var(--row-alt); color: var(--grey-dark); }
+.ol-bar-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+#ol-root .card { padding: 26px 28px; margin-bottom: 22px; }
+#ol-root .card > h2 { font-size: 19px; margin-bottom: 18px; }
+.ol-back { background: none; border: none; color: var(--dark); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; padding: 6px 0; }
+.ol-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.ol-title { font-size: 30px; font-weight: 700; color: var(--dark); margin: 0; }
+.ol-sub { font-size: 16px; color: var(--text-light); margin: 8px 0 0; line-height: 1.5; }
+.ol-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 24px; }
+.ol-stat { background: var(--bg); border-radius: var(--r-md); padding: 16px 18px; }
+.ol-stat .k { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-light); }
+.ol-stat .v { font-size: 30px; font-weight: 700; color: var(--dark); line-height: 1.2; margin-top: 6px; }
+.ol-stat .v small { font-size: 13px; font-weight: 600; color: var(--text-light); margin-left: 3px; }
+.ol-stat .u { font-size: 12px; color: var(--text-light); }
+.ol-stat.held { background: var(--action-green-bg); }
+.ol-stat.held .v { color: var(--action-green); }
+.ol-check { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 20px; font-size: 14px; color: var(--text-light); }
+.ol-check .ok { color: var(--action-green); font-weight: 600; }
+.ol-singles { margin-top: 20px; padding: 14px 16px; border-radius: var(--r-md); background: var(--row-alt); font-size: 14px; line-height: 1.5; color: var(--text); }
+.ol-alert { margin-top: 20px; padding: 14px 16px; border-radius: var(--r-md); background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark); font-size: 14px; line-height: 1.5; }
+.ol-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.ol-ing { table-layout: fixed; }
+.ol-ing col.item { width: 52%; } .ol-ing col.lot { width: 30%; } .ol-ing col.qty { width: 18%; }
+.ol-ing td { padding: 12px 8px; }
+.ol-ing td:first-child { padding-left: 0; } .ol-ing td:last-child { padding-right: 0; }
+.ol-ing .ol-mono { font-size: 14px; overflow-wrap: anywhere; }
+.ol-table th { text-align: left; padding: 6px 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--text-light); font-weight: 600; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.ol-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.ol-table tr:last-child td { border-bottom: none; }
+.ol-table .num { text-align: right; white-space: nowrap; }
+.ol-table .sub { display: block; font-size: 12px; color: var(--text-light); margin-top: 1px; }
+/* Per product: the four numbers sit in the SAME grid as the tiles above, so
+   each one lines up under its tile and the tiles serve as the headings. */
+.ol-per { margin-top: 12px; }
+.ol-per-item { padding: 18px 0 16px; border-bottom: 1px solid var(--border); }
+.ol-per-item:last-child { border-bottom: none; padding-bottom: 0; }
+.ol-per-name { font-size: 15px; font-weight: 600; color: var(--dark); margin-bottom: 8px; }
+.ol-per-nums { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.ol-per-nums > div { padding: 0 18px; font-size: 18px; font-weight: 600; color: var(--dark); line-height: 1.3; }
+.ol-per-nums > div.zero { color: var(--grey-light); }
+.ol-per-nums > div.held { color: var(--action-green); }
+.ol-per-nums .k { display: none; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-light); }
+.ol-per-nums .j { display: block; font-size: 12px; font-weight: 400; color: var(--text-light); }
+.ol-group { margin-top: 26px; }
+.ol-group-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.ol-group-head b { color: var(--dark); font-size: 16px; }
+.ol-group-head .ol-small { margin-left: 6px; }
+h2 .ol-small { font-weight: 400; margin-left: 6px; }
+.ol-rows { list-style: none; margin: 0; padding: 0; }
+.ol-rows li { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; padding: 18px 0; border-bottom: 1px solid var(--border); font-size: 16px; }
+.ol-rows li:first-child { padding-top: 4px; }
+.ol-rows .meta { display: block; font-size: 14px; color: var(--text-light); line-height: 1.5; margin-top: 4px; }
+.ol-rows .lines { display: block; margin-top: 8px; font-size: 14px; line-height: 1.7; color: var(--text); }
+.ol-rows .lines b { font-weight: 600; color: var(--dark); white-space: nowrap; }
+.ol-rows .also { display: block; margin-top: 6px; font-size: 13px; color: var(--text-light); line-height: 1.5; }
+.ol-rows li:last-child { border-bottom: none; }
+.ol-rows .who { font-weight: 700; color: var(--dark); }
+.ol-rows .amt { text-align: right; white-space: nowrap; font-weight: 700; font-size: 17px; color: var(--dark); }
+.ol-rows .amt.minus { color: var(--action-red); }
+.ol-rows .links { display: block; font-weight: 400; font-size: 14px; margin-top: 8px; }
+.ol-rows .links a, .ol-rows .links button { color: var(--text-light); background: none; border: none; padding: 0; font: inherit; cursor: pointer; text-decoration: underline; }
+.ol-chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 10px; background: var(--row-alt); color: var(--dark); white-space: nowrap; }
+.ol-chip.red { background: var(--action-red-bg); color: var(--action-red); }
+.ol-link { font-size: 13px; color: var(--dark); }
+.ol-btn { font-size: 13px; text-decoration: none; padding: 7px 14px; }
+@media (max-width: 700px) {
+  .ol-folder { grid-template-columns: 1fr auto; padding: 16px 18px; gap: 12px 16px; }
+  .ol-folder .skus { grid-column: 1 / -1; grid-row: 2; font-size: 15px; }
+  .ol-folder .c-stock { grid-column: 2; grid-row: 1; }
+  .ol-folder .lot { font-size: 20px; }
+  .ol-folder .lot svg { display: none; }
+  .ol-folder .bb { padding-left: 0; }
+}
+@media (max-width: 600px) {
+  #ol-root .card { padding: 20px 18px; }
+  .ol-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Tiles wrap 2×2 here, so the per-product numbers carry their own labels. */
+  .ol-per-nums { gap: 6px; }
+  .ol-per-nums > div { padding: 0; font-size: 16px; }
+  .ol-per-nums .k { display: block; }
+  .ol-ing col.item { width: 46%; } .ol-ing col.lot { width: 32%; } .ol-ing col.qty { width: 22%; }
+  .ol-title { font-size: 24px; }
+  .ol-search { max-width: none; }
+}
+@media print {
+  .header, .ol-bar-top, .ol-noprint, #oc-extras, .oc-rule, .oc-h { display: none !important; }
+  body { background: #fff; }
+  .main { padding: 0; }
+  .card { box-shadow: none; border: 1px solid #999; break-inside: avoid; }
+  .ol-rows li, .ol-group { break-inside: avoid; }
+}
+
 .card { margin-bottom: 20px; }
 .card-desc { font-size: 13px; line-height: 1.5; color: var(--text-light); margin: 0 0 14px; }
 .count-badge { font-size: 12px; font-weight: 500; color: var(--text-light); background: var(--row-alt); padding: 3px 10px; border-radius: 10px; margin-left: 6px; vertical-align: middle; }
@@ -33,10 +166,6 @@
 .ap-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-light); }
 .ap-form input[type=date] { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 14px; background: var(--white); }
 .ap-form .ap-check { flex-direction: row; align-items: center; gap: 6px; font-size: 13px; color: var(--text); padding-bottom: 9px; }
-@media (max-width: 600px) {
-  .oc-hero { padding: 18px; gap: 14px; }
-  .oc-hero .go { display: none; }
-}
 .oc-rule { margin: -6px 0 20px; padding: 12px 16px; border-radius: var(--r-md); background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark); font-size: 14px; line-height: 1.5; }
 .oc-links { font-size: 13px; color: var(--text-light); line-height: 2; margin: 4px 2px 0; }
 .oc-links .k { display: inline-block; min-width: 84px; font-weight: 600; color: var(--text-light); }
@@ -54,32 +183,29 @@
     </div>
 </div>
 <div class="main oc-main">
-    <!-- Organic Lots (organic_lots.py) — one folder per organic LOT#: it answers
-         "does organic in equal organic out?", so it leads the page. -->
-    <a href="/organic-lots" class="oc-hero">
-        <span class="icon">&#128193;</span>
-        <span class="body">
-            <span class="title">Organic Lots</span>
-            <span class="desc">Each organic LOT#: what went in, where it was sold, what is left.</span>
-            <span class="stats" id="oc-lot-stats"></span>
-        </span>
-        <span class="go">&rarr;</span>
-    </a>
-
     <!-- The singles rule, stated once where an inspector or a new manager reads
          it (Jeremy, 2026-10-14): organic stock is whole cases only. -->
     <div class="oc-rule"><b>Organic is sold in full cases only.</b> Jars left over after the last full case
         (singles) are taken out of inventory and <b>not sold</b>.</div>
 
+    <!-- Organic Lots (organic_lots.py): one folder per organic LOT#, on this
+         page since 2026-10-15 (/organic-lots redirects here). A folder opens in
+         place via the URL hash (#280927) and hides #oc-extras. -->
+    <section id="organic-lots">
+        <h2 class="oc-h">Organic Lots</h2>
+        <div id="ol-root"><div class="ol-empty">Loading…</div></div>
+    </section>
+
+    <div id="oc-extras">
     <!-- Supplier certificates — read-only view of each supplier's
          `certificates` list (edited on Buyers & Suppliers, incl. the ones a
          distributor holds for its suppliers). Status comes from the server
          (suppliers._cert_status) so both pages agree. -->
-    <div class="card" id="supplier-certs">
-        <h2>Supplier Certificates <span class="count-badge" id="sc-count">—</span></h2>
+    <details class="card" id="supplier-certs">
+        <summary><span class="chev">&#9654;</span><h2>Supplier Certificates <span class="count-badge" id="sc-count">—</span></h2></summary>
         <p class="card-desc">Organic certificates your suppliers hold, soonest to expire first.</p>
         <div id="sc-container"><div class="empty-state">Loading…</div></div>
-    </div>
+    </details>
 
     <!-- Audit pack — one PDF for the inspector (audit_tools.audit_pack_pdf).
          Batches are chosen by START date, the date their LOT# is made from. -->
@@ -103,6 +229,7 @@
             <a href="/sales-receiving#trace">Search &amp; Trace</a> &middot;
             <a href="/certifications">Certificates &amp; Documents</a></div>
     </div>
+    </div><!-- /#oc-extras -->
 </div>
 <script>
 (function(){
@@ -178,19 +305,6 @@ async function loadSupplierCerts() {
 }
 loadSupplierCerts();
 
-// ── Organic Lots at a glance (same feed as the Organic Lots page) ──
-(async function () {
-  const el = document.getElementById('oc-lot-stats');
-  try {
-    const folders = (await (await fetch('/api/organic-lots')).json()).folders || [];
-    const held = folders.filter(function (f) { return f.status === 'held'; });
-    const jars = held.reduce(function (a, f) { return a + f.held; }, 0);
-    el.innerHTML = '<span><b>' + Math.floor(jars / 12).toLocaleString() + '</b> cases in stock</span>'
-      + '<span><b>' + held.length + '</b> lot' + (held.length === 1 ? '' : 's') + ' with stock</span>'
-      + '<span><b>' + (folders.length - held.length) + '</b> closed (none left)</span>';
-  } catch (e) { /* the link still works without the numbers */ }
-})();
-
 // ── Audit pack: default to the last 90 days, download as a plain GET ──
 (function () {
   // Local date, not toISOString (UTC), so a Toronto evening doesn't read as tomorrow.
@@ -213,6 +327,270 @@ loadSupplierCerts();
 // ── Shared escaping (mirrored from organic.html) ──
 function escSku(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function escHtml(s){return escSku(s);}
+
+// ── Organic Lots (moved from organic_lots.html, 2026-10-15) ──
+let olFolders = [];
+let olQuery = '';
+
+function olEsc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function olDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso + 'T00:00:00');
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString('en-CA', {day: 'numeric', month: 'short', year: 'numeric'});
+}
+
+// A production LOT# IS the Best Before date (ddmmyy).
+function olBestBefore(lot) {
+    const m = /^(\d{2})(\d{2})(\d{2})$/.exec(lot || '');
+    return m ? olDate('20' + m[3] + '-' + m[2] + '-' + m[1]) : '';
+}
+
+// Product name with its brand: "Nature's Emporium Plain Chicken · SS-876ML".
+// Two brands carry near-identical recipe names, so the brand always shows.
+function olProduct(x) {
+    return x.recipe ? (x.brand ? x.brand + ' ' : '') + x.recipe + (x.format ? ' · ' + x.format : '') : (x.name || '');
+}
+
+// The same name as HTML, the format kept on one line so a phone never
+// breaks "SS-750ML" in two.
+function olProductHtml(x) {
+    if (!x.recipe) return olEsc(x.name || '');
+    return olEsc((x.brand ? x.brand + ' ' : '') + x.recipe) + (x.format ? ' &middot; <span class="ol-nw">' + olEsc(x.format) + '</span>' : '');
+}
+
+// Cases first (a case is 12 jars), jars underneath. Loose jars carry their
+// own unit ("6 cases + 6 jars"): a bare "6 + 6" read as twelve cases.
+function olCases(n) {
+    const c = Math.floor(n / 12), loose = n % 12;
+    if (!loose) return c.toLocaleString();
+    return c.toLocaleString() + ' ' + (c === 1 ? 'case' : 'cases') + ' + ' + loose + ' jar' + (loose === 1 ? '' : 's');
+}
+// The unit to print after olCases — empty when olCases already named it.
+function olCaseWord(n) { return n % 12 ? '' : (n === 12 ? 'case' : 'cases'); }
+
+// ── List ─────────────────────────────────────────────────────────────
+// A folder outline before each LOT#: the card opens a folder.
+const OL_FOLDER_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">'
+    + '<path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.6l2 2.5h8.4A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></svg>';
+function olFolderCard(f) {
+    const pct = f.made ? Math.round(100 * f.held / f.made) : 0;
+    const held = f.status === 'held';
+    const bb = olBestBefore(f.lot);
+    return '<button class="ol-folder' + (held ? '' : ' closed') + '" onclick="location.hash=\'' + encodeURIComponent(f.lot) + '\'">'
+        + '<div class="c-lot"><span class="lot ol-mono">' + OL_FOLDER_ICON + olEsc(f.lot) + '</span>'
+        + (bb ? '<span class="bb">Best before ' + olEsc(bb) + '</span>' : '') + '</div>'
+        + '<ul class="skus">' + f.skus.map(s => '<li>' + (s.recipe
+            ? olEsc((s.brand ? s.brand + ' ' : '') + s.recipe) + (s.format ? '<span class="fmt">' + olEsc(s.format) + '</span>' : '')
+            : olEsc(s.name || '')) + '</li>').join('') + '</ul>'
+        + '<div class="c-stock">'
+        + (held ? '<span class="big">' + Math.floor(f.held / 12) + '<span class="of">of ' + Math.floor(f.made / 12) + ' cases</span></span>'
+                + '<div class="ol-bar"><span style="width:' + pct + '%"></span></div>'
+                : '<span class="closed-tag">Closed</span>')
+        + '</div></button>';
+}
+
+// The search box is drawn once; typing only redraws the cards below it, so
+// the box keeps focus and the cursor.
+function olRenderList() {
+    if (!document.getElementById('ol-search')) {
+        document.getElementById('ol-root').innerHTML = '<input class="ol-search" id="ol-search" type="search" placeholder="Find a LOT# or product" autocomplete="off">'
+            + '<div id="ol-list"></div>';
+        const box = document.getElementById('ol-search');
+        box.value = olQuery;
+        box.addEventListener('input', () => { olQuery = box.value; olRenderCards(); });
+    }
+    olRenderCards();
+}
+
+function olRenderCards() {
+    const q = olQuery.trim().toLowerCase();
+    const shown = olFolders.filter(f => !q || f.lot.toLowerCase().includes(q)
+        || f.skus.some(s => olProduct(s).toLowerCase().includes(q)));
+    const held = shown.filter(f => f.status === 'held');
+    const closed = shown.filter(f => f.status !== 'held');
+    let h = '';
+    if (!olFolders.length) {
+        h += '<div class="card"><div class="ol-empty">No organic lots yet.</div></div>';
+    } else if (!shown.length) {
+        h += '<div class="card"><div class="ol-empty">No lot matches “' + olEsc(olQuery) + '”.</div></div>';
+    }
+    if (held.length) {
+        h += '<div class="ol-heading">In stock · ' + held.length + ' lot' + (held.length === 1 ? '' : 's') + ' · '
+            + Math.floor(held.reduce((a, f) => a + f.held, 0) / 12).toLocaleString() + ' cases</div><div class="ol-grid">' + held.map(olFolderCard).join('') + '</div>';
+    }
+    if (closed.length) {
+        h += '<details class="ol-closed"' + (q ? ' open' : '') + '><summary>Closed · ' + closed.length + ' <span class="chev">&#9662;</span></summary>'
+            + '<div class="ol-grid">' + closed.map(olFolderCard).join('') + '</div></details>';
+    }
+    document.getElementById('ol-list').innerHTML = h;
+}
+
+// ── Folder ───────────────────────────────────────────────────────────
+// Whole cases big; loose jars, when there are any, small underneath.
+function olStat(label, jars, cls) {
+    const loose = jars % 12;
+    const c = Math.floor(jars / 12);
+    return '<div class="ol-stat' + (cls ? ' ' + cls : '') + '"><div class="k">' + label + '</div>'
+        + '<div class="v">' + c.toLocaleString() + '<small>' + (c === 1 ? 'case' : 'cases') + '</small></div>'
+        + (loose ? '<div class="u">+ ' + loose + ' jar' + (loose === 1 ? '' : 's') + '</div>' : '') + '</div>';
+}
+
+// One per-product number: cases, loose jars underneath. The label only shows
+// on a phone, where the tiles above no longer sit in one row.
+function olCell(label, jars, cls) {
+    const loose = jars % 12;
+    return '<div class="' + (jars ? cls || '' : 'zero') + '"><span class="k">' + label + '</span>'
+        + Math.floor(jars / 12).toLocaleString()
+        + (loose ? '<span class="j">+ ' + loose + ' jar' + (loose === 1 ? '' : 's') + '</span>' : '') + '</div>';
+}
+
+function olSummaryHtml(f) {
+    const sum = k => f.skus.reduce((a, s) => a + s[k], 0);
+    const made = sum('made') + sum('added'), sold = sum('sold'), reduced = sum('reduced'), hot = sum('hot_cups');
+    const bb = olBestBefore(f.lot);
+    let h = '<div class="card"><div class="ol-head"><h1 class="ol-title"><span class="ol-mono">LOT# ' + olEsc(f.lot) + '</span></h1>'
+        + '<span class="pill ' + f.status + '">' + (f.status === 'held' ? 'In stock' : 'Closed') + '</span></div>'
+        + '<p class="ol-sub">'
+        + (f.skus.length === 1 ? olProductHtml(f.skus[0]) + (bb ? ' &middot; ' : '') : '')
+        + (bb ? 'Best before ' + olEsc(bb) : '') + '</p>'
+        + '<div class="ol-stats">' + olStat('Made', made) + olStat('Sold', sold) + olStat('Written off', reduced) + olStat('In stock', f.held, 'held') + '</div>';
+    if (f.skus.length > 1) {
+        // Product name on its own line, its four numbers underneath in cases.
+        h += '<div class="ol-per">' + f.skus.map(s => '<div class="ol-per-item"><div class="ol-per-name">' + olProductHtml(s) + '</div>'
+            + '<div class="ol-per-nums">' + olCell('Made', s.made + s.added) + olCell('Sold', s.sold)
+            + olCell('Written off', s.reduced) + olCell('In stock', s.held, 'held') + '</div></div>').join('') + '</div>';
+    }
+    // Singles: jars the kitchen counted beyond the last full case. Organic is
+    // sold in full cases only, so they never enter stock and are not sold.
+    if (hot) {
+        const counted = sum('made') + hot;
+        h += '<div class="ol-singles">Kitchen counted <b>' + counted.toLocaleString() + ' jars</b>. '
+            + '<b>' + hot + ' single' + (hot === 1 ? '' : 's') + '</b> (jars short of a full case) '
+            + (hot === 1 ? 'was' : 'were') + ' taken out of inventory and <b>not sold</b>.</div>';
+    }
+    const off = f.skus.filter(s => s.unrecorded);
+    if (off.length) {
+        h += '<div class="ol-alert">&#9888; Doesn\'t add up. No record explains: '
+            + off.map(s => olProductHtml(s) + ', ' + (s.unrecorded > 0 ? s.unrecorded + ' jars missing' : (-s.unrecorded) + ' jars extra')).join('; ') + '.</div>';
+    } else {
+        h += '<div class="ol-check"><span class="ok">&#10003; Adds up</span><span>Made = sold + written off + in stock</span></div>';
+    }
+    return h + '</div>';
+}
+
+function olInHtml(f) {
+    let h = '<div class="card"><h2>In <span class="ol-small">batches and the ingredients they used</span></h2>';
+    const rows = f.batches.map(b => '<li><span><span class="who">' + olEsc((b.brand ? b.brand + ' ' : '') + b.recipe) + '</span>'
+            + '<span class="meta">' + [b.vessel, b.start_date ? 'started ' + olDate(b.start_date) : ''].filter(Boolean).map(olEsc).join(' &middot; ') + '</span></span></li>')
+        .concat(f.added.map(a => '<li><span><span class="who">' + olEsc(a.label) + '</span>'
+            + '<span class="meta">' + olProductHtml({brand: a.brand, recipe: a.recipe, format: a.format, name: a.sku}) + (a.date ? ' &middot; ' + olEsc(olDate(a.date)) : '') + '</span></span>'
+            + '<span class="amt">' + olCases(a.quantity) + ' ' + olCaseWord(a.quantity) + '</span></li>'));
+    if (rows.length) h += '<ul class="ol-rows">' + rows.join('') + '</ul>';
+    if (f.invoices.length) h += '<div class="ol-heading">Ingredients</div>';
+    f.invoices.forEach(inv => {
+        h += '<div class="ol-group"><div class="ol-group-head"><span><b>' + olEsc(inv.opening_count ? 'From opening stock' : (inv.supplier || 'Unknown supplier')) + '</b> '
+            + '<span class="ol-small">' + olEsc(olDate(inv.date_received)) + '</span></span>'
+            + (inv.photo_id
+                ? '<a class="ol-link ol-noprint" target="_blank" href="/api/organic/raw-materials/receipt-photo/' + encodeURIComponent(inv.photo_id) + '">&#128206; Invoice</a>'
+                : inv.opening_count ? '' : '<span class="ol-chip red">No invoice on file</span>')
+            + '</div><table class="ol-table ol-ing"><colgroup><col class="item"><col class="lot"><col class="qty"></colgroup><tbody>'
+            + inv.lines.map(l => '<tr><td>' + olEsc(l.item)
+                + (f.batches.length > 1 ? '<span class="sub">' + olEsc(l.vessel) + '</span>' : '') + '</td>'
+                + '<td class="ol-mono">' + olEsc(l.supplier_lot) + '</td>'
+                + '<td class="num">' + olEsc(l.quantity) + ' ' + olEsc(l.unit) + '</td></tr>').join('')
+            + '</tbody></table></div>';
+    });
+    if (f.no_lot.length) {
+        h += '<div class="ol-alert">Used with no raw lot on record: '
+            + f.no_lot.map(l => olEsc(l.item) + ' ' + olEsc(l.quantity) + ' ' + olEsc(l.unit)).join(', ') + '</div>';
+    }
+    if (!rows.length && !f.invoices.length && !f.no_lot.length) h += '<p class="ol-muted">Nothing on record.</p>';
+    return h + '</div>';
+}
+
+function olOutHtml(f) {
+    let h = '<div class="card"><h2>Out <span class="ol-small">sales and write-offs</span></h2>';
+    if (!f.out.length) return h + '<p class="ol-muted">Nothing has left this lot yet.</p></div>';
+    h += '<ul class="ol-rows">';
+    f.out.forEach(o => {
+        if (o.kind === 'sale') {
+            const mine = o.lines.filter(l => l.from_this_lot), other = o.lines.filter(l => !l.from_this_lot);
+            const meta = [olDate(o.date)];
+            if (o.delivery_date && o.delivery_date !== o.date) meta.push('delivers ' + olDate(o.delivery_date));
+            if (o.po_number) meta.push('PO ' + o.po_number);
+            h += '<li><span><span class="who">' + olEsc(o.buyer || 'Sale') + '</span>'
+                + '<span class="meta">' + meta.map(olEsc).join(' &middot; ') + '</span>'
+                + (f.skus.length > 1 ? '<span class="lines">' + mine.map(l => olProductHtml(l) + ' &middot; <b>'
+                    + olCases(l.from_this_lot) + ' ' + olCaseWord(l.from_this_lot) + '</b>').join('<br>') + '</span>' : '')
+                + (other.length ? '<span class="also">Same order: '
+                    + other.map(l => olProductHtml(l) + ' ' + olCases(l.quantity) + ' ' + olCaseWord(l.quantity)).join(', ') + '</span>' : '')
+                + '</span><span class="amt">' + olCases(o.jars) + ' ' + olCaseWord(o.jars)
+                + '<span class="links ol-noprint"><a target="_blank" href="/sales/' + encodeURIComponent(o.slip_sale_id) + '/packing-slip">Slip</a> &middot; '
+                + '<button onclick="olEmailSlip(this, \'' + encodeURIComponent(o.slip_sale_id) + '\')">Email</button></span></span></li>';
+        } else {
+            h += '<li><span><span class="who">' + olEsc(o.reason || 'Written off') + '</span>'
+                + '<span class="meta">' + olEsc(olDate(o.date))
+                + (f.skus.length > 1 ? ' &middot; ' + olProductHtml({brand: o.brand, recipe: o.recipe, format: o.format, name: o.sku}) : '')
+                + (o.notes ? ' &middot; ' + olEsc(o.notes) : '') + '</span></span>'
+                + '<span class="amt minus">&minus;' + olCases(o.jars) + ' ' + olCaseWord(o.jars) + '</span></li>';
+        }
+    });
+    return h + '</ul></div>';
+}
+
+// Send a recorded sale's packing slip to the organic email list (Company
+// Settings) — for a sale whose automatic email failed.
+async function olEmailSlip(btn, saleId) {
+    btn.disabled = true;
+    const was = btn.innerHTML;
+    btn.textContent = 'Sending…';
+    let d = {};
+    try { d = await (await fetch('/api/organic/sales/' + saleId + '/email-slip', {method: 'POST'})).json(); }
+    catch (e) { d = {error: 'No connection'}; }
+    alert(d.sent ? 'Packing slip emailed to ' + (d.to || []).join(', ')
+        : d.reason === 'no_recipients' ? 'No addresses are set in Company Settings → Packing slip email.'
+        : 'Not sent: ' + (d.error || 'unknown error'));
+    btn.disabled = false;
+    btn.innerHTML = was;
+}
+
+function olRenderFolder(f) {
+    document.getElementById('ol-root').innerHTML =
+        '<div class="ol-bar-top"><button class="ol-back" onclick="location.hash=\'\'">&larr; All organic lots</button>'
+        + '<button class="btn btn-outline ol-btn" onclick="window.print()">&#128424; Print</button></div>'
+        + olSummaryHtml(f) + olInHtml(f) + olOutHtml(f);
+    window.scrollTo(0, 0);
+}
+
+// An open folder takes the whole page; the rest of the hub (#oc-extras)
+// comes back with the list.
+function olRoute() {
+    const lot = decodeURIComponent(location.hash.slice(1));
+    const f = lot && olFolders.find(x => x.lot === lot);
+    const extras = document.getElementById('oc-extras');
+    if (f) { extras.hidden = true; olRenderFolder(f); return; }
+    const wasFolder = extras.hidden;
+    extras.hidden = false;
+    olRenderList();
+    if (wasFolder) document.getElementById('organic-lots').scrollIntoView();
+}
+
+(async function () {
+    try {
+        const res = await fetch('/api/organic-lots');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        olFolders = (await res.json()).folders || [];
+    } catch (e) {
+        document.getElementById('ol-root').innerHTML = '<div class="card"><div class="ol-empty">Could not load the organic lots (' + olEsc(e.message) + ').</div></div>';
+        return;
+    }
+    window.addEventListener('hashchange', olRoute);
+    olRoute();
+})();
 
 </script>
 </body>

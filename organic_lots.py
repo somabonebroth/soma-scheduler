@@ -20,7 +20,7 @@ import os
 from datetime import datetime, timedelta
 from functools import wraps
 
-from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, jsonify, redirect, request, session, url_for
 
 from helpers import ADJUSTMENTS_PATH, ORGANIC_RUNS_PATH, _delivery_id, _load_json, _sku_display, _sku_key
 
@@ -300,8 +300,9 @@ def _load_folders():
 @organic_lots_bp.route("/organic-lots")
 @manager_required
 def organic_lots_page():
-    """The Organic Lots page: the folder list, and one folder opened via #LOT."""
-    return render_template("organic_lots.html")
+    """The folders live on the Organic Certification page since 2026-10-15.
+    Redirect there; the browser keeps any #LOT on the old link."""
+    return redirect("/organic-certification")
 
 
 @organic_lots_bp.route("/api/organic-lots", methods=["GET"])

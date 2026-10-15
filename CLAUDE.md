@@ -781,6 +781,8 @@ RESET marker (cutover + frozen run ids). The drift check and the reset are untou
 
 **Organic Certification hub, fourth trim (2026-10-01):** no card sentences; Supplier Certificates lists every DATED certificate — current and expired alike, expired first (2026-10-02; suppliers with no certificate and undated certs are left out — those are on Buyers & Suppliers); the pills became one line of text links (Count finished goods · Count raw materials · Stock count history · Certificates & Documents · Search & Trace). The documents page is titled "Certificates & Documents" everywhere; its drop zone became a "+ Add document" button (drop anywhere on the page still uploads).
 
+**Organic Lots moved ONTO the hub (2026-10-15, Jeremy):** `templates/organic_lots.html` is DELETED; its CSS + JS live in `organic_certification.html`, and `/organic-lots` 302s to `/organic-certification` (the browser keeps `#LOT`, so old links still open the folder; Search & Trace links the hub directly). Page order: singles rule, Organic Lots (search + one FULL-WIDTH row per LOT#: LOT# + Best before · products with format beneath · cases in stock + bar), then `#oc-extras` = Supplier Certificates (a `<details>`, COLLAPSED by default), Audit Pack, links. An open folder (`#LOT`) hides `#oc-extras`; folder text/spacing was enlarged the same day. `/api/organic-lots` unchanged. Notes above that say "the Organic Lots page" mean this section now.
+
 **Search & Trace is implemented ONCE** (`sales_receiving.html`, `doTrace`/`doTraceDebounced`) since 2026-09-22 — the second copy on `organic_certification.html` was deleted; the hub links to `/sales-receiving#trace`. Keep it that way.
 
 ---
