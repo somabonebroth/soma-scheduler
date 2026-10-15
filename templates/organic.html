@@ -188,6 +188,12 @@ body.inv-page .inv-table tr:nth-child(even) { background: var(--row-alt); }
 body.inv-page .inv-table tr:hover { background: #f5f7f0; }
 body.inv-page .inv-table .negative { color: var(--danger); font-weight: 700; }
 body.inv-page .inv-table .low { color: #e67e22; font-weight: 600; }
+/* Raw Materials: Certified / Non-Certified toggle + tag (2026-10-15) */
+.rm-view-toggle { display:flex; gap:4px; padding:4px; background:var(--bg); border:1px solid var(--border); border-radius:10px; margin-bottom:12px; }
+.rm-view-toggle button { flex:1; border:0; background:transparent; padding:10px 12px; border-radius:7px; font-size:14px; font-weight:600; color:var(--text-light); cursor:pointer; min-height:42px; }
+.rm-view-toggle button span { font-weight:500; opacity:0.75; margin-left:4px; }
+.rm-view-toggle button.on { background:var(--white); color:var(--action-green); box-shadow:0 1px 3px rgba(0,0,0,0.12); }
+.rm-cert-tag { display:inline-block; font-size:10px; font-weight:700; background:var(--action-green-bg); color:var(--action-green); border:1px solid var(--green-light); padding:2px 8px; border-radius:10px; letter-spacing:0.4px; margin-left:8px; vertical-align:middle; text-transform:uppercase; }
 /* FIFO order on a raw ingredient's lots (2026-10-15) */
 body.inv-page .inv-table tr.fifo-row-now td { background: var(--action-green-bg); }
 body.inv-page .inv-table tr.fifo-row-now td:first-child { box-shadow: inset 4px 0 0 var(--action-green); }
@@ -767,7 +773,7 @@ body.inv-page .modal-actions {
             </div>
             <div id="rm-table-container"><div class="empty-state">Loading...</div></div>
         </div>
-        <p class="repair-note">Set up: <a href="#" onclick="addCustomIngredient();return false;">New ingredient</a> &middot; <a href="#" onclick="openSectionsModal();return false;">Edit sections</a></p>
+        <p class="repair-note">Set up: <a href="#" onclick="addCustomIngredient();return false;">New ingredient</a></p>
         <p class="repair-note">Repair, only if raw stock looks wrong: <a href="/admin/reconcile-raw">Rebuild raw balances</a> replays every completed batch and rewrites the raw books (it shows you a preview first).</p>
     </div>
 
@@ -1348,37 +1354,27 @@ async function loadContacts(){
 // Key format: "name|unit" so two units of the same ingredient (rare) don't collide.
 var expandedRMKey=null;
 
-// Track which sections are collapsed. Persisted to localStorage so state
-// survives page reloads. Default: all sections open.
-function _getCollapsedSections(){
-    try{
-        var raw = localStorage.getItem('rm_collapsed_sections');
-        return raw ? JSON.parse(raw) : {};
-    }catch(e){ return {}; }
-}
-function _setCollapsedSections(state){
-    try{ localStorage.setItem('rm_collapsed_sections', JSON.stringify(state)); }catch(e){}
-}
-function toggleRMSection(sectionId){
-    var state = _getCollapsedSections();
-    state[sectionId] = !state[sectionId];
-    _setCollapsedSections(state);
+// Raw Materials list (2026-10-15, Jeremy): no sections — one alphabetical
+// list behind a toggle. "Used in Certified" = ingredients an active Organic
+// recipe uses; "Used in Non-Certified" = ingredients any other recipe uses
+// plus anything no recipe uses (custom items, renamed leftovers). An
+// ingredient both kinds of recipe use shows in both, tagged Certified.
+let _rmShowAll = false;
+let _rmView = 'cert';
+try { if (localStorage.getItem('rm_view') === 'other') _rmView = 'other'; } catch (e) {}
+function setRMView(v){
+    _rmView = v;
+    try { localStorage.setItem('rm_view', v); } catch (e) {}
     loadRawMaterials();
 }
-
-var _rmShowAll = false;
 async function loadRawMaterials(){
-    var [rowsRes, sectionsRes] = await Promise.all([
-        fetch('/api/organic/raw-materials/grouped'),
-        fetch('/api/organic/raw-materials/sections'),
-    ]);
-    var rows = await rowsRes.json();
-    var sectionsData = await sectionsRes.json();
-    var container = document.getElementById('rm-table-container');
-    var countEl = document.getElementById('rm-count');
+    const res = await fetch('/api/organic/raw-materials/grouped');
+    let rows = await res.json();
+    const container = document.getElementById('rm-table-container');
+    const countEl = document.getElementById('rm-count');
     if(countEl){
-        var stocked = rows.filter(function(r){return(r.total_remaining||0)>0;}).length;
-        var totalLots = rows.reduce(function(a,r){return a+(r.lot_count||0);},0);
+        const stocked = rows.filter(function(r){return(r.total_remaining||0)>0;}).length;
+        const totalLots = rows.reduce(function(a,r){return a+(r.lot_count||0);},0);
         countEl.textContent = stocked+' in stock · '+totalLots+' lot'+(totalLots===1?'':'s');
     }
     if(!rows.length){
@@ -1386,56 +1382,31 @@ async function loadRawMaterials(){
         return;
     }
 
-    // Ingredients never received and empty sections stay hidden unless asked
-    // for (2026-10-01) — they were most of the list and none of the stock.
-    var hiddenCount = rows.filter(function(r){ return r.catalog_only; }).length;
+    const isCert = function(r){ return (r.certified_recipes||[]).length > 0; };
+    const inOther = function(r){ return (r.other_recipes||[]).length > 0 || !isCert(r); };
+    const shown = function(r){ return _rmShowAll || !r.catalog_only; };
+    const nCert = rows.filter(function(r){ return isCert(r) && shown(r); }).length;
+    const nOther = rows.filter(function(r){ return inOther(r) && shown(r); }).length;
+    rows = rows.filter(_rmView === 'cert' ? isCert : inOther);
+
+    // Ingredients never received stay hidden unless asked for (2026-10-01).
+    const hiddenCount = rows.filter(function(r){ return r.catalog_only; }).length;
     if(!_rmShowAll) rows = rows.filter(function(r){ return !r.catalog_only; });
-
-    // Group rows by section_id
-    var bySection = {};
-    rows.forEach(function(r){
-        var sid = r.section_id || '_unassigned';
-        if(!(sid in bySection)) bySection[sid] = [];
-        bySection[sid].push(r);
+    rows.sort(function(x, y){
+        return x.name.toLowerCase().localeCompare(y.name.toLowerCase()) || (x.unit||'').localeCompare(y.unit||'');
     });
 
-    // Build the ordered section list: user-defined sections first (in their
-    // saved order), then Unassigned at the end (always shown but greyed out
-    // when empty).
-    var sectionOrder = (sectionsData.sections || []).map(function(s){
-        return {id: s.id, name: s.name};
-    });
-    sectionOrder.push({id: '_unassigned', name: 'Unassigned'});
-
-    var collapsed = _getCollapsedSections();
-    var html = '';
-    sectionOrder.forEach(function(sec){
-        var items = bySection[sec.id] || [];
-        var isEmpty = items.length === 0;
-        if(isEmpty && !_rmShowAll) return;
-        var isCollapsed = !!collapsed[sec.id];
-        var greyed = isEmpty ? 'opacity:0.45;' : '';
-
-        html += '<div class="rm-section" style="'+greyed+'">';
-        html += '<div class="rm-section-header" onclick="toggleRMSection(\''+escSku(sec.id)+'\')">';
-        html += '<span class="rm-section-toggle">'+(isCollapsed?'▶':'▼')+'</span>';
-        html += '<span class="rm-section-name">'+escSku(sec.name)+'</span>';
-        html += '<span class="rm-section-count">'+items.length+'</span>';
+    let html = '<div class="rm-view-toggle" role="tablist">'
+        + '<button type="button" role="tab" aria-selected="'+(_rmView==='cert')+'" class="'+(_rmView==='cert'?'on':'')+'" onclick="setRMView(\'cert\')">Used in Certified <span>'+nCert+'</span></button>'
+        + '<button type="button" role="tab" aria-selected="'+(_rmView==='other')+'" class="'+(_rmView==='other'?'on':'')+'" onclick="setRMView(\'other\')">Used in Non-Certified <span>'+nOther+'</span></button>'
+        + '</div>';
+    if(!rows.length){
+        html += '<div class="empty-state">Nothing in stock here.</div>';
+    } else {
+        html += '<div class="rm-section-body">';
+        rows.forEach(function(r){ html += renderRMRow(r); });
         html += '</div>';
-
-        if(!isCollapsed && !isEmpty){
-            html += '<div class="rm-section-body">';
-            items.forEach(function(r){
-                html += renderRMRow(r);
-            });
-            html += '</div>';
-        } else if(!isCollapsed && isEmpty){
-            // Show empty placeholder so it's clear there's nothing here
-            html += '<div class="rm-section-empty">No ingredients in this section. Click "⚙ Edit Sections" to assign items.</div>';
-        }
-        html += '</div>';
-    });
-
+    }
     if(hiddenCount || _rmShowAll)
         html += '<button type="button" class="rm-showall" onclick="_rmShowAll=!_rmShowAll;loadRawMaterials();">'
             + (_rmShowAll ? 'Hide ingredients never received' : 'Show all ingredients (' + hiddenCount + ' never received)') + '</button>';
@@ -1452,7 +1423,9 @@ function renderRMRow(r){
     var isExpanded = (expandedRMKey === key);
     var outOfStock = (r.total_remaining||0) <= 0;
     var rowOpacity = outOfStock ? 'opacity:0.55;' : '';
-    var baselineBadge = '';
+    var baselineBadge = (r.certified_recipes||[]).length
+        ? '<span class="rm-cert-tag" title="Used in certified recipes: '+escSku(r.certified_recipes.join(', '))+'">Certified</span>'
+        : '';
     var stockBadge = '';
     if(outOfStock && r.lot_count > 0){
         stockBadge = '<span style="display:inline-block;font-size:10px;font-weight:700;background:#f5f5f0;color:#999;border:1px solid #d0d0c8;padding:2px 8px;border-radius:10px;letter-spacing:0.4px;margin-left:8px;vertical-align:middle;">DEPLETED</span>';

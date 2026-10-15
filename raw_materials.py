@@ -249,9 +249,13 @@ def get_raw_materials_grouped():
     """
     recipes = app.load_recipes()
     derived = {}  # key: (name_lower, unit) -> {name, unit}
+    # Which active recipes use each ingredient (by name), split by the recipe's
+    # certification — the Raw Materials list tags and filters on it (2026-10-15).
+    used_cert, used_other = {}, {}
     for rname, rdata in recipes.items():
         if rdata.get("archived"):
             continue
+        certified = (rdata.get("certification") or "").strip().lower() == "organic"
         for section in app.INGREDIENT_SECTIONS:
             for item in rdata.get(section, []):
                 if not app.is_structured_ingredient(item):
@@ -267,6 +271,8 @@ def get_raw_materials_grouped():
                 key = (ing_name.lower(), unit)
                 if key not in derived:
                     derived[key] = {"name": ing_name, "unit": unit}
+                (used_cert if certified else used_other).setdefault(
+                    ing_name.lower(), set()).add(rname)
 
     custom = _load_json(app.ORGANIC_CUSTOM_ITEMS_PATH, [])
     for c in custom:
@@ -353,6 +359,8 @@ def get_raw_materials_grouped():
             "active_lot_count": agg.get("active_lot_count", 0),
             "has_baseline": agg.get("has_baseline", False),
             "catalog_only": (agg.get("lot_count", 0) == 0),
+            "certified_recipes": sorted(used_cert.get(ing["name"].lower(), ())),
+            "other_recipes": sorted(used_other.get(ing["name"].lower(), ())),
         })
 
     # Sort: by section order first, then alphabetically by name within each
