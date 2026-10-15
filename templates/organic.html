@@ -188,6 +188,14 @@ body.inv-page .inv-table tr:nth-child(even) { background: var(--row-alt); }
 body.inv-page .inv-table tr:hover { background: #f5f7f0; }
 body.inv-page .inv-table .negative { color: var(--danger); font-weight: 700; }
 body.inv-page .inv-table .low { color: #e67e22; font-weight: 600; }
+/* FIFO order on a raw ingredient's lots (2026-10-15) */
+body.inv-page .inv-table tr.fifo-row-now td { background: var(--action-green-bg); }
+body.inv-page .inv-table tr.fifo-row-now td:first-child { box-shadow: inset 4px 0 0 var(--action-green); }
+.fifo-tag { display:inline-block; min-width:22px; text-align:center; font-size:10px; font-weight:700; letter-spacing:0.4px; text-transform:uppercase; padding:2px 8px; border-radius:10px; background:var(--bg); color:var(--text-light); border:1px solid var(--border); white-space:nowrap; }
+.fifo-tag.fifo-now { background:var(--action-green); color:var(--white); border-color:var(--action-green); }
+.fifo-tag.fifo-next { background:var(--amber-bg); color:var(--amber-text-dark); border-color:var(--amber-border); }
+.fifo-bar { height:4px; background:var(--border); border-radius:2px; margin-top:4px; min-width:48px; overflow:hidden; }
+.fifo-bar span { display:block; height:100%; background:var(--action-green); }
 
 /* In-table action buttons — clearer visual differences */
 body.inv-page .btn-sm {
@@ -1493,23 +1501,38 @@ async function renderRMDetail(key){
     var res=await fetch(url);
     var lots=await res.json();
     if(!lots.length){el.innerHTML='<em style="font-size:12px;color:var(--text-light);">No lots.</em>';return;}
-    function lotRow(m){
+    // FIFO (2026-10-15): production draws the oldest lot with stock first —
+    // the same date_received → created_at order this list is sorted in — so
+    // active lot 0 is IN USE, 1 is NEXT, the rest wait their turn.
+    function fifoTag(pos){
+        if(pos===0) return '<span class="fifo-tag fifo-now">In use</span>';
+        if(pos===1) return '<span class="fifo-tag fifo-next">Next</span>';
+        if(pos>1) return '<span class="fifo-tag">'+(pos+1)+'</span>';
+        return '';
+    }
+    function remBar(m){
+        const q=Number(m.quantity)||0, r=Math.max(0,Number(m.remaining)||0);
+        const pct=q>0?Math.min(100,Math.round(r/q*100)):0;
+        return '<div class="fifo-bar"><span style="width:'+pct+'%"></span></div>';
+    }
+    function lotRow(m,pos){
         const remClass=(m.remaining||0)<0?'negative':(m.remaining||0)===0?'low':'';
         const baselineBadge=m.migration_baseline?'<span class="baseline-badge" style="margin-left:4px;">BASELINE</span>':'';
         const noLotFlag=m.no_supplier_lot?'<span title="No supplier LOT# was entered — this is a system-generated lot. Fill in the real supplier lot number when known." style="margin-left:4px;font-size:10px;color:#b26a00;white-space:nowrap;">⚠ no supplier lot</span>':'';
-        return '<tr>'+
+        return '<tr'+(pos===0?' class="fifo-row-now"':'')+'>'+
+              '<td>'+fifoTag(pos)+'</td>'+
               '<td>'+escSku(m.supplier||'')+'</td>'+
               '<td>'+escSku(m.date_received||'')+'</td>'+
               '<td>'+escSku(m.supplier_lot||'')+baselineBadge+noLotFlag+'</td>'+
               '<td>'+m.quantity+'</td>'+
-              '<td class="'+remClass+'">'+m.remaining+'</td>'+
+              '<td class="'+remClass+'">'+m.remaining+(pos>=0?remBar(m):'')+'</td>'+
               '<td>'+(m.has_invoice?'<a href="/api/organic/raw-materials/receipt-photo/'+encodeURIComponent(m.id)+'" target="_blank" title="View invoice / packing slip">📎 Invoice</a>':'<span style="color:var(--text-light);">—</span>')+'</td>'+
               '<td style="white-space:nowrap;">'+
                 '<button class="btn-sm" data-rm-action="edit" data-rm-id="'+escSku(m.id)+'" data-rm-remaining="'+m.remaining+'" data-rm-item="'+escSku(m.item)+'" data-rm-unit="'+escSku(m.unit||'')+'" style="margin-right:4px;">Edit Qty</button>'+
                 '<button class="btn-danger" data-rm-action="delete" data-rm-id="'+escSku(m.id)+'">Del</button>'+
               '</td></tr>';
     }
-    const tableHead='<tr><th>Supplier</th><th>Received</th><th>LOT#</th><th>Qty</th><th>Remaining</th><th>Invoice</th><th></th></tr>';
+    const tableHead='<tr><th>FIFO</th><th>Supplier</th><th>Received</th><th>LOT#</th><th>Qty</th><th>Remaining</th><th>Invoice</th><th></th></tr>';
     // Active lots (still have stock) stay visible; depleted lots (remaining ≤ 0)
     // collapse behind a tab to cut clutter while preserving FIFO order.
     const active=lots.filter(function(m){return (m.remaining||0)>0;});
@@ -1517,7 +1540,7 @@ async function renderRMDetail(key){
     let html='';
     if(active.length){
         html+='<div class="inv-table-wrap"><table class="inv-table" style="margin:0;font-size:12px;">'+tableHead;
-        active.forEach(function(m){html+=lotRow(m);});
+        active.forEach(function(m,i){html+=lotRow(m,i);});
         html+='</table></div>';
     } else {
         html+='<em style="font-size:12px;color:var(--text-light);">No active lots — all depleted.</em>';
@@ -1526,7 +1549,7 @@ async function renderRMDetail(key){
         html+='<details style="margin-top:8px;">'+
               '<summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--text-light);text-transform:uppercase;letter-spacing:0.4px;padding:4px 0;">Depleted LOTs ('+depleted.length+')</summary>'+
               '<div class="inv-table-wrap" style="margin-top:6px;opacity:0.65;"><table class="inv-table" style="margin:0;font-size:12px;">'+tableHead;
-        depleted.forEach(function(m){html+=lotRow(m);});
+        depleted.forEach(function(m){html+=lotRow(m,-1);});
         html+='</table></div></details>';
     }
     el.innerHTML=html;
