@@ -189,6 +189,7 @@ h2 .ol-small { font-weight: 400; margin-left: 6px; }
 .mb-table .unit { color: var(--text-light); font-size: 12px; margin-left: 4px; }
 .mb-table .cert { color: var(--action-green); font-weight: 600; }
 .mb-table .zero { color: var(--grey-light); }
+.mb-table tr.mb-lot a { color: var(--dark); font-weight: 600; }
 .mb-table tfoot td { font-weight: 700; border-top: 2px solid var(--border); }
 .oc-rule { margin: -6px 0 20px; padding: 12px 16px; border-radius: var(--r-md); background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-text-dark); font-size: 14px; line-height: 1.5; }
 .oc-links { font-size: 13px; color: var(--text-light); line-height: 2; margin: 4px 2px 0; }
@@ -259,6 +260,20 @@ h2 .ol-small { font-weight: 400; margin-left: 6px; }
             <span class="pm-status" id="mb-status"></span>
         </div>
         <div id="mb-out"></div>
+    </details>
+
+    <!-- Finished goods mass balance (2026-10-15): the organic LOT#s whose batch
+         STARTED in the period, followed to today, per product with each LOT#
+         beneath. Read from the same /api/organic-lots feed as the folders
+         above, so the two can never disagree. No server code of its own. -->
+    <details class="card" id="fg-balance">
+        <summary><span class="chev">&#9654;</span><h2>Finished Goods Mass Balance</h2></summary>
+        <div class="ap-form">
+            <label>From <input type="date" id="fb-from" required></label>
+            <label>To <input type="date" id="fb-to" required></label>
+            <button type="button" class="btn btn-primary" id="fb-run">Perform mass balance</button>
+        </div>
+        <div id="fb-out"></div>
     </details>
 
     <!-- Pest control map (audit_tools.py, 2026-10-15): ONE current file, shown
@@ -371,6 +386,8 @@ loadSupplierCerts();
   document.getElementById('ap-from').value = iso(from);
   document.getElementById('mb-to').value = iso(now);
   document.getElementById('mb-from').value = iso(from);
+  document.getElementById('fb-to').value = iso(now);
+  document.getElementById('fb-from').value = iso(from);
   document.getElementById('ap-form').addEventListener('submit', function (e) {
     e.preventDefault();
     const q = new URLSearchParams({
@@ -458,6 +475,64 @@ async function runMassBalance() {
   });
 }
 document.getElementById('mb-run').addEventListener('click', runMassBalance);
+
+// ── Finished goods mass balance: organic LOT#s made in the period ──
+// Made = sold + written off + in stock, in cases (jars beneath when loose).
+// Made includes stock added by a count or the opening count, as the folders do.
+function fbQty(j) {
+  if (!j) return '<span class="zero">0</span>';
+  const c = Math.floor(j / 12), loose = j % 12;
+  return c.toLocaleString() + (loose ? '<span class="unit">+' + loose + ' jar' + (loose === 1 ? '' : 's') + '</span>' : '');
+}
+async function runFgBalance() {
+  const frm = document.getElementById('fb-from').value, to = document.getElementById('fb-to').value;
+  const out = document.getElementById('fb-out');
+  if (!olFolders.length) {
+    try { olFolders = (await (await fetch('/api/organic-lots')).json()).folders || []; } catch (e) { /* empty below */ }
+  }
+  const lots = olFolders.filter(function (f) { return f.batch_date && f.batch_date >= frm && f.batch_date <= to; });
+  let h = '<div class="mb-head"><b>Organic products made ' + escHtml(frm) + ' to ' + escHtml(to)
+    + '</b>, followed to today. Cases. Made = sold + written off + in stock.</div>';
+  if (!lots.length) { out.innerHTML = h + '<div class="empty-state">No organic batch started in this period.</div>'; return; }
+  const prods = {}, off = [];
+  lots.forEach(function (f) {
+    f.skus.forEach(function (s) {
+      const p = prods[s.sku_key] = prods[s.sku_key] || { s: s, made: 0, sold: 0, reduced: 0, held: 0, lots: [] };
+      const made = s.made + s.added;
+      p.made += made; p.sold += s.sold; p.reduced += s.reduced; p.held += s.held;
+      p.lots.push({ lot: f.lot, made: made, sold: s.sold, reduced: s.reduced, held: s.held });
+      if (s.unrecorded) off.push(f.lot + ' · ' + olProduct(s) + ': ' + (s.unrecorded > 0 ? s.unrecorded + ' jars missing' : (-s.unrecorded) + ' jars extra'));
+    });
+  });
+  h += off.length
+    ? '<div class="mb-flags"><b>&#9888; Doesn&rsquo;t add up (' + off.length + ')</b><ul>' + off.map(function (x) { return '<li>' + escHtml(x) + '</li>'; }).join('') + '</ul></div>'
+    : '<div class="mb-head"><span class="mb-ok">&#10003; Adds up for every LOT#.</span></div>';
+  const list = Object.values(prods).sort(function (a, b) { return olProduct(a.s).localeCompare(olProduct(b.s)); });
+  const tot = { made: 0, sold: 0, reduced: 0, held: 0 };
+  h += '<div class="inv-table-wrap"><table class="inv-table mb-table"><thead><tr><th>Product</th>'
+    + '<th class="num">Made</th><th class="num">Sold</th><th class="num">Written off</th><th class="num">In stock</th></tr></thead><tbody>';
+  list.forEach(function (p, i) {
+    ['made', 'sold', 'reduced', 'held'].forEach(function (k) { tot[k] += p[k]; });
+    h += '<tr class="mb-ing" data-mb="' + i + '"><td><span class="chev">&#9654;</span><b>' + olProductHtml(p.s) + '</b></td>'
+      + '<td class="num">' + fbQty(p.made) + '</td><td class="num">' + fbQty(p.sold) + '</td>'
+      + '<td class="num">' + fbQty(p.reduced) + '</td><td class="num cert">' + fbQty(p.held) + '</td></tr>';
+    p.lots.forEach(function (l) {
+      h += '<tr class="mb-lot" data-mb-of="' + i + '" hidden><td><a href="#' + encodeURIComponent(l.lot) + '">LOT# ' + escHtml(l.lot) + '</a></td>'
+        + '<td class="num">' + fbQty(l.made) + '</td><td class="num">' + fbQty(l.sold) + '</td>'
+        + '<td class="num">' + fbQty(l.reduced) + '</td><td class="num">' + fbQty(l.held) + '</td></tr>';
+    });
+  });
+  h += '</tbody><tfoot><tr><td>Total</td><td class="num">' + fbQty(tot.made) + '</td><td class="num">' + fbQty(tot.sold)
+    + '</td><td class="num">' + fbQty(tot.reduced) + '</td><td class="num">' + fbQty(tot.held) + '</td></tr></tfoot></table></div>';
+  out.innerHTML = h;
+  out.querySelectorAll('tr.mb-ing').forEach(function (tr) {
+    tr.addEventListener('click', function () {
+      const open = tr.classList.toggle('open');
+      out.querySelectorAll('tr[data-mb-of="' + tr.dataset.mb + '"]').forEach(function (x) { x.hidden = !open; });
+    });
+  });
+}
+document.getElementById('fb-run').addEventListener('click', runFgBalance);
 
 // ── Pest control map: details in the header now, the file on first open ──
 let pmMeta = null, pmShown = false;
