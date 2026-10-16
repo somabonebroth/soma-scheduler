@@ -967,7 +967,7 @@ def _packing_slip_pdf(sale_id):
             super().__init__()
             self.left, self.size, self.font, self.right = left, size, font, right
             self.keep, self.indent, self.box, self.rule, self.gap = keep, indent, box, rule, gap
-            self.height = size * 1.25 + gap
+            self.height = size * 1.5 + gap
 
         def wrap(self, aw, ah):
             return WIDTH, self.height
@@ -1013,8 +1013,8 @@ def _packing_slip_pdf(sale_id):
     story.append(Line("", 2, rule=2, gap=2))
     for k in d["skus"]:
         rows = [Line(k["product"], 10, BOLD, right=k["cases"],
-                     keep=f" · {k['format']}" if k["format"] else "", rule=0.75, gap=4)]
-        rows += [Line(f"LOT {l['lot']}", 9, right=l["cases"], indent=13, box=True, gap=1)
+                     keep=f" · {k['format']}" if k["format"] else "", rule=0.75, gap=6)]
+        rows += [Line(f"LOT {l['lot']}", 9, right=l["cases"], indent=13, box=True, gap=3)
                  for l in k["lots"]]
         story.append(KeepTogether(rows))
     n = len(d["skus"])
