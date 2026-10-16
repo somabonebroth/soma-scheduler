@@ -6,6 +6,23 @@
 <title>Packing Slip · {{ s.buyer_name }}</title>
 <link rel="stylesheet" href="/static/style.css">
 {% include '_packing_slip_head.html' %}
+<style>
+.pp { font-family:Helvetica,Arial,sans-serif; }
+.pp-row { display:flex; justify-content:space-between; align-items:baseline; gap:8pt; }
+.pp-l { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.pp-name > .pp-l { display:flex; }
+.pp-fmt { flex:none; white-space:nowrap; }
+.pp-n { flex:none; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.pp-top { font-size:7.5pt; }
+.pp-buyer { font-size:12.5pt; font-weight:700; margin-top:4pt; }
+.pp-addr, .pp-meta { font-size:8pt; margin-top:1pt; }
+.pp-rule { border-bottom:2pt solid #000; margin-top:4pt; }
+.pp-sku { break-inside:avoid; page-break-inside:avoid; }
+.pp-name { font-size:10pt; font-weight:700; border-top:.75pt solid #000; padding-top:4pt; margin-top:4pt; }
+.pp-lot { font-size:9pt; padding:1.5pt 0 1.5pt 13pt; }
+.pp-box { display:inline-block; width:7pt; height:7pt; border:.75pt solid #000; margin-right:5pt; vertical-align:-.5pt; }
+.pp-total { border-top:2pt solid #000; margin-top:6pt; padding-top:4pt; font-size:10pt; font-weight:700; }
+</style>
 </head>
 <body class="inv-page">
 {# The packing slip for a recorded sale (manual or Organic Sale) as a page,
@@ -16,45 +33,24 @@
   <a href="/api/organic/sales/{{ s.sale_id }}/packing-slip" class="btn btn-outline">PDF</a>
   <a href="javascript:history.length > 1 ? history.back() : (location.href = '/')" class="btn btn-outline">&larr; Back</a>
 </div>
-<main>
-<div class="ps-head">
-  <div>
-    <img src="/static/logo.png" alt="{{ s.company.name or 'Soma Bone Broth' }}">
-    <div class="ps-co">
-      <strong>{{ s.company.name or 'Soma Bone Broth' }}</strong>
-      {% for f in ['address', 'city', 'phone', 'email', 'website'] %}{% if s.company[f] %}<br>{{ s.company[f] }}{% endif %}{% endfor %}
-    </div>
-  </div>
-  <div>
-    <div class="ps-title">Packing Slip</div>
-    <div class="ps-printed">Printed {{ today }}</div>
-  </div>
-</div>
-<div class="ps-info" style="margin-top:6pt;">
-  <div class="wide"><div class="lbl">Ship to</div><div class="val">
-    <strong>{{ s.buyer_name }}</strong>
-    {% for v in [s.buyer_contact, s.buyer_address, s.buyer_phone, s.buyer_email] %}{% if v %}<br><span class="sub">{{ v }}</span>{% endif %}{% endfor %}
-  </div></div>
-  <div><div class="lbl">Date</div><div class="val">{{ s.sale_date }}</div></div>
-  <div><div class="lbl">PO #</div><div class="val">{{ s.po }}</div></div>
-  <div class="wide"><div class="lbl">Order ref</div><div class="val">{{ s.ref }}</div></div>
-</div>
-<table class="ps-tbl">
-  <thead>
-    <tr class="ps-runhead"><th colspan="3">{{ s.buyer_name }} · {{ s.ref }}</th></tr>
-    <tr><th>Product</th><th>LOT #</th><th class="r">Qty</th></tr>
-  </thead>
-  <tbody>
-  {% for ln in s.lines %}
-  <tr><td><strong>{{ ln.product }}</strong>{% if ln.format %}<span class="ps-sub">{{ ln.format }}</span>{% endif %}</td>
-      <td>{{ ln.lot }}</td><td class="r qty">{{ ln.qty }}</td></tr>
+<main class="pp">
+{# Pick-and-pack (2026-10-16): one line per product, its LOTs beneath with a
+   tick box. Every line is ONE line — long names are cut, never wrapped. #}
+<div class="pp-row pp-top"><span>{{ (s.company.name or 'Soma Bone Broth')|upper }}</span><span>PACKING SLIP</span></div>
+<div class="pp-l pp-buyer">{{ s.buyer_name }}</div>
+{% if s.deliver_to %}<div class="pp-l pp-addr"><strong>For delivery to: {{ s.deliver_to }}</strong></div>{% endif %}
+{% if s.deliver_address %}<div class="pp-l pp-addr">{{ s.deliver_address }}</div>{% endif %}
+<div class="pp-l pp-meta">Deliver {{ s.deliver }}{% if s.po and s.po != '—' %} · PO {{ s.po }}{% endif %} · Ref {{ s.ref }}</div>
+<div class="pp-rule"></div>
+{% for k in s.skus %}
+<div class="pp-sku">
+  <div class="pp-row pp-name"><span class="pp-l"><span class="pp-l">{{ k.product }}</span>{% if k.format %}<span class="pp-fmt">&nbsp;· {{ k.format }}</span>{% endif %}</span><span class="pp-n">{{ k.cases }}</span></div>
+  {% for l in k.lots %}
+  <div class="pp-row pp-lot"><span class="pp-l"><span class="pp-box"></span>LOT {{ l.lot }}</span><span class="pp-n">{{ l.cases }}</span></div>
   {% endfor %}
-  <tr class="totals"><td colspan="3" class="r">Total {{ s.total_units }} units ({{ s.total_cases }} cases)</td></tr>
-  </tbody>
-</table>
-<div class="ps-foot">
-  Thank you for your business.{% if s.company.registration %} | Reg: {{ s.company.registration }}{% endif %}
 </div>
+{% endfor %}
+<div class="pp-row pp-total"><span>{{ s.skus|length }} product{{ '' if s.skus|length == 1 else 's' }}</span><span class="pp-n">{{ s.total_cases }}</span></div>
 </main>
 </body>
 </html>

@@ -834,6 +834,18 @@ def delete_organic_sale(sale_id):
     return jsonify({"success": True})
 
 
+def _cases_text(jars, unit=""):
+    """Jars as whole cases for the slip: '6 cases', '1 case + 3 jars', '3 jars'
+    (with no unit, a bare '6')."""
+    cases, loose = divmod(int(jars or 0), 12)
+    if unit and cases == 1:
+        unit = unit.rstrip("s")
+    text = f"{cases} {unit}".strip() if cases or not loose else ""
+    if loose:
+        text = (text + " + " if text else "") + f"{loose} jar" + ("s" if loose != 1 else "")
+    return text
+
+
 def _packing_slip_data(sale_id):
     """Everything the packing slip shows for a sale's whole order, or None if
     the sale does not exist. ONE read for both renderings — the PDF (email,
@@ -855,22 +867,47 @@ def _packing_slip_data(sale_id):
     buyers = app._load_buyers()
     buyer_name = sale.get("buyer") or "—"
     buyer_rec = next((b for b in buyers if b.get("name") == buyer_name), {})
+    # Deliver to the sub-location picked on the sale; the buyer's own
+    # address only when none was picked.
     buyer_address = sale.get("location_address") or buyer_rec.get("address") or ""
     buyer_contact = sale.get("location_name") or ""
     buyer_phone = buyer_rec.get("phone") or ""
     buyer_email = buyer_rec.get("email") or ""
 
-    # One row per LOT drawn (organic and new-shape sales), else one per line.
-    lines = []
+    # Pick-and-pack shape (2026-10-16): ONE row per SKU, its LOTs beneath.
+    # Quantities are jars on record; the slip shows cases (+ any loose jars).
+    skus, by_key = [], {}
     for line in order_lines:
-        product = ((line.get("brand","")+" " if line.get("brand") else "") + (line.get("recipe") or "")).strip()
+        brand = (line.get("brand") or "").strip()
+        name = line.get("recipe") or ""
+        if brand and brand.upper() != "SOMA":
+            name = f"{brand} {name}"
         fmt = line.get("format") or ""
+        key = (brand.upper(), name, fmt)
+        sku = by_key.get(key)
+        if sku is None:
+            sku = by_key[key] = {"product": name, "format": fmt, "qty": 0, "lots": []}
+            skus.append(sku)
         for lot in (line.get("lots") or [{"lot": line.get("fg_lot"), "quantity": line.get("quantity")}]):
-            lines.append({"product": product, "format": fmt,
-                          "lot": lot.get("lot") or "—", "qty": int(lot.get("quantity") or 0)})
-    total_units = sum(l["qty"] for l in lines)
+            q = int(lot.get("quantity") or 0)
+            lot_no = lot.get("lot") or "—"
+            hit = next((l for l in sku["lots"] if l["lot"] == lot_no), None)
+            if hit is None:
+                hit = {"lot": lot_no, "qty": 0}
+                sku["lots"].append(hit)
+            hit["qty"] += q
+            sku["qty"] += q
+    for sku in skus:
+        sku["cases"] = _cases_text(sku["qty"], "cases")
+        for l in sku["lots"]:
+            l["cases"] = _cases_text(l["qty"])
+    total_units = sum(s["qty"] for s in skus)
 
     sale_date = sale.get("sale_date") or "—"
+    try:
+        deliver = datetime.strptime(sale_date, "%Y-%m-%d").strftime("%a %-d %b")
+    except ValueError:
+        deliver = sale_date
     safe_buyer = "".join(c for c in buyer_name if c.isalnum() or c in "-_ ")[:20]
     return {
         "sale_id": sale_id,
@@ -879,11 +916,16 @@ def _packing_slip_data(sale_id):
         "buyer_address": buyer_address, "buyer_phone": buyer_phone,
         "buyer_email": buyer_email,
         "sale_date": sale_date,
+        "deliver": deliver,
+        # "For delivery to: <sub-location>", its address beneath; with no
+        # sub-location the address itself takes the label.
+        "deliver_to": buyer_contact or buyer_address,
+        "deliver_address": buyer_address if buyer_contact else "",
         "po": sale.get("po_number") or sale.get("case_lot") or "—",
         "ref": sale_id[-10:],
-        "lines": lines,
+        "skus": skus,
         "total_units": total_units,
-        "total_cases": total_units // 12,
+        "total_cases": _cases_text(total_units, "cases"),
         "filename": f"packing-slip-{safe_buyer}-{sale_date}.pdf",
     }
 
@@ -895,148 +937,89 @@ def _packing_slip_pdf(sale_id):
     d = _packing_slip_data(sale_id)
     if d is None:
         return None
-    company = d["company"]
-    buyer_name = d["buyer_name"]
-    buyer_contact = d["buyer_contact"]
-    buyer_address = d["buyer_address"]
-    buyer_phone = d["buyer_phone"]
-    buyer_email = d["buyer_email"]
-
-    from reportlab.lib import colors
-    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
-                                    Paragraph, Spacer, HRFlowable, Image)
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Flowable, KeepTogether
+    from reportlab.pdfbase.pdfmetrics import stringWidth
     from reportlab.lib.units import inch
-    from reportlab.lib.enums import TA_RIGHT, TA_LEFT, TA_CENTER
     import io as _io
 
-    # Sized for the 4in x 6in THERMAL label printer, not letter: a letter page
-    # shrunk to fit a label prints at ~47% and is unreadable. Thermal heads
-    # print black or nothing, so there is no grey text and no tinted fill —
-    # weight and rules carry the hierarchy. A long order runs onto a second
-    # label (the column header repeats; rows never split).
-    BLACK   = colors.black
-    # SimpleDocTemplate's frame pads 6pt inside the margin, so the paper
-    # margin is MARGIN + 6pt (~0.16in) and tables must fit the INNER width.
-    MARGIN  = 0.08 * inch
-    WIDTH   = 4 * inch - 2 * (MARGIN + 6)
+    # 4in x 6in THERMAL label: pure black, weight and rules carry hierarchy.
+    # Pick-and-pack (2026-10-16): every line is drawn as ONE line — a long
+    # name is cut with an ellipsis, never wrapped. A long order runs onto a
+    # second label; a product and its LOTs are never split.
+    # SimpleDocTemplate's frame pads 6pt inside the margin, so lines must fit
+    # the INNER width.
+    MARGIN = 0.08 * inch
+    WIDTH = 4 * inch - 2 * (MARGIN + 6)
+    REG, BOLD = "Helvetica", "Helvetica-Bold"
+
+    def fit(text, font, size, width):
+        if stringWidth(text, font, size) <= width:
+            return text
+        while text and stringWidth(text + "…", font, size) > width:
+            text = text[:-1]
+        return text.rstrip() + "…"
+
+    class Line(Flowable):
+        """One row: left text (cut to fit), optional right text, optional
+        tick box, optional rule above."""
+        def __init__(self, left, size, font=REG, right="", keep="", indent=0,
+                     box=False, rule=0, gap=0):
+            super().__init__()
+            self.left, self.size, self.font, self.right = left, size, font, right
+            self.keep, self.indent, self.box, self.rule, self.gap = keep, indent, box, rule, gap
+            self.height = size * 1.25 + gap
+
+        def wrap(self, aw, ah):
+            return WIDTH, self.height
+
+        def draw(self):
+            c = self.canv
+            y = self.size * 0.3
+            if self.rule:
+                c.setLineWidth(self.rule)
+                c.line(0, self.height - self.rule / 2, WIDTH, self.height - self.rule / 2)
+            x = self.indent
+            if self.box:
+                b = self.size * 0.75
+                c.setLineWidth(0.75)
+                c.rect(x, y - 0.5, b, b)
+                x += b + 5
+            right_w = stringWidth(self.right, self.font, self.size) if self.right else 0
+            keep_w = stringWidth(self.keep, self.font, self.size) if self.keep else 0
+            room = WIDTH - x - keep_w - (right_w + 8 if self.right else 0)
+            c.setFont(self.font, self.size)
+            text = fit(self.left, self.font, self.size, room) + self.keep
+            c.drawString(x, y, text)
+            if self.right:
+                c.drawRightString(WIDTH, y, self.right)
 
     buf = _io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=(4 * inch, 6 * inch),
                             rightMargin=MARGIN, leftMargin=MARGIN,
                             topMargin=MARGIN, bottomMargin=MARGIN)
-    styles = getSampleStyleSheet()
+    company = d["company"]
+    meta = f"Deliver {d['deliver']}"
+    if d["po"] and d["po"] != "—":
+        meta += f" · PO {d['po']}"
+    meta += f" · Ref {d['ref']}"
 
-    def _ps(name, **kw):
-        base = styles.get(name, styles["Normal"])
-        kw.setdefault("textColor", BLACK)
-        return ParagraphStyle("_"+name+"_"+str(abs(hash(str(kw)))), parent=base, **kw)
-
-    story = []
-
-    logo_path = os.path.join(os.path.dirname(__file__), "static", "logo.jpg")
-    if not os.path.exists(logo_path):
-        logo_path = os.path.join(os.path.dirname(__file__), "static", "logo.png")
-
-    company_name = company.get("name") or "Soma Bone Broth"
-    company_lines = [f"<b>{company_name}</b>"]
-    for fld in ("address", "city", "phone", "email", "website"):
-        if company.get(fld): company_lines.append(company[fld])
-    company_para = Paragraph("<br/>".join(company_lines),
-                             _ps("Normal", fontSize=7.5, alignment=TA_RIGHT, leading=9.5))
-
-    if os.path.exists(logo_path):
-        left = Image(logo_path, width=0.85*inch, height=0.6*inch, kind="proportional")
-        left.hAlign = "LEFT"
-    else:
-        left = Paragraph(company_name, _ps("Normal", fontSize=13, fontName="Helvetica-Bold"))
-    header_tbl = Table([[left, company_para]], colWidths=[1.1*inch, WIDTH - 1.1*inch])
-    header_tbl.setStyle(TableStyle([
-        ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
-        ("ALIGN",        (0,0), (0,0),  "LEFT"),
-        ("LEFTPADDING",  (0,0), (-1,-1), 0),
-        ("RIGHTPADDING", (0,0), (-1,-1), 0),
-        ("TOPPADDING",   (0,0), (-1,-1), 0),
-        ("BOTTOMPADDING",(0,0), (-1,-1), 2),
-    ]))
-    story.append(header_tbl)
-    story.append(HRFlowable(width="100%", thickness=2, color=BLACK, spaceBefore=2, spaceAfter=3))
-    story.append(Paragraph("PACKING SLIP",
-        _ps("Normal", fontSize=14, fontName="Helvetica-Bold", leading=16, spaceAfter=3)))
-
-    # Ship To, then Date / Ref / PO on one row beneath it
-    sale_date = d["sale_date"]
-    po        = d["po"]
-    ref       = d["ref"]
-
-    lbl = _ps("Normal", fontSize=7, fontName="Helvetica-Bold", leading=9)
-    val = _ps("Normal", fontSize=10, leading=12)
-
-    ship_lines = [f'<font size="12"><b>{buyer_name}</b></font>']
-    if buyer_contact: ship_lines.append(buyer_contact)
-    if buyer_address: ship_lines.append(buyer_address)
-    if buyer_phone:   ship_lines.append(buyer_phone)
-    if buyer_email:   ship_lines.append(buyer_email)
-
-    order_info = Table([
-        [Paragraph("SHIP TO", lbl), "", ""],
-        [Paragraph("<br/>".join(ship_lines), _ps("Normal", fontSize=10, leading=13)), "", ""],
-        [Paragraph("DATE", lbl), Paragraph("ORDER REF", lbl), Paragraph("PO #", lbl)],
-        [Paragraph(sale_date, val), Paragraph(ref, val), Paragraph(po, val)],
-    ], colWidths=[1.15*inch, 1.35*inch, WIDTH - 2.5*inch])
-    order_info.setStyle(TableStyle([
-        ("VALIGN",        (0,0), (-1,-1), "TOP"),
-        ("SPAN",          (0,0), (2,0)),
-        ("SPAN",          (0,1), (2,1)),
-        ("BOX",           (0,0), (-1,-1), 1, BLACK),
-        ("LINEABOVE",     (0,2), (-1,2),  1, BLACK),
-        ("LINEBEFORE",    (1,2), (2,3),   0.5, BLACK),
-        ("TOPPADDING",    (0,0), (-1,-1), 2),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 2),
-        ("BOTTOMPADDING", (0,1), (-1,1),  4),
-        ("LEFTPADDING",   (0,0), (-1,-1), 4),
-        ("RIGHTPADDING",  (0,0), (-1,-1), 4),
-    ]))
-    story.append(order_info)
-    story.append(Spacer(1, 0.08*inch))
-
-    hdr_l  = _ps("Normal", fontSize=7.5, fontName="Helvetica-Bold", alignment=TA_LEFT)
-    hdr_c  = _ps("Normal", fontSize=7.5, fontName="Helvetica-Bold", alignment=TA_CENTER)
-    cell_l = _ps("Normal", fontSize=10.5, leading=12.5, alignment=TA_LEFT)
-    cell_c = _ps("Normal", fontSize=10.5, leading=12.5, alignment=TA_CENTER)
-    qty_s  = _ps("Normal", fontSize=13, leading=15, fontName="Helvetica-Bold", alignment=TA_CENTER)
-    tot_s  = _ps("Normal", fontSize=11, leading=13, fontName="Helvetica-Bold", alignment=TA_RIGHT)
-
-    # FORMAT sits under the product name — a fourth column does not fit 4in.
-    rows = [[Paragraph("PRODUCT", hdr_l), Paragraph("LOT #", hdr_c), Paragraph("QTY", hdr_c)]]
-    for ln in d["lines"]:
-        cell = Paragraph(f'<b>{ln["product"]}</b>'
-                         + (f'<br/><font size="8.5">{ln["format"]}</font>' if ln["format"] else ""), cell_l)
-        rows.append([cell, Paragraph(ln["lot"], cell_c), Paragraph(str(ln["qty"]), qty_s)])
-    total_units = d["total_units"]
-    total_cases = d["total_cases"]
-    rows.append([Paragraph(f"TOTAL&nbsp;&nbsp;{total_units} units  ({total_cases} cases)", tot_s), "", ""])
-
-    rc = len(rows)
-    items_tbl = Table(rows, colWidths=[WIDTH - 1.75*inch, 1.1*inch, 0.65*inch], repeatRows=1)
-    items_tbl.setStyle(TableStyle([
-        ("LINEBELOW",     (0,0),  (-1,0),    1.5, BLACK),
-        ("LINEBELOW",     (0,1),  (-1,rc-2), 0.5, BLACK),
-        ("SPAN",          (0,-1), (-1,-1)),
-        ("LINEABOVE",     (0,-1), (-1,-1),   2, BLACK),
-        ("TOPPADDING",    (0,0),  (-1,-1),   3),
-        ("BOTTOMPADDING", (0,0),  (-1,-1),   3),
-        ("LEFTPADDING",   (0,0),  (-1,-1),   2),
-        ("RIGHTPADDING",  (0,0),  (-1,-1),   2),
-        ("VALIGN",        (0,0),  (-1,-1),   "MIDDLE"),
-    ]))
-    story.append(items_tbl)
-    story.append(Spacer(1, 0.1*inch))
-
-    footer = ["Thank you for your business."]
-    if company.get("registration"): footer.append(f"Reg: {company['registration']}")
-    story.append(Paragraph("  |  ".join(footer),
-                            _ps("Normal", fontSize=7.5, alignment=TA_CENTER)))
+    story = [Line((company.get("name") or "Soma Bone Broth").upper(), 7.5, right="PACKING SLIP"),
+             Line(d["buyer_name"], 12.5, BOLD, gap=2)]
+    if d["deliver_to"]:
+        story.append(Line(f"For delivery to: {d['deliver_to']}", 8, BOLD))
+    if d["deliver_address"]:
+        story.append(Line(d["deliver_address"], 8))
+    story.append(Line(meta, 8))
+    story.append(Line("", 2, rule=2, gap=2))
+    for k in d["skus"]:
+        rows = [Line(k["product"], 10, BOLD, right=k["cases"],
+                     keep=f" · {k['format']}" if k["format"] else "", rule=0.75, gap=4)]
+        rows += [Line(f"LOT {l['lot']}", 9, right=l["cases"], indent=13, box=True, gap=1)
+                 for l in k["lots"]]
+        story.append(KeepTogether(rows))
+    n = len(d["skus"])
+    story.append(Line(f"{n} product{'' if n == 1 else 's'}", 10, BOLD,
+                      right=d["total_cases"], rule=2, gap=6))
 
     doc.build(story)
     buf.seek(0)

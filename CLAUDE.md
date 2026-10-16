@@ -304,8 +304,16 @@ retail_orders.py    — Flask Blueprint (added 2026-07-02): SBBC Wholesale Porta
                       number) repeats, so a long order runs onto a second label. Edit
                       the partial, never fork it. The fourth slip is the ReportLab PDF
                       in `sales.get_packing_slip` (manual/organic sales, carries LOT#s):
-                      same page size + rules; FORMAT sits under the product; note the
-                      frame's 6pt inner padding when sizing tables (`WIDTH`).
+                      same page size + rules; note the frame's 6pt inner padding when
+                      sizing (`WIDTH`). **Recorded-sale slip = pick-and-pack (2026-10-16,
+                      Jeremy):** one line per SKU (`recipe · format`, brand only if not
+                      SOMA, total in cases), its LOTs beneath with a tick box; "For
+                      delivery to: <sub-location>" + that location's address (buyer's
+                      address only when none was picked); no logo, company block or
+                      signature lines. EVERY row is one line — the PDF draws each row
+                      itself and cuts long names with an ellipsis (`fit`), the page uses
+                      CSS ellipsis. `_packing_slip_data` returns `skus` (each with `lots`),
+                      not flat `lines`. Tests: `tests.test_slip_page`.
                       **iPhone printing (2026-10-05):** the home-screen app ignores
                       `window.print()`, so every slip's Print button (`#ps-print`,
                       handled in `_packing_slip_head.html`) carries `data-pdf`; in the

@@ -57,9 +57,36 @@ class SlipPage(unittest.TestCase):
         r = self.c.get(f"/sales/{self.sale_id}/packing-slip")
         self.assertEqual(r.status_code, 200)
         html = r.get_data(as_text=True)
-        for text in ("Nature&#39;s Emporium", "1 Main St", "NE-9", "280927",
-                     "Total 24 units (2 cases)", "window.print()"):
+        for text in ("Nature&#39;s Emporium", "1 Main St", "NE-9", "LOT 280927",
+                     "Organic Chicken Bone Broth", "2 cases", "window.print()"):
             self.assertIn(text, html)
+        self.assertNotIn("Picked by", html)
+
+    def test_one_row_per_sku_with_its_lots(self):
+        """Pick-and-pack: two sale lines of the same SKU are ONE product row,
+        each LOT once beneath it, quantities in cases."""
+        d = sales._packing_slip_data(self.sale_id)
+        self.assertEqual(len(d["skus"]), 1)
+        k = d["skus"][0]
+        self.assertEqual((k["product"], k["format"], k["cases"]),
+                         ("Organic Chicken Bone Broth", "SS-750ML", "2 cases"))
+        self.assertEqual([(l["lot"], l["cases"]) for l in k["lots"]], [("280927", "2")])
+
+    def test_sub_location_address_wins(self):
+        """Deliver to the sub-location picked on the sale, not the buyer."""
+        rows = json.load(open(self.p["sales"]))
+        for r in rows:
+            r["location_name"], r["location_address"] = "Newmarket", "9 Davis Dr"
+        json.dump(rows, open(self.p["sales"], "w"))
+        html = self.c.get(f"/sales/{self.sale_id}/packing-slip").get_data(as_text=True)
+        self.assertIn("For delivery to: Newmarket", html)
+        self.assertIn("9 Davis Dr", html)
+        self.assertNotIn("1 Main St", html)
+
+    def test_cases_text(self):
+        self.assertEqual(sales._cases_text(72, "cases"), "6 cases")
+        self.assertEqual(sales._cases_text(15, "cases"), "1 case + 3 jars")
+        self.assertEqual(sales._cases_text(3), "3 jars")
 
     def test_pdf_still_builds(self):
         r = self.c.get(f"/api/organic/sales/{self.sale_id}/packing-slip")
